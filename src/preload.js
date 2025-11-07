@@ -33,5 +33,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onParticipantsUpdated: (callback) => ipcRenderer.on('participants-updated', (_, meetingId) => callback(meetingId)),
   onVideoFrame: (callback) => ipcRenderer.on('video-frame', (_, data) => callback(data)),
   onMeetingDetectionStatus: (callback) => ipcRenderer.on('meeting-detection-status', (_, data) => callback(data)),
-  getActiveRecordingId: (noteId) => ipcRenderer.invoke('getActiveRecordingId', noteId)
+  getActiveRecordingId: (noteId) => ipcRenderer.invoke('getActiveRecordingId', noteId),
+  // Google Calendar integration
+  getCalendarMeetings: (hours) => ipcRenderer.invoke('calendar:getUpcomingMeetings', hours),
+  openExternal: (url) => ipcRenderer.send('open-external', url)
 });

@@ -8,30 +8,18 @@ const OpenAI = require('openai');
 const sdkLogger = require('./sdk-logger');
 const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema } = require('./shared/validation');
 const { z } = require('zod');
+const GoogleCalendar = require('./main/integrations/GoogleCalendar');
 require('dotenv').config();
 
-// Function to get the OpenRouter headers
-function getHeaderLines() {
-  return [
-    "HTTP-Referer: https://recall.ai", // Replace with your actual app's URL
-    "X-Title: Muesli AI Notetaker"
-  ];
-}
-
-// Initialize OpenAI client with OpenRouter as the base URL
+// Initialize OpenAI client (using OpenAI directly)
 const openai = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_KEY,
-  defaultHeaders: {
-    "HTTP-Referer": "https://recall.ai",
-    "X-Title": "Muesli AI Notetaker"
-  }
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 // Define available models with their capabilities
 const MODELS = {
-  // Primary models
-  PRIMARY: "anthropic/claude-3.7-sonnet",
+  // Primary model - using gpt-4o-mini for cost-effective summaries (gpt-5-mini requires verification)
+  PRIMARY: "gpt-4o-mini",
   FALLBACKS: []
 };
 
@@ -42,6 +30,9 @@ if (require('electron-squirrel-startup')) {
 
 // Store detected meeting information
 let detectedMeeting = null;
+
+// Google Calendar integration
+let googleCalendar = null;
 
 let mainWindow;
 
@@ -134,6 +125,28 @@ app.whenReady().then(() => {
 
   // Initialize the Recall.ai SDK
   initSDK();
+
+  // Initialize Google Calendar integration
+  googleCalendar = new GoogleCalendar();
+  const calendarCredentials = {
+    client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
+    redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback'
+  };
+
+  if (calendarCredentials.client_id && calendarCredentials.client_secret) {
+    googleCalendar.initialize(calendarCredentials).then(authenticated => {
+      if (authenticated) {
+        console.log('[GoogleCalendar] Initialized with existing token');
+      } else {
+        console.log('[GoogleCalendar] Initialized but not authenticated - need OAuth flow');
+      }
+    }).catch(err => {
+      console.error('[GoogleCalendar] Initialization error:', err);
+    });
+  } else {
+    console.log('[GoogleCalendar] No credentials in .env - calendar features disabled');
+  }
 
   createWindow();
 
@@ -666,6 +679,96 @@ ipcMain.handle('debugGetHandlers', async () => {
   const handlers = Object.keys(ipcMain._invokeHandlers);
   console.log("Registered handlers:", handlers);
   return handlers;
+});
+
+// ===================================================================
+// Google Calendar Integration IPC Handlers (Phase 3)
+// ===================================================================
+
+// Initialize Google Calendar with OAuth credentials
+ipcMain.handle('calendar:initialize', async (event, credentials) => {
+  try {
+    console.log('[Calendar IPC] Initializing Google Calendar');
+    const initialized = await googleCalendar.initialize(credentials || {
+      client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
+      redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI
+    });
+    return { success: true, authenticated: initialized };
+  } catch (error) {
+    console.error('[Calendar IPC] Failed to initialize:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get OAuth authorization URL
+ipcMain.handle('calendar:getAuthUrl', async () => {
+  try {
+    console.log('[Calendar IPC] Getting OAuth authorization URL');
+    const authUrl = googleCalendar.getAuthUrl();
+    return { success: true, authUrl };
+  } catch (error) {
+    console.error('[Calendar IPC] Failed to get auth URL:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Authenticate with authorization code
+ipcMain.handle('calendar:authenticate', async (event, code) => {
+  try {
+    console.log('[Calendar IPC] Authenticating with code');
+    await googleCalendar.authenticate(code);
+    return { success: true };
+  } catch (error) {
+    console.error('[Calendar IPC] Authentication failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Check if user is authenticated
+ipcMain.handle('calendar:isAuthenticated', async () => {
+  try {
+    const authenticated = googleCalendar.isAuthenticated();
+    return { success: true, authenticated };
+  } catch (error) {
+    console.error('[Calendar IPC] Error checking authentication:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Sign out and clear tokens
+ipcMain.handle('calendar:signOut', async () => {
+  try {
+    console.log('[Calendar IPC] Signing out');
+    await googleCalendar.signOut();
+    return { success: true };
+  } catch (error) {
+    console.error('[Calendar IPC] Failed to sign out:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get upcoming calendar meetings
+ipcMain.handle('calendar:getUpcomingMeetings', async (event, hoursAhead = 24) => {
+  try {
+    console.log(`[Calendar IPC] Fetching upcoming meetings (${hoursAhead} hours ahead)`);
+    const meetings = await googleCalendar.getUpcomingMeetings(hoursAhead);
+    console.log(`[Calendar IPC] Found ${meetings.length} upcoming meetings`);
+    return { success: true, meetings };
+  } catch (error) {
+    console.error('[Calendar IPC] Failed to fetch meetings:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// End Google Calendar IPC Handlers
+// ===================================================================
+
+// Handle open-external IPC (for opening URLs in default browser)
+ipcMain.on('open-external', (event, url) => {
+  console.log('[IPC] open-external called with url:', url);
+  require('electron').shell.openExternal(url);
 });
 
 // Handler to get active recording ID for a note
@@ -1539,15 +1642,11 @@ ${transcriptText}`
 
     // If no progress callback provided, use the non-streaming version
     if (!progressCallback) {
-      // Call the OpenAI API (via OpenRouter) for summarization (non-streaming)
+      // Call the OpenAI API for summarization (non-streaming)
       const response = await openai.chat.completions.create({
-        model: MODELS.PRIMARY, // Use our primary model for a good balance of quality and speed
+        model: MODELS.PRIMARY,
         messages: messages,
-        max_tokens: 1000,
-        temperature: 0.7,
-        fallbacks: MODELS.FALLBACKS, // Use our defined fallback models
-        transform_to_openai: true, // Ensures consistent response format across models
-        route: "fallback" // Automatically use fallbacks if the primary model is unavailable
+        max_completion_tokens: 1000
       });
 
       // Log which model was actually used
@@ -1561,14 +1660,11 @@ ${transcriptText}`
 
       // Create a streaming request
       const stream = await openai.chat.completions.create({
-        model: MODELS.PRIMARY, // Use our primary model for a good balance of quality and speed
+        model: MODELS.PRIMARY,
         messages: messages,
-        max_tokens: 1000,
-        temperature: 0.7,
-        stream: true,
-        fallbacks: MODELS.FALLBACKS, // Use our defined fallback models
-        transform_to_openai: true, // Ensures consistent response format across models
-        route: "fallback" // Automatically use fallbacks if the primary model is unavailable
+        max_completion_tokens: 1000,
+        temperature: 0.7,  // gpt-4o-mini supports temperature
+        stream: true
       });
 
       // Handle streaming events
@@ -1578,8 +1674,12 @@ ${transcriptText}`
           try {
             // Log the model being used when first chunk arrives (if available)
             let modelLogged = false;
+            let chunkCount = 0;
+            let contentChunkCount = 0;
 
             for await (const chunk of stream) {
+              chunkCount++;
+
               // Log the model on first chunk if available
               if (!modelLogged && chunk.model) {
                 console.log(`Streaming with model: ${chunk.model}`);
@@ -1590,15 +1690,9 @@ ${transcriptText}`
               const content = chunk.choices[0]?.delta?.content || '';
 
               if (content) {
+                contentChunkCount++;
                 // Add the new text chunk to our accumulated text
                 fullText += content;
-
-                // Log each token for debugging (less verbose)
-                if (content.length < 50) {
-                  console.log(`Received token: "${content}"`);
-                } else {
-                  console.log(`Received content of length: ${content.length}`);
-                }
 
                 // Call the progress callback immediately with each token
                 if (progressCallback) {
@@ -1607,7 +1701,12 @@ ${transcriptText}`
               }
             }
 
-            console.log('AI summary streaming completed');
+            console.log(`AI summary completed - ${contentChunkCount} content chunks, ${fullText.length} characters`);
+
+            if (fullText.length === 0) {
+              console.warn('WARNING: AI returned empty summary!');
+            }
+
             resolve(fullText);
           } catch (error) {
             console.error('Stream error:', error);

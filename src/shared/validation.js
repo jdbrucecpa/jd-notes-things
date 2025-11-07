@@ -7,10 +7,18 @@ const ParticipantSchema = z.object({
 });
 
 // Transcript entry schema
+// Accept both string and number timestamps for backwards compatibility
 const TranscriptEntrySchema = z.object({
   speaker: z.string(),
   text: z.string(),
-  timestamp: z.number().optional(),
+  timestamp: z.union([z.number(), z.string()]).optional().transform(val => {
+    if (typeof val === 'string') {
+      // Try to parse string timestamp to number
+      const parsed = parseFloat(val);
+      return isNaN(parsed) ? Date.parse(val) : parsed;
+    }
+    return val;
+  }),
 });
 
 // Meeting schema

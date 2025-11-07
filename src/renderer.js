@@ -18,6 +18,9 @@ const meetingsData = {
 const upcomingMeetings = [];
 const pastMeetings = [];
 
+// Calendar meetings from Google Calendar
+const calendarMeetings = [];
+
 // Group past meetings by date
 let pastMeetingsByDate = {};
 
@@ -266,6 +269,93 @@ function createMeetingCard(meeting) {
   `;
 
   return card;
+}
+
+// Function to create calendar meeting card
+function createCalendarMeetingCard(meeting) {
+  const card = document.createElement('div');
+  card.className = 'meeting-card calendar-meeting';
+  card.dataset.id = meeting.id;
+
+  // Platform icon colors
+  const platformColors = {
+    'zoom': '#2D8CFF',
+    'teams': '#6264A7',
+    'google-meet': '#0F9D58',
+    'webex': '#00BCEB',
+    'whereby': '#6366F1',
+    'unknown': '#999'
+  };
+
+  const platformColor = platformColors[meeting.platform] || platformColors['unknown'];
+
+  // Format the meeting time
+  const startTime = new Date(meeting.startTime);
+  const endTime = new Date(meeting.endTime);
+  const timeString = `${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+  // Platform display name
+  const platformNames = {
+    'zoom': 'Zoom',
+    'teams': 'Teams',
+    'google-meet': 'Google Meet',
+    'webex': 'Webex',
+    'whereby': 'Whereby',
+    'unknown': 'Meeting'
+  };
+  const platformName = platformNames[meeting.platform] || 'Meeting';
+
+  card.innerHTML = `
+    <div class="meeting-icon calendar" style="background-color: ${platformColor}20;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M19 4H18V2H16V4H8V2H6V4H5C3.89 4 3.01 4.9 3.01 6L3 20C3 21.1 3.89 22 5 22H19C20.1 22 21 21.1 21 20V6C21 4.9 20.1 4 19 4ZM19 20H5V10H19V20ZM19 8H5V6H19V8Z" fill="${platformColor}"/>
+      </svg>
+    </div>
+    <div class="meeting-content">
+      <div class="meeting-title">${meeting.title}</div>
+      <div class="meeting-time">${timeString} • ${platformName}</div>
+      <div class="meeting-participants">${meeting.participants.length} participant${meeting.participants.length !== 1 ? 's' : ''}</div>
+    </div>
+    <div class="meeting-actions">
+      ${meeting.meetingLink ? `
+        <button class="join-calendar-meeting-btn" data-id="${meeting.id}" data-link="${meeting.meetingLink}" title="Join meeting">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+          </svg>
+        </button>
+      ` : ''}
+      <button class="record-calendar-meeting-btn" data-id="${meeting.id}" title="Record meeting">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="8" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+  `;
+
+  return card;
+}
+
+// Function to fetch calendar meetings from Google Calendar
+async function fetchCalendarMeetings() {
+  try {
+    console.log('Fetching calendar meetings...');
+    const result = await window.electronAPI.getCalendarMeetings(24); // Next 24 hours
+
+    if (result.success) {
+      console.log(`Fetched ${result.meetings.length} calendar meetings`);
+      calendarMeetings.length = 0; // Clear existing
+      calendarMeetings.push(...result.meetings);
+      renderMeetings(); // Re-render to show updated calendar
+    } else {
+      console.error('Failed to fetch calendar meetings:', result.error);
+      if (result.error.includes('Not authenticated')) {
+        // Show authentication needed UI
+        console.log('Calendar authentication required');
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching calendar meetings:', error);
+  }
 }
 
 // Function to show home view
@@ -595,6 +685,32 @@ function renderMeetings() {
   // Clear previous content
   const mainContent = document.querySelector('.main-content .content-container');
   mainContent.innerHTML = '';
+
+  // Create upcoming meetings section (from Google Calendar)
+  if (calendarMeetings.length > 0) {
+    const upcomingSection = document.createElement('section');
+    upcomingSection.className = 'meetings-section';
+    upcomingSection.innerHTML = `
+      <div class="section-header">
+        <h2 class="section-title">Upcoming Meetings</h2>
+        <button class="refresh-calendar-btn" title="Refresh calendar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      <div class="meetings-list" id="calendar-list"></div>
+    `;
+    mainContent.appendChild(upcomingSection);
+
+    // Get the calendar container
+    const calendarContainer = upcomingSection.querySelector('#calendar-list');
+
+    // Add calendar meetings
+    calendarMeetings.forEach(meeting => {
+      calendarContainer.appendChild(createCalendarMeetingCard(meeting));
+    });
+  }
 
   // Create all notes section (replaces both upcoming and date-grouped sections)
   const notesSection = document.createElement('section');
@@ -1235,6 +1351,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Try to load the latest data from file - this is the only data source
   await loadMeetingsDataFromFile();
 
+  // Fetch calendar meetings from Google Calendar
+  await fetchCalendarMeetings();
+
   // Render meetings only after loading from file
   console.log('Data loaded, rendering meetings...');
   renderMeetings();
@@ -1560,7 +1679,53 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Add click event delegation for meeting cards and their actions
-  document.querySelector('.main-content').addEventListener('click', (e) => {
+  document.querySelector('.main-content').addEventListener('click', async (e) => {
+    // Check if refresh calendar button was clicked
+    if (e.target.closest('.refresh-calendar-btn')) {
+      e.stopPropagation();
+      const refreshBtn = e.target.closest('.refresh-calendar-btn');
+      const originalHTML = refreshBtn.innerHTML;
+
+      refreshBtn.disabled = true;
+      refreshBtn.innerHTML = '<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+      await fetchCalendarMeetings();
+
+      refreshBtn.disabled = false;
+      refreshBtn.innerHTML = originalHTML;
+      return;
+    }
+
+    // Check if join calendar meeting button was clicked
+    if (e.target.closest('.join-calendar-meeting-btn')) {
+      e.stopPropagation();
+      const joinBtn = e.target.closest('.join-calendar-meeting-btn');
+      const meetingLink = joinBtn.dataset.link;
+
+      if (meetingLink) {
+        // Open the meeting link in the default browser
+        window.electronAPI.openExternal(meetingLink);
+      }
+      return;
+    }
+
+    // Check if record calendar meeting button was clicked
+    if (e.target.closest('.record-calendar-meeting-btn')) {
+      e.stopPropagation();
+      const recordBtn = e.target.closest('.record-calendar-meeting-btn');
+      const meetingId = recordBtn.dataset.id;
+
+      console.log('Record calendar meeting:', meetingId);
+
+      // Create a new note for this meeting
+      const noteId = await createNewMeeting();
+
+      // TODO: Future enhancement - associate calendar meeting with this note
+      // Could store calendar meeting ID in the note metadata
+
+      return;
+    }
+
     // Check if delete button was clicked
     if (e.target.closest('.delete-meeting-btn')) {
       e.stopPropagation(); // Prevent opening the note
@@ -1642,6 +1807,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Find the meeting card that was clicked (for opening)
     const card = e.target.closest('.meeting-card');
     if (card) {
+      // Don't open editor for calendar meeting cards (they don't have saved notes yet)
+      // Only the Join/Record buttons should work for calendar meetings
+      if (card.classList.contains('calendar-meeting')) {
+        return;
+      }
+
       const meetingId = card.dataset.id;
       showEditorView(meetingId);
     }
