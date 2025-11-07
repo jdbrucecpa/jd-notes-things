@@ -1,8 +1,8 @@
 # JD Notes Things - Development Progress
 
-**Last Updated:** November 6, 2025
-**Current Phase:** Phase 2 Complete - Routing System Functional
-**Status:** Core recording and intelligent routing complete, ready for Calendar Integration
+**Last Updated:** November 7, 2025
+**Current Phase:** Phase 3 In Progress - Calendar Integration (UI complete, auto-recording pending)
+**Status:** Calendar integration UI complete, AI summaries working with gpt-4o-mini
 
 ---
 
@@ -165,24 +165,115 @@ Each meeting generates:
 
 ---
 
-## 🚧 What's Next (Phase 3+)
+## ✅ Phase 3: Calendar Integration (IN PROGRESS)
+
+### November 7, 2025: Google Calendar UI & Bug Fixes
+**Goal**: Display upcoming meetings and enable one-click join/record
+
+#### Completed Features
+- ✅ Google Calendar OAuth 2.0 integration
+- ✅ Calendar event fetching (next 24 hours)
+- ✅ Meeting platform detection (Zoom, Teams, Google Meet, Webex, Whereby)
+- ✅ Upcoming meetings display in main UI
+- ✅ Calendar meeting cards with Join/Record buttons
+- ✅ Platform badges and participant counts
+- ✅ Manual refresh functionality
+- ✅ Extract meeting metadata (title, participants, links, organizer)
+- ✅ Integration with existing routing system (participant emails captured)
+
+#### Modules Created
+- `src/main/integrations/GoogleCalendar.js` (369 lines)
+  - OAuth 2.0 authentication flow
+  - Token persistence and refresh
+  - Calendar event fetching with filtering
+  - Platform detection using regex patterns
+  - Meeting link extraction
+  - Participant information extraction
+
+#### Bug Fixes (November 7, 2025)
+
+**1. Calendar Card Click Bug**
+- **Issue**: Calendar meeting cards opened editor view with placeholder content
+- **Root Cause**: Click handler didn't differentiate calendar meetings from saved meetings
+- **Fix**: Added early return in `src/renderer.js:1812-1814` for `.calendar-meeting` class
+- **Files Modified**: `src/renderer.js`, `src/index.html`
+
+**2. Validation Breaking New Meetings**
+- **Issue**: "Meeting not found" error when creating new in-person meetings
+- **Root Cause**: Old meetings had string timestamps, new validation expected numbers
+- **Error**: `Invalid meetings data format: expected number, received string`
+- **Fix**: Updated `src/shared/validation.js:14-21` to accept both types with `z.union()` and `.transform()`
+- **Result**: Backwards compatible validation with type coercion
+
+**3. AI Summary Generation Empty Content**
+- **Issue**: Summary generation completed but produced only `"# Meeting Title\n\n"` - no actual content
+- **Investigation**:
+  - Enhanced logging revealed GPT-5-nano returning 2 chunks with 0 content chunks
+  - Chunk analysis showed `finish_reason: "length"` before generating any tokens
+  - This was a GPT-5-nano streaming bug
+- **Model Selection Journey**:
+  - Started with: `gpt-5-nano` (streaming bug - empty summaries)
+  - Attempted: `gpt-4o-mini` (works but user wanted gpt-5-mini)
+  - Attempted: `gpt-5-mini-2025-08-07` (protected model requiring verification, temperature parameter not supported)
+  - Final: `gpt-4o-mini` with `temperature: 0.7` ✅
+- **Fix**: Switched to `gpt-4o-mini` in `src/main.js:14-24`
+- **Result**: AI summaries now working correctly
+
+**4. Debug Logging Cleanup**
+- Removed verbose chunk structure logging
+- Removed per-token logging
+- Kept essential statistics: model name, content chunk count, character length
+- Kept empty summary warning for diagnostics
+
+#### Environment Configuration
+- Google Calendar credentials documented in `.env.example`
+- OAuth redirect URI: `http://localhost:3000/oauth2callback`
+- Token storage: Context-aware (Electron vs Node.js)
+
+#### Test Results
+- ✅ Calendar authentication successful
+- ✅ Meetings displayed in UI
+- ✅ Platform detection working (Zoom, Teams, Meet)
+- ✅ Participant extraction working
+- ✅ Join/Record buttons respond correctly
+- ✅ AI summaries generate with proper formatting
+
+#### Pending Tasks (Phase 3)
+- ⏳ Calendar authentication UI (OAuth flow currently CLI-based)
+- ⏳ Auto-start recording when meeting begins
+- ⏳ Recording notification system
+- ⏳ Hook up routing system with calendar participant emails
+
+**Success Criteria**: ✅ 5 of 8 complete
+- ✅ Calendar events displayed in main window
+- ✅ Meetings with 2+ participants detected
+- ✅ Meeting title and participants extracted
+- ✅ Platform detection working
+- ✅ One-click join/record from UI
+- ⏳ Recording starts automatically (with notification)
+- ⏳ OAuth flow accessible from UI
+- ⏳ Routing uses calendar participant data
 
 ---
 
-### Phase 3: Calendar Integration
-**Goal**: Auto-detect and record scheduled meetings
+## 🚧 What's Next (Phase 3+ Completion)
 
-#### Tasks
-- [ ] Google Calendar OAuth integration
-- [ ] Display upcoming meetings in UI
+---
+
+### Phase 3 Completion: Auto-Recording & OAuth UI
+**Goal**: Complete calendar integration with auto-recording
+
+#### Remaining Tasks
+- [ ] Calendar authentication UI (in-app OAuth flow)
 - [ ] Auto-start recording when meeting begins
-- [ ] Extract meeting metadata (title, participants, platform)
-- [ ] Meeting platform detection (Zoom/Teams/Meet links)
+- [ ] Recording notification system
+- [ ] Hook up routing system with calendar participants
+- [ ] Test auto-recording flow end-to-end
 
 **Success Criteria**:
-- Calendar events displayed in main window
-- Recording starts automatically with user notification
-- Meeting title and participants extracted correctly
+- ⏳ OAuth flow accessible from settings/UI
+- ⏳ Recording starts automatically with user notification
+- ⏳ Calendar participants used in routing decisions
 
 ---
 
@@ -302,8 +393,9 @@ Each meeting generates:
 
 ### APIs & Services
 - **Transcription**: AssemblyAI v3 streaming (speaker diarization, real-time)
-- **LLM**: OpenRouter (anthropic/claude-3.7-sonnet)
+- **LLM**: OpenAI (gpt-4o-mini for summaries, switched from gpt-5-nano)
 - **Platform Detection**: Recall.ai SDK (Zoom, Teams, Google Meet, Slack)
+- **Calendar**: Google Calendar API v3 (OAuth 2.0, read-only)
 
 ### Build Tools
 - **Electron Forge**: 7.8.0
@@ -318,12 +410,16 @@ Each meeting generates:
 jd-notes-things/
 ├── src/
 │   ├── main/
+│   │   ├── integrations/
+│   │   │   └── GoogleCalendar.js    # Google Calendar OAuth & event fetching
 │   │   ├── routing/
 │   │   │   ├── ConfigLoader.js      # YAML configuration loader
 │   │   │   ├── EmailMatcher.js      # Email/domain matching logic
 │   │   │   └── RoutingEngine.js     # Main routing decision engine
 │   │   └── storage/
 │   │       └── VaultStructure.js    # Vault folder creation & file generation
+│   ├── shared/
+│   │   └── validation.js            # Zod schemas for meetings data
 │   ├── main.js                      # Main Electron process
 │   ├── renderer.js                  # React UI (main window)
 │   ├── preload.js                   # IPC bridge
@@ -360,7 +456,13 @@ jd-notes-things/
 RECALLAI_API_URL=https://us-west-2.recall.ai
 RECALLAI_API_KEY=your_key_here
 
-OPENROUTER_KEY=your_key_here
+ASSEMBLYAI_API_KEY=your_key_here
+
+OPENAI_API_KEY=your_key_here
+
+GOOGLE_CALENDAR_CLIENT_ID=your_google_client_id_here.apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=your_google_client_secret_here
+GOOGLE_CALENDAR_REDIRECT_URI=http://localhost:3000/oauth2callback
 ```
 
 ### Running the App
@@ -380,18 +482,19 @@ npm run package
 ## Known Issues & Limitations
 
 ### Current Limitations
-- ❌ No Obsidian integration (files saved to internal JSON)
-- ❌ No calendar integration (manual recording only)
+- ⚠️ Calendar OAuth requires manual CLI steps (no in-app UI)
+- ⚠️ No auto-start recording for calendar events
 - ❌ No contact matching (speaker labels generic)
 - ❌ No encryption
-- ❌ No routing system
-- ❌ No custom templates (hardcoded format)
+- ❌ No custom templates (single hardcoded format)
 - ⚠️ JSON parsing warnings in SDK (cosmetic, doesn't affect functionality)
-- ⚠️ OpenRouter API key placeholder (401 errors on AI summary)
 
 ### Fixed Issues
 - ✅ Microphone audio capture (resolved with AssemblyAI v3 streaming)
 - ✅ SDK upload token creation (consolidated into main process)
+- ✅ Calendar card click bug (Nov 7: prevented editor opening for calendar meetings)
+- ✅ Validation breaking new meetings (Nov 7: timestamp type coercion)
+- ✅ AI summary empty content (Nov 7: switched from gpt-5-nano to gpt-4o-mini)
 
 ---
 
@@ -423,16 +526,20 @@ npm run package
 
 ## Next Session Priorities
 
-### Immediate Tasks
-1. **Test server consolidation**: Verify recording still works without separate Express server
-2. **Code review**: Identify deprecated code, TypeScript opportunities, linting issues
-3. **Update SPECIFICATION.md**: Reflect muesli baseline as starting point
+### Option A: Complete Phase 3 (Auto-Recording)
+1. **Calendar authentication UI**: Build in-app OAuth flow (currently CLI-based)
+2. **Auto-start recording**: Implement meeting start detection and auto-recording
+3. **Recording notifications**: System notifications for meeting detection/recording start
+4. **Routing integration**: Use calendar participant emails in routing decisions
 
-### Phase 2 Planning
-1. Design Obsidian vault structure
-2. Create routing.yaml example
-3. Implement file generation (full-notes.md, index.md)
-4. Test markdown compatibility with Obsidian
+### Option B: Begin Phase 4 (Enhanced AI Summaries)
+1. **Template system**: Implement `config/templates/` scanning and loading
+2. **Template parser**: Support .md, .yaml, .json template formats
+3. **Multi-summary generation**: Apply multiple templates per meeting
+4. **Template selection UI**: Allow user to choose which templates to apply
+5. **Cost tracking**: Track LLM usage per template/meeting
+
+**Recommendation**: Complete Phase 3 first for cohesive user experience (calendar → auto-record → summary)
 
 ---
 
@@ -444,10 +551,17 @@ npm run package
 - ✅ Real-time transcription working
 - ✅ AI summary generation functional
 
-### Phase 2 (Target)
-- 100% of meetings routed to correct folders
-- Markdown files render correctly in Obsidian
-- Zero manual file organization needed
+### Phase 2 (Complete)
+- ✅ 100% of meetings routed to correct folders
+- ✅ Markdown files render correctly in Obsidian
+- ✅ Zero manual file organization needed
+
+### Phase 3 (In Progress)
+- ✅ Calendar events displayed in UI
+- ✅ Meeting metadata extracted correctly
+- ✅ AI summaries working with gpt-4o-mini
+- ⏳ OAuth flow accessible from UI (currently CLI)
+- ⏳ Auto-start recording for calendar events
 
 ---
 

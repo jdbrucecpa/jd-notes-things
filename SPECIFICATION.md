@@ -11,8 +11,8 @@
 ## Development Status
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
-**Phase:** 2 Complete - Routing system functional
-**Next Phase:** 3 - Calendar Integration & Auto-Recording
+**Phase:** 3 In Progress - Calendar Integration (UI complete, auto-recording pending)
+**Next Phase:** 3 completion (auto-recording) or 4 - Enhanced AI Summaries
 
 The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
 - Recall.ai Desktop SDK integration
@@ -696,21 +696,28 @@ Meetings automatically organized into proper client/project folders.
 **Goal:** Automated meeting detection and recording
 
 #### Deliverables
-1. Google Calendar OAuth integration
-2. Calendar event fetching
-3. Upcoming meetings display in UI
-4. Meeting detection (Zoom/Teams/Meet links)
-5. Auto-start recording when meeting begins
-6. Extract meeting metadata (title, participants)
-7. Recording notification system
-8. Manual refresh button
+1. ✅ Google Calendar OAuth integration
+2. ✅ Calendar event fetching
+3. ✅ Upcoming meetings display in UI
+4. ✅ Meeting detection (Zoom/Teams/Meet links)
+5. ⏳ Auto-start recording when meeting begins
+6. ✅ Extract meeting metadata (title, participants)
+7. ⏳ Recording notification system
+8. ✅ Manual refresh button
 
 #### Success Criteria
-- Calendar events displayed in main window
-- Meetings with 2+ participants detected
-- Recording starts automatically (with notification)
-- Meeting title and participants extracted
-- User can stop recording via widget
+- ✅ Calendar events displayed in main window
+- ✅ Meetings with 2+ participants detected
+- ⏳ Recording starts automatically (with notification)
+- ✅ Meeting title and participants extracted
+- ✅ User can stop recording via widget
+
+#### Implementation Details
+- **Module**: `src/main/integrations/GoogleCalendar.js` (369 lines)
+- **Features**: OAuth 2.0 flow, token storage, meeting platform detection (Zoom/Teams/Meet/Webex/Whereby)
+- **Token Storage**: `C:\Users\brigh\AppData\Roaming\JD Notes Things\google-calendar-token.json`
+- **UI**: Calendar meeting cards with Join/Record buttons, platform badges, participant counts
+- **Model**: Currently using `gpt-4o-mini` for AI summaries (switched from gpt-5-nano due to streaming bug)
 
 #### User Value
 No manual intervention needed - app automatically records scheduled meetings.
