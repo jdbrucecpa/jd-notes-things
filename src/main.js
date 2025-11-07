@@ -6,6 +6,8 @@ const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
 const OpenAI = require('openai');
 const sdkLogger = require('./sdk-logger');
+const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema } = require('./shared/validation');
+const { z } = require('zod');
 require('dotenv').config();
 
 // Function to get the OpenRouter headers
@@ -368,7 +370,7 @@ async function createDesktopSdkUpload() {
       timeout: 9000,
     });
 
-    console.log("Upload token created successfully:", response.data.upload_token);
+    console.log("Upload token created successfully:", response.data.upload_token?.substring(0, 8) + '...');
     return response.data;
   } catch (error) {
     console.error("Error creating upload token:", error.response?.data || error.message);
@@ -483,7 +485,7 @@ function initSDK() {
           const uploadData = await createDesktopSdkUpload();
 
           if (uploadData && uploadData.upload_token) {
-            console.log('Uploading recording with new upload token:', uploadData.upload_token);
+            console.log('Uploading recording with new upload token:', uploadData.upload_token.substring(0, 8) + '...');
 
             // Log the uploadRecording API call
             sdkLogger.logApiCall('uploadRecording', {
@@ -642,10 +644,17 @@ function initSDK() {
 // Handle saving meetings data
 ipcMain.handle('saveMeetingsData', async (event, data) => {
   try {
+    // Validate input data
+    const validatedData = MeetingsDataSchema.parse(data);
+
     // Use the file operation manager to safely write the file
-    await fileOperationManager.writeData(data);
+    await fileOperationManager.writeData(validatedData);
     return { success: true };
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      console.error('Invalid meetings data format:', error.message);
+      return { success: false, error: `Invalid data format: ${error.message}` };
+    }
     console.error('Failed to save meetings data:', error);
     return { success: false, error: error.message };
   }
@@ -687,15 +696,17 @@ ipcMain.handle('getActiveRecordingId', async (event, noteId) => {
 // Handle deleting a meeting
 ipcMain.handle('deleteMeeting', async (event, meetingId) => {
   try {
-    console.log(`Deleting meeting with ID: ${meetingId}`);
+    // Validate meetingId
+    const validatedId = MeetingIdSchema.parse(meetingId);
+    console.log(`Deleting meeting with ID: ${validatedId}`);
 
     // Read current data
     const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
     const meetingsData = JSON.parse(fileData);
 
     // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === meetingId);
-    const upcomingMeetingIndex = meetingsData.upcomingMeetings.findIndex(meeting => meeting.id === meetingId);
+    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === validatedId);
+    const upcomingMeetingIndex = meetingsData.upcomingMeetings.findIndex(meeting => meeting.id === validatedId);
 
     let meetingDeleted = false;
     let recordingId = null;
@@ -733,9 +744,13 @@ ipcMain.handle('deleteMeeting', async (event, meetingId) => {
       delete global.activeMeetingIds[recordingId];
     }
 
-    console.log(`Successfully deleted meeting: ${meetingId}`);
+    console.log(`Successfully deleted meeting: ${validatedId}`);
     return { success: true };
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      console.error('Invalid meeting ID format:', error.message);
+      return { success: false, error: `Invalid meeting ID format: ${error.message}` };
+    }
     console.error('Error deleting meeting:', error);
     return { success: false, error: error.message };
   }
@@ -840,14 +855,16 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
 // Handle starting a manual desktop recording
 ipcMain.handle('startManualRecording', async (event, meetingId) => {
   try {
-    console.log(`Starting manual desktop recording for meeting: ${meetingId}`);
+    // Validate meetingId
+    const validatedId = MeetingIdSchema.parse(meetingId);
+    console.log(`Starting manual desktop recording for meeting: ${validatedId}`);
 
     // Read current data
     const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
     const meetingsData = JSON.parse(fileData);
 
     // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === meetingId);
+    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === validatedId);
 
     if (pastMeetingIndex === -1) {
       return { success: false, error: 'Meeting not found' };
@@ -863,7 +880,7 @@ ipcMain.handle('startManualRecording', async (event, meetingId) => {
       sdkLogger.logApiCall('prepareDesktopAudioRecording');
 
       const key = await RecallAiSdk.prepareDesktopAudioRecording();
-      console.log('Prepared desktop audio recording with key:', key);
+      console.log('Prepared desktop audio recording with key:', typeof key === 'string' ? key.substring(0, 8) + '...' : key);
 
       // Create a recording token
       const uploadData = await createDesktopSdkUpload();
@@ -883,17 +900,17 @@ ipcMain.handle('startManualRecording', async (event, meetingId) => {
       global.activeMeetingIds = global.activeMeetingIds || {};
       global.activeMeetingIds[key] = {
         platformName: 'Desktop Recording',
-        noteId: meetingId
+        noteId: validatedId
       };
 
       // Register the recording in our active recordings tracker
-      activeRecordings.addRecording(key, meetingId, 'Desktop Recording');
+      activeRecordings.addRecording(key, validatedId, 'Desktop Recording');
 
       // Save the updated data
       await fileOperationManager.writeData(meetingsData);
 
       // Start recording with the key from prepareDesktopAudioRecording
-      console.log('Starting desktop recording with key:', key);
+      console.log('Starting desktop recording with key:', typeof key === 'string' ? key.substring(0, 8) + '...' : key);
 
       // Log the startRecording API call
       sdkLogger.logApiCall('startRecording', {
@@ -915,6 +932,10 @@ ipcMain.handle('startManualRecording', async (event, meetingId) => {
       return { success: false, error: 'Failed to prepare desktop recording: ' + sdkError.message };
     }
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      console.error('Invalid meeting ID format:', error.message);
+      return { success: false, error: `Invalid meeting ID format: ${error.message}` };
+    }
     console.error('Error starting manual recording:', error);
     return { success: false, error: error.message };
   }
@@ -923,20 +944,22 @@ ipcMain.handle('startManualRecording', async (event, meetingId) => {
 // Handle stopping a manual desktop recording
 ipcMain.handle('stopManualRecording', async (event, recordingId) => {
   try {
-    console.log(`Stopping manual desktop recording: ${recordingId}`);
+    // Validate recordingId
+    const validatedId = RecordingIdSchema.parse(recordingId);
+    console.log(`Stopping manual desktop recording: ${validatedId}`);
 
     // Stop the recording - using the windowId property as shown in the reference
 
     // Log the stopRecording API call
     sdkLogger.logApiCall('stopRecording', {
-      windowId: recordingId
+      windowId: validatedId
     });
 
     // Update our active recordings tracker
-    activeRecordings.updateState(recordingId, 'stopping');
+    activeRecordings.updateState(validatedId, 'stopping');
 
     RecallAiSdk.stopRecording({
-      windowId: recordingId
+      windowId: validatedId
     });
 
     // The recording-ended event will be triggered automatically,
@@ -944,6 +967,10 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
 
     return { success: true };
   } catch (error) {
+    if (error instanceof z.ZodError) {
+      console.error('Invalid recording ID format:', error.message);
+      return { success: false, error: `Invalid recording ID format: ${error.message}` };
+    }
     console.error('Error stopping manual recording:', error);
     return { success: false, error: error.message };
   }
@@ -1173,7 +1200,7 @@ async function createMeetingNoteAndRecord(platformName) {
           windowId: detectedMeeting.window.id
         });
       } else {
-        console.log('Starting recording with upload token:', uploadData.upload_token);
+        console.log('Starting recording with upload token:', uploadData.upload_token.substring(0, 8) + '...');
 
         // Log the startRecording API call with upload token
         sdkLogger.logApiCall('startRecording', {

@@ -657,6 +657,32 @@ Can manually record meetings and get transcribed notes saved locally.
 #### User Value
 Meetings automatically organized into proper client/project folders.
 
+#### Technical Debt Items (Phase 2)
+
+**5. Implement Proper Logging Framework**
+- Install `electron-log` for structured logging
+- Create `src/shared/logger.js` with log levels and formatting
+- Replace `console.log` statements incrementally as files are modified
+- Priority: Do incrementally - replace logging in files touched during Phase 2 development
+- Estimated effort: 2-3 hours initial setup, then incremental
+
+**6. Add ESLint & Prettier Configuration**
+- Install ESLint, Prettier, and related plugins
+- Create `.eslintrc.js` and `.prettierrc` configuration files
+- Add lint/format scripts to `package.json`
+- Priority: Set up early in Phase 2, run periodically
+- Estimated effort: 1 hour setup
+
+**7. Split main.js Into Modules**
+- Extract code from 1,818-line `src/main.js` into focused modules:
+  - `src/main/api/recallai.js` - Upload token creation
+  - `src/main/storage/FileManager.js` - File operations
+  - `src/main/llm/SummaryGenerator.js` - LLM service (if applicable)
+- Extract 1 module at a time, test after each extraction
+- Focus on modules actively being worked on in Phase 2
+- Priority: Incremental during Phase 2 - extract as you add features
+- Estimated effort: 8-10 hours total, done incrementally
+
 ---
 
 ### Phase 3: Calendar Integration & Auto-Recording
@@ -681,6 +707,37 @@ Meetings automatically organized into proper client/project folders.
 
 #### User Value
 No manual intervention needed - app automatically records scheduled meetings.
+
+#### Technical Debt Items (Phase 3)
+
+**8. TypeScript Migration**
+- Migrate project from JavaScript to TypeScript for type safety
+- Start with shared types in `src/shared/types.ts`
+- Incrementally migrate modules (prioritize new code over legacy)
+- Configure tsconfig.json with appropriate compiler options
+- Best done before Phase 4 (LLM integration) to help with provider abstraction
+- Priority: Start during Phase 3, complete before Phase 4
+- Estimated effort: 20-30 hours total, done incrementally
+
+**9. React Component Extraction**
+- Extract components from 2,004-line `src/renderer.js` monolith
+- Create modular component structure:
+  - `components/MeetingList.jsx`, `MeetingCard.jsx`, `MeetingEditor.jsx`
+  - `components/TranscriptView.jsx`, `RecordingControls.jsx`
+  - `hooks/useMeetings.js`, `useRecording.js`
+- Essential for Phase 3 Calendar UI implementation
+- Extract components as needed when building Calendar view
+- Priority: Do during Phase 3 when adding Calendar UI
+- Estimated effort: 12-15 hours
+
+**10. Comprehensive Testing**
+- Set up testing infrastructure: Jest, React Testing Library
+- Install: `jest`, `@testing-library/react`, `@testing-library/jest-dom`
+- Write tests incrementally for new features added in Phase 3+
+- Focus on critical paths: routing logic, file operations, IPC handlers
+- Target: 50% test coverage by Phase 4
+- Priority: Set up infrastructure in Phase 3, write tests incrementally
+- Estimated effort: 30+ hours ongoing
 
 ---
 
@@ -846,6 +903,27 @@ Entire meeting history organized and searchable using new system.
 #### User Value
 Sensitive client information protected from unauthorized access.
 
+#### Technical Debt Items (Phase 10)
+
+**11. Memory Leak Prevention**
+- Clean up event listeners on window/app close
+- Affected areas:
+  - IPC listeners in main process
+  - SDK event listeners (Recall.ai)
+  - Renderer process event listeners
+- Add proper cleanup handlers for all event registrations
+- Test with long-running sessions to verify no memory accumulation
+- Priority: Implement during Phase 10 security hardening
+- Estimated effort: 4-6 hours
+
+**13. XSS Vulnerabilities**
+- Replace unsafe `innerHTML` usage with safer alternatives
+- Use `textContent` for plain text or DOMPurify for HTML sanitization
+- Audit renderer process for potential XSS vectors
+- Primarily affects transcript display and summary rendering
+- Priority: Low risk (data from trusted sources), address during security phase
+- Estimated effort: 2-3 hours
+
 ---
 
 ### Phase 11: Advanced UI & Settings
@@ -872,6 +950,26 @@ Sensitive client information protected from unauthorized access.
 
 #### User Value
 Fully customizable to personal workflow preferences.
+
+#### Technical Debt Items (Phase 11)
+
+**12. Code Duplication**
+- Refactor repeated patterns identified during development:
+  - Video file checking logic
+  - Upload token creation
+  - Error handling patterns
+- Extract common code into utility functions/modules
+- Approach: Refactor opportunistically when touching duplicated code
+- Priority: Low - fix when convenient during normal development
+- Estimated effort: 4-6 hours total, done opportunistically
+
+**14. Environment Configuration**
+- Implement dev/staging/production environment separation
+- Create environment-specific configuration files
+- Support for different API endpoints per environment
+- Enable easier testing with different configurations
+- Priority: Implement when deployment/distribution needs arise
+- Estimated effort: 3-4 hours
 
 ---
 

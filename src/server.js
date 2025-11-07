@@ -9,7 +9,7 @@ const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai'
 const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
 
 app.get('/start-recording', async (req, res) => {
-    console.log(`Creating upload token with API key: ${RECALLAI_API_KEY}`);
+    console.log(`Creating upload token with API key: ${RECALLAI_API_KEY?.substring(0, 8)}...`);
 
     if (!RECALLAI_API_KEY) {
         console.error("RECALLAI_API_KEY is missing! Set it in .env file");

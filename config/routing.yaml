@@ -1,0 +1,63 @@
+# JD Notes Things - Routing Configuration
+# This file determines where meeting notes are saved based on participant email addresses
+
+# Client Organizations
+clients:
+  alman-partners:
+    vault_path: "clients/alman-partners"
+    emails:
+      - "almanpartners.com"
+    contacts:
+      - "specific.contact@almanpartners.com"
+
+  capital-partners:
+    vault_path: "clients/capital-partners"
+    emails:
+      - "capitalpartners.com"
+    contacts: []
+
+  regency-invests:
+    vault_path: "clients/regency-invests"
+    emails:
+      - "regencyinvests.com"
+    contacts: []
+
+# Industry Contacts
+industry:
+  herbers:
+    vault_path: "industry/herbers"
+    emails:
+      - "herbers.com"
+    contacts:
+      - "contact@herbers.com"
+
+# Internal Team Meetings
+internal:
+  vault_path: "internal/meetings"
+  team_emails:
+    - "jdknowsthings.com"    # Your organization domain
+
+# Email Overrides (specific email -> organization mapping)
+# Use this for personal emails that should route to specific organizations
+email_overrides:
+  "personal@gmail.com": "alman-partners"
+  "consultant@outlook.com": "capital-partners"
+
+# Routing Settings
+settings:
+  # Path for meetings with unknown participants
+  unfiled_path: "_unfiled"
+
+  # How to handle meetings with participants from multiple organizations
+  # Options: "all" (duplicate in all folders), "primary" (use organization with most attendees), "unfiled" (route to unfiled)
+  duplicate_multi_org: "all"
+
+  # How to determine primary organization when duplicate_multi_org is "primary"
+  # Options: "most_attendees" (org with most participants), "first" (first matched org)
+  domain_priority: "most_attendees"
+
+  # Enable email override functionality
+  enable_email_overrides: true
+
+  # Case sensitive email matching
+  case_sensitive_emails: false
