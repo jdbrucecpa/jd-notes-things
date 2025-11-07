@@ -4,7 +4,23 @@
 **Organization:** JD Knows Things
 **Purpose:** Personal AI Meeting Notetaker for Zoom, Microsoft Teams, Google Meet, and Manual Recording
 **Version:** 1.0
-**Last Updated:** November 5, 2025
+**Last Updated:** November 6, 2025
+
+---
+
+## Development Status
+
+**Current Baseline:** Muesli (Recall.ai reference implementation)
+**Phase:** 1 Complete - Core recording and transcription functional
+**Next Phase:** 2 - Obsidian Vault Integration
+
+The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
+- Recall.ai Desktop SDK integration
+- Real-time transcription with AssemblyAI v3
+- Meeting detection (Zoom, Teams, Google Meet, Slack)
+- AI-powered summary generation via OpenRouter
+
+This specification describes the full vision. Development follows the phase plan below, building incrementally on the working baseline.
 
 ---
 
@@ -888,9 +904,21 @@ Take notes and review what was said during the meeting.
 - Desktop Recording SDK
 - Documentation: https://docs.recall.ai/docs/getting-started
 
-### Transcription Service (Choose One)
-- **Deepgram**: Real-time + speaker diarization, good pricing
-- **AssemblyAI**: Excellent diarization, mid-tier pricing
+### Transcription Service (Provider Pattern)
+**Architecture**: Pluggable provider system supporting multiple backends
+
+**Phase 1 - AssemblyAI Provider**:
+- **AssemblyAI**: Excellent diarization (50 speakers), mid-tier pricing ($0.27/hr)
+- Primary implementation for immediate use
+- Cloud-based, requires API key
+
+**Phase 1.5 - Parakeet Provider** (Future):
+- **Parakeet (NVIDIA)**: Local transcription, privacy-focused, offline, free
+- Similar to Meetify's implementation
+- Requires GPU for optimal performance
+
+**Other Options Considered**:
+- **Deepgram**: Real-time + speaker diarization, good pricing (may use in Phase 12)
 - **Whisper API**: OpenAI, high quality, potentially expensive
 
 ### LLM Services
@@ -920,9 +948,10 @@ jdnotesthings/
 │   │   │   ├── RecallSDK.ts
 │   │   │   └── AudioCapture.ts
 │   │   ├── transcription/
-│   │   │   ├── TranscriptionService.ts
-│   │   │   ├── DeepgramService.ts
-│   │   │   └── SpeakerDiarization.ts
+│   │   │   ├── TranscriptionService.ts       # Provider factory/interface
+│   │   │   ├── ITranscriptionProvider.ts     # Abstract provider interface
+│   │   │   ├── AssemblyAIProvider.ts         # AssemblyAI implementation
+│   │   │   └── ParakeetProvider.ts           # Future: Local transcription
 │   │   ├── routing/
 │   │   │   ├── RoutingEngine.ts
 │   │   │   ├── ConfigLoader.ts

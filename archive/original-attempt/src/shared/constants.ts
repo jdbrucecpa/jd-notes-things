@@ -16,6 +16,7 @@ export const DEFAULT_VAULT_PATH = './vault';
 export const DEFAULT_SAMPLE_RATE = 44100;
 export const DEFAULT_BITRATE = 192000;
 export const DEFAULT_AUDIO_FORMAT = 'wav' as const;
+export const DEFAULT_TRANSCRIPTION_PROVIDER = 'assemblyai' as const;
 
 // API Endpoints
 export const DEFAULT_RECALL_API_URL = 'https://us-east-1.recall.ai';

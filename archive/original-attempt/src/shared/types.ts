@@ -73,11 +73,15 @@ export enum IPCChannel {
   UPDATE_SETTINGS = 'settings:update',
 }
 
+// Transcription Provider Types
+export type TranscriptionProvider = 'assemblyai' | 'parakeet' | 'auto';
+
 // App Settings
 export interface AppSettings {
   vaultPath: string;
   recallApiUrl: string;
   recallApiKey?: string;
+  transcriptionProvider: TranscriptionProvider;
   assemblyAiApiKey?: string;
   audioQuality: {
     sampleRate: number;

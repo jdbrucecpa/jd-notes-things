@@ -1,349 +1,373 @@
 # JD Notes Things - Development Progress
 
-**Last Updated:** November 5, 2025
-**Current Phase:** Phase 1 - Core Recording & Transcription
-**Status:** Foundation Complete, Ready for Core Implementation
+**Last Updated:** November 6, 2025
+**Current Phase:** Phase 1 - Working Baseline Complete
+**Status:** Core recording functional, ready for Phase 2 enhancements
 
 ---
 
-## Phase 1 Progress
+## Project History
 
-### ✅ Completed Tasks
+### November 5, 2025: Initial Setup Attempt
+- Created Electron + TypeScript + React project structure
+- Set up basic recording widget UI
+- Attempted Recall.ai SDK integration
+- **Result**: Microphone audio not captured (0 words/utterances) - dealbreaker issue
 
-#### 1. Research & Technology Selection
-- **Recall.ai Desktop SDK**: Version 1.3.2, proven Windows compatibility via muesli-public example
-- **Transcription Service**: Selected **AssemblyAI** for best speaker diarization (50 speakers, $0.27/hour)
-  - Alternative options documented: Deepgram (real-time), Whisper API (highest accuracy)
-- **Tech Stack Confirmed**: Electron + Node.js + TypeScript + React
-
-#### 2. Project Initialization
-- ✅ Electron Forge project created with TypeScript + Webpack template
-- ✅ Package.json configured with correct app name and description
-- ✅ All core dependencies installed:
-  - `react` (19.2.0) and `react-dom` (19.2.0)
-  - `@recallai/desktop-sdk` (1.3.2)
-  - `assemblyai` (4.19.0)
-  - `dotenv` (17.2.3)
-  - TypeScript types for React
-
-#### 3. Project Structure
-Created organized folder structure per SPECIFICATION.md:
-
-```
-src/
-├── main/
-│   ├── index.ts                    (Entry point - needs implementation)
-│   ├── recording/                  (Ready for RecordingManager)
-│   ├── transcription/              (Ready for TranscriptionService)
-│   ├── routing/                    (Phase 2)
-│   ├── llm/                        (Phase 4)
-│   ├── integrations/               (Phase 3+)
-│   ├── storage/                    (Ready for FileManager)
-│   └── utils/                      (Ready for Config, Logger)
-│
-├── renderer/
-│   ├── App.tsx                     ✅ Basic recording widget UI
-│   ├── index.tsx                   ✅ React app bootstrap
-│   ├── index.html                  ✅ HTML template with root div
-│   ├── index.css                   ✅ Complete styling
-│   ├── components/                 (Ready for future components)
-│   ├── hooks/                      (Ready for custom hooks)
-│   └── styles/                     (Ready for additional styles)
-│
-├── shared/
-│   ├── types.ts                    ✅ Complete TypeScript interfaces
-│   └── constants.ts                ✅ App constants and defaults
-│
-└── preload.ts                      (Needs IPC API exposure)
-```
-
-#### 4. Configuration Files
-- ✅ `tsconfig.json` - TypeScript configured with JSX support (`"jsx": "react"`)
-- ✅ `webpack.main.config.ts` - Updated entry point to `src/main/index.ts`
-- ✅ `webpack.renderer.config.ts` - CSS loader configured
-- ✅ `forge.config.ts` - Updated paths for new structure
-- ✅ `.env.example` - Template for API keys and configuration
-
-#### 5. Basic UI Implementation
-Created functional React app with recording widget:
-- **App.tsx**: Recording controls with start/stop buttons
-- **Styling**: Professional UI with animations, hover effects
-- **State Management**: Basic recording state (ready for IPC integration)
-- **Build Verified**: Webpack compiles successfully ✅
+### November 6, 2025: Pivot to Muesli Template
+- Fixed muesli reference implementation (corrected AssemblyAI v3 streaming configuration)
+- Verified microphone capture works with proper SDK configuration
+- Replaced jd-notes-things codebase with proven muesli implementation
+- Consolidated Express server into Electron main process
+- **Result**: Working baseline with functional recording and real-time transcription
 
 ---
 
-### 🔧 What's Built and Ready
+## ✅ What We Have Now (Muesli Baseline)
 
-#### TypeScript Types (`src/shared/types.ts`)
-Comprehensive type definitions for:
-- `RecordingSession` - Track recording metadata
-- `RecordingStatus` - State enum ('idle' | 'recording' | 'paused' | 'processing')
-- `MeetingPlatform` - Platform detection types
-- `Participant` - Contact information
-- `Transcript` & `TranscriptSegment` - Transcription data
-- `IPCChannel` - IPC communication channels
-- `AppSettings` - App configuration
+### Core Recording Functionality
+- ✅ Recall.ai Desktop SDK integrated and working
+- ✅ Manual desktop audio recording with `prepareDesktopAudioRecording()`
+- ✅ Automatic meeting detection (Zoom, Teams, Google Meet, Slack)
+- ✅ Real-time transcription with AssemblyAI v3 streaming
+- ✅ Speaker diarization (Speaker 1, Speaker 2, etc.)
+- ✅ Microphone audio capture confirmed working
 
-#### Constants (`src/shared/constants.ts`)
-- App information (name, version, company)
-- Default settings (sample rate: 44100, bitrate: 192000)
-- API endpoints
-- File paths and naming conventions
+### UI Features
+- ✅ Main window with meeting list (upcoming and past meetings)
+- ✅ Meeting note editor with:
+  - Real-time transcript display
+  - Participant list
+  - Start/stop recording controls
+  - Video frame preview (for supported platforms)
+- ✅ Meeting detection notifications
+- ✅ Recording status indicators
 
-#### UI Components (`src/renderer/`)
-- Fully styled recording widget
-- Recording status indicator with pulse animation
-- Timer display (ready to connect to real recording)
-- Professional button styling with hover/active states
+### AI Integration
+- ✅ OpenRouter integration for LLM services
+- ✅ Streaming AI summary generation
+- ✅ Template-based summarization with structured format:
+  - Participants list
+  - Summary (key discussion points)
+  - Action items
+- ✅ Progress updates during summary generation
 
----
+### File Management
+- ✅ Meetings stored in JSON file at `userData/meetings.json`
+- ✅ Recording files saved to `userData/recordings/`
+- ✅ File operation manager prevents race conditions
+- ✅ Upload progress tracking
 
-### 🚧 Next Steps - Ready to Implement
+### SDK Integration
+- ✅ Event-driven architecture with Recall.ai SDK
+- ✅ Real-time events:
+  - `meeting-detected` - Platform meeting detected
+  - `meeting-closed` - Meeting window closed
+  - `recording-ended` - Recording stopped
+  - `sdk-state-change` - Recording state updates
+  - `realtime-event` - Transcript, participants, video frames
+  - `upload-progress` - Upload completion tracking
+  - `permissions-granted` - System permissions confirmed
 
-#### 6. Main Process Implementation (src/main/)
-
-**Priority 1: Recording Manager** (`src/main/recording/RecordingManager.ts`)
-```typescript
-// TODO: Implement
-- Initialize Recall.ai SDK
-- Handle start/stop recording
-- Capture system audio
-- Save audio files to temp location
-- Emit IPC events for UI updates
-```
-
-**Priority 2: Transcription Service** (`src/main/transcription/TranscriptionService.ts`)
-```typescript
-// TODO: Implement
-- Initialize AssemblyAI client
-- Upload audio file for transcription
-- Poll for completion
-- Process speaker diarization results
-- Return formatted transcript
-```
-
-**Priority 3: File Manager** (`src/main/storage/FileManager.ts`)
-```typescript
-// TODO: Implement
-- Generate date-based filename (YYYY-MM-DD-HH-MM-transcript.md)
-- Save transcript to disk
-- Create markdown format with timestamps
-- Handle file permissions/errors
-```
-
-**Priority 4: Main Process Entry** (`src/main/index.ts`)
-```typescript
-// TODO: Implement
-- Create BrowserWindow
-- Load environment variables
-- Set up IPC handlers (start, stop, save)
-- Initialize services
-- Handle app lifecycle
-```
-
-**Priority 5: Preload Script** (`src/preload.ts`)
-```typescript
-// TODO: Implement
-- Expose IPC API to renderer
-- contextBridge.exposeInMainWorld('api', {
-    startRecording: () => ipcRenderer.invoke('recording:start'),
-    stopRecording: () => ipcRenderer.invoke('recording:stop'),
-    onRecordingStarted: (callback) => ...,
-    onRecordingError: (callback) => ...
-  })
-```
-
-#### 7. Connect UI to Backend
-
-**Update App.tsx** to use IPC:
-```typescript
-// Replace console.log with actual IPC calls
-const handleStartRecording = async () => {
-  await window.api.startRecording();
-};
-
-const handleStopRecording = async () => {
-  await window.api.stopRecording();
-};
-```
-
-#### 8. End-to-End Testing
-- Manual test: Start recording → Record 30 seconds → Stop
-- Verify audio file created
-- Verify transcription completes
-- Verify transcript saved with correct filename
-- Verify speaker labels present
+### Architecture
+- ✅ Electron main process (src/main.js)
+- ✅ React renderer process (src/renderer.js)
+- ✅ IPC communication via preload.js
+- ✅ ~~Express server for SDK upload tokens~~ → **Consolidated into main process**
+- ✅ SDK logger for debugging (src/sdk-logger.js)
 
 ---
 
-## Testing on Windows
+## 🚧 What's Next (Phase 2+)
 
-### Setup Steps
-1. Clone/sync the project to Windows machine
-2. Copy `.env.example` to `.env`
-3. Add API keys:
-   ```
-   RECALLAI_API_KEY=your_key_here
-   ASSEMBLYAI_API_KEY=your_key_here
-   ```
-4. Run `npm install` (if not synced)
-5. Run `npm start`
+### Phase 2: Obsidian Vault Integration
+**Goal**: Save meetings to Obsidian vault with intelligent routing
 
-### Expected Behavior (Once Implementation Complete)
-1. Electron window opens with "JD Notes Things" header
-2. Click "Start Recording" → Status changes to red "● Recording"
-3. Timer counts up
-4. Click "Stop Recording" → Processing begins
-5. Transcript saved to current directory as `YYYY-MM-DD-HH-MM-transcript.md`
+#### Tasks
+- [ ] Implement routing configuration system (`config/routing.yaml`)
+- [ ] Create vault folder structure (clients/industry/internal/unfiled)
+- [ ] Email domain matching logic
+- [ ] Generate markdown files for meetings:
+  - `full-notes.md` - Complete transcript with timestamps
+  - `index.md` - Meeting metadata and navigation
+  - Template-based summaries
+- [ ] File naming convention: `YYYY-MM-DD-meeting-title/`
+- [ ] Metadata extraction from calendar events
 
-### Known Limitations (Phase 1 Only)
-- ❌ No routing yet (saves to current directory)
-- ❌ No LLM summaries (manual review only)
-- ❌ No calendar integration (manual start/stop only)
-- ❌ No contact matching (speaker labels are "Speaker 1", "Speaker 2")
+**Success Criteria**:
+- Meetings automatically saved to correct folders
+- Markdown files compatible with Obsidian
+- Routing based on participant emails
+
+---
+
+### Phase 3: Calendar Integration
+**Goal**: Auto-detect and record scheduled meetings
+
+#### Tasks
+- [ ] Google Calendar OAuth integration
+- [ ] Display upcoming meetings in UI
+- [ ] Auto-start recording when meeting begins
+- [ ] Extract meeting metadata (title, participants, platform)
+- [ ] Meeting platform detection (Zoom/Teams/Meet links)
+
+**Success Criteria**:
+- Calendar events displayed in main window
+- Recording starts automatically with user notification
+- Meeting title and participants extracted correctly
+
+---
+
+### Phase 4: Enhanced AI Summaries
+**Goal**: User-editable templates and multiple summary types
+
+#### Tasks
+- [ ] Template system in `config/templates/`
+- [ ] Support `.md`, `.yaml`, `.json` template formats
+- [ ] Template editor in settings
+- [ ] Multiple summaries per meeting
+- [ ] Cost tracking per LLM provider
+- [ ] Provider selection UI (OpenAI, Claude, Gemini)
+
+**Success Criteria**:
+- Users can create custom summary templates
+- Multiple summary types generated per meeting
+- Template selection UI functional
+
+---
+
+### Phase 5: Contact Matching
+**Goal**: Replace "Speaker N" with actual names
+
+#### Tasks
+- [ ] Google Contacts API integration
+- [ ] Match calendar participants to contacts
+- [ ] Speaker voice → participant matching
+- [ ] Manual speaker ID correction UI
+- [ ] Contact caching for performance
+
+**Success Criteria**:
+- Transcript shows real names instead of "Speaker 1"
+- 70%+ speaker identification accuracy
+- User can correct misidentifications
+
+---
+
+### Phase 6: HubSpot Integration
+**Goal**: Auto-sync meeting summaries to CRM
+
+#### Tasks
+- [ ] HubSpot OAuth integration
+- [ ] Company matching by email domain
+- [ ] Create Note/Activity in HubSpot
+- [ ] Associate with Company and Contacts
+- [ ] Include Obsidian link (research `obsidian://` protocol)
+
+**Success Criteria**:
+- Meeting summaries appear in HubSpot
+- Contacts and Companies correctly linked
+- User notified of successful sync
+
+---
+
+### Phase 7: Encryption & Security
+**Goal**: Protect sensitive meeting data
+
+#### Tasks
+- [ ] Windows DPAPI integration
+- [ ] Encrypt transcripts and audio at rest
+- [ ] API keys in Windows Credential Manager
+- [ ] Enable/disable encryption toggle
+- [ ] Re-encrypt existing files option
+
+**Success Criteria**:
+- Files encrypted using DPAPI
+- Decryption transparent to user
+- No performance degradation
+
+---
+
+### Phase 8: Import Prior Transcripts
+**Goal**: Bulk import historical meeting notes
+
+#### Tasks
+- [ ] File import UI (single or bulk)
+- [ ] Support .txt, .md, VTT, SRT formats
+- [ ] Metadata extraction from filename/content
+- [ ] Apply routing to imported transcripts
+- [ ] Batch processing with progress indicator
+
+**Success Criteria**:
+- Import 100+ transcripts successfully
+- Metadata extracted accurately (>80%)
+- Summaries generated for imports
+
+---
+
+### Phase 9: Advanced UI & Settings
+**Goal**: Polish and customization
+
+#### Tasks
+- [ ] Comprehensive settings panel
+- [ ] Template editor with syntax highlighting
+- [ ] Routing configuration editor
+- [ ] Audio quality settings
+- [ ] Theme support (light/dark)
+- [ ] Keyboard shortcuts
+- [ ] System tray menu
+- [ ] Logs and diagnostics viewer
+
+**Success Criteria**:
+- All settings accessible and functional
+- In-app config editing works
+- System tray provides quick access
+
+---
+
+## Technical Stack
+
+### Core
+- **Electron**: 36.0.1
+- **Node.js**: 20.19.0 (from environment)
+- **React**: 19.1.0
+- **Recall.ai Desktop SDK**: 1.3.2
+
+### APIs & Services
+- **Transcription**: AssemblyAI v3 streaming (speaker diarization, real-time)
+- **LLM**: OpenRouter (anthropic/claude-3.7-sonnet)
+- **Platform Detection**: Recall.ai SDK (Zoom, Teams, Google Meet, Slack)
+
+### Build Tools
+- **Electron Forge**: 7.8.0
+- **Webpack**: Asset bundling
+- **Babel**: JSX compilation
+
+---
+
+## Current File Structure
+
+```
+jd-notes-things/
+├── src/
+│   ├── main.js                      # Main Electron process
+│   ├── renderer.js                  # React UI (main window)
+│   ├── preload.js                   # IPC bridge
+│   ├── sdk-logger.js                # Recall.ai SDK event logger
+│   ├── server.js                    # (DEPRECATED - consolidated into main.js)
+│   └── pages/
+│       └── note-editor/
+│           └── renderer.js          # Meeting note editor UI
+├── package.json
+├── forge.config.js                  # Electron Forge configuration
+├── webpack.*.config.js              # Webpack configs
+├── .env                             # API keys (not in git)
+├── SPECIFICATION.md                 # Full product spec
+├── PROGRESS.md                      # This file
+├── CLAUDE.md                        # Context for Claude Code
+└── archive/
+    └── original-attempt/            # Original TypeScript implementation (failed)
+```
+
+---
+
+## Environment Setup
+
+### Required API Keys (.env file)
+```
+RECALLAI_API_URL=https://us-west-2.recall.ai
+RECALLAI_API_KEY=your_key_here
+
+OPENROUTER_KEY=your_key_here
+```
+
+### Running the App
+```bash
+# Install dependencies
+npm install
+
+# Start the app
+npm start
+
+# Build distributable
+npm run package
+```
+
+---
+
+## Known Issues & Limitations
+
+### Current Limitations
+- ❌ No Obsidian integration (files saved to internal JSON)
+- ❌ No calendar integration (manual recording only)
+- ❌ No contact matching (speaker labels generic)
 - ❌ No encryption
+- ❌ No routing system
+- ❌ No custom templates (hardcoded format)
+- ⚠️ JSON parsing warnings in SDK (cosmetic, doesn't affect functionality)
+- ⚠️ OpenRouter API key placeholder (401 errors on AI summary)
+
+### Fixed Issues
+- ✅ Microphone audio capture (resolved with AssemblyAI v3 streaming)
+- ✅ SDK upload token creation (consolidated into main process)
 
 ---
 
-## Dependencies Installed
+## Testing Checklist
 
-### Production
-- `react` (19.2.0)
-- `react-dom` (19.2.0)
-- `@recallai/desktop-sdk` (1.3.2)
-- `assemblyai` (4.19.0)
-- `dotenv` (17.2.3)
-- `electron-squirrel-startup` (1.0.1)
+### Manual Recording Test
+1. Start app with `npm start`
+2. Create a new meeting note
+3. Click "Start Recording"
+4. Speak into microphone for 30 seconds
+5. Click "Stop Recording"
+6. Wait for upload (100% progress)
+7. Verify transcript appears with speaker labels
+8. Click "Generate AI Summary" (requires valid OpenRouter key)
+9. Verify summary displays with formatted sections
 
-### Development
-- `electron` (39.1.0)
-- `@electron-forge/cli` (7.10.2)
-- `@electron-forge/plugin-webpack` (7.10.2)
-- `typescript` (4.5.4)
-- `@types/react` (latest)
-- `@types/react-dom` (latest)
-- `ts-loader` (9.5.4)
-- ESLint, webpack loaders, etc.
-
----
-
-## Build Verification
-
-✅ **Webpack Build**: Successful
-✅ **TypeScript Compilation**: No errors
-✅ **React Rendering**: Configured correctly
-✅ **Dev Server**: Launches on `http://localhost:9000`
-
-**Note**: Cannot test Electron window in container environment (needs Windows/macOS/Linux desktop).
+### Meeting Detection Test
+1. Start app
+2. Open Zoom/Teams/Google Meet
+3. Join a meeting
+4. Verify notification appears
+5. Click "Join Meeting" from notification
+6. Verify recording starts automatically
+7. Verify real-time transcript updates
+8. End meeting
+9. Verify recording stops and uploads
 
 ---
 
-## File Checklist
+## Next Session Priorities
 
-- ✅ `package.json` - Dependencies and scripts
-- ✅ `tsconfig.json` - TypeScript + JSX config
-- ✅ `webpack.*.config.ts` - Build configuration
-- ✅ `forge.config.ts` - Electron Forge setup
-- ✅ `.env.example` - API key template
-- ✅ `.gitignore` - Standard Node.js ignores
-- ✅ `SPECIFICATION.md` - Complete product spec
-- ✅ `CLAUDE.md` - Context for future Claude instances
-- ✅ `PROGRESS.md` - This file
+### Immediate Tasks
+1. **Test server consolidation**: Verify recording still works without separate Express server
+2. **Code review**: Identify deprecated code, TypeScript opportunities, linting issues
+3. **Update SPECIFICATION.md**: Reflect muesli baseline as starting point
 
----
-
-## Next Session Checklist
-
-### Before You Start
-- [ ] Obtain Recall.ai API key from https://recall.ai dashboard
-- [ ] Obtain AssemblyAI API key from https://assemblyai.com
-- [ ] Create `.env` file with both API keys
-- [ ] Verify you're on Windows (Recall.ai SDK requirement)
-
-### Implementation Order
-1. [ ] Implement `src/main/index.ts` (BrowserWindow setup, IPC handlers)
-2. [ ] Implement `src/preload.ts` (IPC API exposure)
-3. [ ] Implement `src/main/recording/RecordingManager.ts`
-4. [ ] Implement `src/main/transcription/TranscriptionService.ts`
-5. [ ] Implement `src/main/storage/FileManager.ts`
-6. [ ] Update `src/renderer/App.tsx` to use IPC instead of console.log
-7. [ ] Test end-to-end recording flow
-
-### Success Criteria for Phase 1
-- ✅ Can record system audio using Recall.ai SDK
-- ✅ Audio is transcribed with speaker labels
-- ✅ Transcript saved as markdown with timestamps
-- ✅ Filename format: `YYYY-MM-DD-HH-MM-transcript.md`
-- ✅ UI shows recording status and timer
+### Phase 2 Planning
+1. Design Obsidian vault structure
+2. Create routing.yaml example
+3. Implement file generation (full-notes.md, index.md)
+4. Test markdown compatibility with Obsidian
 
 ---
 
-## Research Notes
+## Success Metrics
 
-### Recall.ai SDK
-- **Package**: `@recallai/desktop-sdk@1.3.2`
-- **Proven Windows Support**: Via muesli-public example app
-- **Authentication**: API key + regional URL (us-east-1.recall.ai)
-- **Reference Implementation**: https://github.com/recallai/muesli-public
+### Phase 1 (Complete)
+- ✅ Record 30-minute meeting successfully
+- ✅ Transcript accuracy >85%
+- ✅ Real-time transcription working
+- ✅ AI summary generation functional
 
-### AssemblyAI
-- **Best in Class**: Speaker diarization (up to 50 speakers)
-- **Accuracy**: ~6.68% WER
-- **Pricing**: $0.27/hour for pre-recorded audio
-- **API**: Simple REST API with polling for completion
-- **Features**: Speaker labels, confidence scores, timestamps
-
-### Alternative Considered
-- **Deepgram**: Best for real-time ($0.22-0.46/hr) - May use in Phase 12
-- **Whisper API**: Highest accuracy but no native speaker diarization
+### Phase 2 (Target)
+- 100% of meetings routed to correct folders
+- Markdown files render correctly in Obsidian
+- Zero manual file organization needed
 
 ---
 
-## Git Status
+**Ready for Phase 2: Obsidian Vault Integration**
 
-**Current Branch**: main (assumed)
-**Uncommitted Changes**: All project files are new/modified
-
-**Recommended Commit Message**:
-```
-feat: Phase 1 foundation - Electron + React + TypeScript setup
-
-- Initialize Electron Forge project with TypeScript + Webpack
-- Set up React UI with basic recording widget
-- Configure project structure (main, renderer, shared)
-- Install Recall.ai SDK and AssemblyAI dependencies
-- Create TypeScript types and constants
-- Add environment configuration template
-- Create project specification and documentation
-
-Phase 1 foundation complete. Ready for core implementation.
-```
-
----
-
-## Questions to Resolve During Implementation
-
-1. **Recall.ai SDK Audio Format**: Confirm output format (WAV/MP3) and sample rate
-2. **AssemblyAI Upload**: Test file size limits and upload performance
-3. **File Permissions**: Ensure app can write to vault directory
-4. **Error Handling**: Define retry logic for failed transcriptions
-5. **Polling Interval**: Optimize AssemblyAI status check frequency
-
----
-
-## Phase 1 Timeline
-
-| Task | Status | Time Estimate |
-|------|--------|---------------|
-| Research & Planning | ✅ Complete | - |
-| Project Setup | ✅ Complete | - |
-| Basic UI | ✅ Complete | - |
-| Main Process Implementation | 🚧 Next | 2-4 hours |
-| Testing & Debugging | ⏳ Pending | 1-2 hours |
-
-**Estimated Completion**: 3-6 hours of focused development
-
----
-
-**Ready to continue? Start with `src/main/index.ts` and work through the checklist above.**
+Baseline is stable and functional. Next step is to integrate Obsidian file generation and routing system to match the original JD Notes Things specification.

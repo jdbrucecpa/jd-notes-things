@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Create",
+      "Edit",
+      "MultiEdit",
+      "Bash(git *):*",
+      "Bash(npm *):*",
+      "Bash(npx *):*",
+      "Bash(python *):*",
+      "Bash(node *):*",
+      "Bash(service *):*",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "deny": [
+      "Bash(rm -rf *):*",
+      "Bash(sudo *):*",
+      "Bash(git push origin main:*):*",
+      "Bash(git push origin master:*):*",
+      "Write(production.*):*",
+      "Read(.env*):*"
+    ],
+    "ask": []
+  }
+}

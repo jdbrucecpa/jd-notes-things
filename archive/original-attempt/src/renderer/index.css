@@ -72,6 +72,11 @@ body {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+.status-indicator.processing {
+  color: #f39c12;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
@@ -124,6 +129,40 @@ body {
 
 .btn-danger:hover {
   background-color: #c0392b;
+}
+
+.btn-secondary {
+  background-color: #95a5a6;
+  color: white;
+  cursor: not-allowed;
+}
+
+.btn-secondary:hover {
+  transform: none;
+  box-shadow: none;
+  background-color: #95a5a6;
+}
+
+.error-message {
+  background-color: #fadbd8;
+  border: 1px solid #e74c3c;
+  color: #c0392b;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.status-message {
+  background-color: #d5f4e6;
+  border: 1px solid #27ae60;
+  color: #1e8449;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 14px;
 }
 
 .info {
