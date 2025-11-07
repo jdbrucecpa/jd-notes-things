@@ -6,9 +6,10 @@ const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
 const OpenAI = require('openai');
 const sdkLogger = require('./sdk-logger');
-const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema } = require('./shared/validation');
+const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema} = require('./shared/validation');
 const { z } = require('zod');
 const GoogleCalendar = require('./main/integrations/GoogleCalendar');
+const TemplateManager = require('./main/templates/TemplateManager');
 require('dotenv').config();
 
 // Initialize OpenAI client (using OpenAI directly)
@@ -34,7 +35,153 @@ let detectedMeeting = null;
 // Google Calendar integration
 let googleCalendar = null;
 
+// Template Manager for Phase 4
+let templateManager = null;
+
 let mainWindow;
+
+// Meeting monitor state
+const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
+const autoStartedMeetings = new Set(); // Track meetings we've auto-started recording
+let meetingMonitorInterval = null;
+
+/**
+ * Meeting monitor - checks for upcoming meetings and auto-starts recording
+ */
+function startMeetingMonitor() {
+  console.log('[Meeting Monitor] Starting meeting monitor...');
+
+  // Check immediately on start
+  checkUpcomingMeetings();
+
+  // Then check every minute
+  meetingMonitorInterval = setInterval(() => {
+    checkUpcomingMeetings();
+  }, 60000); // 60 seconds
+}
+
+/**
+ * Check for upcoming meetings and auto-start recording if needed
+ */
+async function checkUpcomingMeetings() {
+  try {
+    // Only check if calendar is authenticated
+    if (!googleCalendar || !googleCalendar.isAuthenticated()) {
+      return;
+    }
+
+    const meetings = await googleCalendar.getUpcomingMeetings(2); // Next 2 hours
+    const now = new Date();
+
+    for (const meeting of meetings) {
+      const startTime = new Date(meeting.startTime);
+      const timeUntilStart = startTime - now;
+      const minutesUntilStart = Math.floor(timeUntilStart / (1000 * 60));
+
+      // Skip if meeting has already started (more than 2 minutes ago)
+      if (minutesUntilStart < -2) {
+        continue;
+      }
+
+      // Show notification 2 minutes before meeting starts
+      if (minutesUntilStart <= 2 && minutesUntilStart >= 0 && !notifiedMeetings.has(meeting.id)) {
+        console.log(`[Meeting Monitor] Meeting starting soon: ${meeting.title}`);
+        showMeetingNotification(meeting, minutesUntilStart);
+        notifiedMeetings.add(meeting.id);
+      }
+
+      // Auto-start recording when meeting starts (within 1 minute window)
+      if (minutesUntilStart <= 0 && minutesUntilStart >= -1 && !autoStartedMeetings.has(meeting.id)) {
+        console.log(`[Meeting Monitor] Auto-starting recording for: ${meeting.title}`);
+        await autoStartRecording(meeting);
+        autoStartedMeetings.add(meeting.id);
+      }
+    }
+
+    // Clean up old meeting IDs (remove meetings from more than 1 hour ago)
+    const oneHourAgo = now - (60 * 60 * 1000);
+    for (const meeting of meetings) {
+      const startTime = new Date(meeting.startTime);
+      if (startTime < oneHourAgo) {
+        notifiedMeetings.delete(meeting.id);
+        autoStartedMeetings.delete(meeting.id);
+      }
+    }
+  } catch (error) {
+    console.error('[Meeting Monitor] Error checking meetings:', error);
+  }
+}
+
+/**
+ * Show system notification for upcoming meeting
+ */
+function showMeetingNotification(meeting, minutesUntilStart) {
+  const notification = new Notification({
+    title: 'Meeting Starting Soon',
+    body: `${meeting.title} starts in ${minutesUntilStart} minute${minutesUntilStart !== 1 ? 's' : ''}`,
+    icon: null, // You can add an icon path here
+    timeoutType: 'default'
+  });
+
+  notification.on('click', () => {
+    console.log('[Meeting Monitor] Notification clicked');
+    // Focus the main window
+    if (mainWindow) {
+      mainWindow.focus();
+    }
+  });
+
+  notification.show();
+}
+
+/**
+ * Auto-start recording for a calendar meeting
+ */
+async function autoStartRecording(meeting) {
+  try {
+    console.log(`[Meeting Monitor] Auto-starting recording for meeting: ${meeting.title}`);
+
+    // Create a new meeting entry
+    const meetingId = Date.now().toString();
+    const newMeeting = {
+      id: meetingId,
+      title: meeting.title,
+      date: new Date().toISOString().split('T')[0],
+      content: `# ${meeting.title}\n\n## Meeting Information\n- Date: ${new Date(meeting.startTime).toLocaleDateString()}\n- Time: ${new Date(meeting.startTime).toLocaleTimeString()}\n- Platform: ${meeting.platform}\n${meeting.meetingLink ? `- Link: ${meeting.meetingLink}\n` : ''}${meeting.organizer ? `- Organizer: ${meeting.organizer.name} (${meeting.organizer.email})\n` : ''}\n\n## Participants\n${meeting.participants.map(p => `- ${p.name} (${p.email})`).join('\n')}\n\n## Recording\nAuto-started at ${new Date().toLocaleTimeString()}\n\n## Transcript\nRecording in progress...\n`,
+      recordingId: null,
+      recordingStatus: 'pending',
+      transcript: '',
+      summary: '',
+      calendarEventId: meeting.id,
+      participantEmails: meeting.participantEmails || []
+    };
+
+    // Save the meeting
+    const data = await fileOperationManager.readMeetingsData();
+    data.upcomingMeetings.push(newMeeting);
+    await fileOperationManager.writeData(data);
+
+    // Start recording
+    // Note: You'll need to implement the actual recording start logic here
+    // For now, we'll just create the meeting entry
+    console.log(`[Meeting Monitor] Created meeting entry: ${meetingId}`);
+
+    // Show notification that recording started
+    const recordingNotification = new Notification({
+      title: 'Recording Started',
+      body: `Auto-recording: ${meeting.title}`,
+      icon: null
+    });
+    recordingNotification.show();
+
+    // Send update to renderer
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('meeting-auto-started', { meetingId, meeting });
+    }
+  } catch (error) {
+    console.error('[Meeting Monitor] Error auto-starting recording:', error);
+  }
+}
 
 const createWindow = () => {
   // Create the browser window.
@@ -148,6 +295,23 @@ app.whenReady().then(() => {
     console.log('[GoogleCalendar] No credentials in .env - calendar features disabled');
   }
 
+  // Initialize Template Manager (Phase 4)
+  console.log('[TemplateManager] Initializing template system...');
+  templateManager = new TemplateManager();
+
+  // Use project root config/templates during development
+  if (process.env.NODE_ENV === 'development') {
+    const projectRoot = path.join(__dirname, '..', '..');
+    templateManager.templatesPath = path.join(projectRoot, 'config', 'templates');
+    console.log('[TemplateManager] Development mode - using:', templateManager.templatesPath);
+  }
+
+  const templateCount = templateManager.scanTemplates();
+  console.log(`[TemplateManager] Loaded ${templateCount} templates`);
+
+  // Start meeting monitor for auto-recording
+  startMeetingMonitor();
+
   createWindow();
 
   // When the window is ready, send the initial meeting detection status
@@ -171,6 +335,14 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+// Cleanup meeting monitor when app quits
+app.on('before-quit', () => {
+  if (meetingMonitorInterval) {
+    clearInterval(meetingMonitorInterval);
+    console.log('[Meeting Monitor] Stopped meeting monitor');
   }
 });
 
@@ -761,8 +933,281 @@ ipcMain.handle('calendar:getUpcomingMeetings', async (event, hoursAhead = 24) =>
   }
 });
 
+// Open OAuth window for calendar authentication
+ipcMain.handle('calendar:openAuthWindow', async () => {
+  try {
+    console.log('[Calendar IPC] Opening OAuth window');
+
+    // Ensure calendar is initialized before getting auth URL
+    if (!googleCalendar.isAuthenticated()) {
+      const calendarCredentials = {
+        client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
+        redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback'
+      };
+      await googleCalendar.initialize(calendarCredentials);
+    }
+
+    // Get the authorization URL
+    const authUrl = googleCalendar.getAuthUrl();
+
+    // Create a new BrowserWindow for OAuth
+    let authWindow = new BrowserWindow({
+      width: 500,
+      height: 700,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      },
+      parent: mainWindow,
+      modal: true,
+      show: false
+    });
+
+    authWindow.loadURL(authUrl);
+    authWindow.show();
+
+    // Return a promise that resolves when we get the auth code
+    return new Promise((resolve, reject) => {
+      // Listen for navigation events to catch the OAuth callback
+      authWindow.webContents.on('will-redirect', async (event, redirectUrl) => {
+        console.log('[Calendar OAuth] Redirect:', redirectUrl);
+
+        // Check if this is our callback URL
+        if (redirectUrl.startsWith(process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback')) {
+          event.preventDefault();
+
+          // Extract the authorization code from the URL
+          const urlObj = new URL(redirectUrl);
+          const code = urlObj.searchParams.get('code');
+          const error = urlObj.searchParams.get('error');
+
+          if (error) {
+            console.error('[Calendar OAuth] Error:', error);
+            authWindow.close();
+            resolve({ success: false, error: `OAuth error: ${error}` });
+            return;
+          }
+
+          if (code) {
+            console.log('[Calendar OAuth] Got authorization code');
+
+            // Exchange code for tokens
+            try {
+              await googleCalendar.authenticate(code);
+              authWindow.close();
+              resolve({ success: true });
+            } catch (authError) {
+              console.error('[Calendar OAuth] Authentication failed:', authError);
+              authWindow.close();
+              resolve({ success: false, error: authError.message });
+            }
+          }
+        }
+      });
+
+      // Also listen for URL changes (in case redirect doesn't fire)
+      authWindow.webContents.on('did-navigate', async (event, redirectUrl) => {
+        console.log('[Calendar OAuth] Navigate:', redirectUrl);
+
+        if (redirectUrl.startsWith(process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback')) {
+          const urlObj = new URL(redirectUrl);
+          const code = urlObj.searchParams.get('code');
+          const error = urlObj.searchParams.get('error');
+
+          if (error) {
+            console.error('[Calendar OAuth] Error:', error);
+            authWindow.close();
+            resolve({ success: false, error: `OAuth error: ${error}` });
+            return;
+          }
+
+          if (code) {
+            console.log('[Calendar OAuth] Got authorization code');
+
+            try {
+              await googleCalendar.authenticate(code);
+              authWindow.close();
+              resolve({ success: true });
+            } catch (authError) {
+              console.error('[Calendar OAuth] Authentication failed:', authError);
+              authWindow.close();
+              resolve({ success: false, error: authError.message });
+            }
+          }
+        }
+      });
+
+      // Handle window close
+      authWindow.on('closed', () => {
+        authWindow = null;
+        resolve({ success: false, error: 'Window closed by user' });
+      });
+    });
+  } catch (error) {
+    console.error('[Calendar IPC] Failed to open auth window:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // ===================================================================
 // End Google Calendar IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Template System IPC Handlers (Phase 4)
+// ===================================================================
+
+// Get all available templates
+ipcMain.handle('templates:getAll', async () => {
+  try {
+    console.log('[Template IPC] Getting all templates');
+    const templates = templateManager.getAllTemplates();
+    return { success: true, templates };
+  } catch (error) {
+    console.error('[Template IPC] Failed to get templates:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get template by ID
+ipcMain.handle('templates:getById', async (event, templateId) => {
+  try {
+    console.log('[Template IPC] Getting template:', templateId);
+    const template = templateManager.getTemplate(templateId);
+    if (!template) {
+      return { success: false, error: 'Template not found' };
+    }
+    return { success: true, template };
+  } catch (error) {
+    console.error('[Template IPC] Failed to get template:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Estimate cost for templates
+ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript }) => {
+  try {
+    console.log('[Template IPC] Estimating cost for', templateIds.length, 'templates');
+    const estimate = templateManager.estimateCost(templateIds, transcript);
+    return { success: true, estimate };
+  } catch (error) {
+    console.error('[Template IPC] Failed to estimate cost:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Generate summaries using multiple templates
+ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templateIds }) => {
+  try {
+    console.log('[Template IPC] Generating summaries for meeting:', meetingId, 'with', templateIds.length, 'templates');
+
+    // Load meeting data
+    const data = await fileOperationManager.readMeetingsData();
+    const meeting = [...data.upcomingMeetings, ...data.pastMeetings].find(m => m.id === meetingId);
+
+    if (!meeting) {
+      return { success: false, error: 'Meeting not found' };
+    }
+
+    if (!meeting.transcript) {
+      return { success: false, error: 'Meeting has no transcript' };
+    }
+
+    // Convert transcript to string if it's an array of objects
+    let transcriptText = '';
+    if (Array.isArray(meeting.transcript)) {
+      transcriptText = meeting.transcript.map(segment => {
+        if (typeof segment === 'object' && segment.text) {
+          return `${segment.speaker || 'Speaker'}: ${segment.text}`;
+        }
+        return String(segment);
+      }).join('\n');
+    } else if (typeof meeting.transcript === 'string') {
+      transcriptText = meeting.transcript;
+    } else {
+      transcriptText = String(meeting.transcript);
+    }
+
+    console.log(`[Template IPC] Transcript length: ${transcriptText.length} characters`);
+
+    // Generate summaries for each template
+    const summaries = [];
+
+    for (const templateId of templateIds) {
+      const template = templateManager.getTemplate(templateId);
+      if (!template) {
+        console.warn('[Template IPC] Template not found:', templateId);
+        continue;
+      }
+
+      console.log('[Template IPC] Generating summary with template:', template.name);
+
+      // Build the summary by processing each section
+      let summaryMarkdown = `# ${meeting.title}\n\n`;
+      summaryMarkdown += `Generated using template: **${template.name}**\n\n`;
+      summaryMarkdown += `---\n\n`;
+
+      for (const section of template.sections) {
+        console.log(`[Template IPC] Processing section: ${section.title}`);
+
+        // Call LLM for this section
+        const sectionPrompt = `${section.prompt}\n\nMeeting Transcript:\n${transcriptText}`;
+
+        try {
+          const completion = await openai.chat.completions.create({
+            model: MODELS.PRIMARY,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.'
+              },
+              {
+                role: 'user',
+                content: sectionPrompt
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 500
+          });
+
+          const sectionContent = completion.choices[0].message.content;
+          summaryMarkdown += `## ${section.title}\n\n${sectionContent}\n\n`;
+        } catch (error) {
+          console.error(`[Template IPC] Error generating section ${section.title}:`, error);
+          summaryMarkdown += `## ${section.title}\n\n*Error generating this section*\n\n`;
+        }
+      }
+
+      summaries.push({
+        templateId: template.id,
+        templateName: template.name,
+        content: summaryMarkdown
+      });
+    }
+
+    console.log(`[Template IPC] Generated ${summaries.length} summaries`);
+    return { success: true, summaries };
+  } catch (error) {
+    console.error('[Template IPC] Failed to generate summaries:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Reload templates from disk
+ipcMain.handle('templates:reload', async () => {
+  try {
+    console.log('[Template IPC] Reloading templates');
+    const count = templateManager.reload();
+    return { success: true, count };
+  } catch (error) {
+    console.error('[Template IPC] Failed to reload templates:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// End Template System IPC Handlers
 // ===================================================================
 
 // Handle open-external IPC (for opening URLs in default browser)

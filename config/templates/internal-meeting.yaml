@@ -1,0 +1,22 @@
+name: Internal Team Meeting
+description: Summary for internal team meetings and standup
+type: internal
+cost_estimate: 0.01
+sections:
+  - title: Meeting Summary
+    prompt: "Provide a concise 1-2 sentence summary of this internal team meeting."
+
+  - title: Updates Shared
+    prompt: "List all team updates, progress reports, or status updates shared during the meeting. Format as bulleted list with team member names."
+
+  - title: Blockers and Challenges
+    prompt: "Identify any blockers, challenges, or issues raised by team members. Include who raised each issue and any proposed solutions."
+
+  - title: Decisions and Agreements
+    prompt: "List any decisions made or agreements reached by the team during this meeting."
+
+  - title: Action Items
+    prompt: "Extract action items from the meeting. Format as: '- [ ] Task description (@owner, due: date)'. Use checkboxes for easy tracking."
+
+  - title: Parking Lot
+    prompt: "Identify topics mentioned that were deferred or need separate discussion. These are items to revisit later."

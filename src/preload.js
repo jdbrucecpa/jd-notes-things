@@ -36,5 +36,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getActiveRecordingId: (noteId) => ipcRenderer.invoke('getActiveRecordingId', noteId),
   // Google Calendar integration
   getCalendarMeetings: (hours) => ipcRenderer.invoke('calendar:getUpcomingMeetings', hours),
+  calendarInitialize: (credentials) => ipcRenderer.invoke('calendar:initialize', credentials),
+  calendarGetAuthUrl: () => ipcRenderer.invoke('calendar:getAuthUrl'),
+  calendarAuthenticate: (code) => ipcRenderer.invoke('calendar:authenticate', code),
+  calendarIsAuthenticated: () => ipcRenderer.invoke('calendar:isAuthenticated'),
+  calendarSignOut: () => ipcRenderer.invoke('calendar:signOut'),
+  calendarOpenAuthWindow: () => ipcRenderer.invoke('calendar:openAuthWindow'),
+  // Template system (Phase 4)
+  templatesGetAll: () => ipcRenderer.invoke('templates:getAll'),
+  templatesGetById: (templateId) => ipcRenderer.invoke('templates:getById', templateId),
+  templatesEstimateCost: (templateIds, transcript) => ipcRenderer.invoke('templates:estimateCost', { templateIds, transcript }),
+  templatesGenerateSummaries: (meetingId, templateIds) => ipcRenderer.invoke('templates:generateSummaries', { meetingId, templateIds }),
+  templatesReload: () => ipcRenderer.invoke('templates:reload'),
   openExternal: (url) => ipcRenderer.send('open-external', url)
 });

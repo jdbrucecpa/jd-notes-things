@@ -1,0 +1,20 @@
+{
+  "name": "Quick Notes",
+  "description": "Brief summary with key points and action items only",
+  "type": "general",
+  "cost_estimate": 0.005,
+  "sections": [
+    {
+      "title": "Summary",
+      "prompt": "Provide a 1-2 sentence summary of this meeting."
+    },
+    {
+      "title": "Key Points",
+      "prompt": "List 3-5 key points from the meeting. Be concise."
+    },
+    {
+      "title": "Action Items",
+      "prompt": "List action items in checkbox format: '- [ ] Task (@owner)'"
+    }
+  ]
+}

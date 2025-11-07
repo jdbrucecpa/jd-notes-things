@@ -215,6 +215,104 @@ function debounce(func, wait) {
   };
 }
 
+// ========================================
+// Display AI Generated Summaries
+// ========================================
+
+function displaySummaries(summaries) {
+  const summariesSection = document.getElementById('summariesSection');
+  const summariesContent = document.getElementById('summariesContent');
+
+  if (!summaries || summaries.length === 0) {
+    summariesSection.style.display = 'none';
+    return;
+  }
+
+  // Clear existing content
+  summariesContent.innerHTML = '';
+
+  // Create summary cards
+  summaries.forEach((summary, index) => {
+    const card = document.createElement('div');
+    card.className = 'summary-card';
+    card.dataset.summaryId = summary.templateId;
+
+    card.innerHTML = `
+      <div class="summary-card-header">
+        <div class="summary-card-title">${summary.templateName}</div>
+        <div class="summary-card-toggle">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M7 10L12 15L17 10H7Z" fill="currentColor"/>
+          </svg>
+        </div>
+      </div>
+      <div class="summary-card-body">
+        ${markdownToHtml(summary.content)}
+      </div>
+    `;
+
+    // Add click handler to toggle collapse
+    const header = card.querySelector('.summary-card-header');
+    header.addEventListener('click', () => {
+      card.classList.toggle('collapsed');
+    });
+
+    summariesContent.appendChild(card);
+  });
+
+  // Show the summaries section
+  summariesSection.style.display = 'block';
+
+  // Add collapse all button handler
+  const collapseBtn = document.getElementById('collapseSummaries');
+  collapseBtn.onclick = () => {
+    const allCards = summariesContent.querySelectorAll('.summary-card');
+    const allCollapsed = Array.from(allCards).every(card => card.classList.contains('collapsed'));
+
+    allCards.forEach(card => {
+      if (allCollapsed) {
+        card.classList.remove('collapsed');
+      } else {
+        card.classList.add('collapsed');
+      }
+    });
+  };
+}
+
+// Simple markdown to HTML converter
+function markdownToHtml(markdown) {
+  let html = markdown;
+
+  // Headers
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+  // Bold
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+  // Italic
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+  // Lists
+  html = html.replace(/^\* (.+)$/gim, '<li>$1</li>');
+  html = html.replace(/^- (.+)$/gim, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+
+  // Line breaks
+  html = html.replace(/\n\n/g, '</p><p>');
+  html = '<p>' + html + '</p>';
+
+  // Clean up empty paragraphs
+  html = html.replace(/<p>\s*<\/p>/g, '');
+  html = html.replace(/<p>(<h[1-3]>)/g, '$1');
+  html = html.replace(/(<\/h[1-3]>)<\/p>/g, '$1');
+  html = html.replace(/<p>(<ul>)/g, '$1');
+  html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+
+  return html;
+}
+
 
 
 // Function to create meeting card elements
@@ -335,6 +433,102 @@ function createCalendarMeetingCard(meeting) {
   return card;
 }
 
+// Calendar authentication state
+let calendarAuthenticated = false;
+
+// Function to initialize calendar integration
+async function initializeCalendar() {
+  try {
+    console.log('Initializing Google Calendar...');
+    const initResult = await window.electronAPI.calendarInitialize();
+
+    if (initResult.success && initResult.authenticated) {
+      console.log('Calendar already authenticated');
+      calendarAuthenticated = true;
+      updateCalendarStatus(true);
+      return true;
+    } else {
+      console.log('Calendar not authenticated');
+      calendarAuthenticated = false;
+      updateCalendarStatus(false);
+      return false;
+    }
+  } catch (error) {
+    console.error('Error initializing calendar:', error);
+    updateCalendarStatus(false);
+    return false;
+  }
+}
+
+// Function to update calendar button UI
+function updateCalendarStatus(isConnected) {
+  const calendarBtn = document.getElementById('calendarBtn');
+  if (!calendarBtn) return;
+
+  if (isConnected) {
+    calendarBtn.classList.add('connected');
+    calendarBtn.title = 'Calendar Connected - Click to disconnect';
+  } else {
+    calendarBtn.classList.remove('connected');
+    calendarBtn.title = 'Connect Calendar';
+  }
+}
+
+// Function to handle calendar button click
+async function handleCalendarButtonClick() {
+  const calendarBtn = document.getElementById('calendarBtn');
+  if (!calendarBtn) return;
+
+  if (calendarAuthenticated) {
+    // Already connected - show disconnect option
+    if (confirm('Disconnect Google Calendar?')) {
+      try {
+        const result = await window.electronAPI.calendarSignOut();
+        if (result.success) {
+          console.log('Calendar disconnected');
+          calendarAuthenticated = false;
+          updateCalendarStatus(false);
+          calendarMeetings.length = 0; // Clear calendar meetings
+          renderMeetings(); // Re-render without calendar meetings
+        }
+      } catch (error) {
+        console.error('Error disconnecting calendar:', error);
+      }
+    }
+  } else {
+    // Not connected - start OAuth flow
+    try {
+      calendarBtn.disabled = true;
+      calendarBtn.textContent = 'Connecting...';
+
+      const result = await window.electronAPI.calendarOpenAuthWindow();
+
+      if (result.success) {
+        console.log('Calendar authentication successful');
+        calendarAuthenticated = true;
+        updateCalendarStatus(true);
+
+        // Fetch calendar meetings after successful authentication
+        await fetchCalendarMeetings();
+      } else {
+        console.error('Calendar authentication failed:', result.error);
+        alert('Failed to connect calendar: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Error during calendar authentication:', error);
+      alert('Error connecting calendar: ' + error.message);
+    } finally {
+      calendarBtn.disabled = false;
+      calendarBtn.innerHTML = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19 4H18V2H16V4H8V2H6V4H5C3.89 4 3.01 4.9 3.01 6L3 20C3 21.1 3.89 22 5 22H19C20.1 22 21 21.1 21 20V6C21 4.9 20.1 4 19 4ZM19 20H5V10H19V20ZM19 8H5V6H19V8Z" fill="currentColor"/>
+        </svg>
+        <span id="calendarStatus" class="calendar-status"></span>
+      `;
+    }
+  }
+}
+
 // Function to fetch calendar meetings from Google Calendar
 async function fetchCalendarMeetings() {
   try {
@@ -453,6 +647,13 @@ function showEditorView(meetingId) {
 
     // Check if this note has an active recording and update the record button
     checkActiveRecordingState();
+
+    // Display summaries if they exist
+    if (meeting.summaries && meeting.summaries.length > 0) {
+      displaySummaries(meeting.summaries);
+    } else {
+      displaySummaries([]); // Hide summaries section if none exist
+    }
 
     // Update debug panel with any available data if it's open
     const debugPanel = document.getElementById('debugPanel');
@@ -1348,11 +1549,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize the debug panel
   initDebugPanel();
 
+  // Initialize calendar integration
+  await initializeCalendar();
+
   // Try to load the latest data from file - this is the only data source
   await loadMeetingsDataFromFile();
 
-  // Fetch calendar meetings from Google Calendar
-  await fetchCalendarMeetings();
+  // Fetch calendar meetings from Google Calendar (only if authenticated)
+  if (calendarAuthenticated) {
+    await fetchCalendarMeetings();
+  }
 
   // Render meetings only after loading from file
   console.log('Data loaded, rendering meetings...');
@@ -1826,6 +2032,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderMeetings(); // Refresh the meeting list
   });
 
+  // Calendar button event listener
+  const calendarBtn = document.getElementById('calendarBtn');
+  if (calendarBtn) {
+    calendarBtn.addEventListener('click', handleCalendarButtonClick);
+  }
+
   // Set up the initial auto-save handler
   setupAutoSaveHandler();
 
@@ -2089,11 +2301,222 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Handle generate notes button (Auto button)
+  // Phase 4: Template Selection Modal Logic
+  // ========================================
+
+  let availableTemplates = [];
+  let selectedTemplateIds = [];
+
+  // Load templates on page load
+  async function loadTemplates() {
+    try {
+      const result = await window.electronAPI.templatesGetAll();
+      if (result.success) {
+        availableTemplates = result.templates;
+        console.log('Loaded', availableTemplates.length, 'templates');
+      }
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    }
+  }
+
+  // Open template selection modal
+  function openTemplateModal() {
+    const modal = document.getElementById('templateModal');
+    const templateList = document.getElementById('templateList');
+
+    // Clear previous content
+    templateList.innerHTML = '';
+
+    // Render template items
+    if (availableTemplates.length === 0) {
+      templateList.innerHTML = '<p style="text-align: center; color: #999;">No templates found. Add templates to config/templates/</p>';
+    } else {
+      availableTemplates.forEach(template => {
+        const templateItem = document.createElement('div');
+        templateItem.className = 'template-item';
+        templateItem.dataset.templateId = template.id;
+
+        templateItem.innerHTML = `
+          <div class="template-checkbox">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="white"/>
+            </svg>
+          </div>
+          <div class="template-info">
+            <div class="template-name">${template.name}</div>
+            <div class="template-description-text">${template.description}</div>
+            <div class="template-meta">
+              <span class="template-type">${template.type}</span>
+              <span class="template-sections">${template.sections.length} sections</span>
+            </div>
+          </div>
+        `;
+
+        templateItem.addEventListener('click', () => {
+          toggleTemplateSelection(template.id);
+        });
+
+        templateList.appendChild(templateItem);
+      });
+    }
+
+    // Show modal
+    modal.style.display = 'flex';
+    updateCostEstimate();
+  }
+
+  // Close template modal
+  function closeTemplateModal() {
+    const modal = document.getElementById('templateModal');
+    modal.style.display = 'none';
+    selectedTemplateIds = [];
+    updateConfirmButton();
+  }
+
+  // Toggle template selection
+  function toggleTemplateSelection(templateId) {
+    const index = selectedTemplateIds.indexOf(templateId);
+    if (index > -1) {
+      selectedTemplateIds.splice(index, 1);
+    } else {
+      selectedTemplateIds.push(templateId);
+    }
+
+    // Update UI
+    const templateItem = document.querySelector(`[data-template-id="${templateId}"]`);
+    if (templateItem) {
+      if (selectedTemplateIds.includes(templateId)) {
+        templateItem.classList.add('selected');
+      } else {
+        templateItem.classList.remove('selected');
+      }
+    }
+
+    updateCostEstimate();
+    updateConfirmButton();
+  }
+
+  // Update cost estimate
+  async function updateCostEstimate() {
+    const costEstimateDiv = document.getElementById('costEstimate');
+
+    if (selectedTemplateIds.length === 0) {
+      costEstimateDiv.style.display = 'none';
+      return;
+    }
+
+    // Get current meeting transcript
+    const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
+    if (!meeting || !meeting.transcript) {
+      costEstimateDiv.style.display = 'none';
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.templatesEstimateCost(selectedTemplateIds, meeting.transcript);
+      if (result.success) {
+        const estimate = result.estimate;
+        document.getElementById('totalTokens').textContent = estimate.totalTokens.toLocaleString();
+        document.getElementById('totalCost').textContent = `$${estimate.totalCost.toFixed(4)}`;
+        costEstimateDiv.style.display = 'block';
+      }
+    } catch (error) {
+      console.error('Error estimating cost:', error);
+    }
+  }
+
+  // Update confirm button state
+  function updateConfirmButton() {
+    const confirmButton = document.getElementById('confirmGenerate');
+    confirmButton.disabled = selectedTemplateIds.length === 0;
+  }
+
+  // Generate summaries with selected templates
+  async function generateWithTemplates() {
+    if (selectedTemplateIds.length === 0) return;
+
+    // Save selected templates before closing modal (closeTemplateModal clears the array!)
+    const templatesToGenerate = [...selectedTemplateIds];
+
+    const generateButton = document.getElementById('generateButton');
+    const originalHTML = generateButton.innerHTML;
+
+    try {
+      // Close modal
+      closeTemplateModal();
+
+      // Show generating state
+      generateButton.classList.add('generating');
+      generateButton.disabled = true;
+      generateButton.textContent = 'Generating';
+
+      console.log('Generating summaries with templates:', templatesToGenerate);
+
+      const result = await window.electronAPI.templatesGenerateSummaries(currentEditingMeetingId, templatesToGenerate);
+
+      if (result.success) {
+        console.log('Generated', result.summaries.length, 'summaries');
+
+        // Show success toast
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = `Generated ${result.summaries.length} summaries successfully!`;
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+
+        // Save summaries to meeting data
+        const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
+        if (meeting) {
+          meeting.summaries = result.summaries;
+          await saveMeetingsData();
+        }
+
+        // Display summaries in UI
+        displaySummaries(result.summaries);
+
+        console.log('Summaries:', result.summaries);
+      } else {
+        alert('Failed to generate summaries: ' + result.error);
+      }
+    } catch (error) {
+      console.error('Error generating summaries:', error);
+      alert('Error: ' + error.message);
+    } finally {
+      generateButton.classList.remove('generating');
+      generateButton.disabled = false;
+      generateButton.innerHTML = originalHTML;
+    }
+  }
+
+  // Initialize templates
+  loadTemplates();
+
+  // Modal event listeners
+  document.getElementById('closeTemplateModal').addEventListener('click', closeTemplateModal);
+  document.getElementById('cancelGenerate').addEventListener('click', closeTemplateModal);
+  document.getElementById('confirmGenerate').addEventListener('click', generateWithTemplates);
+
+  // Close modal on overlay click
+  document.getElementById('templateModal').addEventListener('click', (e) => {
+    if (e.target.id === 'templateModal') {
+      closeTemplateModal();
+    }
+  });
+
+  // ========================================
+  // End Template Selection Modal Logic
+  // ========================================
+
+  // Handle generate notes button - opens template modal
   const generateButton = document.querySelector('.generate-btn');
   if (generateButton) {
     generateButton.addEventListener('click', async () => {
-      console.log('Generating AI summary from transcript...');
+      console.log('Opening template selection...');
 
       // Check if we have an active meeting
       if (!currentEditingMeetingId) {
@@ -2101,56 +2524,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
 
-      // Store the original HTML content (including the sparkle icon)
-      const originalHTML = generateButton.innerHTML;
-
-      // Show loading state - but keep the same structure
-      generateButton.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 4px;">
-          <path d="M208,512a24.84,24.84,0,0,1-23.34-16l-39.84-103.6a16.06,16.06,0,0,0-9.19-9.19L32,343.34a25,25,0,0,1,0-46.68l103.6-39.84a16.06,16.06,0,0,0,9.19-9.19L184.66,144a25,25,0,0,1,46.68,0l39.84,103.6a16.06,16.06,0,0,0,9.19,9.19l103,39.63A25.49,25.49,0,0,1,400,320.52a24.82,24.82,0,0,1-16,22.82l-103.6,39.84a16.06,16.06,0,0,0-9.19,9.19L231.34,496A24.84,24.84,0,0,1,208,512Z" fill="currentColor"/>
-          <path d="M88,176a14.67,14.67,0,0,1-13.69-9.4L57.45,122.76a7.28,7.28,0,0,0-4.21-4.21L9.4,101.69a14.67,14.67,0,0,1,0-27.38L53.24,57.45a7.31,7.31,0,0,0,4.21-4.21L74.16,9.79A15,15,0,0,1,86.23.11,14.67,14.67,0,0,1,101.69,9.4l16.86,43.84a7.31,7.31,0,0,0,4.21,4.21L166.6,74.31a14.67,14.67,0,0,1,0,27.38l-43.84,16.86a7.28,7.28,0,0,0-4.21,4.21L101.69,166.6A14.67,14.67,0,0,1,88,176Z" fill="currentColor"/>
-          <path d="M400,256a16,16,0,0,1-14.93-10.26l-22.84-59.37a8,8,0,0,0-4.6-4.6l-59.37-22.84a16,16,0,0,1,0-29.86l59.37-22.84a8,8,0,0,0,4.6-4.6L384.9,42.68a16.45,16.45,0,0,1,13.17-10.57,16,16,0,0,1,16.86,10.15l22.84,59.37a8,8,0,0,0,4.6,4.6l59.37,22.84a16,16,0,0,1,0,29.86l-59.37,22.84a8,8,0,0,0-4.6,4.6l-22.84,59.37A16,16,0,0,1,400,256Z" fill="currentColor"/>
-        </svg>
-        Generating...
-      `;
-      generateButton.disabled = true;
-
-      try {
-        // Use streaming version for better user experience
-        console.log('Starting streaming summary generation');
-
-        // Log the Auto button summary generation to the SDK logger
-        sdkLogger.log('Auto button: Requesting AI summary generation for meeting: ' + currentEditingMeetingId);
-
-        const result = await window.electronAPI.generateMeetingSummaryStreaming(currentEditingMeetingId);
-
-        if (result.success) {
-          console.log('Summary generated successfully (streaming)');
-          // Show a little toast message
-          const toast = document.createElement('div');
-          toast.className = 'toast';
-          toast.textContent = 'Summary generated successfully!';
-          document.body.appendChild(toast);
-
-          // Remove toast after 3 seconds
-          setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => {
-              document.body.removeChild(toast);
-            }, 300);
-          }, 3000);
-        } else {
-          console.error('Failed to generate summary:', result.error);
-          alert('Failed to generate summary: ' + result.error);
-        }
-      } catch (error) {
-        console.error('Error generating summary:', error);
-        alert('Error generating summary: ' + (error.message || error));
-      } finally {
-        // Reset button state with the original HTML (including sparkle icon)
-        generateButton.innerHTML = originalHTML;
-        generateButton.disabled = false;
+      // Check if meeting has transcript
+      const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
+      if (!meeting || !meeting.transcript) {
+        alert('No transcript available yet. Please record a meeting first.');
+        return;
       }
+
+      // Open template selection modal
+      openTemplateModal();
     });
   }
 
