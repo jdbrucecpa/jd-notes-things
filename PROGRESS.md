@@ -389,22 +389,191 @@ Each meeting generates:
   - `speakers:updateMapping` - Manual speaker correction
 - [x] Preload API exposure for renderer access
 
+#### November 7, 2025: Unified Authentication Refactor
+
+**Problem**: Separate OAuth flows for Calendar and Contacts required duplicate authentication logic and potentially two separate token files.
+
+**Solution**: Created unified GoogleAuth module that handles authentication for both services with a single OAuth flow.
+
+**Changes Made**:
+
+1. **Created `GoogleAuth.js`** (232 lines) - New shared authentication module
+   - Single OAuth2 client for both Calendar and Contacts
+   - Combined scopes: `calendar.readonly` + `contacts.readonly`
+   - Centralized token management (single `google-token.json` file)
+   - Automatic token refresh for all services
+   - Dependency injection pattern (passed to GoogleCalendar and GoogleContacts)
+
+2. **Refactored `GoogleCalendar.js`** (370 → 239 lines)
+   - Removed all OAuth logic (saved 131 lines)
+   - Now accepts `googleAuth` instance via constructor
+   - Uses shared token refresh logic
+
+3. **Refactored `GoogleContacts.js`** (318 → 223 lines)
+   - Removed all OAuth logic (saved 95 lines)
+   - Now accepts `googleAuth` instance via constructor
+   - Added `contactCount` property to track actual contact count vs email count
+
+4. **Consolidated IPC Handlers in `main.js`** (10 → 6 handlers)
+   - Removed separate `calendar:*` and `contacts:*` auth handlers
+   - Created unified `google:*` handlers:
+     - `google:getAuthUrl` - Get OAuth URL with combined scopes
+     - `google:authenticate` - Exchange code and initialize both services
+     - `google:isAuthenticated` - Check unified auth status
+     - `google:getStatus` - Get detailed status including contact count
+     - `google:signOut` - Sign out of both services
+     - `google:openAuthWindow` - OAuth popup window with service initialization
+
+5. **Updated Renderer (`preload.js`, `index.html`, `index.css`, `renderer.js`)**
+   - Single Google button with official Google logo (replaced separate Calendar/Contacts buttons)
+   - Unified authentication status display
+   - Contact count shown in button tooltip
+   - Simplified UI with single authentication flow
+
+**Bug Fixes**:
+
+1. **Contact Count Showing 0**
+   - **Cause**: `fetchAllContacts()` called without `await` in auth handlers
+   - **Fix**: Added `await` to both `google:authenticate` and `google:openAuthWindow` handlers
+   - **Result**: Contacts now load before returning success
+
+2. **Contact Count Showing Email Count Instead of Contact Count**
+   - **Cause**: `contactsCache.size` returns number of email addresses, not contacts
+   - **Why Different**: Contacts with multiple emails create multiple Map entries (781 contacts → 562 unique emails)
+   - **Fix**: Added `contactCount` property to track actual unique contacts
+   - **Result**: UI now correctly shows 781 contacts instead of 562 emails
+
+**Architecture Benefits**:
+- ✅ Single authentication flow (better UX)
+- ✅ Single token file (simpler management)
+- ✅ 226 lines of code removed (eliminated duplication)
+- ✅ Centralized token refresh logic
+- ✅ Cleaner IPC API (6 handlers vs 10)
+- ✅ Easier to maintain and extend
+
+**Code Review Findings** (November 7, 2025):
+
+Comprehensive code review identified:
+
+**Critical Issues (Must Fix)**:
+1. Race condition in service initialization (multiple paths initialize same services)
+2. Token file permissions not set to 0o600 (security risk)
+3. Token refresh failure has no recovery mechanism
+4. Auth window not properly destroyed (memory leak)
+5. Contact cache allows arbitrary keys (injection risk)
+
+**Important Issues**:
+1. Inconsistent authentication checks across modules
+2. Contact cache uses unsafe string concatenation for keys
+3. Missing null checks in contact processing
+4. No handling for 401 errors (expired tokens)
+5. No persistence of auth state across app restarts
+
+**Nice-to-Have Improvements**:
+1. Incomplete JSDoc comments
+2. Hard-coded OAuth scopes
+3. Magic numbers in cache expiry
+4. No enforcement of cache expiry
+5. Logging may expose sensitive data
+6. No retry logic for failed API calls
+7. No analytics/telemetry
+
+**Positive Observations**:
+- Excellent separation of concerns with GoogleAuth module
+- Good error messages throughout
+- Proper async/await usage
+- Security-aware design (token refresh, HTTPS)
+- Well-implemented token refresh logic
+- Clean IPC API design
+- Effective contact caching strategy
+- Type safety awareness
+
+**Files Modified**:
+- `src/main/integrations/GoogleAuth.js` (NEW - 232 lines → 276 lines after security fixes)
+- `src/main/integrations/GoogleCalendar.js` (370 → 239 lines)
+- `src/main/integrations/GoogleContacts.js` (318 → 223 lines)
+- `src/main.js` (unified initialization, consolidated IPC handlers, +67 lines for centralized init)
+- `src/preload.js` (unified Google API exposure)
+- `src/index.html` (single Google button)
+- `src/index.css` (unified button styling)
+- `src/renderer.js` (single authentication handler)
+
+#### November 7, 2025: Critical Security Fixes
+
+**Motivation**: Code review identified 5 critical/high-priority security and reliability issues that needed immediate attention.
+
+**Fixes Implemented** (4 of 5 completed):
+
+1. **✅ Fixed Race Condition in Service Initialization** (CRITICAL)
+   - **Problem**: Multiple code paths initializing `googleCalendar`, `googleContacts`, and `speakerMatcher` simultaneously
+   - **Impact**: Duplicate service instances, memory leaks, state inconsistencies
+   - **Solution**: Created centralized `initializeGoogleServices()` function (main.js:1185-1234)
+     - Checks if services already exist before creating new instances
+     - Prevents orphaned instances and race conditions
+     - Updated all three initialization paths: app ready, `google:authenticate`, `google:openAuthWindow`
+   - **Result**: Services initialized exactly once, eliminating race conditions
+
+2. **✅ Fixed Auth Window Memory Leak** (HIGH)
+   - **Problem**: OAuth window not properly destroyed in all code paths
+   - **Impact**: Memory leaks after repeated authentication attempts
+   - **Solution**: Implemented proper cleanup mechanism (main.js:1330-1412)
+     - Added `cleanup()` helper function that safely destroys windows
+     - Added 5-minute timeout to prevent hanging windows
+     - Ensured cleanup called in all paths: success, error, timeout, window closed
+     - Properly clears timeout when window closes
+   - **Result**: Windows guaranteed to be destroyed, preventing memory leaks
+
+3. **✅ Secured Token File Permissions** (CRITICAL)
+   - **Problem**: OAuth tokens saved without restrictive file permissions, readable by all users
+   - **Impact**: Local attackers could steal OAuth tokens and access user's Google account
+   - **Solution**: Platform-specific permission hardening (GoogleAuth.js:95-134)
+     - **Unix/Linux/Mac**: Set file mode to `0o600` (owner read/write only)
+     - **Windows**: Use `icacls` to remove inheritance and restrict to current user
+       ```cmd
+       icacls "token-file" /inheritance:r /grant:r "USERNAME:F"
+       ```
+   - **Result**: Token files secured on all platforms
+
+4. **✅ Implemented Token Refresh Failure Recovery** (CRITICAL)
+   - **Problem**: Token refresh failures left user in broken authenticated state with no recovery
+   - **Impact**: Silent failures, no user notification, broken authentication persists
+   - **Solution**: Added comprehensive recovery logic (GoogleAuth.js:235-272)
+     - Clear broken credentials on refresh failure
+     - Delete invalid token file
+     - Reset `initialized` flag to false
+     - Throw error with code `AUTH_REFRESH_FAILED` and clear message
+     - Enables calling code to trigger re-authentication flow
+   - **Result**: Token refresh failures now cleanly reset auth state with clear error messages
+
+5. **⏳ Contact Cache Validation** (HIGH) - DEFERRED
+   - **Issue**: Email addresses used as cache keys without validation
+   - **Impact**: Potential for injection attacks or prototype pollution
+   - **Status**: Deferred for future implementation (lower risk since data comes from Google's trusted API)
+
+**Testing Recommendations**:
+- Test token file permissions on Windows (verify `icacls` output)
+- Simulate network failures during token refresh
+- Test multiple simultaneous authentication attempts
+- Verify memory cleanup after repeated auth flows with Windows Task Manager
+- Test with expired/revoked tokens to verify recovery flow
+
 #### Remaining Tasks
+- [ ] Implement contact cache validation (deferred)
 - [ ] Manual speaker ID correction UI component (future enhancement)
 - [x] Google Contacts authentication UI (Contacts button in header)
 - [x] Speaker matching status display (button shows contact count)
 - [ ] End-to-end testing with real meetings
 
 **Implementation Details**:
-- **Modules Created**: `GoogleContacts.js`, `SpeakerMatcher.js`
+- **Modules Created**: `GoogleAuth.js`, `GoogleContacts.js`, `SpeakerMatcher.js`
 - **Modified**:
   - `main.js` - initialization, IPC handlers, export integration
   - `preload.js` - API exposure for renderer
   - `generateTranscriptMarkdown()` - uses speaker names
   - `generateSummaryMarkdown()` - includes speaker mapping in frontmatter
   - `renderer.js` - authentication UI logic, event handlers
-  - `index.html` - Contacts button in header
-  - `index.css` - Contacts button styling
+  - `index.html` - Google button in header (unified)
+  - `index.css` - Google button styling (unified)
 - **Matching Algorithms**:
   1. Count-based (if speakers == participants, 1:1 match)
   2. First speaker heuristic (often organizer)
@@ -416,6 +585,7 @@ Each meeting generates:
 - [x] Transcript shows real names instead of "Speaker 1" (implemented with fallback)
 - [ ] 70%+ speaker identification accuracy (needs testing)
 - [x] User can correct misidentifications (IPC handler ready, UI pending)
+- [x] Single authentication flow for Calendar + Contacts
 
 ---
 

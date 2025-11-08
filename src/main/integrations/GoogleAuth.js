@@ -88,7 +88,7 @@ class GoogleAuth {
   }
 
   /**
-   * Save token to disk
+   * Save token to disk with secure file permissions
    *
    * @param {Object} token - OAuth2 token object
    */
@@ -98,7 +98,34 @@ class GoogleAuth {
       const dir = path.dirname(this.tokenPath);
       await fs.mkdir(dir, { recursive: true });
 
+      // Write token file
       await fs.writeFile(this.tokenPath, JSON.stringify(token, null, 2));
+
+      // Set restrictive file permissions
+      if (process.platform !== 'win32') {
+        // Unix/Linux/Mac: Set to 0o600 (owner read/write only)
+        await fs.chmod(this.tokenPath, 0o600);
+        console.log('[GoogleAuth] Token saved with 0o600 permissions');
+      } else {
+        // Windows: Use icacls to restrict access to current user only
+        try {
+          const { exec } = require('child_process');
+          const { promisify } = require('util');
+          const execAsync = promisify(exec);
+
+          const username = process.env.USERNAME || process.env.USER;
+          if (username) {
+            // Remove inheritance and grant full control to current user only
+            await execAsync(`icacls "${this.tokenPath}" /inheritance:r /grant:r "${username}:F"`);
+            console.log('[GoogleAuth] Token saved with restricted permissions (Windows)');
+          } else {
+            console.warn('[GoogleAuth] Could not set file permissions - USERNAME not found');
+          }
+        } catch (err) {
+          console.error('[GoogleAuth] Failed to set token file permissions:', err.message);
+        }
+      }
+
       console.log('[GoogleAuth] Token saved to:', this.tokenPath);
     } catch (error) {
       console.error('[GoogleAuth] Error saving token:', error.message);
@@ -201,6 +228,7 @@ class GoogleAuth {
 
   /**
    * Refresh access token if expired
+   * Includes recovery mechanism for refresh failures
    *
    * @returns {Promise<void>}
    */
@@ -219,10 +247,26 @@ class GoogleAuth {
         const { credentials: newCredentials } = await this.oauth2Client.refreshAccessToken();
         this.oauth2Client.setCredentials(newCredentials);
         await this.saveToken(newCredentials);
-        console.log('[GoogleAuth] Access token refreshed');
+        console.log('[GoogleAuth] Access token refreshed successfully');
       } catch (error) {
         console.error('[GoogleAuth] Error refreshing token:', error.message);
-        throw error;
+
+        // Token refresh failed - clear broken credentials and notify user
+        this.oauth2Client.setCredentials({});
+        this.initialized = false;
+
+        // Delete token file
+        try {
+          await fs.unlink(this.tokenPath);
+          console.log('[GoogleAuth] Deleted invalid token file');
+        } catch (unlinkErr) {
+          // File may not exist, ignore
+        }
+
+        // Throw error with clear message for re-authentication
+        const authError = new Error('Google authentication expired - please sign in again');
+        authError.code = 'AUTH_REFRESH_FAILED';
+        throw authError;
       }
     }
   }

@@ -27,8 +27,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Transcription Service - Interfaces with transcription API, speaker diarization
 - Routing Engine - Matches participants to organizations, determines save location
 - LLM Service - Template processing, summary generation
-- Calendar Integration - Google Calendar OAuth, meeting detection
-- Contact Integration - Google Contacts matching
+- Google Integration - Unified OAuth 2.0 authentication for Calendar + Contacts
+- Calendar Integration - Google Calendar event fetching, meeting detection
+- Contact Integration - Google Contacts matching, speaker identification
 - HubSpot Integration - CRM sync
 - File Manager - Obsidian vault structure, encryption (DPAPI)
 
@@ -120,17 +121,33 @@ Each phase delivers independently useful functionality.
 - Handles system audio capture and app-specific recording
 - Windows compatibility confirmed via muesli example
 
-### Google Calendar
-- OAuth 2.0, read-only calendar access
+### Google Integration (Calendar + Contacts)
+
+**Unified Authentication:**
+- Single OAuth 2.0 flow for both Calendar and Contacts APIs
+- Combined scopes: `calendar.readonly` + `contacts.readonly`
+- Single token file (`google-token.json`) with automatic refresh
+- Shared authentication module (`GoogleAuth.js`) for centralized token management
+
+**Google Calendar:**
+- Read-only calendar access
 - Detects meetings with Zoom/Teams/Meet links
+- Extracts participant emails and meeting metadata
 - Auto-start recording when meeting begins (with notification)
 - Manual refresh + on-app-launch sync
+
+**Google Contacts:**
+- Contact caching with 24-hour expiry
+- Fast email-based lookups for speaker matching
+- Batch contact fetching on authentication
+- Automatic re-authentication when cache expires
 
 ### Speaker Identification
 1. Transcription service provides speaker diarization (Speaker 1, Speaker 2)
 2. Match speakers to calendar participants via Google Contacts lookup
 3. Label transcript with actual names instead of "Speaker N"
-4. Future: Voice fingerprinting for historical matching
+4. Heuristic-based matching (word count, timing, first speaker patterns)
+5. Future: Voice fingerprinting for historical matching
 
 ### HubSpot Sync
 - Match email domain → HubSpot Company (prioritize Companies over Contacts)
@@ -145,7 +162,7 @@ Each phase delivers independently useful functionality.
 - **No recording consent announcements**: User responsibility (not in-app feature)
 - **Local-first**: All data stored locally in Obsidian vault, encrypted if enabled
 
-## Project File Structure (Planned)
+## Project File Structure
 
 ```
 src/
@@ -154,13 +171,18 @@ src/
 │   ├── transcription/   # TranscriptionService, SpeakerDiarization
 │   ├── routing/         # RoutingEngine, ConfigLoader, EmailMatcher
 │   ├── llm/             # LLMService, TemplateProcessor, SummaryGenerator
-│   ├── integrations/    # GoogleCalendar, GoogleContacts, HubSpotAPI
+│   ├── integrations/
+│   │   ├── GoogleAuth.js       # Unified OAuth 2.0 for Calendar + Contacts
+│   │   ├── GoogleCalendar.js   # Calendar event fetching
+│   │   ├── GoogleContacts.js   # Contact matching
+│   │   ├── SpeakerMatcher.js   # Speaker identification
+│   │   └── HubSpotAPI.js       # CRM sync (future)
 │   ├── storage/         # FileManager, Encryption (DPAPI), VaultStructure
 │   └── utils/           # Logger, Config
 ├── renderer/
 │   ├── components/      # MainWindow, RecordingWidget, SettingsPanel, etc.
 │   └── hooks/
-└── shared/              # TypeScript types, constants
+└── shared/              # TypeScript types, constants, validation
 ```
 
 ## Important Constraints
@@ -182,30 +204,53 @@ src/
 - **Recall.ai Docs**: https://docs.recall.ai/docs/getting-started
 - **Recall.ai Example**: https://github.com/recallai/muesli-public
 
-## Current Project State (Nov 5, 2025)
+## Current Project State (Nov 7, 2025)
 
-### Completed
-- ✅ Electron + TypeScript + React project initialized
-- ✅ Project structure organized (main, renderer, shared)
-- ✅ Dependencies installed (Recall.ai SDK, AssemblyAI, React)
-- ✅ Basic recording widget UI built and styled
-- ✅ TypeScript types and constants defined
-- ✅ Webpack build verified successful
+### Completed Phases
+- ✅ **Phase 1**: Core Recording & Transcription (Recall.ai SDK, AssemblyAI streaming)
+- ✅ **Phase 2**: Routing System (Email domain matching, vault structure)
+- ✅ **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
+- ✅ **Phase 4**: LLM Integration (OpenAI summaries with templates)
+- ✅ **Phase 5**: Obsidian Export (Two-file architecture with frontmatter)
+- 🚧 **Phase 6**: Speaker Recognition & Contact Matching (In Progress)
 
-### Next Implementation Tasks
-1. `src/main/index.ts` - Main Electron process with BrowserWindow and IPC handlers
-2. `src/preload.ts` - IPC API exposure to renderer via contextBridge
-3. `src/main/recording/RecordingManager.ts` - Recall.ai SDK integration
-4. `src/main/transcription/TranscriptionService.ts` - AssemblyAI integration
-5. `src/main/storage/FileManager.ts` - Save transcripts to disk
-6. Update `src/renderer/App.tsx` - Connect UI to IPC API
+### Recent Additions (Nov 7, 2025)
+- ✅ Unified Google authentication (GoogleAuth.js)
+- ✅ Single OAuth flow for Calendar + Contacts
+- ✅ Google Contacts integration with caching
+- ✅ Speaker matching with heuristic algorithms
+- ✅ Contact count tracking (unique contacts vs email addresses)
+- ✅ UI authentication with single Google button
+- ✅ Consolidated IPC handlers (10 → 6 handlers)
+
+### Current Status
+**Working Features:**
+- Manual and automatic meeting recording
+- Real-time transcription with speaker diarization
+- Calendar event detection and display
+- Contact matching for speaker identification
+- AI summary generation with templates
+- Obsidian vault export with routing
+- Two-file meeting architecture (summary + transcript)
+
+**Known Issues (From Code Review):**
+- Critical: Race condition in service initialization
+- Critical: Token file permissions not secure (need 0o600)
+- Critical: No token refresh failure recovery
+- High: Auth window memory leak
+- High: Contact cache deduplication issues
+
+### Next Tasks
+1. Fix critical security and reliability issues
+2. End-to-end testing with real meetings
+3. Address code review findings
 
 ### Running the App
 - Development: `npm start` (launches Electron with hot reload)
 - Build: `npm run package` (creates distributable)
 - **Note**: Requires Windows for Recall.ai Desktop SDK
 
-See `PROGRESS.md` for detailed implementation guide and checklist.
+See `PROGRESS.md` for detailed implementation history and `CODE_REVIEW.md` for security findings.
 
 ## Development Philosophy
 

@@ -295,13 +295,9 @@ app.whenReady().then(async () => {
   const authInitialized = await googleAuth.initialize();
 
   if (authInitialized) {
-    console.log('[GoogleAuth] Authenticated successfully');
-
-    // Initialize Google Calendar with shared auth
-    googleCalendar = new GoogleCalendar(googleAuth);
-    googleCalendar.initialize();
-
-    console.log('[GoogleCalendar] Initialized with shared authentication');
+    console.log('[GoogleAuth] Authenticated successfully - initializing services');
+    // Use centralized initialization to prevent race conditions
+    await initializeGoogleServices();
   } else {
     console.log('[GoogleAuth] Not authenticated - user needs to sign in');
     console.log('[GoogleAuth] Calendar and Contacts features will be disabled until authenticated');
@@ -1172,6 +1168,68 @@ ipcMain.handle('debugGetHandlers', async () => {
 });
 
 // ===================================================================
+// Centralized Google Services Initialization
+// ===================================================================
+
+/**
+ * Initialize or reinitialize Google services (Calendar, Contacts, Speaker Matcher)
+ * Prevents race conditions by checking if services are already initialized.
+ *
+ * @param {boolean} forceReinitialize - If true, recreate services even if they exist
+ * @returns {Promise<boolean>} True if initialization successful
+ */
+async function initializeGoogleServices(forceReinitialize = false) {
+  if (!googleAuth || !googleAuth.isAuthenticated()) {
+    console.log('[Google Services] Not authenticated - skipping service initialization');
+    return false;
+  }
+
+  try {
+    // Initialize Calendar service
+    if (!googleCalendar || forceReinitialize) {
+      console.log('[Google Services] Initializing Calendar service...');
+      googleCalendar = new GoogleCalendar(googleAuth);
+      googleCalendar.initialize();
+    } else {
+      console.log('[Google Services] Calendar service already initialized');
+    }
+
+    // Initialize Contacts service
+    if (!googleContacts || forceReinitialize) {
+      console.log('[Google Services] Initializing Contacts service...');
+      googleContacts = new GoogleContacts(googleAuth);
+      googleContacts.initialize();
+    } else {
+      console.log('[Google Services] Contacts service already initialized');
+    }
+
+    // Initialize Speaker Matcher
+    if (googleContacts && (!speakerMatcher || forceReinitialize)) {
+      console.log('[Google Services] Initializing Speaker Matcher...');
+      speakerMatcher = new SpeakerMatcher(googleContacts);
+    } else if (googleContacts) {
+      console.log('[Google Services] Speaker Matcher already initialized');
+    }
+
+    // Preload contacts (runs in background, doesn't block)
+    if (googleContacts) {
+      try {
+        await googleContacts.fetchAllContacts();
+        console.log('[Google Services] Contacts preloaded successfully');
+      } catch (err) {
+        console.error('[Google Services] Failed to preload contacts:', err.message);
+      }
+    }
+
+    console.log('[Google Services] All services initialized successfully');
+    return true;
+  } catch (error) {
+    console.error('[Google Services] Initialization failed:', error.message);
+    return false;
+  }
+}
+
+// ===================================================================
 // Unified Google Authentication IPC Handlers (Calendar + Contacts)
 // ===================================================================
 
@@ -1199,24 +1257,9 @@ ipcMain.handle('google:authenticate', async (event, code) => {
 
     await googleAuth.getTokenFromCode(code);
 
-    // Initialize Calendar and Contacts with the new auth
+    // Use centralized initialization to prevent race conditions
     if (googleAuth.isAuthenticated()) {
-      googleCalendar = new GoogleCalendar(googleAuth);
-      googleCalendar.initialize();
-
-      googleContacts = new GoogleContacts(googleAuth);
-      googleContacts.initialize();
-
-      speakerMatcher = new SpeakerMatcher(googleContacts);
-
-      // Preload contacts and wait for completion
-      try {
-        await googleContacts.fetchAllContacts();
-        console.log('[Google IPC] Contacts loaded successfully');
-      } catch (err) {
-        console.error('[Google IPC] Failed to preload contacts:', err.message);
-      }
-
+      await initializeGoogleServices();
       console.log('[Google IPC] Successfully authenticated Google Calendar + Contacts');
     }
 
@@ -1284,6 +1327,16 @@ ipcMain.handle('google:signOut', async () => {
 
 // Open OAuth window for Google authentication
 ipcMain.handle('google:openAuthWindow', async () => {
+  let authWindow = null;
+
+  // Helper function to safely clean up the auth window
+  const cleanup = () => {
+    if (authWindow && !authWindow.isDestroyed()) {
+      authWindow.destroy();
+    }
+    authWindow = null;
+  };
+
   try {
     console.log('[Google IPC] Opening OAuth window');
 
@@ -1293,7 +1346,7 @@ ipcMain.handle('google:openAuthWindow', async () => {
 
     const authUrl = googleAuth.getAuthUrl();
 
-    let authWindow = new BrowserWindow({
+    authWindow = new BrowserWindow({
       width: 600,
       height: 800,
       webPreferences: {
@@ -1305,10 +1358,20 @@ ipcMain.handle('google:openAuthWindow', async () => {
     authWindow.loadURL(authUrl);
 
     return new Promise((resolve) => {
+      // Timeout after 5 minutes to prevent hanging
+      const timeout = setTimeout(() => {
+        if (authWindow && !authWindow.isDestroyed()) {
+          console.log('[Google OAuth] Authentication timeout');
+          cleanup();
+          resolve({ success: false, error: 'Authentication timeout (5 minutes)' });
+        }
+      }, 5 * 60 * 1000);
+
       // Listen for the redirect
       authWindow.webContents.on('will-redirect', async (event, url) => {
         if (url.startsWith('http://localhost:3000/oauth2callback')) {
           event.preventDefault();
+          clearTimeout(timeout);
 
           const parsedUrl = new URL(url);
           const code = parsedUrl.searchParams.get('code');
@@ -1317,43 +1380,33 @@ ipcMain.handle('google:openAuthWindow', async () => {
             try {
               await googleAuth.getTokenFromCode(code);
 
-              // Initialize services
-              googleCalendar = new GoogleCalendar(googleAuth);
-              googleCalendar.initialize();
+              // Use centralized initialization to prevent race conditions
+              await initializeGoogleServices();
+              console.log('[Google OAuth] Services initialized successfully');
 
-              googleContacts = new GoogleContacts(googleAuth);
-              googleContacts.initialize();
-
-              speakerMatcher = new SpeakerMatcher(googleContacts);
-
-              // Preload contacts and wait for completion
-              try {
-                await googleContacts.fetchAllContacts();
-                console.log('[Google OAuth] Contacts loaded successfully');
-              } catch (err) {
-                console.error('[Google OAuth] Failed to preload contacts:', err.message);
-              }
-
-              authWindow.close();
+              cleanup();
               resolve({ success: true });
             } catch (error) {
-              authWindow.close();
+              cleanup();
               resolve({ success: false, error: error.message });
             }
           } else {
             const error = parsedUrl.searchParams.get('error');
-            authWindow.close();
+            cleanup();
             resolve({ success: false, error: error || 'No authorization code received' });
           }
         }
       });
 
       authWindow.on('closed', () => {
+        clearTimeout(timeout);
+        cleanup();
         resolve({ success: false, error: 'Authentication window closed' });
       });
     });
   } catch (error) {
     console.error('[Google IPC] Failed to open auth window:', error);
+    cleanup();
     return { success: false, error: error.message };
   }
 });

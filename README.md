@@ -46,22 +46,25 @@ npm run make
 
 ## Project Status
 
-**Current Phase:** Phase 1 - Core Recording & Transcription
+**Current Phase:** Phase 6 - Speaker Recognition & Contact Matching (In Progress)
 
-### ✅ Completed
-- Project initialization with Electron + TypeScript + React
-- Basic recording widget UI
-- Project structure and type definitions
-- Build system configuration
+### ✅ Completed Phases
+- **Phase 1**: Core Recording & Transcription (Recall.ai SDK + AssemblyAI)
+- **Phase 2**: Routing System (Email domain matching, vault structure)
+- **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
+- **Phase 4**: LLM Integration (OpenAI summaries with templates)
+- **Phase 5**: Obsidian Export (Two-file architecture with frontmatter)
 
-### 🚧 In Progress
-- Recall.ai SDK integration for audio recording
-- AssemblyAI transcription service
-- File management for saving transcripts
+### 🚧 Current Phase (Phase 6)
+- ✅ Unified Google authentication (Calendar + Contacts)
+- ✅ Google Contacts integration with caching
+- ✅ Speaker matching with heuristic algorithms
+- ⏳ End-to-end testing with real meetings
 
 ### 📋 See Full Status
 - **[PROGRESS.md](./PROGRESS.md)** - Detailed progress and next steps
 - **[SPECIFICATION.md](./SPECIFICATION.md)** - Complete product specification
+- **[CODE_REVIEW.md](./CODE_REVIEW.md)** - Security and code quality findings
 
 ---
 
@@ -98,36 +101,56 @@ jdnotesthings/
 
 ---
 
-## Features (Planned)
+## Features
 
-### Phase 1: Core Recording & Transcription ⏳
-- Manual recording with start/stop controls
+### ✅ Phase 1: Core Recording & Transcription (Complete)
+- Manual and automatic meeting recording
 - System audio capture via Recall.ai SDK
-- Transcription with speaker diarization
-- Save transcripts as Markdown files
+- Real-time transcription with AssemblyAI v3 streaming
+- Speaker diarization (Speaker 1, Speaker 2, etc.)
+- Microphone audio capture confirmed working
 
-### Phase 2: Routing System
-- Automatic file organization by client/project
-- Email domain-based routing
-- YAML configuration
+### ✅ Phase 2: Routing System (Complete)
+- Automatic file organization by client/project/industry
+- Email domain-based routing with priority system
+- YAML configuration (`config/routing.yaml`)
+- Multi-organization meeting handling
+- Email override system for personal emails
 
-### Phase 3: Calendar Integration
-- Google Calendar integration
-- Auto-start recording when meetings begin
-- Meeting metadata extraction
+### ✅ Phase 3: Calendar Integration (Complete)
+- Google Calendar OAuth 2.0 integration (unified with Contacts)
+- Calendar event fetching (next 24 hours)
+- Meeting platform detection (Zoom, Teams, Meet, Webex, Whereby)
+- Meeting metadata extraction (title, participants, links)
+- Upcoming meetings display in main UI
 
-### Phase 4: LLM Summaries
-- Template-based meeting summaries
-- Multi-LLM support (OpenAI, Claude, Gemini)
-- Custom summary templates
+### ✅ Phase 4: LLM Integration (Complete)
+- AI-generated meeting summaries with OpenAI (gpt-4o-mini)
+- Template-based summary generation
+- Streaming summary generation with progress updates
+- Structured summaries (participants, key points, action items)
+
+### ✅ Phase 5: Obsidian Export (Complete)
+- Two-file architecture (summary + transcript)
+- Rich YAML frontmatter with meeting metadata
+- Bidirectional Obsidian wiki-links
+- Automatic export to configured vault path
+- Multi-organization routing support
+
+### 🚧 Phase 6: Speaker Recognition & Contact Matching (In Progress)
+- ✅ Unified Google authentication (Calendar + Contacts)
+- ✅ Google Contacts integration with 24-hour caching
+- ✅ Heuristic-based speaker matching algorithms
+- ✅ Contact count tracking and UI display
+- ⏳ End-to-end testing with real meetings
 
 ### Future Phases
-- Speaker recognition & contact matching
-- Platform-specific recording (Zoom/Teams/Meet)
-- HubSpot CRM integration
-- Import prior transcripts
-- Encryption & security
-- Real-time transcription
+- Phase 7: Platform-specific recording (Zoom/Teams/Meet)
+- Phase 8: HubSpot CRM integration
+- Phase 9: Import prior transcripts
+- Phase 10: Encryption & security (Windows DPAPI)
+- Phase 11: Advanced UI & settings
+- Phase 12: Real-time transcription (optional)
 
 See [SPECIFICATION.md](./SPECIFICATION.md) for complete feature roadmap.
 
@@ -161,19 +184,32 @@ npm run make
 
 ```env
 # Recall.ai Configuration
-RECALLAI_API_URL=https://us-east-1.recall.ai
+RECALLAI_API_URL=https://us-west-2.recall.ai
 RECALLAI_API_KEY=your_api_key
 
 # AssemblyAI Configuration
 ASSEMBLYAI_API_KEY=your_api_key
 
-# Obsidian Vault (future)
+# OpenAI Configuration (for AI summaries)
+OPENAI_API_KEY=your_api_key
+
+# Google Calendar + Contacts OAuth (unified authentication)
+GOOGLE_CALENDAR_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CALENDAR_REDIRECT_URI=http://localhost:3000/oauth2callback
+
+# Obsidian Vault Path
 VAULT_PATH=./vault
 ```
 
 ### API Keys Required
 - **Recall.ai**: For desktop audio recording
 - **AssemblyAI**: For transcription with speaker diarization
+- **OpenAI**: For AI-generated meeting summaries (gpt-4o-mini)
+- **Google OAuth**: For Calendar + Contacts access (unified authentication)
+  - Set up OAuth 2.0 credentials at [Google Cloud Console](https://console.cloud.google.com/)
+  - Required scopes: `calendar.readonly` + `contacts.readonly`
+  - Redirect URI: `http://localhost:3000/oauth2callback`
 
 ---
 
