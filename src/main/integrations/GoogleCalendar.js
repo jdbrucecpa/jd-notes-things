@@ -68,7 +68,15 @@ class GoogleCalendar {
     }
 
     // Refresh token if needed
-    await this.googleAuth.refreshTokenIfNeeded();
+    try {
+      await this.googleAuth.refreshTokenIfNeeded();
+    } catch (error) {
+      if (error.code === 'AUTH_REFRESH_FAILED') {
+        // Notify user that authentication expired
+        this._notifyAuthExpired();
+      }
+      throw error;
+    }
 
     const now = new Date();
     const timeMax = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
@@ -232,6 +240,30 @@ class GoogleCalendar {
         optional: attendee.optional || false,
         organizer: attendee.organizer || false
       }));
+  }
+
+  /**
+   * Notify renderer process that Google authentication has expired
+   * @private
+   */
+  _notifyAuthExpired() {
+    try {
+      const { BrowserWindow } = require('electron');
+      const windows = BrowserWindow.getAllWindows();
+
+      if (windows.length > 0) {
+        const mainWindow = windows[0];
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('auth:expired', {
+            service: 'Google',
+            message: 'Your Google authentication has expired. Please sign in again to continue using Calendar and Contacts features.'
+          });
+          console.log('[GoogleCalendar] Sent auth:expired notification to renderer');
+        }
+      }
+    } catch (error) {
+      console.error('[GoogleCalendar] Failed to send auth expiration notification:', error.message);
+    }
   }
 }
 

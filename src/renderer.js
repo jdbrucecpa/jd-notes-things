@@ -1606,6 +1606,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Listen for authentication expiration notifications
+  window.electronAPI.onAuthExpired((data) => {
+    console.log('Authentication expired:', data);
+
+    // Show notification to user
+    const notificationDiv = document.createElement('div');
+    notificationDiv.className = 'auth-expired-notification';
+    notificationDiv.innerHTML = `
+      <div class="notification-content">
+        <strong>${data.service} Authentication Expired</strong>
+        <p>${data.message}</p>
+        <button onclick="this.parentElement.parentElement.remove(); window.location.reload();">
+          Sign In Again
+        </button>
+        <button onclick="this.parentElement.parentElement.remove();" style="margin-left: 10px;">
+          Dismiss
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(notificationDiv);
+
+    // Auto-dismiss after 30 seconds
+    setTimeout(() => {
+      if (notificationDiv.parentElement) {
+        notificationDiv.remove();
+      }
+    }, 30000);
+  });
+
   // Listen for requests to open a meeting note (from notification click)
   window.electronAPI.onOpenMeetingNote((meetingId) => {
     console.log('Received request to open meeting note:', meetingId);
@@ -1811,10 +1841,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Add event listeners for buttons
-  document.querySelector('.new-note-btn').addEventListener('click', async () => {
-    console.log('New note button clicked');
-    await createNewMeeting();
-  });
+  console.log('[EventListeners] Setting up Record In-person Meeting button...');
+  const newNoteBtn = document.getElementById('newNoteBtn');
+  console.log('[EventListeners] newNoteBtn element:', newNoteBtn);
+
+  if (newNoteBtn) {
+    console.log('[EventListeners] Adding click listener to newNoteBtn');
+    newNoteBtn.addEventListener('click', async () => {
+      console.log('>>> Record In-person Meeting button clicked! <<<');
+      try {
+        await createNewMeeting();
+      } catch (error) {
+        console.error('Error creating new meeting:', error);
+        alert('Failed to start in-person meeting recording: ' + error.message);
+      }
+    });
+    console.log('[EventListeners] Click listener added successfully to newNoteBtn');
+  } else {
+    console.error('[EventListeners] ERROR: newNoteBtn element not found in DOM!');
+  }
 
   // Join Meeting button handler
   document.getElementById('joinMeetingBtn').addEventListener('click', async () => {
@@ -2044,12 +2089,41 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Back button event listener
-  document.getElementById('backButton').addEventListener('click', async () => {
-    // Save content before going back to home
-    await saveCurrentNote();
-    showHomeView();
-    renderMeetings(); // Refresh the meeting list
-  });
+  console.log('[EventListeners] Setting up back button...');
+  const backButton = document.getElementById('backButton');
+  console.log('[EventListeners] backButton element:', backButton);
+
+  if (backButton) {
+    console.log('[EventListeners] Adding click listener to backButton');
+    backButton.addEventListener('click', async () => {
+      console.log('>>> Back button clicked! <<<');
+      try {
+        // Save content before going back to home
+        await saveCurrentNote();
+        console.log('Note saved, returning to home view');
+
+        // Clear current editing state
+        currentEditingMeetingId = null;
+
+        // Show home view
+        showHomeView();
+
+        // Refresh the meeting list
+        await loadMeetingsDataFromFile();
+        renderMeetings();
+
+        console.log('Returned to home view');
+      } catch (error) {
+        console.error('Error navigating back to home:', error);
+        // Still try to show home view even if save failed
+        showHomeView();
+        renderMeetings();
+      }
+    });
+    console.log('[EventListeners] Click listener added successfully to backButton');
+  } else {
+    console.error('[EventListeners] ERROR: backButton element not found in DOM!');
+  }
 
   // Google button event listener (unified Calendar + Contacts)
   const googleBtn = document.getElementById('googleBtn');

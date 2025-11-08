@@ -354,27 +354,14 @@ app.whenReady().then(async () => {
     console.log('[ObsidianExport] Obsidian export will be disabled');
   }
 
-  // Initialize Speaker Recognition System (Phase 6) with shared auth
-  console.log('[SpeakerRecognition] Initializing Google Contacts and speaker matching...');
-
-  if (googleAuth && googleAuth.isAuthenticated()) {
-    // Initialize Google Contacts with shared auth
-    googleContacts = new GoogleContacts(googleAuth);
-    googleContacts.initialize();
-
-    speakerMatcher = new SpeakerMatcher(googleContacts);
-    console.log('[SpeakerRecognition] Speaker matcher ready with shared authentication');
-
-    // Preload contacts in background for faster matching
-    googleContacts.fetchAllContacts().catch(err => {
-      console.error('[SpeakerRecognition] Failed to preload contacts:', err.message);
-    });
-  } else {
+  // Note: Speaker Recognition System (Phase 6) is initialized within initializeGoogleServices()
+  // This ensures all Google services (Calendar, Contacts, Speaker Matcher) are initialized together
+  if (!googleAuth || !googleAuth.isAuthenticated()) {
     console.log('[SpeakerRecognition] Google not authenticated - speaker matching will use fallback');
     console.log('[SpeakerRecognition] Speaker names will fall back to email-based extraction');
   }
 
-  // Start meeting monitor for auto-recording
+  // Start meeting monitor for auto-recording (only after all services initialized)
   startMeetingMonitor();
 
   createWindow();
@@ -476,11 +463,19 @@ const activeRecordings = {
 const fileOperationManager = {
   isProcessing: false,
   pendingOperations: [],
+  readWaiters: [],
   cachedData: null,
   lastReadTime: 0,
 
   // Read the meetings data with caching to reduce file I/O
-  readMeetingsData: async function () {
+  readMeetingsData: async function (skipWait = false) {
+    // If a write is in progress, wait for it to complete (unless called internally)
+    if (!skipWait && (this.isProcessing || this.pendingOperations.length > 0)) {
+      await new Promise(resolve => {
+        this.readWaiters.push(resolve);
+      });
+    }
+
     // If we have cached data that's recent (less than 500ms old), use it
     const now = Date.now();
     if (this.cachedData && (now - this.lastReadTime < 500)) {
@@ -533,8 +528,8 @@ const fileOperationManager = {
       // Get the next operation
       const nextOp = this.pendingOperations.shift();
 
-      // Read the latest data
-      const currentData = await this.readMeetingsData();
+      // Read the latest data (skipWait = true to avoid deadlock)
+      const currentData = await this.readMeetingsData(true);
 
       try {
         // Execute the operation function with the current data
@@ -566,6 +561,12 @@ const fileOperationManager = {
       }
     } finally {
       this.isProcessing = false;
+
+      // Notify any waiting readers that the write is complete
+      if (this.readWaiters.length > 0) {
+        const waiters = this.readWaiters.splice(0); // Get all and clear
+        waiters.forEach(resolve => resolve());
+      }
 
       // Check if more operations were added while we were processing
       if (this.pendingOperations.length > 0) {
@@ -945,7 +946,12 @@ async function exportMeetingToObsidian(meeting) {
     }
 
     // Get routing decisions
-    const routes = routingEngine.routeMeeting(participantEmails, meeting.title || 'Untitled Meeting');
+    const routingDecision = routingEngine.route({
+      participantEmails,
+      meetingTitle: meeting.title || 'Untitled Meeting',
+      meetingDate: meeting.date ? new Date(meeting.date) : new Date()
+    });
+    const routes = routingDecision.routes;
     console.log(`[ObsidianExport] Found ${routes.length} routing destination(s)`);
 
     const createdPaths = [];
@@ -1142,19 +1148,27 @@ summary_file: "${baseFilename}.md"
 
 // Handle saving meetings data
 ipcMain.handle('saveMeetingsData', async (event, data) => {
+  console.log('[IPC] saveMeetingsData called with data:', {
+    upcomingCount: data?.upcomingMeetings?.length,
+    pastCount: data?.pastMeetings?.length
+  });
   try {
     // Validate input data
+    console.log('[IPC] Validating meetings data...');
     const validatedData = MeetingsDataSchema.parse(data);
+    console.log('[IPC] Validation successful');
 
     // Use the file operation manager to safely write the file
+    console.log('[IPC] Writing to file...');
     await fileOperationManager.writeData(validatedData);
+    console.log('[IPC] File write complete');
     return { success: true };
   } catch (error) {
     if (error instanceof z.ZodError) {
-      console.error('Invalid meetings data format:', error.message);
-      return { success: false, error: `Invalid data format: ${error.message}` };
+      console.error('[IPC] Zod validation error:', JSON.stringify(error.errors, null, 2));
+      return { success: false, error: `Invalid data format: ${JSON.stringify(error.errors)}` };
     }
-    console.error('Failed to save meetings data:', error);
+    console.error('[IPC] Failed to save meetings data:', error);
     return { success: false, error: error.message };
   }
 });

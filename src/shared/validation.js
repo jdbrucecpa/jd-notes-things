@@ -33,7 +33,16 @@ const MeetingSchema = z.object({
   summary: z.string().optional(),
   recordingId: z.string().optional(),
   platform: z.string().optional(),
-});
+  subtitle: z.string().optional(),  // Added for UI display
+  hasDemo: z.boolean().optional(),   // Added for UI display
+  summaries: z.array(z.any()).optional(), // Added for LLM summaries
+  participantEmails: z.array(z.string()).optional(), // Added for routing
+  videoFile: z.string().optional(),   // Added for recording
+  start: z.string().optional(),       // Added for calendar events
+  end: z.string().optional(),         // Added for calendar events
+  link: z.string().optional(),        // Added for meeting links
+  description: z.string().optional(), // Added for calendar events
+}).passthrough();  // Allow additional fields for flexibility
 
 // Meetings data schema (for saveMeetingsData)
 const MeetingsDataSchema = z.object({

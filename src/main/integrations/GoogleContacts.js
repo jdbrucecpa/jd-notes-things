@@ -6,6 +6,7 @@
  */
 
 const { google } = require('googleapis');
+const { LRUCache } = require('lru-cache');
 
 class GoogleContacts {
   /**
@@ -18,9 +19,17 @@ class GoogleContacts {
 
     this.googleAuth = googleAuth;
     this.people = null;
-    this.contactsCache = new Map(); // email -> contact info
+
+    // Use LRU cache with max 5,000 entries and 24-hour TTL
+    this.contactsCache = new LRUCache({
+      max: 5000, // Maximum 5,000 contacts in cache
+      ttl: 24 * 60 * 60 * 1000, // 24 hour TTL per entry
+      updateAgeOnGet: true, // Reset TTL when accessed
+      allowStale: false
+    });
+
     this.contactCount = 0; // actual number of unique contacts
-    this.cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours
+    this.cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours (for full cache refresh)
     this.lastFetch = null;
   }
 
@@ -74,7 +83,15 @@ class GoogleContacts {
     }
 
     // Refresh token if needed
-    await this.googleAuth.refreshTokenIfNeeded();
+    try {
+      await this.googleAuth.refreshTokenIfNeeded();
+    } catch (error) {
+      if (error.code === 'AUTH_REFRESH_FAILED') {
+        // Notify user that authentication expired
+        this._notifyAuthExpired();
+      }
+      throw error;
+    }
 
     try {
       console.log('[GoogleContacts] Fetching contacts from Google People API...');
@@ -219,6 +236,30 @@ class GoogleContacts {
     this.contactCount = 0;
     this.lastFetch = null;
     console.log('[GoogleContacts] Cache cleared');
+  }
+
+  /**
+   * Notify renderer process that Google authentication has expired
+   * @private
+   */
+  _notifyAuthExpired() {
+    try {
+      const { BrowserWindow } = require('electron');
+      const windows = BrowserWindow.getAllWindows();
+
+      if (windows.length > 0) {
+        const mainWindow = windows[0];
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('auth:expired', {
+            service: 'Google',
+            message: 'Your Google authentication has expired. Please sign in again to continue using Calendar and Contacts features.'
+          });
+          console.log('[GoogleContacts] Sent auth:expired notification to renderer');
+        }
+      }
+    } catch (error) {
+      console.error('[GoogleContacts] Failed to send auth expiration notification:', error.message);
+    }
   }
 }
 

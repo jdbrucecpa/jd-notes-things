@@ -1040,6 +1040,53 @@ Clear attribution of statements to specific people with minimal manual effort.
 
 ---
 
+### Pre-Phase 7: Critical Bug Fixes
+
+**Status:** Required before Phase 7 development
+
+**Critical Issues Identified (Code Review - Nov 8, 2025):**
+
+**1. Fix RoutingEngine Method Signature Bug**
+- **Issue**: `main.js` line 948 calls `routingEngine.routeMeeting(participantEmails, title)` but `RoutingEngine.js` defines `route(meetingData)` expecting an object
+- **Impact**: Runtime error when routing meetings
+- **Fix**: Change call to `routingEngine.route({ participantEmails, meetingTitle, meetingDate })`
+- **Priority**: Critical - blocks meeting routing
+
+**2. Improve Service Initialization Robustness**
+- **Issue**: Race condition partially fixed in Phase 6, but still possible for `startMeetingMonitor()` to run before services ready
+- **Current State**: Services initialized asynchronously in `app.whenReady()`
+- **Fix**: Ensure strict sequential initialization: `initializeServices() → startMeetingMonitor() → createWindow()`
+- **Priority**: High - causes crashes during development
+
+**3. Add Token Refresh User Notification**
+- **Issue**: Token refresh failures throw errors but UI doesn't notify user to re-authenticate
+- **Current State**: Error logged, app continues with broken authentication
+- **Fix**: Add IPC event `auth:expired` to notify renderer, show "Sign in again" prompt
+- **Priority**: High - affects daily development use
+
+**4. Fix File Operation Read/Write Race**
+- **Issue**: `fileOperationManager.readMeetingsData()` doesn't wait for pending writes
+- **Current State**: Cache check doesn't account for in-progress writes
+- **Fix**: Add `readWaiters` array, queue reads when writes are in progress
+- **Priority**: Medium - could cause data inconsistency
+
+**5. Implement LRU Cache for Contacts**
+- **Issue**: Contact cache in `GoogleContacts.js` grows unbounded (could reach 10,000+ entries)
+- **Current State**: Simple Map with 24-hour expiry, no eviction
+- **Fix**: Use `lru-cache` with max 5,000 entries and 24-hour TTL
+- **Priority**: Medium - memory usage concern
+
+**Success Criteria:**
+- All meetings route correctly without errors
+- Services initialize reliably on every app start
+- User notified when Google authentication expires
+- No data corruption during concurrent file operations
+- Contact cache memory usage remains reasonable (<50MB)
+
+**Estimated Effort:** 4-6 hours
+
+---
+
 ### Phase 7: Platform-Specific Recording (Zoom/Teams/Meet)
 **Goal:** Optimized recording for specific meeting platforms
 
@@ -1133,26 +1180,127 @@ Entire meeting history organized and searchable using new system.
 #### User Value
 Sensitive client information protected from unauthorized access.
 
-#### Technical Debt Items (Phase 10)
+#### Security Hardening Items (Phase 10)
 
-**11. Memory Leak Prevention**
-- Clean up event listeners on window/app close
-- Affected areas:
-  - IPC listeners in main process
-  - SDK event listeners (Recall.ai)
-  - Renderer process event listeners
-- Add proper cleanup handlers for all event registrations
-- Test with long-running sessions to verify no memory accumulation
-- Priority: Implement during Phase 10 security hardening
-- Estimated effort: 4-6 hours
+**11. XSS Vulnerability Mitigation**
+- **Issue**: `renderer.js` uses `innerHTML` with user-controlled data (meeting titles, summaries, template names)
+- **Risk**: Malicious content could execute scripts, potentially stealing OAuth tokens
+- **Files**: `src/renderer.js` lines 240-250, 354-367, 1065-1068
+- **Fix**: Install and use DOMPurify library:
+  ```javascript
+  import DOMPurify from 'dompurify';
+  card.innerHTML = DOMPurify.sanitize(htmlContent, {
+    ALLOWED_TAGS: ['h1', 'h2', 'h3', 'p', 'ul', 'li', 'strong', 'em', 'code'],
+    ALLOWED_ATTR: []
+  });
+  ```
+- **Also**: Replace custom `markdownToHtml()` function with `marked` + DOMPurify
+- **Priority**: Critical for production use
+- **Estimated effort**: 2-3 hours
 
-**13. XSS Vulnerabilities**
-- Replace unsafe `innerHTML` usage with safer alternatives
-- Use `textContent` for plain text or DOMPurify for HTML sanitization
-- Audit renderer process for potential XSS vectors
-- Primarily affects transcript display and summary rendering
-- Priority: Low risk (data from trusted sources), address during security phase
-- Estimated effort: 2-3 hours
+**12. Path Traversal Validation**
+- **Issue**: `VaultStructure.js` doesn't validate paths stay within vault directory
+- **Risk**: Malicious paths like `../../../sensitive.txt` could write outside vault
+- **File**: `src/main/storage/VaultStructure.js` line 263-277
+- **Fix**: Add validation in `saveFile()`:
+  ```javascript
+  const normalizedVault = path.normalize(this.vaultBasePath);
+  const normalizedTarget = path.normalize(absolutePath);
+  if (!normalizedTarget.startsWith(normalizedVault + path.sep)) {
+    throw new Error('Path traversal detected');
+  }
+  ```
+- **Priority**: High - prevents data corruption/leakage
+- **Estimated effort**: 1 hour
+
+**13. IPC Handler Input Validation**
+- **Issue**: All IPC handlers accept data without validation
+- **Risk**: Malformed data from renderer could crash main process
+- **Files**: `src/main.js` lines 1419-1713 (all handlers)
+- **Fix**: Add Zod schema validation:
+  ```javascript
+  const SpeakersMatchSchema = z.object({
+    transcript: z.array(z.object({ speaker: z.string(), text: z.string() })),
+    participantEmails: z.array(z.string().email())
+  });
+  ipcMain.handle('speakers:matchSpeakers', async (event, data) => {
+    const validated = SpeakersMatchSchema.parse(data);
+    // ... use validated data
+  });
+  ```
+- **Priority**: High - improves reliability
+- **Estimated effort**: 4-6 hours (all handlers)
+
+**14. OAuth CSRF Protection**
+- **Issue**: OAuth callback doesn't validate state parameter
+- **Risk**: CSRF attack could trick user into authorizing attacker's Google account
+- **File**: `src/main.js` lines 1371-1398
+- **Fix**: Add state parameter generation and validation:
+  ```javascript
+  // In GoogleAuth.js
+  getAuthUrl() {
+    const state = crypto.randomBytes(32).toString('hex');
+    this.pendingState = state;
+    return this.oauth2Client.generateAuthUrl({ ..., state });
+  }
+  // In callback handler
+  if (state !== googleAuth.pendingState) {
+    throw new Error('Invalid state - possible CSRF');
+  }
+  ```
+- **Priority**: Medium - standard OAuth security practice
+- **Estimated effort**: 1-2 hours
+
+**15. Memory Leak Prevention**
+- **Issue**: Event listeners not properly cleaned up, especially auth window handlers
+- **Files**: `src/main.js` lines 1329-1412 (auth window), IPC listeners throughout
+- **Fix**: Implement cleanup handlers:
+  - Auth window: Store handler references, call `.off()` in cleanup function
+  - IPC listeners: Track all registered handlers, clean up on `app.quit`
+  - Add timeout to auth window (5 minute max)
+- **Test**: Run app for extended periods, monitor memory usage
+- **Priority**: Medium - affects long-running sessions
+- **Estimated effort**: 3-4 hours
+
+**16. API Key Migration to Credential Manager**
+- **Issue**: API keys stored in plain text `.env` file
+- **Specification Requirement**: Use Windows Credential Manager for sensitive keys
+- **Current**: `process.env.OPENAI_API_KEY` read from `.env`
+- **Fix**: Use `keytar` or `windows-credential-manager` npm package:
+  ```javascript
+  const keytar = require('keytar');
+  const apiKey = await keytar.getPassword('JD-Notes-Things', 'OpenAI');
+  ```
+- **UI**: Add settings panel for users to input/update API keys securely
+- **Priority**: High - aligns with spec, improves security
+- **Estimated effort**: 4-5 hours (includes UI)
+
+**17. Token File Permission Validation**
+- **Issue**: Windows `icacls` command may fail silently
+- **Current**: Error logged but not thrown, token file created anyway
+- **File**: `src/main/integrations/GoogleAuth.js` lines 95-127
+- **Fix**: Validate permissions were actually set, delete token file if failed:
+  ```javascript
+  try {
+    await execAsync(`icacls "${this.tokenPath}" ...`);
+    // Verify permissions were set
+  } catch (err) {
+    await fs.unlink(this.tokenPath).catch(() => {});
+    throw new Error('Failed to secure token file');
+  }
+  ```
+- **Priority**: High - prevents token theft
+- **Estimated effort**: 1-2 hours
+
+**18. Comprehensive Security Audit**
+- Penetration test OAuth flow with various attack vectors
+- Test XSS payloads in all user input fields
+- Verify file permissions across Windows 10/11 versions
+- Test path traversal attempts in vault operations
+- Validate IPC handlers with malformed/malicious data
+- Review all API key and token handling paths
+- **Priority**: Before production release
+- **Estimated effort**: 8-10 hours
 
 ---
 
@@ -1181,25 +1329,76 @@ Sensitive client information protected from unauthorized access.
 #### User Value
 Fully customizable to personal workflow preferences.
 
-#### Technical Debt Items (Phase 11)
+#### Code Quality Improvements (Phase 11)
 
-**12. Code Duplication**
+**19. Global State Management Refactoring**
+- **Issue**: `main.js` uses module-level variables for state (40+ globals)
+- **Current**: `let detectedMeeting, googleAuth, googleCalendar, templateManager...`
+- **Fix**: Create `AppState` class to encapsulate state:
+  ```javascript
+  class AppState {
+    constructor() {
+      this.detectedMeeting = null;
+      this.services = {};
+    }
+    async initialize() { /* centralized init */ }
+  }
+  ```
+- **Benefits**: Easier testing, clearer state ownership, better encapsulation
+- **Priority**: Medium - improves maintainability
+- **Estimated effort**: 6-8 hours
+
+**20. Configuration Centralization**
+- **Issue**: Hardcoded values scattered throughout codebase
+- **Examples**:
+  - `60000` (meeting check interval)
+  - `200` (tokens per section)
+  - `0.150` (LLM pricing)
+- **Fix**: Create `config/constants.js` with named constants:
+  ```javascript
+  module.exports = {
+    INTERVALS: { MEETING_CHECK_MS: 60 * 1000 },
+    LLM_PRICING: { 'gpt-4o-mini': { input: 0.150 / 1_000_000 } }
+  };
+  ```
+- **Priority**: Medium - improves maintainability
+- **Estimated effort**: 3-4 hours
+
+**21. Routing Configuration Validation**
+- **Issue**: `ConfigLoader.js` validates structure but not data validity
+- **Fix**: Use Zod schemas to validate:
+  - Email formats (`z.string().email()`)
+  - Domain formats (`z.string().regex(/^[a-z0-9.-]+$/i)`)
+  - Valid vault paths
+  - No duplicate entries
+- **Priority**: Medium - prevents configuration errors
+- **Estimated effort**: 2-3 hours
+
+**22. Code Duplication Cleanup**
 - Refactor repeated patterns identified during development:
   - Video file checking logic
   - Upload token creation
   - Error handling patterns
 - Extract common code into utility functions/modules
 - Approach: Refactor opportunistically when touching duplicated code
-- Priority: Low - fix when convenient during normal development
-- Estimated effort: 4-6 hours total, done opportunistically
+- **Priority**: Low - fix when convenient
+- **Estimated effort**: 4-6 hours total, done opportunistically
 
-**14. Environment Configuration**
+**23. Async File Operations Migration**
+- **Issue**: `VaultStructure.js` and `ConfigLoader.js` use sync operations
+- **Current**: `fs.writeFileSync()`, `fs.readFileSync()` block event loop
+- **Fix**: Migrate to async versions: `fs.promises.writeFile()`, etc.
+- **Impact**: Large files won't freeze UI
+- **Priority**: Low - mostly small files in this app
+- **Estimated effort**: 2-3 hours
+
+**24. Environment Configuration**
 - Implement dev/staging/production environment separation
 - Create environment-specific configuration files
 - Support for different API endpoints per environment
 - Enable easier testing with different configurations
-- Priority: Implement when deployment/distribution needs arise
-- Estimated effort: 3-4 hours
+- **Priority**: Implement when deployment/distribution needs arise
+- **Estimated effort**: 3-4 hours
 
 ---
 

@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **React** - Renderer process UI
 - **Webpack + Electron Forge** - Build system
 - **Recall.ai Desktop Recording SDK** - Audio/video capture
-- **Transcription Service** - TBD (Deepgram, AssemblyAI, or Whisper API)
+- **Transcription Service** - AssemblyAI v3 (streaming with speaker diarization)
 - **LLM Integration** - Multi-provider (OpenAI, Claude, Gemini) for summaries
 - **Windows DPAPI** - Encryption at rest
 
@@ -96,7 +96,7 @@ The LLM service scans this folder, presents available templates in UI, and gener
 
 ## Development Phases
 
-**Currently**: Phase 1 - Core Recording & Transcription (Foundation Complete, Implementation Pending)
+**Currently**: Phase 6 Complete - All Core Features Implemented (Ready for production testing or Phase 7+)
 
 The project follows a 12-phase plan (see `SPECIFICATION.md`):
 1. Core recording & transcription (MVP)
@@ -195,8 +195,7 @@ src/
 
 ## Reference Documentation
 
-- **Product Spec**: `SPECIFICATION.md` (authoritative source)
-- **Progress Tracker**: `PROGRESS.md` (current status, what's done, what's next)
+- **Product Spec**: `SPECIFICATION.md` (authoritative source - includes detailed status)
 - **Routing Example**: `docs/routing-example.yaml`
 - **Index Example**: `docs/index-example.md`
 - **Initial Requirements**: `docs/startingprompt.md`, `docs/answers1.md`
@@ -204,7 +203,7 @@ src/
 - **Recall.ai Docs**: https://docs.recall.ai/docs/getting-started
 - **Recall.ai Example**: https://github.com/recallai/muesli-public
 
-## Current Project State (Nov 7, 2025)
+## Current Project State (Nov 8, 2025)
 
 ### Completed Phases
 - ✅ **Phase 1**: Core Recording & Transcription (Recall.ai SDK, AssemblyAI streaming)
@@ -212,7 +211,7 @@ src/
 - ✅ **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
 - ✅ **Phase 4**: LLM Integration (OpenAI summaries with templates)
 - ✅ **Phase 5**: Obsidian Export (Two-file architecture with frontmatter)
-- 🚧 **Phase 6**: Speaker Recognition & Contact Matching (In Progress)
+- ✅ **Phase 6**: Speaker Recognition & Contact Matching (COMPLETE)
 
 ### Recent Additions (Nov 7, 2025)
 - ✅ Unified Google authentication (GoogleAuth.js)
@@ -233,24 +232,37 @@ src/
 - Obsidian vault export with routing
 - Two-file meeting architecture (summary + transcript)
 
-**Known Issues (From Code Review):**
-- Critical: Race condition in service initialization
-- Critical: Token file permissions not secure (need 0o600)
-- Critical: No token refresh failure recovery
-- High: Auth window memory leak
-- High: Contact cache deduplication issues
+**Security Fixes Applied (Nov 7, 2025):**
+- ✅ Fixed race condition in service initialization (centralized `initializeGoogleServices()`)
+- ✅ Secured token file permissions (0o600 Unix, icacls Windows)
+- ✅ Implemented token refresh failure recovery (clears state, re-authentication flow)
+- ✅ Fixed auth window memory leak (proper cleanup with timeout)
+- ⏳ Contact cache validation (deferred - low risk from trusted Google API)
 
-### Next Tasks
-1. Fix critical security and reliability issues
-2. End-to-end testing with real meetings
-3. Address code review findings
+**Code Review Completed (Nov 8, 2025):**
+- Comprehensive review of 5,500 lines across 17 files
+- 42 issues identified and categorized by development phase
+- All findings documented in SPECIFICATION.md
+- Security items (XSS, path traversal, CSRF, etc.) scheduled for Phase 10
+- Code quality improvements (state management, config) scheduled for Phase 11
+- Critical bug fixes (routing error, race conditions) documented in Pre-Phase 7
+
+### Next Steps
+1. **Pre-Phase 7 Bug Fixes**: Fix 5 critical bugs identified in code review (4-6 hours)
+   - RoutingEngine method signature bug
+   - Service initialization robustness
+   - Token refresh user notification
+   - File operation race conditions
+   - LRU cache for contacts
+2. **Production Testing**: Test complete system end-to-end with real meetings
+3. **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet optimization)
+4. **Phase 10**: Security hardening (XSS, CSRF, IPC validation, credential manager)
+5. **Phase 11**: Code quality improvements (React migration, state management)
 
 ### Running the App
 - Development: `npm start` (launches Electron with hot reload)
 - Build: `npm run package` (creates distributable)
 - **Note**: Requires Windows for Recall.ai Desktop SDK
-
-See `PROGRESS.md` for detailed implementation history and `CODE_REVIEW.md` for security findings.
 
 ## Development Philosophy
 

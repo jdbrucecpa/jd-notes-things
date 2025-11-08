@@ -1481,3 +1481,76 @@ body {
   background: none;
   padding: 0;
 }
+
+/* Authentication Expired Notification */
+.auth-expired-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  background: #fff3cd;
+  border: 2px solid #ffc107;
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-width: 400px;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.auth-expired-notification .notification-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-expired-notification strong {
+  color: #856404;
+  font-size: 16px;
+}
+
+.auth-expired-notification p {
+  color: #856404;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.auth-expired-notification button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.auth-expired-notification button:first-of-type {
+  background-color: #ffc107;
+  color: #000;
+}
+
+.auth-expired-notification button:first-of-type:hover {
+  background-color: #e0a800;
+}
+
+.auth-expired-notification button:last-of-type {
+  background-color: transparent;
+  color: #856404;
+  border: 1px solid #856404;
+}
+
+.auth-expired-notification button:last-of-type:hover {
+  background-color: #fff3cd;
+}
