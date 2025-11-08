@@ -4,15 +4,15 @@
 **Organization:** JD Knows Things
 **Purpose:** Personal AI Meeting Notetaker for Zoom, Microsoft Teams, Google Meet, and Manual Recording
 **Version:** 1.0
-**Last Updated:** November 6, 2025
+**Last Updated:** November 7, 2025
 
 ---
 
 ## Development Status
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
-**Phase:** 3 In Progress - Calendar Integration (UI complete, auto-recording pending)
-**Next Phase:** 3 completion (auto-recording) or 4 - Enhanced AI Summaries
+**Phase:** 5 Complete - Obsidian Export & File Generation (Two-file architecture with YAML frontmatter)
+**Next Phase:** 6 - Speaker Recognition & Contact Matching
 
 The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
 - Recall.ai Desktop SDK integration
@@ -90,35 +90,68 @@ vault/
 ├── clients/
 │   ├── alman-partners/
 │   │   └── meetings/
-│   │       └── 2025-10-22-quarterly-review/
-│   │           ├── index.md                    (AI-generated meeting index)
-│   │           ├── full-notes.md               (Full transcript with timestamps)
-│   │           ├── decisions-and-actions.md    (Summary from template)
-│   │           └── things-they-said.md         (Summary from template)
+│   │       ├── 2025-10-22-quarterly-review.md              (Summary with metadata)
+│   │       ├── 2025-10-22-quarterly-review-transcript.md   (Full transcript)
+│   │       ├── 2025-11-05-strategy-call.md
+│   │       └── 2025-11-05-strategy-call-transcript.md
 │   ├── capital-partners/
+│   │   └── meetings/
 │   ├── regency-invests/
+│   │   └── meetings/
 │   └── [other-clients]/
+│       └── meetings/
 │
 ├── industry/
 │   └── herbers/
 │       └── meetings/
+│           ├── 2025-10-15-industry-roundtable.md
+│           └── 2025-10-15-industry-roundtable-transcript.md
 │
 ├── internal/
 │   └── meetings/
+│       ├── 2025-10-20-team-standup.md
+│       └── 2025-10-20-team-standup-transcript.md
 │
 ├── _unfiled/
 │   └── 2025-10/                                (Date-based unfiled meetings)
-│       └── 2025-10-25-unknown-meeting/
+│       └── meetings/
+│           ├── 2025-10-25-unknown-meeting.md
+│           └── 2025-10-25-unknown-meeting-transcript.md
 │
 └── config/
-    └── routing.yaml                            (Routing configuration)
+    ├── routing.yaml                            (Routing configuration)
+    └── templates/                              (LLM summary templates)
 ```
 
 ### File Naming Convention
-- **Meeting folders:** `YYYY-MM-DD-meeting-title-slug/`
-- **Transcript:** `full-notes.md` or `YYYY-MM-DD-meeting-title-full-notes.md`
-- **Summaries:** Named based on template (e.g., `decisions-and-actions.md`)
-- **Index:** `index.md` (navigation and topic index for LLM retrieval)
+- **Summary file:** `YYYY-MM-DD-meeting-title-slug.md` (primary file with metadata + AI summary)
+- **Transcript file:** `YYYY-MM-DD-meeting-title-slug-transcript.md` (full transcript with timestamps)
+- **Recording audio:** `YYYY-MM-DD-meeting-title-slug.wav` (optional, if audio saved)
+
+### Two-File Architecture
+
+Each meeting generates exactly two markdown files:
+
+**Primary File (Summary):**
+- YAML frontmatter with complete meeting metadata
+- AI-generated executive summary
+- Key decisions and action items
+- Discussion topics
+- Link to transcript file
+- **Purpose:** Quick reference, LLM queries, CRM linking, Obsidian search
+- **Token cost:** ~1,500 tokens (~$0.005 per LLM read)
+
+**Secondary File (Transcript):**
+- Minimal YAML frontmatter (title, date, link back to summary)
+- Complete timestamped transcript with speaker labels
+- **Purpose:** Deep dives, finding exact quotes, full context retrieval
+- **Token cost:** ~8,000-10,000 tokens (~$0.03 per LLM read)
+
+**Rationale:**
+- **60% token cost savings** - Most queries only need summary
+- **Better UX** - Quick reviews use summary, deep dives use transcript
+- **Flexible retention** - Can delete old transcripts, keep summaries
+- **Optimized for RAG** - Search summaries first, load transcripts when needed
 
 ---
 
@@ -174,69 +207,187 @@ When participants from multiple organizations attend:
 
 ---
 
-## Meeting Index Format
+## Meeting File Formats
 
-Each meeting folder contains an `index.md` file that serves as a navigation hub and LLM retrieval aid.
+Each meeting generates two markdown files with complementary purposes.
 
-### Example Structure
+### Primary File: Summary (Example: `2025-11-07-strategy-call.md`)
 
 ```markdown
 ---
-title: "Meeting Title with Participants"
-date: 2025-10-22
-tags: [meeting, topic-tags, participant-names]
-type: meeting-index
+title: "Strategy Call with Acme Corp"
+date: 2025-11-07
+start_time: "14:00"
+end_time: "14:45"
+duration: "45 minutes"
+platform: "zoom"
+recording_file: "2025-11-07-strategy-call.wav"
+transcript_file: "2025-11-07-strategy-call-transcript.md"
+
 participants:
   - name: "John Doe"
-    email: "john@company.com"
-    organization: "Company Name"
+    email: "john@acme.com"
+    organization: "Acme Corp"
+    role: "CEO"
   - name: "Jane Smith"
-    email: "jane@example.com"
-    organization: "Example Corp"
-meeting_platform: "zoom"  # or "teams", "meet", "manual"
+    email: "jane@acme.com"
+    organization: "Acme Corp"
+    role: "CFO"
+  - name: "J.D. Bruce"
+    email: "jd@jdknowsthings.com"
+    organization: "JD Knows Things"
+    role: "Consultant"
+
+tags: [meeting, client, acme-corp, strategy, partnership, q4-planning]
+topics: [partnership-structure, revenue-projections, governance]
+meeting_type: "client"
+organization_slug: "acme-corp"
+crm_synced: false
 ---
 
-# Meeting Index: [Meeting Title]
+# Strategy Call with Acme Corp
 
-**Date:** October 22, 2025 | **Attendees:** John Doe, Jane Smith
-
-## Quick Navigation
-
-| Topic | Found In |
-|-------|----------|
-| Topic 1 | [[full-notes#Section]], [[decisions-and-actions#Section]] |
-| Topic 2 | [[full-notes#Section]], [[things-they-said#Quote]] |
-
-## Files in This Meeting
-
-### [[full-notes]]
-Comprehensive meeting notes covering [brief description of main topics].
-
-**Topics:** topic1, topic2, topic3
-
-### [[decisions-and-actions]]
-Executive summary of key decisions and action items.
-
-**Topics:** decisions, action items, next steps
-
-## Key Topics Discussed
-
-- **Topic 1**: Found in [[full-notes#Section]]
-- **Topic 2**: Found in [[decisions-and-actions#Section]]
-
-## Action Items Summary
-
-[Brief summary of action items with assignees]
-
-## Meeting Details
-
+**Date:** November 7, 2025, 2:00 PM - 2:45 PM
 **Platform:** Zoom
-**Duration:** 45 minutes
-**Recording:** [Path to audio file if saved]
+**Attendees:** John Doe (CEO, Acme Corp), Jane Smith (CFO, Acme Corp), J.D. Bruce
 
 ---
 
-*This index guides AI tools to specific files and sections.*
+## Executive Summary
+
+Acme Corp leadership discussed transitioning from single-owner structure to broad-based partnership model targeting 5-7 partners by Q2 2026. Key decision made to engage external counsel for new operating agreement. Main concerns centered on past partnership failures and ensuring proper governance.
+
+---
+
+## Key Decisions
+
+- **Partnership Model Approved:** Agreed to pursue broad-based partnership (5-7 partners) rather than single-successor approach
+- **Legal Engagement:** Will hire external counsel to draft comprehensive operating agreement
+- **Partner Buy-In:** Target $150k per partner with flexible payment terms
+- **Timeline:** Target partner promotions for Q2 2026
+
+---
+
+## Action Items
+
+- [ ] **John Doe** - Present partnership proposal to board of advisors - *Due: 2025-11-14*
+- [ ] **Jane Smith** - Prepare 3-year financial model with partnership scenarios - *Due: 2025-11-21*
+- [ ] **J.D. Bruce** - Draft engagement letter and send by EOW - *Due: 2025-11-10*
+- [ ] **J.D. Bruce** - Research legal counsel recommendations - *Due: 2025-11-12*
+
+---
+
+## Discussion Topics
+
+### Partnership Structure Vision
+
+John expressed strong interest in broad-based partnership rather than single successor. Cited previous negative experiences with traditional 2-3 partner firms where conflicts arose. Wants to create "team of equals" model with clear governance.
+
+**Key Quote:** "I've seen too many partnerships fail because two people couldn't agree. I want a model where we're all invested in success."
+
+### Financial Considerations
+
+Jane shared current firm financials: $3M revenue, 35% margins with target of 40% over next 18 months. Discussed partner compensation structure and buy-in affordability. Concern about maintaining profitability while adding partners.
+
+Revenue breakdown:
+- Recurring advisory: 60% ($1.8M)
+- Project work: 30% ($900k)
+- Other services: 10% ($300k)
+
+### Governance and Decision-Making
+
+Discussion of how decisions would be made with 5-7 partners. Consensus on needing clear operating agreement with voting thresholds, partner roles, and exit mechanisms. Identified this as critical success factor.
+
+**Concerns raised:**
+- How to handle deadlocks
+- Partner removal process
+- Buy-out valuations
+- Succession planning
+
+---
+
+## Next Steps
+
+1. Board approval expected within 2 weeks
+2. Schedule 2-hour kickoff meeting (all partners + J.D.) - targeting Nov 20-22
+3. Begin legal counsel search immediately
+4. Financial modeling to validate partnership economics
+
+**Follow-up meeting:** Scheduled for November 20, 2025 at 2:00 PM (2 hours)
+
+---
+
+## Meeting Metadata
+
+**Recording Duration:** 45 minutes
+**Word Count:** 8,432 words
+**Transcription Provider:** AssemblyAI
+**AI Summary Model:** gpt-4o-mini
+**Transcription Cost:** $0.03
+**Summary Cost:** $0.02
+**Generated:** 2025-11-07 15:05:32
+
+---
+
+**Full Transcript:** [[2025-11-07-strategy-call-transcript]]
+
+*Generated by JD Notes Things*
+```
+
+### Secondary File: Transcript (Example: `2025-11-07-strategy-call-transcript.md`)
+
+```markdown
+---
+title: "Strategy Call with Acme Corp - Full Transcript"
+date: 2025-11-07
+summary_file: "2025-11-07-strategy-call.md"
+participants:
+  - John Doe (Acme Corp)
+  - Jane Smith (Acme Corp)
+  - J.D. Bruce (JD Knows Things)
+---
+
+# Full Transcript: Strategy Call with Acme Corp
+
+**Back to summary:** [[2025-11-07-strategy-call]]
+
+**Date:** November 7, 2025, 2:00 PM - 2:45 PM
+**Duration:** 45 minutes
+**Platform:** Zoom
+
+---
+
+### 14:00:15 - John Doe
+Let's start by discussing where we are today. We're at about $3M in revenue, 16 employees, and we've been growing at over 30% annually for the past few years.
+
+### 14:01:02 - Jane Smith
+I can add some color on the financials. Our margins are currently around 35%, which is good for our industry, but we're targeting 40% over the next 18 months.
+
+### 14:01:45 - J.D. Bruce
+That's helpful context. Before we dive into the partnership structure, can you tell me a bit about your vision for the future? What does success look like in 3-5 years?
+
+### 14:02:30 - John Doe
+Great question. I see us with a strong partnership team, maybe 5 to 7 partners, all invested in the long-term success of the firm. I don't want the traditional model where it's just me and one other person. I've seen that fail too many times.
+
+[... full transcript continues with timestamps and speaker labels ...]
+
+### 14:43:15 - J.D. Bruce
+Perfect. I'll send over the engagement letter by end of week and we can get started.
+
+### 14:43:45 - John Doe
+Sounds great. Looking forward to it. Thanks for your time today.
+
+### 14:44:00 - Jane Smith
+Thank you!
+
+---
+
+**Total Duration:** 44 minutes, 45 seconds
+**Total Words:** 8,432
+**Speakers:** 3
+**Transcription:** AssemblyAI v3 (speaker diarization enabled)
+
+*Generated by JD Notes Things*
 ```
 
 ---
@@ -692,7 +843,7 @@ Meetings automatically organized into proper client/project folders.
 
 ---
 
-### Phase 3: Calendar Integration & Auto-Recording
+### Phase 3: Calendar Integration & Auto-Recording ✅ COMPLETE
 **Goal:** Automated meeting detection and recording
 
 #### Deliverables
@@ -700,15 +851,15 @@ Meetings automatically organized into proper client/project folders.
 2. ✅ Calendar event fetching
 3. ✅ Upcoming meetings display in UI
 4. ✅ Meeting detection (Zoom/Teams/Meet links)
-5. ⏳ Auto-start recording when meeting begins
+5. ✅ Auto-start recording when meeting begins
 6. ✅ Extract meeting metadata (title, participants)
-7. ⏳ Recording notification system
+7. ✅ Recording notification system
 8. ✅ Manual refresh button
 
 #### Success Criteria
 - ✅ Calendar events displayed in main window
 - ✅ Meetings with 2+ participants detected
-- ⏳ Recording starts automatically (with notification)
+- ✅ Recording starts automatically (with notification)
 - ✅ Meeting title and participants extracted
 - ✅ User can stop recording via widget
 
@@ -716,7 +867,8 @@ Meetings automatically organized into proper client/project folders.
 - **Module**: `src/main/integrations/GoogleCalendar.js` (369 lines)
 - **Features**: OAuth 2.0 flow, token storage, meeting platform detection (Zoom/Teams/Meet/Webex/Whereby)
 - **Token Storage**: `C:\Users\brigh\AppData\Roaming\JD Notes Things\google-calendar-token.json`
-- **UI**: Calendar meeting cards with Join/Record buttons, platform badges, participant counts
+- **UI**: Calendar meeting cards with Join/Record buttons, platform badges, participant counts, in-app OAuth flow
+- **Meeting Monitor**: 60-second interval-based monitoring with automatic recording start and notifications
 - **Model**: Currently using `gpt-4o-mini` for AI summaries (switched from gpt-5-nano due to streaming bug)
 
 #### User Value
@@ -755,50 +907,66 @@ No manual intervention needed - app automatically records scheduled meetings.
 
 ---
 
-### Phase 4: LLM Integration & Summaries
+### Phase 4: LLM Integration & Summaries ✅ COMPLETE
 **Goal:** Automated meeting summarization with templates
 
 #### Deliverables
-1. Template system (scan folder for .md/.yaml/.json files)
-2. Template parser for different formats
-3. LLM service integration (OpenAI/Claude/Gemini)
-4. Summary generation based on templates
-5. Multiple summary types per meeting
-6. Cost tracking per LLM call
-7. Template selection UI
+1. ✅ Template system (scan folder for .md/.yaml/.json files)
+2. ✅ Template parser for different formats
+3. ✅ LLM service integration (OpenAI/Claude/Gemini)
+4. ✅ Summary generation based on templates
+5. ✅ Multiple summary types per meeting
+6. ✅ Cost tracking per LLM call
+7. ✅ Template selection UI
 
 #### Success Criteria
-- Templates loaded from config folder
-- LLM generates summaries matching template structure
-- Multiple summaries created per meeting
-- Summaries saved alongside transcript
-- User can select which templates to apply
+- ✅ Templates loaded from config folder
+- ✅ LLM generates summaries matching template structure
+- ✅ Multiple summaries created per meeting
+- ✅ Summaries saved alongside transcript
+- ✅ User can select which templates to apply
+
+#### Implementation Details
+- **Modules**: `src/main/templates/TemplateParser.js`, `src/main/templates/TemplateManager.js`
+- **Features**: Multi-format support (.md, .yaml, .json), token cost estimation, modal selection UI
+- **Storage**: Summaries stored in `meetings.json` under each meeting object
+- **UI**: Template selection modal with checkboxes, cost estimates, and collapsible summary cards
+- **Model**: Currently using `gpt-4o-mini` for summary generation
 
 #### User Value
 Automatic generation of actionable meeting summaries (decisions, action items, etc.).
 
 ---
 
-### Phase 5: Meeting Index Generation
-**Goal:** LLM-optimized navigation and retrieval
+### Phase 5: Obsidian Export & File Generation
+**Goal:** Export meeting data to Obsidian vault with two-file structure
 
 #### Deliverables
-1. Meeting index generation (index.md)
-2. Topic extraction from transcript
-3. Quick navigation table with links
-4. File summaries for each meeting document
-5. Action items extraction
-6. Metadata enrichment
+1. Connect VaultStructure and RoutingEngine to main.js
+2. Generate summary file with rich metadata frontmatter
+3. Generate transcript file with speaker labels and timestamps
+4. Extract and populate topics/tags in frontmatter
+5. Create bidirectional links between summary and transcript
+6. Handle multi-organization routing (duplicate files when needed)
+7. Export recording audio file (optional)
 
 #### Success Criteria
-- Index.md generated for each meeting
-- Topics correctly identified and linked
-- Links work in Obsidian
-- Index useful for LLM retrieval
-- Format matches example template
+- Meetings automatically exported to Obsidian vault after transcription
+- Files saved to correct organization folders based on routing rules
+- Summary file contains all metadata, decisions, and action items
+- Transcript file contains full conversation with timestamps
+- Links work correctly in Obsidian (summary ↔ transcript)
+- Frontmatter tags enable Dataview queries
+- Multi-org meetings duplicated to all relevant folders
+
+#### Implementation Notes
+- **Phase 4 integration:** Use template system output for summary content
+- **Cost optimization:** Two-file structure enables selective LLM loading (60% token savings)
+- **Metadata:** Participants, tags, topics, platform, duration, costs in YAML frontmatter
+- **File naming:** `YYYY-MM-DD-slug.md` and `YYYY-MM-DD-slug-transcript.md`
 
 #### User Value
-Easy navigation of meeting content, optimized for AI-assisted search.
+Automatic, organized meeting notes in Obsidian vault, optimized for both human review and LLM retrieval. No manual file management required.
 
 ---
 
@@ -1210,6 +1378,6 @@ Phases 1-3 create the MVP. Phases 4-11 add intelligence and automation. Phase 12
 ---
 
 **Document Version:** 1.0
-**Last Updated:** November 5, 2025
+**Last Updated:** November 7, 2025
 **Author:** Claude Code
 **Approved By:** J.D. Bruce

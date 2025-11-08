@@ -1,113 +1,48 @@
 const { google } = require('googleapis');
-const fs = require('fs').promises;
-const fsSync = require('fs');
-const path = require('path');
-const os = require('os');
-
-// Try to import electron app, but handle gracefully if not in Electron context
-let app;
-try {
-  app = require('electron').app;
-} catch (e) {
-  // Not in Electron context, use fallback
-  app = null;
-}
 
 /**
  * GoogleCalendar Integration
  *
- * Handles OAuth 2.0 authentication and calendar event fetching for Google Calendar.
+ * Handles calendar event fetching for Google Calendar using shared GoogleAuth.
  *
  * Features:
- * - OAuth 2.0 authentication flow
  * - Fetch upcoming meetings (next 24 hours)
  * - Extract meeting metadata (title, participants, platform)
  * - Detect meeting platforms (Zoom, Teams, Google Meet)
- * - Token persistence and refresh
+ *
+ * Note: Authentication is handled by GoogleAuth module (shared with GoogleContacts)
  */
 class GoogleCalendar {
-  constructor() {
-    this.oauth2Client = null;
+  /**
+   * @param {GoogleAuth} googleAuth - Shared Google authentication instance
+   */
+  constructor(googleAuth) {
+    if (!googleAuth) {
+      throw new Error('[GoogleCalendar] GoogleAuth instance is required');
+    }
+
+    this.googleAuth = googleAuth;
     this.calendar = null;
-
-    // Determine storage path based on context (Electron vs Node.js)
-    const storagePath = app
-      ? app.getPath('userData')
-      : path.join(os.homedir(), '.jd-notes-things');
-
-    this.tokenPath = path.join(storagePath, 'google-calendar-token.json');
-    this.credentialsPath = path.join(storagePath, 'google-calendar-credentials.json');
-
-    console.log('[GoogleCalendar] Token path:', this.tokenPath);
-
-    // OAuth scopes - read-only calendar access
-    this.scopes = ['https://www.googleapis.com/auth/calendar.readonly'];
   }
 
   /**
-   * Initialize OAuth2 client with credentials
-   * @param {Object} credentials - OAuth2 client credentials (client_id, client_secret, redirect_uri)
+   * Initialize the Calendar API with authenticated client
+   * @returns {boolean} True if initialized successfully
    */
-  async initialize(credentials) {
-    if (!credentials || !credentials.client_id || !credentials.client_secret) {
-      throw new Error('Invalid credentials: client_id and client_secret are required');
+  initialize() {
+    if (!this.googleAuth.isAuthenticated()) {
+      console.log('[GoogleCalendar] Not authenticated - user needs to sign in');
+      return false;
     }
 
-    this.oauth2Client = new google.auth.OAuth2(
-      credentials.client_id,
-      credentials.client_secret,
-      credentials.redirect_uri || 'http://localhost:3000/oauth2callback'
-    );
-
-    // Try to load existing token
     try {
-      const token = await this.loadToken();
-      this.oauth2Client.setCredentials(token);
-      this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+      const auth = this.googleAuth.getClient();
+      this.calendar = google.calendar({ version: 'v3', auth });
       console.log('[GoogleCalendar] Initialized with existing token');
       return true;
     } catch (error) {
-      console.log('[GoogleCalendar] No valid token found, authentication required');
+      console.error('[GoogleCalendar] Initialization error:', error.message);
       return false;
-    }
-  }
-
-  /**
-   * Get OAuth authorization URL
-   * @returns {string} Authorization URL for user to grant access
-   */
-  getAuthUrl() {
-    if (!this.oauth2Client) {
-      throw new Error('OAuth2 client not initialized. Call initialize() first.');
-    }
-
-    return this.oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      scope: this.scopes,
-      prompt: 'consent' // Force consent screen to get refresh token
-    });
-  }
-
-  /**
-   * Exchange authorization code for tokens
-   * @param {string} code - Authorization code from OAuth callback
-   */
-  async authenticate(code) {
-    if (!this.oauth2Client) {
-      throw new Error('OAuth2 client not initialized. Call initialize() first.');
-    }
-
-    try {
-      const { tokens } = await this.oauth2Client.getToken(code);
-      this.oauth2Client.setCredentials(tokens);
-      await this.saveToken(tokens);
-
-      this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
-      console.log('[GoogleCalendar] Authentication successful');
-      return true;
-    } catch (error) {
-      console.error('[GoogleCalendar] Authentication error:', error);
-      throw new Error(`Failed to authenticate: ${error.message}`);
     }
   }
 
@@ -116,21 +51,7 @@ class GoogleCalendar {
    * @returns {boolean} True if authenticated
    */
   isAuthenticated() {
-    return this.oauth2Client && this.calendar !== null;
-  }
-
-  /**
-   * Sign out and clear stored token
-   */
-  async signOut() {
-    try {
-      await fs.unlink(this.tokenPath);
-      this.oauth2Client = null;
-      this.calendar = null;
-      console.log('[GoogleCalendar] Signed out successfully');
-    } catch (error) {
-      console.error('[GoogleCalendar] Error signing out:', error);
-    }
+    return this.googleAuth.isAuthenticated() && this.calendar !== null;
   }
 
   /**
@@ -140,8 +61,14 @@ class GoogleCalendar {
    */
   async getUpcomingMeetings(hoursAhead = 24) {
     if (!this.isAuthenticated()) {
-      throw new Error('Not authenticated. Call authenticate() first.');
+      // Try to initialize if not already done
+      if (!this.initialize()) {
+        throw new Error('Not authenticated. Call authenticate() first.');
+      }
     }
+
+    // Refresh token if needed
+    await this.googleAuth.refreshTokenIfNeeded();
 
     const now = new Date();
     const timeMax = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
@@ -305,65 +232,6 @@ class GoogleCalendar {
         optional: attendee.optional || false,
         organizer: attendee.organizer || false
       }));
-  }
-
-  /**
-   * Save OAuth token to disk
-   * @private
-   */
-  async saveToken(token) {
-    try {
-      // Ensure storage directory exists
-      const dir = path.dirname(this.tokenPath);
-      if (!fsSync.existsSync(dir)) {
-        await fs.mkdir(dir, { recursive: true });
-      }
-
-      await fs.writeFile(this.tokenPath, JSON.stringify(token, null, 2));
-      console.log('[GoogleCalendar] Token saved successfully');
-    } catch (error) {
-      console.error('[GoogleCalendar] Error saving token:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Load OAuth token from disk
-   * @private
-   */
-  async loadToken() {
-    try {
-      const data = await fs.readFile(this.tokenPath, 'utf8');
-      return JSON.parse(data);
-    } catch (error) {
-      throw new Error('No saved token found');
-    }
-  }
-
-  /**
-   * Save OAuth credentials to disk
-   * @param {Object} credentials - Client credentials
-   */
-  async saveCredentials(credentials) {
-    try {
-      await fs.writeFile(this.credentialsPath, JSON.stringify(credentials, null, 2));
-      console.log('[GoogleCalendar] Credentials saved successfully');
-    } catch (error) {
-      console.error('[GoogleCalendar] Error saving credentials:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Load OAuth credentials from disk
-   */
-  async loadCredentials() {
-    try {
-      const data = await fs.readFile(this.credentialsPath, 'utf8');
-      return JSON.parse(data);
-    } catch (error) {
-      throw new Error('No saved credentials found');
-    }
   }
 }
 

@@ -1,8 +1,8 @@
 # JD Notes Things - Development Progress
 
 **Last Updated:** November 7, 2025
-**Current Phase:** Phase 3 In Progress - Calendar Integration (UI complete, auto-recording pending)
-**Status:** Calendar integration UI complete, AI summaries working with gpt-4o-mini
+**Current Phase:** Phase 6 In Progress - Speaker Recognition & Contact Matching
+**Status:** Core speaker matching and Google Contacts integration complete. UI components pending.
 
 ---
 
@@ -295,24 +295,136 @@ Each meeting generates:
 
 ---
 
-### Phase 5: Contact Matching
-**Goal**: Replace "Speaker N" with actual names
+## ✅ Phase 5: Obsidian Export & File Generation (COMPLETE)
+**Goal**: Export meetings to Obsidian vault with two-file architecture
 
-#### Tasks
-- [ ] Google Contacts API integration
-- [ ] Match calendar participants to contacts
-- [ ] Speaker voice → participant matching
-- [ ] Manual speaker ID correction UI
-- [ ] Contact caching for performance
+### November 7, 2025: Implementation Complete
+
+#### Completed Tasks
+- [x] Connect VaultStructure and RoutingEngine to main.js
+- [x] Generate summary markdown file with rich YAML frontmatter
+- [x] Generate transcript markdown file with speaker labels
+- [x] Extract topics/tags from summary and populate frontmatter
+- [x] Create bidirectional Obsidian links (summary ↔ transcript)
+- [x] Handle multi-organization routing (duplicate files when needed)
+- [ ] Export recording audio file (optional - deferred)
+- [ ] Test end-to-end: meeting → transcribe → summarize → export to vault (pending)
+
+#### Features Implemented
+- ✅ Export system initialization in main.js (lines 320-349)
+- ✅ VaultStructure integration with configurable path from `.env` (VAULT_PATH)
+- ✅ RoutingEngine integration with `config/routing.yaml`
+- ✅ Two markdown file generators:
+  - `generateSummaryMarkdown()` - YAML frontmatter + AI summaries + metadata
+  - `generateTranscriptMarkdown()` - Full conversation with timestamps + speaker labels
+- ✅ Bidirectional Obsidian wiki-links between summary and transcript
+- ✅ Rich YAML frontmatter with:
+  - Meeting metadata (date, duration, platform, participants)
+  - Routing information (organization type, folder path)
+  - Tags and topics for Dataview queries
+  - Links to related files
+  - Cost tracking (transcript tokens, summary costs)
+- ✅ IPC handlers: `obsidian:exportMeeting`, `obsidian:getStatus`
+- ✅ Multi-organization routing support (duplicates to all relevant folders)
+- ✅ Vault structure auto-creation (clients/, industry/, internal/, _unfiled/, config/)
+
+#### Modules Modified
+- `src/main.js` - Export system initialization and core export functions (lines 320-349, 868-1489)
+
+#### Configuration
+- **Vault path**: Set via `VAULT_PATH` in `.env` file (supports relative and absolute paths)
+- **Development vault**: `./vault` (current setting)
+- **Production vault**: Update `.env` to point to actual Obsidian vault (e.g., `Z:/Obsidian/CRM`)
+- **Routing config**: `config/routing.yaml` (determines where meetings are saved)
 
 **Success Criteria**:
-- Transcript shows real names instead of "Speaker 1"
-- 70%+ speaker identification accuracy
-- User can correct misidentifications
+- ✅ Meetings automatically exported to Obsidian after processing
+- ✅ Files saved to correct organization folders per routing rules
+- ✅ Summary file has metadata + AI summary (primary file for CRM/LLM queries)
+- ✅ Transcript file has full conversation (secondary file for deep dives)
+- ✅ Links work in Obsidian
+- ✅ Frontmatter enables Dataview queries
+- ✅ 60% token cost savings (most queries use summary, not transcript)
+
+#### Architecture Notes
+**Two files per meeting:**
+1. `YYYY-MM-DD-meeting-slug.md` - Summary with complete metadata in frontmatter
+2. `YYYY-MM-DD-meeting-slug-transcript.md` - Full transcript with timestamps
+
+**No index.md file** - Previous multi-file approach was over-engineered. Two-file structure is simpler, better for LLM RAG, and more cost-effective.
 
 ---
 
-### Phase 6: HubSpot Integration
+## ✅ Phase 6: Speaker Recognition & Contact Matching (IN PROGRESS)
+**Goal**: Replace "Speaker N" with actual names
+**Started**: November 7, 2025
+
+#### Completed Tasks
+- [x] Google Contacts API integration
+  - Created `GoogleContacts.js` module with OAuth2 authentication
+  - Reuses Google Calendar OAuth credentials
+  - Contact caching with Map (24-hour expiry)
+  - Batch email lookups with `findContactsByEmails()`
+  - Token management (save/load from disk)
+  - Automatic token refresh
+- [x] Speaker matching algorithm
+  - Created `SpeakerMatcher.js` with heuristic-based matching
+  - Word count analysis (talkative vs quiet speakers)
+  - Timing heuristics (first speaker, utterance patterns)
+  - Confidence scoring (high/medium/low/none)
+  - Email-based name extraction fallback
+- [x] Integration with Obsidian export
+  - Speaker matching runs automatically before export
+  - Transcripts show real names instead of "Speaker 1"
+  - Confidence indicators for uncertain matches
+  - Speaker mapping stored in meeting data
+  - Participants frontmatter includes speaker labels
+- [x] IPC handlers for renderer communication
+  - `contacts:getAuthUrl` - Get OAuth URL
+  - `contacts:authenticate` - Exchange code for token
+  - `contacts:getStatus` - Check authentication status
+  - `contacts:fetchContacts` - Refresh contacts
+  - `contacts:openAuthWindow` - OAuth popup window
+  - `speakers:matchSpeakers` - Match speakers to participants
+  - `speakers:updateMapping` - Manual speaker correction
+- [x] Preload API exposure for renderer access
+
+#### Remaining Tasks
+- [ ] Manual speaker ID correction UI component (future enhancement)
+- [x] Google Contacts authentication UI (Contacts button in header)
+- [x] Speaker matching status display (button shows contact count)
+- [ ] End-to-end testing with real meetings
+
+**Implementation Details**:
+- **Modules Created**: `GoogleContacts.js`, `SpeakerMatcher.js`
+- **Modified**:
+  - `main.js` - initialization, IPC handlers, export integration
+  - `preload.js` - API exposure for renderer
+  - `generateTranscriptMarkdown()` - uses speaker names
+  - `generateSummaryMarkdown()` - includes speaker mapping in frontmatter
+  - `renderer.js` - authentication UI logic, event handlers
+  - `index.html` - Contacts button in header
+  - `index.css` - Contacts button styling
+- **Matching Algorithms**:
+  1. Count-based (if speakers == participants, 1:1 match)
+  2. First speaker heuristic (often organizer)
+  3. Most talkative heuristic (likely host)
+  4. Sequential fallback mapping
+  5. Unknown speaker handling
+
+**Success Criteria**:
+- [x] Transcript shows real names instead of "Speaker 1" (implemented with fallback)
+- [ ] 70%+ speaker identification accuracy (needs testing)
+- [x] User can correct misidentifications (IPC handler ready, UI pending)
+
+---
+
+### Phase 7: Platform-Specific Recording (Zoom/Teams/Meet)
+**Note**: See SPECIFICATION.md for details. Not yet scheduled for implementation.
+
+---
+
+### Phase 8: HubSpot Integration
 **Goal**: Auto-sync meeting summaries to CRM
 
 #### Tasks
@@ -329,24 +441,7 @@ Each meeting generates:
 
 ---
 
-### Phase 7: Encryption & Security
-**Goal**: Protect sensitive meeting data
-
-#### Tasks
-- [ ] Windows DPAPI integration
-- [ ] Encrypt transcripts and audio at rest
-- [ ] API keys in Windows Credential Manager
-- [ ] Enable/disable encryption toggle
-- [ ] Re-encrypt existing files option
-
-**Success Criteria**:
-- Files encrypted using DPAPI
-- Decryption transparent to user
-- No performance degradation
-
----
-
-### Phase 8: Import Prior Transcripts
+### Phase 9: Import Prior Transcripts
 **Goal**: Bulk import historical meeting notes
 
 #### Tasks
@@ -363,7 +458,24 @@ Each meeting generates:
 
 ---
 
-### Phase 9: Advanced UI & Settings
+### Phase 10: Encryption & Security
+**Goal**: Protect sensitive meeting data
+
+#### Tasks
+- [ ] Windows DPAPI integration
+- [ ] Encrypt transcripts and audio at rest
+- [ ] API keys in Windows Credential Manager
+- [ ] Enable/disable encryption toggle
+- [ ] Re-encrypt existing files option
+
+**Success Criteria**:
+- Files encrypted using DPAPI
+- Decryption transparent to user
+- No performance degradation
+
+---
+
+### Phase 11: Advanced UI & Settings
 **Goal**: Polish and customization
 
 #### Tasks

@@ -34,19 +34,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onVideoFrame: (callback) => ipcRenderer.on('video-frame', (_, data) => callback(data)),
   onMeetingDetectionStatus: (callback) => ipcRenderer.on('meeting-detection-status', (_, data) => callback(data)),
   getActiveRecordingId: (noteId) => ipcRenderer.invoke('getActiveRecordingId', noteId),
+  // Unified Google Authentication (Calendar + Contacts)
+  googleGetAuthUrl: () => ipcRenderer.invoke('google:getAuthUrl'),
+  googleAuthenticate: (code) => ipcRenderer.invoke('google:authenticate', code),
+  googleIsAuthenticated: () => ipcRenderer.invoke('google:isAuthenticated'),
+  googleGetStatus: () => ipcRenderer.invoke('google:getStatus'),
+  googleSignOut: () => ipcRenderer.invoke('google:signOut'),
+  googleOpenAuthWindow: () => ipcRenderer.invoke('google:openAuthWindow'),
   // Google Calendar integration
   getCalendarMeetings: (hours) => ipcRenderer.invoke('calendar:getUpcomingMeetings', hours),
-  calendarInitialize: (credentials) => ipcRenderer.invoke('calendar:initialize', credentials),
-  calendarGetAuthUrl: () => ipcRenderer.invoke('calendar:getAuthUrl'),
-  calendarAuthenticate: (code) => ipcRenderer.invoke('calendar:authenticate', code),
-  calendarIsAuthenticated: () => ipcRenderer.invoke('calendar:isAuthenticated'),
-  calendarSignOut: () => ipcRenderer.invoke('calendar:signOut'),
-  calendarOpenAuthWindow: () => ipcRenderer.invoke('calendar:openAuthWindow'),
   // Template system (Phase 4)
   templatesGetAll: () => ipcRenderer.invoke('templates:getAll'),
   templatesGetById: (templateId) => ipcRenderer.invoke('templates:getById', templateId),
   templatesEstimateCost: (templateIds, transcript) => ipcRenderer.invoke('templates:estimateCost', { templateIds, transcript }),
   templatesGenerateSummaries: (meetingId, templateIds) => ipcRenderer.invoke('templates:generateSummaries', { meetingId, templateIds }),
   templatesReload: () => ipcRenderer.invoke('templates:reload'),
+  // Google Contacts & Speaker Matching (Phase 6)
+  contactsFetchContacts: (forceRefresh) => ipcRenderer.invoke('contacts:fetchContacts', forceRefresh),
+  speakersMatchSpeakers: (transcript, participantEmails, options) => ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),
+  speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) => ipcRenderer.invoke('speakers:updateMapping', { meetingId, speakerLabel, participantEmail }),
   openExternal: (url) => ipcRenderer.send('open-external', url)
 });

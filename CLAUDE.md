@@ -46,17 +46,36 @@ The app writes to a user-configured Obsidian vault with this structure:
 
 ```
 vault/
-├── clients/{client-slug}/meetings/{date-meeting-title}/
-│   ├── index.md                    # AI-generated navigation index
-│   ├── full-notes.md               # Full transcript with timestamps
-│   └── {template-name}.md          # LLM summaries (multiple per meeting)
+├── clients/{client-slug}/meetings/
+│   ├── YYYY-MM-DD-meeting-title.md            # Summary with metadata
+│   ├── YYYY-MM-DD-meeting-title-transcript.md # Full transcript
+│   └── YYYY-MM-DD-another-meeting.md
 ├── industry/{contact-slug}/meetings/
 ├── internal/meetings/
-├── _unfiled/{YYYY-MM}/             # Unknown participants
+├── _unfiled/{YYYY-MM}/meetings/    # Unknown participants
 └── config/
     ├── routing.yaml                # Email domain → organization mapping
     └── templates/                  # User-editable LLM prompt templates
 ```
+
+### Two-File Architecture
+
+Each meeting generates **two markdown files**:
+
+**Primary File (Summary):**
+- Filename: `YYYY-MM-DD-meeting-slug.md`
+- Complete metadata in YAML frontmatter (participants, tags, topics, platform, duration)
+- AI-generated executive summary with decisions and action items
+- Link to transcript file
+- **Purpose**: Quick reference, LLM queries (cheap), CRM linking, Obsidian search
+
+**Secondary File (Transcript):**
+- Filename: `YYYY-MM-DD-meeting-slug-transcript.md`
+- Full timestamped conversation with speaker labels
+- Link back to summary
+- **Purpose**: Deep dives, exact quotes, full context (more expensive for LLM reads)
+
+**Rationale**: Two-file structure provides ~60% token cost savings (most LLM queries only need summary, not full transcript). No `index.md` file - previous multi-file design with navigation index was over-engineered.
 
 ### Routing System
 
@@ -65,17 +84,6 @@ vault/
 - **Priority**: email_overrides → exact contact → domain match → industry → internal → unfiled
 - **Multi-org meetings**: Configurable (duplicate in all folders, primary only, or unfiled)
 - **See**: `docs/routing-example.yaml` for full structure
-
-### Meeting Index Format
-
-Each meeting folder gets an `index.md` with:
-- Metadata (date, participants, platform, duration)
-- Quick navigation table linking topics → sections in other files
-- File summaries describing each document in the meeting folder
-- Action items summary
-- **Purpose**: Optimized for LLM retrieval and Obsidian navigation
-
-**Reference**: `docs/index-example.md`
 
 ## Template System
 

@@ -8,8 +8,14 @@ const OpenAI = require('openai');
 const sdkLogger = require('./sdk-logger');
 const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema} = require('./shared/validation');
 const { z } = require('zod');
+const GoogleAuth = require('./main/integrations/GoogleAuth');
 const GoogleCalendar = require('./main/integrations/GoogleCalendar');
+const GoogleContacts = require('./main/integrations/GoogleContacts');
+const SpeakerMatcher = require('./main/integrations/SpeakerMatcher');
 const TemplateManager = require('./main/templates/TemplateManager');
+const VaultStructure = require('./main/storage/VaultStructure');
+const RoutingEngine = require('./main/routing/RoutingEngine');
+const ConfigLoader = require('./main/routing/ConfigLoader');
 require('dotenv').config();
 
 // Initialize OpenAI client (using OpenAI directly)
@@ -32,11 +38,21 @@ if (require('electron-squirrel-startup')) {
 // Store detected meeting information
 let detectedMeeting = null;
 
-// Google Calendar integration
+// Google integration (unified authentication)
+let googleAuth = null;
 let googleCalendar = null;
 
 // Template Manager for Phase 4
 let templateManager = null;
+
+// Obsidian export system (Phase 5)
+let vaultStructure = null;
+let routingEngine = null;
+let configLoader = null;
+
+// Speaker recognition system (Phase 6)
+let googleContacts = null;
+let speakerMatcher = null;
 
 let mainWindow;
 
@@ -231,7 +247,7 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   console.log("Registering IPC handlers...");
   // Log all registered IPC handlers
   console.log("IPC handlers:", Object.keys(ipcMain._invokeHandlers));
@@ -273,26 +289,22 @@ app.whenReady().then(() => {
   // Initialize the Recall.ai SDK
   initSDK();
 
-  // Initialize Google Calendar integration
-  googleCalendar = new GoogleCalendar();
-  const calendarCredentials = {
-    client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID,
-    client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
-    redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback'
-  };
+  // Initialize Unified Google Authentication (Calendar + Contacts)
+  console.log('[GoogleAuth] Initializing unified Google authentication...');
+  googleAuth = new GoogleAuth();
+  const authInitialized = await googleAuth.initialize();
 
-  if (calendarCredentials.client_id && calendarCredentials.client_secret) {
-    googleCalendar.initialize(calendarCredentials).then(authenticated => {
-      if (authenticated) {
-        console.log('[GoogleCalendar] Initialized with existing token');
-      } else {
-        console.log('[GoogleCalendar] Initialized but not authenticated - need OAuth flow');
-      }
-    }).catch(err => {
-      console.error('[GoogleCalendar] Initialization error:', err);
-    });
+  if (authInitialized) {
+    console.log('[GoogleAuth] Authenticated successfully');
+
+    // Initialize Google Calendar with shared auth
+    googleCalendar = new GoogleCalendar(googleAuth);
+    googleCalendar.initialize();
+
+    console.log('[GoogleCalendar] Initialized with shared authentication');
   } else {
-    console.log('[GoogleCalendar] No credentials in .env - calendar features disabled');
+    console.log('[GoogleAuth] Not authenticated - user needs to sign in');
+    console.log('[GoogleAuth] Calendar and Contacts features will be disabled until authenticated');
   }
 
   // Initialize Template Manager (Phase 4)
@@ -308,6 +320,63 @@ app.whenReady().then(() => {
 
   const templateCount = templateManager.scanTemplates();
   console.log(`[TemplateManager] Loaded ${templateCount} templates`);
+
+  // Initialize Obsidian Export System (Phase 5)
+  console.log('[ObsidianExport] Initializing vault and routing system...');
+
+  // Read vault path from environment variable (supports relative and absolute paths)
+  let vaultPath = process.env.VAULT_PATH || './vault';
+
+  // If path is relative, resolve it from project root
+  if (!path.isAbsolute(vaultPath)) {
+    const projectRoot = path.join(__dirname, '..', '..');
+    vaultPath = path.resolve(projectRoot, vaultPath);
+  }
+
+  console.log('[ObsidianExport] Vault path:', vaultPath);
+  vaultStructure = new VaultStructure(vaultPath);
+
+  // Use project root config/routing.yaml during development
+  let configPath;
+  if (process.env.NODE_ENV === 'development') {
+    const projectRoot = path.join(__dirname, '..', '..');
+    configPath = path.join(projectRoot, 'config', 'routing.yaml');
+    console.log('[ObsidianExport] Development mode - using routing config:', configPath);
+  } else {
+    configPath = path.join(app.getPath('userData'), 'config', 'routing.yaml');
+  }
+
+  try {
+    routingEngine = new RoutingEngine(configPath);
+    console.log('[ObsidianExport] Routing engine initialized successfully');
+
+    // Initialize vault structure
+    vaultStructure.initializeVault();
+    console.log('[ObsidianExport] Vault structure initialized at:', vaultPath);
+  } catch (error) {
+    console.error('[ObsidianExport] Failed to initialize:', error.message);
+    console.log('[ObsidianExport] Obsidian export will be disabled');
+  }
+
+  // Initialize Speaker Recognition System (Phase 6) with shared auth
+  console.log('[SpeakerRecognition] Initializing Google Contacts and speaker matching...');
+
+  if (googleAuth && googleAuth.isAuthenticated()) {
+    // Initialize Google Contacts with shared auth
+    googleContacts = new GoogleContacts(googleAuth);
+    googleContacts.initialize();
+
+    speakerMatcher = new SpeakerMatcher(googleContacts);
+    console.log('[SpeakerRecognition] Speaker matcher ready with shared authentication');
+
+    // Preload contacts in background for faster matching
+    googleContacts.fetchAllContacts().catch(err => {
+      console.error('[SpeakerRecognition] Failed to preload contacts:', err.message);
+    });
+  } else {
+    console.log('[SpeakerRecognition] Google not authenticated - speaker matching will use fallback');
+    console.log('[SpeakerRecognition] Speaker names will fall back to email-based extraction');
+  }
 
   // Start meeting monitor for auto-recording
   startMeetingMonitor();
@@ -826,6 +895,255 @@ function initSDK() {
   });
 }
 
+// ============================================================================
+// Obsidian Export Functions (Phase 5)
+// ============================================================================
+
+/**
+ * Export a meeting to Obsidian vault with two-file structure
+ * @param {Object} meeting - Meeting object with transcript and summaries
+ * @returns {Promise<Object>} Export result with paths created
+ */
+async function exportMeetingToObsidian(meeting) {
+  if (!vaultStructure || !routingEngine) {
+    console.log('[ObsidianExport] Export system not initialized - skipping export');
+    return { success: false, error: 'Export system not initialized' };
+  }
+
+  try {
+    console.log(`[ObsidianExport] Starting export for meeting: ${meeting.title}`);
+
+    // Extract participant emails for routing
+    const participantEmails = meeting.participantEmails || [];
+    if (participantEmails.length === 0) {
+      console.warn('[ObsidianExport] No participant emails found - routing to unfiled');
+    }
+
+    // Perform speaker matching if available (Phase 6)
+    if (speakerMatcher && meeting.transcript && meeting.transcript.length > 0 && participantEmails.length > 0) {
+      try {
+        console.log('[ObsidianExport] Attempting speaker matching...');
+
+        // Match speakers to participants
+        const speakerMapping = await speakerMatcher.matchSpeakers(
+          meeting.transcript,
+          participantEmails,
+          { includeOrganizer: true, useWordCount: true }
+        );
+
+        // Apply mapping to transcript
+        meeting.transcript = speakerMatcher.applyMappingToTranscript(
+          meeting.transcript,
+          speakerMapping
+        );
+
+        // Store mapping in meeting object for future reference
+        meeting.speakerMapping = speakerMapping;
+
+        console.log('[ObsidianExport] Speaker matching completed successfully');
+      } catch (error) {
+        console.warn('[ObsidianExport] Speaker matching failed, continuing without:', error.message);
+      }
+    } else if (meeting.transcript && meeting.transcript.length > 0) {
+      console.log('[ObsidianExport] Speaker matching skipped - speaker matcher not available or no participants');
+    }
+
+    // Get routing decisions
+    const routes = routingEngine.routeMeeting(participantEmails, meeting.title || 'Untitled Meeting');
+    console.log(`[ObsidianExport] Found ${routes.length} routing destination(s)`);
+
+    const createdPaths = [];
+
+    // Process each route (may have multiple for multi-org meetings)
+    for (const route of routes) {
+      console.log(`[ObsidianExport] Exporting to: ${route.fullPath}`);
+
+      // Generate file slug from title and date
+      const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
+      const dateStr = meetingDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      const titleSlug = meeting.title
+        ? meeting.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        : 'meeting';
+      const baseFilename = `${dateStr}-${titleSlug}`;
+
+      // Create meeting folder path
+      const meetingFolder = vaultStructure.getAbsolutePath(route.fullPath);
+      vaultStructure.ensureDirectory(meetingFolder);
+
+      // Generate summary markdown (primary file)
+      const summaryPath = path.join(meetingFolder, `${baseFilename}.md`);
+      const summaryContent = generateSummaryMarkdown(meeting, baseFilename);
+      fs.writeFileSync(summaryPath, summaryContent, 'utf8');
+      console.log(`[ObsidianExport] Created summary: ${summaryPath}`);
+
+      // Generate transcript markdown (secondary file)
+      const transcriptPath = path.join(meetingFolder, `${baseFilename}-transcript.md`);
+      const transcriptContent = generateTranscriptMarkdown(meeting, baseFilename);
+      fs.writeFileSync(transcriptPath, transcriptContent, 'utf8');
+      console.log(`[ObsidianExport] Created transcript: ${transcriptPath}`);
+
+      createdPaths.push({
+        organization: route.organizationName || route.type,
+        summaryPath,
+        transcriptPath
+      });
+    }
+
+    console.log(`[ObsidianExport] Successfully exported meeting to ${createdPaths.length} location(s)`);
+    return {
+      success: true,
+      paths: createdPaths,
+      routeCount: routes.length
+    };
+
+  } catch (error) {
+    console.error('[ObsidianExport] Export failed:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
+ * Generate summary markdown file with rich frontmatter
+ */
+function generateSummaryMarkdown(meeting, baseFilename) {
+  const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
+  const dateStr = meetingDate.toISOString().split('T')[0];
+  const title = meeting.title || 'Untitled Meeting';
+
+  // Build participants array for frontmatter with speaker mapping (Phase 6)
+  let participantsYaml = '';
+  if (meeting.participantEmails && meeting.participantEmails.length > 0) {
+    participantsYaml = meeting.participantEmails.map(email => {
+      let participantLine = `  - email: "${email}"`;
+
+      // If we have speaker mapping, include which speaker label(s) map to this participant
+      if (meeting.speakerMapping) {
+        const speakerLabels = Object.entries(meeting.speakerMapping)
+          .filter(([label, info]) => info.email === email)
+          .map(([label, info]) => label);
+
+        if (speakerLabels.length > 0) {
+          participantLine += `\n    name: "${meeting.speakerMapping[speakerLabels[0]].name}"`;
+          participantLine += `\n    speaker_labels: [${speakerLabels.join(', ')}]`;
+        }
+      }
+
+      return participantLine;
+    }).join('\n');
+  }
+
+  // Extract tags from meeting metadata
+  const tags = ['meeting'];
+  if (meeting.platform) tags.push(meeting.platform.toLowerCase());
+
+  // Build frontmatter
+  let markdown = `---
+title: "${title}"
+date: ${dateStr}
+platform: "${meeting.platform || 'unknown'}"
+transcript_file: "${baseFilename}-transcript.md"
+participants:
+${participantsYaml || '  []'}
+tags: [${tags.join(', ')}]
+meeting_type: "external"
+---
+
+# ${title}
+
+**Date:** ${meetingDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+**Platform:** ${meeting.platform || 'Unknown'}
+
+---
+
+## Meeting Summary
+
+`;
+
+  // Add summaries if they exist
+  if (meeting.summaries && meeting.summaries.length > 0) {
+    for (const summary of meeting.summaries) {
+      markdown += `### ${summary.templateName || 'Summary'}\n\n`;
+      markdown += summary.content || '*No content*';
+      markdown += '\n\n---\n\n';
+    }
+  } else if (meeting.summary) {
+    // Legacy: single summary field
+    markdown += meeting.summary;
+    markdown += '\n\n---\n\n';
+  } else {
+    markdown += '*No summary generated yet*\n\n---\n\n';
+  }
+
+  // Add link to transcript
+  markdown += `\n**Full Transcript:** [[${baseFilename}-transcript]]\n\n`;
+  markdown += `*Generated by JD Notes Things*\n`;
+
+  return markdown;
+}
+
+/**
+ * Generate transcript markdown file
+ */
+function generateTranscriptMarkdown(meeting, baseFilename) {
+  const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
+  const dateStr = meetingDate.toISOString().split('T')[0];
+  const title = meeting.title || 'Untitled Meeting';
+
+  let markdown = `---
+title: "${title} - Full Transcript"
+date: ${dateStr}
+summary_file: "${baseFilename}.md"
+---
+
+# Full Transcript: ${title}
+
+**Back to summary:** [[${baseFilename}]]
+
+**Date:** ${meetingDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+**Platform:** ${meeting.platform || 'Unknown'}
+
+---
+
+`;
+
+  // Add transcript
+  if (meeting.transcript) {
+    if (Array.isArray(meeting.transcript)) {
+      // Transcript is array of segments with timestamps
+      for (const segment of meeting.transcript) {
+        if (typeof segment === 'object') {
+          // Use speaker name from Phase 6 matching if available, otherwise fall back to raw label
+          const speaker = segment.speakerName || segment.speaker || 'Speaker';
+          const timestamp = segment.timestamp || '';
+          const text = segment.text || '';
+
+          // Add confidence indicator for low-confidence matches (optional)
+          const confidenceNote = segment.speakerConfidence === 'low' || segment.speakerConfidence === 'none'
+            ? ' *(uncertain)*'
+            : '';
+
+          markdown += `### ${timestamp} - ${speaker}${confidenceNote}\n${text}\n\n`;
+        } else {
+          markdown += `${segment}\n\n`;
+        }
+      }
+    } else if (typeof meeting.transcript === 'string') {
+      // Transcript is plain string
+      markdown += meeting.transcript;
+    }
+  } else {
+    markdown += '*No transcript available*\n';
+  }
+
+  markdown += `\n---\n\n`;
+  markdown += `*Generated by JD Notes Things*\n`;
+
+  return markdown;
+}
+
 // Handle saving meetings data
 ipcMain.handle('saveMeetingsData', async (event, data) => {
   try {
@@ -854,71 +1172,195 @@ ipcMain.handle('debugGetHandlers', async () => {
 });
 
 // ===================================================================
-// Google Calendar Integration IPC Handlers (Phase 3)
+// Unified Google Authentication IPC Handlers (Calendar + Contacts)
 // ===================================================================
 
-// Initialize Google Calendar with OAuth credentials
-ipcMain.handle('calendar:initialize', async (event, credentials) => {
+// Get Google OAuth authorization URL (for both Calendar + Contacts)
+ipcMain.handle('google:getAuthUrl', async () => {
   try {
-    console.log('[Calendar IPC] Initializing Google Calendar');
-    const initialized = await googleCalendar.initialize(credentials || {
-      client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
-      redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI
-    });
-    return { success: true, authenticated: initialized };
-  } catch (error) {
-    console.error('[Calendar IPC] Failed to initialize:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// Get OAuth authorization URL
-ipcMain.handle('calendar:getAuthUrl', async () => {
-  try {
-    console.log('[Calendar IPC] Getting OAuth authorization URL');
-    const authUrl = googleCalendar.getAuthUrl();
+    if (!googleAuth) {
+      return { success: false, error: 'GoogleAuth not initialized' };
+    }
+    const authUrl = googleAuth.getAuthUrl();
     return { success: true, authUrl };
   } catch (error) {
-    console.error('[Calendar IPC] Failed to get auth URL:', error);
+    console.error('[Google IPC] Failed to get auth URL:', error);
     return { success: false, error: error.message };
   }
 });
 
 // Authenticate with authorization code
-ipcMain.handle('calendar:authenticate', async (event, code) => {
+ipcMain.handle('google:authenticate', async (event, code) => {
   try {
-    console.log('[Calendar IPC] Authenticating with code');
-    await googleCalendar.authenticate(code);
+    console.log('[Google IPC] Authenticating with code');
+    if (!googleAuth) {
+      return { success: false, error: 'GoogleAuth not initialized' };
+    }
+
+    await googleAuth.getTokenFromCode(code);
+
+    // Initialize Calendar and Contacts with the new auth
+    if (googleAuth.isAuthenticated()) {
+      googleCalendar = new GoogleCalendar(googleAuth);
+      googleCalendar.initialize();
+
+      googleContacts = new GoogleContacts(googleAuth);
+      googleContacts.initialize();
+
+      speakerMatcher = new SpeakerMatcher(googleContacts);
+
+      // Preload contacts and wait for completion
+      try {
+        await googleContacts.fetchAllContacts();
+        console.log('[Google IPC] Contacts loaded successfully');
+      } catch (err) {
+        console.error('[Google IPC] Failed to preload contacts:', err.message);
+      }
+
+      console.log('[Google IPC] Successfully authenticated Google Calendar + Contacts');
+    }
+
     return { success: true };
   } catch (error) {
-    console.error('[Calendar IPC] Authentication failed:', error);
+    console.error('[Google IPC] Authentication failed:', error);
     return { success: false, error: error.message };
   }
 });
 
 // Check if user is authenticated
-ipcMain.handle('calendar:isAuthenticated', async () => {
+ipcMain.handle('google:isAuthenticated', async () => {
   try {
-    const authenticated = googleCalendar.isAuthenticated();
+    if (!googleAuth) {
+      return { success: true, authenticated: false };
+    }
+    const authenticated = googleAuth.isAuthenticated();
     return { success: true, authenticated };
   } catch (error) {
-    console.error('[Calendar IPC] Error checking authentication:', error);
+    console.error('[Google IPC] Error checking authentication:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get authentication status (includes contact count, etc.)
+ipcMain.handle('google:getStatus', async () => {
+  try {
+    const authenticated = googleAuth && googleAuth.isAuthenticated();
+    const contactCount = googleContacts ? googleContacts.contactCount : 0;
+    const calendarReady = googleCalendar && googleCalendar.isAuthenticated();
+    const contactsReady = googleContacts && googleContacts.isAuthenticated();
+
+    return {
+      success: true,
+      authenticated,
+      calendarReady,
+      contactsReady,
+      contactCount
+    };
+  } catch (error) {
+    console.error('[Google IPC] Error getting status:', error);
     return { success: false, error: error.message };
   }
 });
 
 // Sign out and clear tokens
-ipcMain.handle('calendar:signOut', async () => {
+ipcMain.handle('google:signOut', async () => {
   try {
-    console.log('[Calendar IPC] Signing out');
-    await googleCalendar.signOut();
+    console.log('[Google IPC] Signing out');
+    if (googleAuth) {
+      await googleAuth.revokeAuthentication();
+    }
+
+    // Reset services
+    googleCalendar = null;
+    googleContacts = null;
+    speakerMatcher = null;
+
     return { success: true };
   } catch (error) {
-    console.error('[Calendar IPC] Failed to sign out:', error);
+    console.error('[Google IPC] Failed to sign out:', error);
     return { success: false, error: error.message };
   }
 });
+
+// Open OAuth window for Google authentication
+ipcMain.handle('google:openAuthWindow', async () => {
+  try {
+    console.log('[Google IPC] Opening OAuth window');
+
+    if (!googleAuth) {
+      return { success: false, error: 'GoogleAuth not initialized' };
+    }
+
+    const authUrl = googleAuth.getAuthUrl();
+
+    let authWindow = new BrowserWindow({
+      width: 600,
+      height: 800,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    authWindow.loadURL(authUrl);
+
+    return new Promise((resolve) => {
+      // Listen for the redirect
+      authWindow.webContents.on('will-redirect', async (event, url) => {
+        if (url.startsWith('http://localhost:3000/oauth2callback')) {
+          event.preventDefault();
+
+          const parsedUrl = new URL(url);
+          const code = parsedUrl.searchParams.get('code');
+
+          if (code) {
+            try {
+              await googleAuth.getTokenFromCode(code);
+
+              // Initialize services
+              googleCalendar = new GoogleCalendar(googleAuth);
+              googleCalendar.initialize();
+
+              googleContacts = new GoogleContacts(googleAuth);
+              googleContacts.initialize();
+
+              speakerMatcher = new SpeakerMatcher(googleContacts);
+
+              // Preload contacts and wait for completion
+              try {
+                await googleContacts.fetchAllContacts();
+                console.log('[Google OAuth] Contacts loaded successfully');
+              } catch (err) {
+                console.error('[Google OAuth] Failed to preload contacts:', err.message);
+              }
+
+              authWindow.close();
+              resolve({ success: true });
+            } catch (error) {
+              authWindow.close();
+              resolve({ success: false, error: error.message });
+            }
+          } else {
+            const error = parsedUrl.searchParams.get('error');
+            authWindow.close();
+            resolve({ success: false, error: error || 'No authorization code received' });
+          }
+        }
+      });
+
+      authWindow.on('closed', () => {
+        resolve({ success: false, error: 'Authentication window closed' });
+      });
+    });
+  } catch (error) {
+    console.error('[Google IPC] Failed to open auth window:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// Google Calendar Service-Specific IPC Handlers
+// ===================================================================
 
 // Get upcoming calendar meetings
 ipcMain.handle('calendar:getUpcomingMeetings', async (event, hoursAhead = 24) => {
@@ -933,125 +1375,125 @@ ipcMain.handle('calendar:getUpcomingMeetings', async (event, hoursAhead = 24) =>
   }
 });
 
-// Open OAuth window for calendar authentication
-ipcMain.handle('calendar:openAuthWindow', async () => {
-  try {
-    console.log('[Calendar IPC] Opening OAuth window');
+// ===================================================================
+// Google Contacts & Speaker Matching Service-Specific IPC Handlers
+// ===================================================================
 
-    // Ensure calendar is initialized before getting auth URL
-    if (!googleCalendar.isAuthenticated()) {
-      const calendarCredentials = {
-        client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
-        redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback'
-      };
-      await googleCalendar.initialize(calendarCredentials);
+// Fetch/refresh contacts from Google
+ipcMain.handle('contacts:fetchContacts', async (event, forceRefresh = false) => {
+  try {
+    console.log('[Contacts IPC] Fetching contacts (forceRefresh:', forceRefresh, ')');
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
     }
 
-    // Get the authorization URL
-    const authUrl = googleCalendar.getAuthUrl();
-
-    // Create a new BrowserWindow for OAuth
-    let authWindow = new BrowserWindow({
-      width: 500,
-      height: 700,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true
-      },
-      parent: mainWindow,
-      modal: true,
-      show: false
-    });
-
-    authWindow.loadURL(authUrl);
-    authWindow.show();
-
-    // Return a promise that resolves when we get the auth code
-    return new Promise((resolve, reject) => {
-      // Listen for navigation events to catch the OAuth callback
-      authWindow.webContents.on('will-redirect', async (event, redirectUrl) => {
-        console.log('[Calendar OAuth] Redirect:', redirectUrl);
-
-        // Check if this is our callback URL
-        if (redirectUrl.startsWith(process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback')) {
-          event.preventDefault();
-
-          // Extract the authorization code from the URL
-          const urlObj = new URL(redirectUrl);
-          const code = urlObj.searchParams.get('code');
-          const error = urlObj.searchParams.get('error');
-
-          if (error) {
-            console.error('[Calendar OAuth] Error:', error);
-            authWindow.close();
-            resolve({ success: false, error: `OAuth error: ${error}` });
-            return;
-          }
-
-          if (code) {
-            console.log('[Calendar OAuth] Got authorization code');
-
-            // Exchange code for tokens
-            try {
-              await googleCalendar.authenticate(code);
-              authWindow.close();
-              resolve({ success: true });
-            } catch (authError) {
-              console.error('[Calendar OAuth] Authentication failed:', authError);
-              authWindow.close();
-              resolve({ success: false, error: authError.message });
-            }
-          }
-        }
-      });
-
-      // Also listen for URL changes (in case redirect doesn't fire)
-      authWindow.webContents.on('did-navigate', async (event, redirectUrl) => {
-        console.log('[Calendar OAuth] Navigate:', redirectUrl);
-
-        if (redirectUrl.startsWith(process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback')) {
-          const urlObj = new URL(redirectUrl);
-          const code = urlObj.searchParams.get('code');
-          const error = urlObj.searchParams.get('error');
-
-          if (error) {
-            console.error('[Calendar OAuth] Error:', error);
-            authWindow.close();
-            resolve({ success: false, error: `OAuth error: ${error}` });
-            return;
-          }
-
-          if (code) {
-            console.log('[Calendar OAuth] Got authorization code');
-
-            try {
-              await googleCalendar.authenticate(code);
-              authWindow.close();
-              resolve({ success: true });
-            } catch (authError) {
-              console.error('[Calendar OAuth] Authentication failed:', authError);
-              authWindow.close();
-              resolve({ success: false, error: authError.message });
-            }
-          }
-        }
-      });
-
-      // Handle window close
-      authWindow.on('closed', () => {
-        authWindow = null;
-        resolve({ success: false, error: 'Window closed by user' });
-      });
-    });
+    const contacts = await googleContacts.fetchAllContacts(forceRefresh);
+    return {
+      success: true,
+      contactCount: contacts.length,
+      lastFetch: googleContacts.lastFetch
+    };
   } catch (error) {
-    console.error('[Calendar IPC] Failed to open auth window:', error);
+    console.error('[Contacts IPC] Failed to fetch contacts:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Match speakers to participants
+ipcMain.handle('speakers:matchSpeakers', async (event, { transcript, participantEmails, options }) => {
+  try {
+    console.log('[Speakers IPC] Matching speakers to participants');
+    if (!speakerMatcher) {
+      throw new Error('Speaker matcher not initialized');
+    }
+
+    // Perform speaker matching
+    const speakerMapping = await speakerMatcher.matchSpeakers(
+      transcript,
+      participantEmails,
+      options
+    );
+
+    // Apply mapping to transcript
+    const updatedTranscript = speakerMatcher.applyMappingToTranscript(
+      transcript,
+      speakerMapping
+    );
+
+    // Get speaker statistics
+    const speakerStats = speakerMatcher.analyzeSpeakers(transcript);
+    const speakerSummary = speakerMatcher.getSpeakerSummary(speakerStats);
+
+    return {
+      success: true,
+      speakerMapping,
+      updatedTranscript,
+      speakerSummary
+    };
+  } catch (error) {
+    console.error('[Speakers IPC] Failed to match speakers:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Update speaker mapping manually (for corrections)
+ipcMain.handle('speakers:updateMapping', async (event, { meetingId, speakerLabel, participantEmail }) => {
+  try {
+    console.log(`[Speakers IPC] Updating speaker mapping: ${speakerLabel} -> ${participantEmail}`);
+
+    // Load meeting data
+    const meetingsData = await fileOperationManager.readMeetingsData();
+    const meeting = meetingsData.meetings.find(m => m.id === meetingId);
+
+    if (!meeting) {
+      throw new Error(`Meeting ${meetingId} not found`);
+    }
+
+    if (!meeting.transcript) {
+      throw new Error(`Meeting ${meetingId} has no transcript`);
+    }
+
+    // Update the speaker mapping
+    if (!meeting.speakerMapping) {
+      meeting.speakerMapping = {};
+    }
+
+    // Find contact info for the participant email
+    let participantName = participantEmail;
+    if (googleContacts && googleContacts.isAuthenticated()) {
+      const contact = await googleContacts.findContactByEmail(participantEmail);
+      if (contact) {
+        participantName = contact.name;
+      }
+    }
+
+    meeting.speakerMapping[speakerLabel] = {
+      email: participantEmail,
+      name: participantName,
+      confidence: 'manual',
+      method: 'user-correction'
+    };
+
+    // Apply the updated mapping to transcript
+    if (speakerMatcher) {
+      meeting.transcript = speakerMatcher.applyMappingToTranscript(
+        meeting.transcript,
+        meeting.speakerMapping
+      );
+    }
+
+    // Save updated meeting data
+    await fileOperationManager.writeMeetingsData(meetingsData);
+
+    return { success: true, speakerMapping: meeting.speakerMapping };
+  } catch (error) {
+    console.error('[Speakers IPC] Failed to update mapping:', error);
     return { success: false, error: error.message };
   }
 });
 
 // ===================================================================
-// End Google Calendar IPC Handlers
+// End Google Integration IPC Handlers
 // ===================================================================
 
 // ===================================================================
@@ -1208,6 +1650,46 @@ ipcMain.handle('templates:reload', async () => {
 
 // ===================================================================
 // End Template System IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Obsidian Export IPC Handlers (Phase 5)
+// ===================================================================
+
+// Export a meeting to Obsidian vault
+ipcMain.handle('obsidian:exportMeeting', async (event, meetingId) => {
+  try {
+    console.log('[Obsidian IPC] Export requested for meeting:', meetingId);
+
+    // Load meeting data
+    const data = await fileOperationManager.readMeetingsData();
+    const meeting = [...data.upcomingMeetings, ...data.pastMeetings].find(m => m.id === meetingId);
+
+    if (!meeting) {
+      return { success: false, error: 'Meeting not found' };
+    }
+
+    // Export to Obsidian
+    const result = await exportMeetingToObsidian(meeting);
+    return result;
+
+  } catch (error) {
+    console.error('[Obsidian IPC] Export failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get export status/configuration
+ipcMain.handle('obsidian:getStatus', async () => {
+  return {
+    initialized: !!(vaultStructure && routingEngine),
+    vaultPath: vaultStructure ? vaultStructure.vaultBasePath : null,
+    routingConfigured: !!routingEngine
+  };
+});
+
+// ===================================================================
+// End Obsidian Export IPC Handlers
 // ===================================================================
 
 // Handle open-external IPC (for opening URLs in default browser)
