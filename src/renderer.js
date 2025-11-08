@@ -2357,7 +2357,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               // Show a little toast message
               const toast = document.createElement('div');
               toast.className = 'toast';
-              toast.textContent = 'Recording stopped. Generating summary...';
+              toast.textContent = 'Recording stopped. Transcript saved.';
               document.body.appendChild(toast);
 
               // Remove toast after 3 seconds
@@ -2369,7 +2369,6 @@ document.addEventListener('DOMContentLoaded', async () => {
               }, 3000);
 
               // The recording-completed event handler will take care of refreshing the content
-              // and generating the summary when the recording finishes processing
 
             } else {
               console.error('Failed to stop recording:', result.error);
