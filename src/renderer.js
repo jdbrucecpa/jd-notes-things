@@ -2131,6 +2131,70 @@ document.addEventListener('DOMContentLoaded', async () => {
     googleBtn.addEventListener('click', handleGoogleButtonClick);
   }
 
+  // LLM Provider dropdown event listener
+  const llmProviderSelect = document.getElementById('llmProviderSelect');
+  if (llmProviderSelect) {
+    // Load current provider and set dropdown value
+    try {
+      const result = await window.electronAPI.getLLMProvider();
+      if (result.success) {
+        // Map provider names to dropdown values
+        const providerMap = {
+          'Azure OpenAI': 'azure',
+          'Anthropic': 'anthropic',
+          'OpenAI': 'openai'
+        };
+        const currentProvider = providerMap[result.provider] || 'azure';
+        llmProviderSelect.value = currentProvider;
+        console.log('Current LLM provider:', result.provider);
+      }
+    } catch (error) {
+      console.error('Failed to get current LLM provider:', error);
+    }
+
+    // Handle provider change
+    llmProviderSelect.addEventListener('change', async (e) => {
+      const newProvider = e.target.value;
+      console.log('Switching LLM provider to:', newProvider);
+
+      try {
+        const result = await window.electronAPI.switchLLMProvider(newProvider);
+        if (result.success) {
+          console.log('LLM provider switched to:', result.provider);
+
+          // Show a brief notification
+          const toast = document.createElement('div');
+          toast.className = 'toast success';
+          toast.textContent = `Switched to ${result.provider}`;
+          toast.style.cssText = 'position: fixed; top: 80px; right: 20px; background: #4CAF50; color: white; padding: 12px 20px; border-radius: 5px; font-size: 14px; z-index: 10000; box-shadow: 0 2px 8px rgba(0,0,0,0.2);';
+          document.body.appendChild(toast);
+
+          setTimeout(() => {
+            toast.style.transition = 'opacity 0.3s ease';
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+          }, 2000);
+        } else {
+          console.error('Failed to switch provider:', result.error);
+          alert(`Failed to switch provider: ${result.error}`);
+          // Revert dropdown to previous value
+          const currentResult = await window.electronAPI.getLLMProvider();
+          if (currentResult.success) {
+            const providerMap = {
+              'Azure OpenAI': 'azure',
+              'Anthropic': 'anthropic',
+              'OpenAI': 'openai'
+            };
+            llmProviderSelect.value = providerMap[currentResult.provider] || 'azure';
+          }
+        }
+      } catch (error) {
+        console.error('Error switching LLM provider:', error);
+        alert('Failed to switch provider: ' + error.message);
+      }
+    });
+  }
+
   // Set up the initial auto-save handler
   setupAutoSaveHandler();
 

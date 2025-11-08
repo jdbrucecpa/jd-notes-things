@@ -3,7 +3,7 @@ const { z } = require('zod');
 // Participant schema
 const ParticipantSchema = z.object({
   name: z.string(),
-  id: z.string().optional(),
+  id: z.union([z.string(), z.number()]).optional().transform(val => val !== undefined ? String(val) : undefined),
 });
 
 // Transcript entry schema
@@ -42,6 +42,7 @@ const MeetingSchema = z.object({
   end: z.string().optional(),         // Added for calendar events
   link: z.string().optional(),        // Added for meeting links
   description: z.string().optional(), // Added for calendar events
+  obsidianLink: z.string().optional(), // Added for Obsidian vault path tracking
 }).passthrough();  // Allow additional fields for flexibility
 
 // Meetings data schema (for saveMeetingsData)

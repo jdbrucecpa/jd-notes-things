@@ -4,7 +4,6 @@ const url = require('url');
 const fs = require('fs');
 const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
-const OpenAI = require('openai');
 const sdkLogger = require('./sdk-logger');
 const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema} = require('./shared/validation');
 const { z } = require('zod');
@@ -16,19 +15,13 @@ const TemplateManager = require('./main/templates/TemplateManager');
 const VaultStructure = require('./main/storage/VaultStructure');
 const RoutingEngine = require('./main/routing/RoutingEngine');
 const ConfigLoader = require('./main/routing/ConfigLoader');
+const { createLLMServiceFromEnv } = require('./main/services/llmService');
 require('dotenv').config();
 
-// Initialize OpenAI client (using OpenAI directly)
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
-
-// Define available models with their capabilities
-const MODELS = {
-  // Primary model - using gpt-4o-mini for cost-effective summaries (gpt-5-mini requires verification)
-  PRIMARY: "gpt-4o-mini",
-  FALLBACKS: []
-};
+// Initialize LLM service with auto-detection of available provider
+// Priority: Azure OpenAI > Anthropic > OpenAI
+const llmService = createLLMServiceFromEnv();
+console.log(`[Main] LLM Service initialized with provider: ${llmService.getProviderName()}`);
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -1164,11 +1157,16 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
     console.log('[IPC] File write complete');
     return { success: true };
   } catch (error) {
+    console.error('[IPC] Caught error during save:', error);
+    console.error('[IPC] Error type:', error.constructor.name);
+    console.error('[IPC] Error instanceof ZodError:', error instanceof z.ZodError);
+
     if (error instanceof z.ZodError) {
-      console.error('[IPC] Zod validation error:', JSON.stringify(error.errors, null, 2));
-      return { success: false, error: `Invalid data format: ${JSON.stringify(error.errors)}` };
+      console.error('[IPC] Zod validation errors:', error.errors);
+      console.error('[IPC] Full Zod error:', JSON.stringify(error, null, 2));
+      return { success: false, error: `Validation failed: ${JSON.stringify(error.errors, null, 2)}` };
     }
-    console.error('[IPC] Failed to save meetings data:', error);
+    console.error('[IPC] Non-Zod error:', error.message, error.stack);
     return { success: false, error: error.message };
   }
 });
@@ -1640,8 +1638,8 @@ ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templat
 
     console.log(`[Template IPC] Transcript length: ${transcriptText.length} characters`);
 
-    // Generate summaries for each template
-    const summaries = [];
+    // Collect all section generation tasks to run in parallel
+    const sectionTasks = [];
 
     for (const templateId of templateIds) {
       const template = templateManager.getTemplate(templateId);
@@ -1652,45 +1650,89 @@ ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templat
 
       console.log('[Template IPC] Generating summary with template:', template.name);
 
-      // Build the summary by processing each section
+      for (const section of template.sections) {
+        console.log(`[Template IPC] Queuing section: ${section.title}`);
+
+        sectionTasks.push({
+          templateId: template.id,
+          templateName: template.name,
+          sectionTitle: section.title,
+          promise: (async () => {
+            try {
+              const result = await llmService.generateCompletion({
+                systemPrompt: 'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.',
+                userPrompt: `${section.prompt}\n\nMeeting Transcript:\n${transcriptText}`,
+                temperature: 0.7,
+                maxTokens: 500
+              });
+
+              return {
+                success: true,
+                content: result.content
+              };
+            } catch (error) {
+              console.error(`[Template IPC] Error generating section ${section.title}:`, error);
+              return {
+                success: false,
+                content: '*Error generating this section*'
+              };
+            }
+          })()
+        });
+      }
+    }
+
+    console.log(`[Template IPC] Firing ${sectionTasks.length} API calls in parallel...`);
+    const startTime = Date.now();
+
+    // Execute all API calls in parallel
+    const sectionResults = await Promise.all(sectionTasks.map(task => task.promise));
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`[Template IPC] All API calls completed in ${duration}s`);
+
+    // Group results by template and reconstruct summaries
+    const summaries = [];
+    const templateMap = new Map();
+
+    // Initialize template summaries
+    for (const templateId of templateIds) {
+      const template = templateManager.getTemplate(templateId);
+      if (!template) continue;
+
+      templateMap.set(template.id, {
+        templateId: template.id,
+        templateName: template.name,
+        sections: []
+      });
+    }
+
+    // Add section results to their templates
+    sectionTasks.forEach((task, index) => {
+      const result = sectionResults[index];
+      const templateData = templateMap.get(task.templateId);
+
+      if (templateData) {
+        templateData.sections.push({
+          title: task.sectionTitle,
+          content: result.content
+        });
+      }
+    });
+
+    // Build final markdown for each template
+    for (const [templateId, templateData] of templateMap) {
       let summaryMarkdown = `# ${meeting.title}\n\n`;
-      summaryMarkdown += `Generated using template: **${template.name}**\n\n`;
+      summaryMarkdown += `Generated using template: **${templateData.templateName}**\n\n`;
       summaryMarkdown += `---\n\n`;
 
-      for (const section of template.sections) {
-        console.log(`[Template IPC] Processing section: ${section.title}`);
-
-        // Call LLM for this section
-        const sectionPrompt = `${section.prompt}\n\nMeeting Transcript:\n${transcriptText}`;
-
-        try {
-          const completion = await openai.chat.completions.create({
-            model: MODELS.PRIMARY,
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.'
-              },
-              {
-                role: 'user',
-                content: sectionPrompt
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 500
-          });
-
-          const sectionContent = completion.choices[0].message.content;
-          summaryMarkdown += `## ${section.title}\n\n${sectionContent}\n\n`;
-        } catch (error) {
-          console.error(`[Template IPC] Error generating section ${section.title}:`, error);
-          summaryMarkdown += `## ${section.title}\n\n*Error generating this section*\n\n`;
-        }
+      for (const section of templateData.sections) {
+        summaryMarkdown += `## ${section.title}\n\n${section.content}\n\n`;
       }
 
       summaries.push({
-        templateId: template.id,
-        templateName: template.name,
+        templateId: templateData.templateId,
+        templateName: templateData.templateName,
         content: summaryMarkdown
       });
     }
@@ -1717,6 +1759,53 @@ ipcMain.handle('templates:reload', async () => {
 
 // ===================================================================
 // End Template System IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// LLM Provider Management
+// ===================================================================
+
+// Get current LLM provider
+ipcMain.handle('llm:getProvider', async () => {
+  try {
+    return {
+      success: true,
+      provider: llmService.getProviderName()
+    };
+  } catch (error) {
+    console.error('[LLM] Error getting provider:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Switch LLM provider
+ipcMain.handle('llm:switchProvider', async (event, provider) => {
+  try {
+    console.log(`[LLM] Switching provider to: ${provider}`);
+
+    // Validate provider
+    const validProviders = ['openai', 'azure', 'anthropic'];
+    if (!validProviders.includes(provider)) {
+      return {
+        success: false,
+        error: `Invalid provider. Must be one of: ${validProviders.join(', ')}`
+      };
+    }
+
+    llmService.switchProvider(provider);
+
+    return {
+      success: true,
+      provider: llmService.getProviderName()
+    };
+  } catch (error) {
+    console.error('[LLM] Error switching provider:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// End LLM Provider Management
 // ===================================================================
 
 // ===================================================================
@@ -2623,96 +2712,49 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       "- [Add any other action items discussed]\n\n" +
       "Stick strictly to this format with these exact section headers. Keep each bullet point concise but informative.";
 
-    // Prepare the messages array for the API
-    const messages = [
-      { role: "system", content: systemMessage },
-      {
-        role: "user", content: `Summarize the following meeting transcript with the EXACT format specified in your instructions:
+    // Prepare the user prompt
+    const userPrompt = `Summarize the following meeting transcript with the EXACT format specified in your instructions:
 ${participantsText ? participantsText + "\n\n" : ""}
 Transcript:
-${transcriptText}`
-      }
-    ];
+${transcriptText}`;
 
     // If no progress callback provided, use the non-streaming version
     if (!progressCallback) {
-      // Call the OpenAI API for summarization (non-streaming)
-      const response = await openai.chat.completions.create({
-        model: MODELS.PRIMARY,
-        messages: messages,
-        max_completion_tokens: 1000
+      const result = await llmService.generateCompletion({
+        systemPrompt: systemMessage,
+        userPrompt: userPrompt,
+        maxTokens: 1000,
+        temperature: 0.7
       });
 
-      // Log which model was actually used
-      console.log(`AI summary generated successfully using model: ${response.model}`);
-
-      // Return the generated summary
-      return response.choices[0].message.content;
+      console.log(`AI summary generated successfully using ${llmService.getProviderName()} (${result.model})`);
+      return result.content;
     } else {
-      // Use streaming version and accumulate the response
-      let fullText = '';
-
-      // Create a streaming request
-      const stream = await openai.chat.completions.create({
-        model: MODELS.PRIMARY,
-        messages: messages,
-        max_completion_tokens: 1000,
-        temperature: 0.7,  // gpt-4o-mini supports temperature
-        stream: true
-      });
-
-      // Handle streaming events
-      return new Promise((resolve, reject) => {
-        // Process the stream
-        (async () => {
-          try {
-            // Log the model being used when first chunk arrives (if available)
-            let modelLogged = false;
-            let chunkCount = 0;
-            let contentChunkCount = 0;
-
-            for await (const chunk of stream) {
-              chunkCount++;
-
-              // Log the model on first chunk if available
-              if (!modelLogged && chunk.model) {
-                console.log(`Streaming with model: ${chunk.model}`);
-                modelLogged = true;
-              }
-
-              // Extract the text content from the chunk
-              const content = chunk.choices[0]?.delta?.content || '';
-
-              if (content) {
-                contentChunkCount++;
-                // Add the new text chunk to our accumulated text
-                fullText += content;
-
-                // Call the progress callback immediately with each token
-                if (progressCallback) {
-                  progressCallback(fullText);
-                }
-              }
-            }
-
-            console.log(`AI summary completed - ${contentChunkCount} content chunks, ${fullText.length} characters`);
-
-            if (fullText.length === 0) {
-              console.warn('WARNING: AI returned empty summary!');
-            }
-
-            resolve(fullText);
-          } catch (error) {
-            console.error('Stream error:', error);
-            reject(error);
+      // Use streaming version with progress callback
+      const fullText = await llmService.streamCompletion({
+        systemPrompt: systemMessage,
+        userPrompt: userPrompt,
+        maxTokens: 1000,
+        temperature: 0.7,
+        onChunk: (cumulativeText) => {
+          if (progressCallback) {
+            progressCallback(cumulativeText);
           }
-        })();
+        }
       });
+
+      console.log(`AI summary completed - ${fullText.length} characters`);
+
+      if (fullText.length === 0) {
+        console.warn('WARNING: AI returned empty summary!');
+      }
+
+      return fullText;
     }
   } catch (error) {
     console.error('Error generating meeting summary:', error);
 
-    // Check if it's an OpenRouter/OpenAI specific error
+    // Generic error handling for all LLM providers
     if (error.status) {
       return `Error generating summary: API returned status ${error.status}: ${error.message}`;
     } else if (error.response) {

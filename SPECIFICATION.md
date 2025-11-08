@@ -11,16 +11,17 @@
 ## Development Status
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
-**Phase:** 6 Complete - All Core Features Implemented
-**Status:** Ready for production testing or Phase 7+
+**Phase:** 5 In Progress - Completing Obsidian Export Workflow
+**Status:** Export workflow refinement in progress
 
 **Completed Phases:**
 - ✅ Phase 1: Core Recording & Transcription
 - ✅ Phase 2: Routing System
 - ✅ Phase 3: Calendar Integration & Auto-Recording
 - ✅ Phase 4: LLM Integration & Summaries (Template System)
-- ✅ Phase 5: Obsidian Export & File Generation
+- 🚧 Phase 5: Obsidian Export & File Generation (export code exists, workflow integration needed)
 - ✅ Phase 6: Speaker Recognition & Contact Matching
+- ✅ Phase 7: Platform-Specific Recording (Zoom/Teams/Meet)
 
 The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
 - Recall.ai Desktop SDK integration
@@ -954,7 +955,7 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 
 ---
 
-### Phase 5: Obsidian Export & File Generation ✅ COMPLETE
+### Phase 5: Obsidian Export & File Generation 🚧 IN PROGRESS
 **Goal:** Export meeting data to Obsidian vault with two-file structure
 
 #### Deliverables
@@ -965,15 +966,35 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 5. ✅ Create bidirectional links between summary and transcript
 6. ✅ Handle multi-organization routing (duplicate files when needed)
 7. ⏳ Export recording audio file (optional - deferred)
+8. ⏳ **Automatic export after template generation**
+9. ⏳ **Manual "Publish to Obsidian" / "Republish to Obsidian" button**
+10. ⏳ **Obsidian link tracking (meeting → vault folder)**
+11. ⏳ **Manual vault link override** (bypass routing, correct errors)
+12. ⏳ **Multiple template concatenation** (all selected templates in one summary file)
+13. ⏳ **UI status indicator** (show if meeting synced to Obsidian)
+
+#### Complete Workflow (User Perspective)
+1. **Meeting ends** → Automatic basic summary generated
+2. **Nothing exported yet** → Meeting stored locally only
+3. **Click "Generate"** → User selects templates, all chosen templates are generated
+4. **Auto-export to Obsidian** → Creates `summary.md` (with all templates concatenated) + `transcript.md`
+5. **UI shows Obsidian link** → Icon/badge indicates meeting is synced to vault
+6. **Manual override option** → User can edit vault link to correct routing errors or bypass routing
+7. **Republish capability** → "Republish to Obsidian" button (with confirmation) replaces existing files
+8. **Fallback**: If Generate never clicked, user can manually publish with basic summary only
 
 #### Success Criteria
-- ✅ Meetings automatically exported to Obsidian vault after transcription
 - ✅ Files saved to correct organization folders based on routing rules
 - ✅ Summary file contains all metadata, decisions, and action items
 - ✅ Transcript file contains full conversation with timestamps
 - ✅ Links work correctly in Obsidian (summary ↔ transcript)
 - ✅ Frontmatter tags enable Dataview queries
 - ✅ Multi-org meetings duplicated to all relevant folders
+- ⏳ Export automatically triggered after template generation
+- ⏳ UI shows sync status (published, not published, republish available)
+- ⏳ User can manually override vault location
+- ⏳ Multiple templates concatenated into single summary file with section headers
+- ⏳ Republish confirmation prevents accidental overwrites
 
 #### Implementation Details
 - **Integration**: Export system initialized in `main.js` (lines 320-349)
@@ -985,6 +1006,49 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 - **Frontmatter**: Includes meeting metadata, participants, tags, topics, platform, duration, routing info, costs
 - **Bidirectional Links**: Obsidian wiki-links connect summary ↔ transcript
 - **IPC Handlers**: `obsidian:exportMeeting`, `obsidian:getStatus`
+
+#### Technical Specification - Export Workflow
+
+**Data Model - Meeting Object:**
+```javascript
+{
+  id: "meeting-123456789",
+  title: "Strategy Call with Acme",
+  content: "# Automatic Summary\n...",  // Basic summary or combined templates
+  summaries: [                           // Template-based summaries
+    { templateId: "client-meeting", templateName: "Client Meeting", content: "..." },
+    { templateId: "action-items", templateName: "Action Items", content: "..." }
+  ],
+  transcript: [...],
+  obsidianLink: "clients/acme-corp/meetings/2025-11-08-strategy-call.md"  // Path in vault
+}
+```
+
+**Workflow States:**
+1. **Not Published** - `obsidianLink` is null/undefined, UI shows "Publish to Obsidian" button
+2. **Published** - `obsidianLink` exists, UI shows Obsidian icon/badge + "Republish" button
+3. **Manual Override** - User edits `obsidianLink` directly, bypasses routing on next export
+
+**Summary File Generation Logic:**
+- If `meeting.summaries` exists and has items → Concatenate all templates with section headers:
+  ```markdown
+  ## Client Meeting Summary
+  [template content]
+
+  ## Action Items Summary
+  [template content]
+  ```
+- If `meeting.summaries` is empty/missing → Use `meeting.content` (basic auto-summary)
+
+**Export Triggers:**
+1. **Manual**: User clicks "Publish to Obsidian" button (IPC: `obsidian:exportMeeting`)
+2. **Automatic**: After template generation completes successfully
+3. **Republish**: User clicks "Republish to Obsidian" with confirmation dialog
+
+**Routing Logic:**
+- If `meeting.obsidianLink` exists (manual override) → Use that path, skip routing
+- If `meeting.obsidianLink` is null → Run routing engine based on `participantEmails`
+- After successful export → Save vault path to `meeting.obsidianLink`
 
 #### User Value
 Automatic, organized meeting notes in Obsidian vault, optimized for both human review and LLM retrieval. No manual file management required.
@@ -1318,6 +1382,8 @@ Sensitive client information protected from unauthorized access.
 8. Keyboard shortcuts
 9. System tray menu
 10. Logs and diagnostics viewer
+11. **LLM Model Configuration** - Separate model selection for auto-summary vs template-based summaries
+12. **Auto-Summary Template** - Editable template file for automatic post-recording summary (instead of hardcoded prompt)
 
 #### Success Criteria
 - All settings accessible and functional
@@ -1325,6 +1391,8 @@ Sensitive client information protected from unauthorized access.
 - User can customize behavior without editing files
 - Keyboard shortcuts work consistently
 - System tray provides quick access
+- User can select different LLM models for auto vs template summaries
+- Auto-summary prompt editable via template file
 
 #### User Value
 Fully customizable to personal workflow preferences.

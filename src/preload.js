@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   templatesEstimateCost: (templateIds, transcript) => ipcRenderer.invoke('templates:estimateCost', { templateIds, transcript }),
   templatesGenerateSummaries: (meetingId, templateIds) => ipcRenderer.invoke('templates:generateSummaries', { meetingId, templateIds }),
   templatesReload: () => ipcRenderer.invoke('templates:reload'),
+  // LLM Provider Management
+  getLLMProvider: () => ipcRenderer.invoke('llm:getProvider'),
+  switchLLMProvider: (provider) => ipcRenderer.invoke('llm:switchProvider', provider),
   // Google Contacts & Speaker Matching (Phase 6)
   contactsFetchContacts: (forceRefresh) => ipcRenderer.invoke('contacts:fetchContacts', forceRefresh),
   speakersMatchSpeakers: (transcript, participantEmails, options) => ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),

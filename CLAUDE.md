@@ -96,7 +96,7 @@ The LLM service scans this folder, presents available templates in UI, and gener
 
 ## Development Phases
 
-**Currently**: Phase 6 Complete - All Core Features Implemented (Ready for production testing or Phase 7+)
+**Currently**: Phase 5 In Progress - Completing Obsidian Export Workflow
 
 The project follows a 12-phase plan (see `SPECIFICATION.md`):
 1. Core recording & transcription (MVP)
@@ -210,17 +210,15 @@ src/
 - ✅ **Phase 2**: Routing System (Email domain matching, vault structure)
 - ✅ **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
 - ✅ **Phase 4**: LLM Integration (OpenAI summaries with templates)
-- ✅ **Phase 5**: Obsidian Export (Two-file architecture with frontmatter)
-- ✅ **Phase 6**: Speaker Recognition & Contact Matching (COMPLETE)
+- 🚧 **Phase 5**: Obsidian Export (Export code complete, workflow integration in progress)
+- ✅ **Phase 6**: Speaker Recognition & Contact Matching
+- ✅ **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet detection, inherited from Muesli)
 
-### Recent Additions (Nov 7, 2025)
-- ✅ Unified Google authentication (GoogleAuth.js)
-- ✅ Single OAuth flow for Calendar + Contacts
-- ✅ Google Contacts integration with caching
-- ✅ Speaker matching with heuristic algorithms
-- ✅ Contact count tracking (unique contacts vs email addresses)
-- ✅ UI authentication with single Google button
-- ✅ Consolidated IPC handlers (10 → 6 handlers)
+### Recent Bug Fixes (Nov 8, 2025)
+- ✅ Fixed Zod schema validation (added missing optional fields with `.passthrough()`)
+- ✅ Fixed fileOperationManager deadlock (read waiting for write, write calling read)
+- ✅ Fixed misleading "Generating summary..." toast (now says "Transcript saved")
+- ✅ All button functionality working (Record In-person Meeting, back button navigation)
 
 ### Current Status
 **Working Features:**
@@ -232,32 +230,33 @@ src/
 - Obsidian vault export with routing
 - Two-file meeting architecture (summary + transcript)
 
-**Security Fixes Applied (Nov 7, 2025):**
-- ✅ Fixed race condition in service initialization (centralized `initializeGoogleServices()`)
-- ✅ Secured token file permissions (0o600 Unix, icacls Windows)
-- ✅ Implemented token refresh failure recovery (clears state, re-authentication flow)
-- ✅ Fixed auth window memory leak (proper cleanup with timeout)
-- ⏳ Contact cache validation (deferred - low risk from trusted Google API)
+**Platform Detection (Nov 8, 2025):**
+- ✅ Zoom meeting detection working (tested with solo meeting)
+- ✅ Platform metadata saved in meeting objects
+- ✅ Calendar integration detects platform from meeting links
+- ✅ UI displays platform-specific colors and icons
 
-**Code Review Completed (Nov 8, 2025):**
-- Comprehensive review of 5,500 lines across 17 files
-- 42 issues identified and categorized by development phase
-- All findings documented in SPECIFICATION.md
-- Security items (XSS, path traversal, CSRF, etc.) scheduled for Phase 10
-- Code quality improvements (state management, config) scheduled for Phase 11
-- Critical bug fixes (routing error, race conditions) documented in Pre-Phase 7
+**Phase 5 Workflow Requirements (Nov 8, 2025):**
+- ✅ Complete export workflow documented in SPECIFICATION.md
+- Auto-export after template generation
+- Manual Publish/Republish buttons with confirmation
+- Obsidian link tracking (`meeting.obsidianLink` field)
+- Manual vault link override (bypass routing for error correction)
+- Multiple templates concatenated in single summary.md file
+- UI status indicator (synced/not synced to Obsidian)
+
+**Feature Requests Added to Phase 11:**
+- Separate LLM model configuration for auto-summary vs template-based summaries
+- Auto-summary template file (editable like other templates, instead of hardcoded prompt)
 
 ### Next Steps
-1. **Pre-Phase 7 Bug Fixes**: Fix 5 critical bugs identified in code review (4-6 hours)
-   - RoutingEngine method signature bug
-   - Service initialization robustness
-   - Token refresh user notification
-   - File operation race conditions
-   - LRU cache for contacts
-2. **Production Testing**: Test complete system end-to-end with real meetings
-3. **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet optimization)
-4. **Phase 10**: Security hardening (XSS, CSRF, IPC validation, credential manager)
-5. **Phase 11**: Code quality improvements (React migration, state management)
+1. **Complete Phase 5**: Implement Obsidian export workflow (auto-export, UI buttons, link tracking)
+2. **Fix Current Bug**: Investigate "Invalid data format: undefined" error when saving after template generation
+3. **Production Testing**: Test complete system end-to-end with real meetings
+4. **Phase 8**: HubSpot Integration (CRM sync)
+5. **Phase 9**: Import Prior Transcripts (bulk import existing meeting notes)
+6. **Phase 10**: Security hardening (XSS, CSRF, IPC validation, credential manager)
+7. **Phase 11**: Advanced UI & Settings (including LLM model config, auto-summary template editing)
 
 ### Running the App
 - Development: `npm start` (launches Electron with hot reload)
