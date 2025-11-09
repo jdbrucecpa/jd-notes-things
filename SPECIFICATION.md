@@ -18,10 +18,19 @@
 - ✅ Phase 1: Core Recording & Transcription
 - ✅ Phase 2: Routing System
 - ✅ Phase 3: Calendar Integration & Auto-Recording
-- ✅ Phase 4: LLM Integration & Summaries (Template System)
+- ✅ Phase 4: LLM Integration & Summaries (Template System + Modular Provider Architecture)
 - 🚧 Phase 5: Obsidian Export & File Generation (export code exists, workflow integration needed)
 - ✅ Phase 6: Speaker Recognition & Contact Matching
 - ✅ Phase 7: Platform-Specific Recording (Zoom/Teams/Meet)
+- 🔧 Phase 11 (Partial): LLM Provider Selection UI
+
+**Recent Updates (November 8, 2025):**
+- ✅ Implemented modular LLM service architecture with adapter pattern
+- ✅ Added support for OpenAI, Anthropic Claude, and Azure OpenAI providers
+- ✅ Built UI dropdown for runtime provider switching (no restart required)
+- ✅ Configured Azure OpenAI with gpt-5-mini reasoning model (cheapest option)
+- ✅ Fixed provider-specific parameter handling (max_completion_tokens, temperature constraints)
+- ✅ Achieved 10x speedup with parallel API calls (~6s for 20 template sections)
 
 The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
 - Recall.ai Desktop SDK integration
@@ -47,8 +56,11 @@ The application will be developed in phases, with each phase delivering usable f
 - **Platform:** Electron + Node.js + TypeScript
 - **UI Framework:** React (for renderer process)
 - **Recording SDK:** Recall.ai Desktop Recording SDK
-- **Transcription:** To be determined (options: Deepgram, AssemblyAI, Whisper API)
-- **LLM Integration:** Multi-provider support (OpenAI, Anthropic Claude, Google Gemini) with cost/quality optimization per task
+- **Transcription:** AssemblyAI v3 (streaming with speaker diarization)
+- **LLM Integration:** Modular adapter pattern with runtime provider switching
+  - **Supported Providers:** OpenAI (gpt-4o-mini), Anthropic (Claude Haiku 4.5), Azure OpenAI (gpt-5-mini)
+  - **Current Provider:** Azure OpenAI with gpt-5-mini reasoning model
+  - **Architecture:** Unified interface (`LLMService`) with provider-specific adapters
 - **Build System:** Webpack + Electron Forge
 - **Encryption:** Windows Data Protection API (DPAPI)
 
@@ -944,11 +956,18 @@ No manual intervention needed - app automatically records scheduled meetings.
 - ✅ User can select which templates to apply
 
 #### Implementation Details
-- **Modules**: `src/main/templates/TemplateParser.js`, `src/main/templates/TemplateManager.js`
+- **Modules**: `src/main/templates/TemplateParser.js`, `src/main/templates/TemplateManager.js`, `src/main/services/llmService.js`
 - **Features**: Multi-format support (.md, .yaml, .json), token cost estimation, modal selection UI
 - **Storage**: Summaries stored in `meetings.json` under each meeting object
 - **UI**: Template selection modal with checkboxes, cost estimates, and collapsible summary cards
-- **Model**: Currently using `gpt-4o-mini` for summary generation
+- **LLM Service Architecture** (November 8, 2025):
+  - Modular adapter pattern supporting multiple providers (OpenAI, Anthropic, Azure OpenAI)
+  - Auto-detection of available providers based on environment variables
+  - Runtime provider switching via UI dropdown (no restart required)
+  - Unified interface for all providers: `generateCompletion()` and `streamCompletion()`
+  - Provider-specific parameter handling (e.g., Azure's `max_completion_tokens`, no temperature for gpt-5-mini reasoning model)
+- **Current Provider**: Azure OpenAI with gpt-5-mini deployment (reasoning model)
+- **Performance**: 20 parallel API calls complete in ~6 seconds (10x faster than sequential)
 
 #### User Value
 Automatic generation of actionable meeting summaries (decisions, action items, etc.).
@@ -1382,8 +1401,9 @@ Sensitive client information protected from unauthorized access.
 8. Keyboard shortcuts
 9. System tray menu
 10. Logs and diagnostics viewer
-11. **LLM Model Configuration** - Separate model selection for auto-summary vs template-based summaries
-12. **Auto-Summary Template** - Editable template file for automatic post-recording summary (instead of hardcoded prompt)
+11. ✅ **LLM Provider Selection** - UI dropdown for switching between OpenAI, Anthropic, Azure OpenAI (Nov 8, 2025)
+12. ⏳ **LLM Model Configuration** - Separate model selection for auto-summary vs template-based summaries
+13. ⏳ **Auto-Summary Template** - Editable template file for automatic post-recording summary (instead of hardcoded prompt)
 
 #### Success Criteria
 - All settings accessible and functional
@@ -1693,6 +1713,6 @@ Phases 1-3 create the MVP. Phases 4-11 add intelligence and automation. Phase 12
 ---
 
 **Document Version:** 1.0
-**Last Updated:** November 7, 2025
+**Last Updated:** November 8, 2025
 **Author:** Claude Code
 **Approved By:** J.D. Bruce

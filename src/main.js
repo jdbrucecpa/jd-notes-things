@@ -589,22 +589,14 @@ async function createDesktopSdkUpload() {
 
     const response = await axios.post(url, {
       recording_config: {
-        transcript: {
-          provider: {
-            assembly_ai_v3_streaming: {
-              word_boost: [],
-              speaker_labels: true
-            }
-          }
-        },
+        // No real-time transcription - we'll use AssemblyAI async API after recording
+        // This gives us better quality and proper speaker diarization
         realtime_endpoints: [
           {
             type: "desktop-sdk-callback",
             events: [
-              "participant_events.join",
-              "video_separate_png.data",
-              "transcript.data",
-              "transcript.provider_data"
+              "participant_events.join",  // Still need participant info for speaker matching
+              "video_separate_png.data"   // Optional: for video frames
             ]
           },
         ],
@@ -718,78 +710,67 @@ function initSDK() {
       windowId: evt.window.id
     });
 
+    const windowId = evt.window.id;
+
     try {
-      // Update the note with recording information
-      await updateNoteWithRecordingInfo(evt.window.id);
+      // Update the note with recording information (marks as complete)
+      await updateNoteWithRecordingInfo(windowId);
+      console.log('Recording processing complete - uploading to Recall.ai for transcription');
 
-      // Add a small delay before uploading (good practice for file system operations)
-      setTimeout(async () => {
-        try {
-          // Try to get a new upload token for the upload if needed
-          const uploadData = await createDesktopSdkUpload();
+      // Upload to Recall.ai for async transcription
+      // This gives us better quality transcription with proper speaker diarization
+      setTimeout(() => {
+        console.log('Starting upload to Recall.ai for transcription...');
+        RecallAiSdk.uploadRecording({ windowId: windowId });
+      }, 3000); // Wait 3 seconds to ensure file is fully written
 
-          if (uploadData && uploadData.upload_token) {
-            console.log('Uploading recording with new upload token:', uploadData.upload_token.substring(0, 8) + '...');
-
-            // Log the uploadRecording API call
-            sdkLogger.logApiCall('uploadRecording', {
-              windowId: evt.window.id,
-              uploadToken: `${uploadData.upload_token.substring(0, 8)}...` // Log truncated token for security
-            });
-
-            RecallAiSdk.uploadRecording({
-              windowId: evt.window.id,
-              uploadToken: uploadData.upload_token
-            });
-          } else {
-            // Fallback to regular upload
-            console.log('Uploading recording without new token');
-
-            // Log the uploadRecording API call (fallback)
-            sdkLogger.logApiCall('uploadRecording', {
-              windowId: evt.window.id
-            });
-
-            RecallAiSdk.uploadRecording({ windowId: evt.window.id });
-          }
-        } catch (uploadError) {
-          console.error('Error during upload:', uploadError);
-          // Fallback to regular upload
-
-          // Log the uploadRecording API call (error fallback)
-          sdkLogger.logApiCall('uploadRecording', {
-            windowId: evt.window.id,
-            error: 'Fallback after error'
-          });
-
-          RecallAiSdk.uploadRecording({ windowId: evt.window.id });
-        }
-      }, 3000); // Wait 3 seconds before uploading
     } catch (error) {
       console.error("Error handling recording ended:", error);
     }
   });
 
-  RecallAiSdk.addEventListener('permissions-granted', async (evt) => {
-    console.log("PERMISSIONS GRANTED");
-  });
-
   // Track upload progress
   RecallAiSdk.addEventListener('upload-progress', async (evt) => {
     const { progress, window } = evt;
-    console.log(`Upload progress: ${progress}%`);
+    console.log(`Upload progress: ${progress}% for window ${window?.id}`);
 
-    // Log the SDK upload-progress event
-    // sdkLogger.logEvent('upload-progress', {
-    //   windowId: window.id,
-    //   progress
-    // });
+    // Log upload progress
+    sdkLogger.logEvent('upload-progress', {
+      windowId: window?.id,
+      progress: progress
+    });
 
-    // Update the note with upload progress if needed
-    if (progress === 100) {
-      console.log(`Upload completed for recording: ${window.id}`);
-      // Could update the note here with upload completion status
+    // Notify renderer of upload progress
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('recording-state-change', {
+        windowId: window?.id,
+        state: 'uploading',
+        progress: progress
+      });
     }
+  });
+
+  // Handle upload completion - start async transcription
+  RecallAiSdk.addEventListener('upload-complete', async (evt) => {
+    const { window, recording_id } = evt;
+    console.log(`Upload complete for window ${window?.id}, recording_id: ${recording_id}`);
+
+    // Log upload complete
+    sdkLogger.logEvent('upload-complete', {
+      windowId: window?.id,
+      recordingId: recording_id
+    });
+
+    try {
+      // Start async transcription through Recall.ai
+      await startRecallAIAsyncTranscription(recording_id, window.id);
+    } catch (error) {
+      console.error('Error starting async transcription:', error);
+    }
+  });
+
+  RecallAiSdk.addEventListener('permissions-granted', async (evt) => {
+    console.log("PERMISSIONS GRANTED");
   });
 
   // Track SDK state changes
@@ -837,7 +818,8 @@ function initSDK() {
     }
   });
 
-  // Listen for real-time transcript events
+  // Listen for real-time events (participant joins and video frames)
+  // Note: No longer processing real-time transcripts - we use async transcription after recording
   RecallAiSdk.addEventListener('realtime-event', async (evt) => {
     // Only log non-video frame events to prevent flooding the logger
     if (evt.event !== 'video_separate_png.data') {
@@ -850,19 +832,14 @@ function initSDK() {
       });
     }
 
-    // Handle different event types
-    if (evt.event === 'transcript.data' && evt.data && evt.data.data) {
-      await processTranscriptData(evt);
-    }
-    else if (evt.event === 'transcript.provider_data' && evt.data && evt.data.data) {
-      await processTranscriptProviderData(evt);
-    }
-    else if (evt.event === 'participant_events.join' && evt.data && evt.data.data) {
+    // Handle participant join events (needed for speaker matching later)
+    if (evt.event === 'participant_events.join' && evt.data && evt.data.data) {
       await processParticipantJoin(evt);
     }
     else if (evt.event === 'video_separate_png.data' && evt.data && evt.data.data) {
       await processVideoFrame(evt);
     }
+    // Real-time transcript events removed - using async transcription instead
   });
 
   // Handle errors
@@ -903,9 +880,14 @@ async function exportMeetingToObsidian(meeting) {
   try {
     console.log(`[ObsidianExport] Starting export for meeting: ${meeting.title}`);
 
+    // Check if manual override path exists
+    if (meeting.obsidianLink) {
+      console.log(`[ObsidianExport] Using manual override path: ${meeting.obsidianLink}`);
+    }
+
     // Extract participant emails for routing
     const participantEmails = meeting.participantEmails || [];
-    if (participantEmails.length === 0) {
+    if (participantEmails.length === 0 && !meeting.obsidianLink) {
       console.warn('[ObsidianExport] No participant emails found - routing to unfiled');
     }
 
@@ -938,14 +920,28 @@ async function exportMeetingToObsidian(meeting) {
       console.log('[ObsidianExport] Speaker matching skipped - speaker matcher not available or no participants');
     }
 
-    // Get routing decisions
-    const routingDecision = routingEngine.route({
-      participantEmails,
-      meetingTitle: meeting.title || 'Untitled Meeting',
-      meetingDate: meeting.date ? new Date(meeting.date) : new Date()
-    });
-    const routes = routingDecision.routes;
-    console.log(`[ObsidianExport] Found ${routes.length} routing destination(s)`);
+    // Get routing decisions (or use manual override)
+    let routes;
+    if (meeting.obsidianLink) {
+      // Manual override - use existing path
+      // Extract folder path from obsidianLink (remove filename)
+      const linkPath = meeting.obsidianLink.replace(/[^\/]+\.md$/, '');
+      routes = [{
+        fullPath: linkPath,
+        organizationName: 'Manual Override',
+        type: 'override'
+      }];
+      console.log(`[ObsidianExport] Using manual override path: ${meeting.obsidianLink}`);
+    } else {
+      // Use routing engine
+      const routingDecision = routingEngine.route({
+        participantEmails,
+        meetingTitle: meeting.title || 'Untitled Meeting',
+        meetingDate: meeting.date ? new Date(meeting.date) : new Date()
+      });
+      routes = routingDecision.routes;
+      console.log(`[ObsidianExport] Found ${routes.length} routing destination(s)`);
+    }
 
     const createdPaths = [];
 
@@ -985,10 +981,17 @@ async function exportMeetingToObsidian(meeting) {
     }
 
     console.log(`[ObsidianExport] Successfully exported meeting to ${createdPaths.length} location(s)`);
+
+    // Generate obsidianLink from first created path (relative to vault)
+    const obsidianLink = createdPaths.length > 0
+      ? createdPaths[0].summaryPath.replace(vaultStructure.getAbsolutePath(''), '').replace(/\\/g, '/').replace(/^\//, '')
+      : null;
+
     return {
       success: true,
       paths: createdPaths,
-      routeCount: routes.length
+      routeCount: routes.length,
+      obsidianLink  // Return the vault-relative path to save in meeting object
     };
 
   } catch (error) {
@@ -1010,7 +1013,38 @@ function generateSummaryMarkdown(meeting, baseFilename) {
 
   // Build participants array for frontmatter with speaker mapping (Phase 6)
   let participantsYaml = '';
-  if (meeting.participantEmails && meeting.participantEmails.length > 0) {
+
+  // Use meeting.participants (from participant join events) if available
+  if (meeting.participants && meeting.participants.length > 0) {
+    participantsYaml = meeting.participants.map(participant => {
+      let participantLine = `  - name: "${participant.name}"`;
+
+      // Include email if available
+      if (participant.email) {
+        participantLine += `\n    email: "${participant.email}"`;
+      }
+
+      // Include host status
+      if (participant.isHost) {
+        participantLine += `\n    role: "host"`;
+      }
+
+      // If we have speaker mapping, include which speaker label(s) map to this participant
+      if (meeting.speakerMapping) {
+        const speakerLabels = Object.entries(meeting.speakerMapping)
+          .filter(([label, info]) => info.name === participant.name)
+          .map(([label, info]) => label);
+
+        if (speakerLabels.length > 0) {
+          participantLine += `\n    speaker_labels: [${speakerLabels.join(', ')}]`;
+        }
+      }
+
+      return participantLine;
+    }).join('\n');
+  }
+  // Fallback to participantEmails if participants array doesn't exist
+  else if (meeting.participantEmails && meeting.participantEmails.length > 0) {
     participantsYaml = meeting.participantEmails.map(email => {
       let participantLine = `  - email: "${email}"`;
 
@@ -1738,7 +1772,30 @@ ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templat
     }
 
     console.log(`[Template IPC] Generated ${summaries.length} summaries`);
-    return { success: true, summaries };
+
+    // Save summaries to meeting object
+    meeting.summaries = summaries;
+    await fileOperationManager.writeData(data);
+    console.log('[Template IPC] Saved summaries to meeting object');
+
+    // Auto-trigger export to Obsidian after template generation
+    console.log('[Template IPC] Auto-triggering Obsidian export...');
+    const exportResult = await exportMeetingToObsidian(meeting);
+
+    if (exportResult.success && exportResult.obsidianLink) {
+      meeting.obsidianLink = exportResult.obsidianLink;
+      await fileOperationManager.writeData(data);
+      console.log('[Template IPC] Auto-export successful, obsidianLink saved:', exportResult.obsidianLink);
+    } else if (!exportResult.success) {
+      console.warn('[Template IPC] Auto-export failed:', exportResult.error);
+    }
+
+    return {
+      success: true,
+      summaries,
+      exported: exportResult.success,
+      obsidianLink: exportResult.obsidianLink || null
+    };
   } catch (error) {
     console.error('[Template IPC] Failed to generate summaries:', error);
     return { success: false, error: error.message };
@@ -1827,6 +1884,16 @@ ipcMain.handle('obsidian:exportMeeting', async (event, meetingId) => {
 
     // Export to Obsidian
     const result = await exportMeetingToObsidian(meeting);
+
+    // If successful, save obsidianLink back to meeting object
+    if (result.success && result.obsidianLink) {
+      meeting.obsidianLink = result.obsidianLink;
+      console.log('[Obsidian IPC] Saved obsidianLink to meeting:', result.obsidianLink);
+
+      // Save updated meeting data
+      await fileOperationManager.writeData(data);
+    }
+
     return result;
 
   } catch (error) {
@@ -2576,16 +2643,380 @@ async function processParticipantJoin(evt) {
   }
 }
 
-let currentUnknownSpeaker = -1;
+// Store speaker labels per window (AssemblyAI speaker diarization)
+const windowSpeakerLabels = new Map(); // windowId -> latest speaker label
 
-async function processTranscriptProviderData(evt) {
-  // let speakerId = evt.data.data.payload.
-  try {
-    if (evt.data.data.data.payload.channel.alternatives[0].words[0].speaker !== undefined) {
-      currentUnknownSpeaker = evt.data.data.data.payload.channel.alternatives[0].words[0].speaker;
+/**
+ * Match speaker labels to participant names using simple heuristics
+ * @param {Object} meeting - Meeting object with transcript and participants
+ */
+async function matchSpeakersToParticipants(meeting) {
+  if (!meeting.transcript || !meeting.participants) {
+    return;
+  }
+
+  // Analyze speakers in transcript - count words per speaker label
+  const speakerStats = new Map();
+  for (const entry of meeting.transcript) {
+    if (entry.speakerLabel !== undefined) {
+      if (!speakerStats.has(entry.speakerLabel)) {
+        speakerStats.set(entry.speakerLabel, {
+          label: entry.speakerLabel,
+          wordCount: 0,
+          utteranceCount: 0,
+          firstAppearance: entry.timestamp
+        });
+      }
+      const stats = speakerStats.get(entry.speakerLabel);
+      stats.wordCount += entry.text.split(/\s+/).length;
+      stats.utteranceCount++;
     }
+  }
+
+  if (speakerStats.size === 0) {
+    console.log('[Speaker Matching] No speaker labels found in transcript');
+    return;
+  }
+
+  console.log(`[Speaker Matching] Found ${speakerStats.size} unique speakers and ${meeting.participants.length} participants`);
+
+  // Sort speakers by word count (most talkative first)
+  const sortedSpeakers = Array.from(speakerStats.values())
+    .sort((a, b) => b.wordCount - a.wordCount);
+
+  // Sort participants (host first if available, then by join order)
+  const sortedParticipants = [...meeting.participants]
+    .sort((a, b) => {
+      if (a.isHost && !b.isHost) return -1;
+      if (!a.isHost && b.isHost) return 1;
+      return 0;
+    });
+
+  // Create speaker mapping
+  const speakerMapping = new Map();
+
+  // Simple heuristic: match speakers to participants in order
+  // Most talkative speaker -> host (or first participant)
+  // Second most talkative -> second participant, etc.
+  for (let i = 0; i < Math.min(sortedSpeakers.length, sortedParticipants.length); i++) {
+    speakerMapping.set(sortedSpeakers[i].label, sortedParticipants[i].name);
+    console.log(`[Speaker Matching] Speaker ${String.fromCharCode(65 + sortedSpeakers[i].label)} -> ${sortedParticipants[i].name}`);
+  }
+
+  // Update transcript entries with matched names
+  let matchedCount = 0;
+  for (const entry of meeting.transcript) {
+    if (entry.speakerLabel !== undefined && speakerMapping.has(entry.speakerLabel)) {
+      const matchedName = speakerMapping.get(entry.speakerLabel);
+      const oldSpeaker = entry.speaker;
+      entry.speaker = matchedName;
+      entry.speakerMatched = true;
+      if (matchedCount < 3) { // Only log first few to avoid spam
+        console.log(`[Speaker Matching] Updated "${oldSpeaker}" -> "${matchedName}"`);
+      }
+      matchedCount++;
+    }
+  }
+  console.log(`[Speaker Matching] Updated ${matchedCount} transcript entries with matched speaker names`);
+
+  // Store the mapping in the meeting object for reference
+  meeting.speakerMapping = Object.fromEntries(
+    Array.from(speakerMapping.entries()).map(([label, name]) => [
+      `Speaker ${String.fromCharCode(65 + label)}`,
+      { name, email: null, confidence: 'medium', method: 'participant-match' }
+    ])
+  );
+}
+
+// ============================================================================
+// Recall.ai Async Transcription (Phase 6 - Better Quality than Real-Time)
+// ============================================================================
+
+/**
+ * Start async transcription through Recall.ai after upload completes
+ * @param {string} recordingId - Recall.ai recording ID from upload-complete event
+ * @param {string} windowId - Window ID from Desktop SDK
+ */
+async function startRecallAIAsyncTranscription(recordingId, windowId) {
+  console.log(`[Recall.ai] Starting async transcription for recording: ${recordingId}`);
+
+  const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+  const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+
+  if (!RECALLAI_API_KEY) {
+    throw new Error('RECALLAI_API_KEY not set in .env file');
+  }
+
+  try {
+    // Find the meeting for this recording
+    const meetingsData = await fileOperationManager.readData();
+    const meeting = meetingsData.pastMeetings.find(m => m.recordingId === windowId);
+
+    if (!meeting) {
+      throw new Error(`No meeting found for window ID: ${windowId}`);
+    }
+
+    // Get expected speaker count from participants
+    const speakersExpected = meeting.participants ? meeting.participants.length : null;
+
+    // Call Recall.ai API to create async transcript with AssemblyAI
+    const url = `${RECALLAI_API_URL}/api/v1/recording/${recordingId}/create_transcript`;
+
+    const transcriptConfig = {
+      provider: {
+        assembly_ai_async: {
+          speaker_labels: true,  // Enable speaker diarization
+          language_code: "en"
+        }
+      }
+    };
+
+    // Optionally set expected speaker count
+    if (speakersExpected && speakersExpected > 0) {
+      transcriptConfig.provider.assembly_ai_async.speakers_expected = speakersExpected;
+    }
+
+    console.log(`[Recall.ai] Requesting transcript with config:`, JSON.stringify(transcriptConfig, null, 2));
+
+    const response = await axios.post(url, transcriptConfig, {
+      headers: {
+        'Authorization': `Token ${RECALLAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log(`[Recall.ai] Transcript request submitted successfully`);
+
+    // Start polling for transcript completion
+    pollRecallAITranscript(recordingId, windowId, meeting.id).catch(error => {
+      console.error('[Recall.ai] Transcript polling failed:', error);
+    });
+
   } catch (error) {
-    // console.error("Error processing provider data:", error);
+    console.error('[Recall.ai] Failed to start async transcription:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+/**
+ * Poll Recall.ai for transcript completion
+ * @param {string} recordingId - Recall.ai recording ID
+ * @param {string} windowId - Window ID from Desktop SDK
+ * @param {string} meetingId - Our meeting ID
+ */
+async function pollRecallAITranscript(recordingId, windowId, meetingId) {
+  const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+  const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+
+  const pollingEndpoint = `${RECALLAI_API_URL}/api/v1/recording/${recordingId}`;
+
+  console.log(`[Recall.ai] Polling for transcript completion: ${recordingId}`);
+
+  while (true) {
+    try {
+      const response = await axios.get(pollingEndpoint, {
+        headers: {
+          'Authorization': `Token ${RECALLAI_API_KEY}`
+        }
+      });
+
+      const recording = response.data;
+      const transcriptStatus = recording.transcript_status;
+
+      console.log(`[Recall.ai] Transcript status: ${transcriptStatus}`);
+
+      if (transcriptStatus === 'done') {
+        console.log('[Recall.ai] Transcript completed - fetching full transcript');
+
+        // Fetch the full transcript
+        const transcriptUrl = `${RECALLAI_API_URL}/api/v1/recording/${recordingId}/transcript`;
+        const transcriptResponse = await axios.get(transcriptUrl, {
+          headers: {
+            'Authorization': `Token ${RECALLAI_API_KEY}`
+          }
+        });
+
+        const transcript = transcriptResponse.data;
+
+        // Process and save the transcript
+        await processRecallAITranscript(transcript, meetingId, windowId);
+
+        break; // Exit polling loop
+
+      } else if (transcriptStatus === 'error') {
+        throw new Error(`Transcript generation failed for recording ${recordingId}`);
+      }
+
+      // Wait 5 seconds before next poll
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+    } catch (error) {
+      console.error('[Recall.ai] Polling error:', error.response?.data || error.message);
+      throw error;
+    }
+  }
+}
+
+/**
+ * Process Recall.ai transcript and match speakers to participants
+ * @param {Object} transcript - Recall.ai transcript response
+ * @param {string} meetingId - Our meeting ID
+ * @param {string} windowId - Window ID
+ */
+async function processRecallAITranscript(transcript, meetingId, windowId) {
+  console.log('[Recall.ai] Processing transcript with speaker labels');
+
+  try {
+    // Get the meeting with participants
+    const meetingsData = await fileOperationManager.readData();
+    const meeting = meetingsData.pastMeetings.find(m => m.id === meetingId);
+
+    if (!meeting) {
+      throw new Error(`Meeting not found: ${meetingId}`);
+    }
+
+    const participants = meeting.participants || [];
+
+    // Recall.ai transcript format has "words" array with speaker labels
+    // Group into utterances by speaker and timing
+    const utterances = [];
+    let currentUtterance = null;
+
+    if (transcript.words && transcript.words.length > 0) {
+      transcript.words.forEach(word => {
+        const speaker = word.speaker || 'Unknown';
+
+        // Start new utterance if speaker changes or there's a pause
+        if (!currentUtterance || currentUtterance.speaker !== speaker) {
+          if (currentUtterance) {
+            utterances.push(currentUtterance);
+          }
+          currentUtterance = {
+            speaker: speaker,
+            text: word.text,
+            start: word.start,
+            end: word.end,
+            words: [word]
+          };
+        } else {
+          // Add to current utterance
+          currentUtterance.text += ' ' + word.text;
+          currentUtterance.end = word.end;
+          currentUtterance.words.push(word);
+        }
+      });
+
+      // Add final utterance
+      if (currentUtterance) {
+        utterances.push(currentUtterance);
+      }
+    }
+
+    console.log(`[Recall.ai] Grouped into ${utterances.length} utterances`);
+
+    // Get unique speakers
+    const speakerLabels = [...new Set(utterances.map(u => u.speaker))].sort();
+    console.log(`[Recall.ai] Found ${speakerLabels.length} unique speakers:`, speakerLabels);
+
+    // Match speakers to participants
+    const speakerMap = {};
+    speakerLabels.forEach((label, index) => {
+      if (index < participants.length) {
+        const participant = participants[index];
+        speakerMap[label] = {
+          name: participant.name,
+          email: participant.email || null,
+          confidence: participants.length === 1 ? 'high' : 'medium'
+        };
+      } else {
+        speakerMap[label] = {
+          name: `Unknown Speaker (${label})`,
+          email: null,
+          confidence: 'none'
+        };
+      }
+    });
+
+    console.log('[Recall.ai] Speaker mapping:', speakerMap);
+
+    // Convert to our transcript format
+    const processedTranscript = utterances.map(utterance => {
+      const speakerInfo = speakerMap[utterance.speaker] || {
+        name: utterance.speaker,
+        email: null,
+        confidence: 'none'
+      };
+
+      return {
+        speaker: speakerInfo.name,
+        speakerLabel: utterance.speaker,
+        speakerEmail: speakerInfo.email,
+        speakerConfidence: speakerInfo.confidence,
+        text: utterance.text,
+        start: utterance.start,
+        end: utterance.end
+      };
+    });
+
+    // Update the meeting with transcript
+    await fileOperationManager.scheduleOperation(async (data) => {
+      const meetingIndex = data.pastMeetings.findIndex(m => m.id === meetingId);
+      if (meetingIndex !== -1) {
+        data.pastMeetings[meetingIndex].transcript = processedTranscript;
+        data.pastMeetings[meetingIndex].transcriptComplete = true;
+        console.log(`[Recall.ai] Updated meeting with ${processedTranscript.length} utterances`);
+      }
+      return data;
+    });
+
+    // Notify renderer
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('transcript-updated', meetingId);
+    }
+
+    // Generate AI summary
+    console.log(`[Recall.ai] Starting AI summary generation`);
+    const updatedMeetingsData = await fileOperationManager.readData();
+    const updatedMeeting = updatedMeetingsData.pastMeetings.find(m => m.id === meetingId);
+
+    if (updatedMeeting && updatedMeeting.transcript && updatedMeeting.transcript.length > 0) {
+      const meetingTitle = updatedMeeting.title || "Meeting Notes";
+
+      const streamProgress = (currentText) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('summary-update', {
+            meetingId: meetingId,
+            content: `# ${meetingTitle}\n\n${currentText}`
+          });
+        }
+      };
+
+      try {
+        const summary = await generateMeetingSummary(updatedMeeting, streamProgress);
+
+        await fileOperationManager.scheduleOperation(async (data) => {
+          const idx = data.pastMeetings.findIndex(m => m.id === meetingId);
+          if (idx !== -1) {
+            data.pastMeetings[idx].content = `# ${meetingTitle}\n\n${summary}`;
+            data.pastMeetings[idx].summaryGenerated = true;
+            console.log(`[Recall.ai] AI summary generated successfully`);
+          }
+          return data;
+        });
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('summary-generated', meetingId);
+        }
+      } catch (summaryError) {
+        console.error('[Recall.ai] Failed to generate AI summary:', summaryError);
+      }
+    }
+
+    console.log(`[Recall.ai] Async transcription workflow complete`);
+
+  } catch (error) {
+    console.error('[Recall.ai] Error processing transcript:', error);
+    throw error;
   }
 }
 
@@ -2616,20 +3047,61 @@ async function processTranscriptData(evt) {
       return; // No words to process
     }
 
-    // Get speaker information
+    // Get speaker information from AssemblyAI diarization
+    const speakerLabel = windowSpeakerLabels.get(windowId);
     let speaker;
-    if (evt.data.data.participant?.name && evt.data.data.participant?.name !== "Host" && evt.data.data.participant?.name !== "Guest") {
-      speaker = evt.data.data.participant?.name;
-    } else if (currentUnknownSpeaker !== -1) {
-      speaker = `Speaker ${currentUnknownSpeaker}`;
+    let speakerLabelStored = null;
+
+    // Debug: Log participant data from RecallAI
+    const participantName = evt.data.data.participant?.name;
+    const participantId = evt.data.data.participant?.id;
+    console.log(`[Transcript] Participant from RecallAI: "${participantName}" (ID: ${participantId}), Speaker label from AssemblyAI: ${speakerLabel}`);
+
+    // Try to match participant to stored participants in meeting.participants array
+    // This is more reliable than the participant info from transcript events
+    let matchedParticipant = null;
+    await fileOperationManager.scheduleOperation(async (meetingsData) => {
+      const noteIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === noteId);
+      if (noteIndex !== -1) {
+        const meeting = meetingsData.pastMeetings[noteIndex];
+        if (meeting.participants && meeting.participants.length > 0) {
+          // Try to find participant by ID first
+          matchedParticipant = meeting.participants.find(p => p.id === participantId);
+
+          // If not found and we have exactly one non-host participant, use that
+          if (!matchedParticipant) {
+            const nonHostParticipants = meeting.participants.filter(p => !p.isHost && p.name !== "Host" && p.name !== "Guest");
+            if (nonHostParticipants.length === 1) {
+              matchedParticipant = nonHostParticipants[0];
+              console.log(`[Transcript] Matched to stored participant: ${matchedParticipant.name}`);
+            }
+          }
+        }
+      }
+      return null; // No changes to data
+    });
+
+    // Determine speaker name
+    if (matchedParticipant) {
+      speaker = matchedParticipant.name;
+      console.log(`[Transcript] Using matched participant: ${speaker}`);
+    } else if (participantName && participantName !== "Host" && participantName !== "Guest") {
+      speaker = participantName;
+      console.log(`[Transcript] Using RecallAI participant name: ${speaker}`);
+    } else if (speakerLabel !== undefined && speakerLabel !== null) {
+      // Use AssemblyAI speaker label (rarely available in streaming)
+      speaker = `Speaker ${String.fromCharCode(65 + speakerLabel)}`; // Convert 0->A, 1->B, etc.
+      speakerLabelStored = speakerLabel;
+      console.log(`[Transcript] Using AssemblyAI speaker label: ${speaker}`);
     } else {
       speaker = "Unknown Speaker";
+      console.log(`[Transcript] No speaker info available - using Unknown Speaker`);
     }
 
     // Combine all words into a single text
     const text = words.map(word => word.text).join(" ");
 
-    console.log(`Transcript from ${speaker}: "${text}"`);
+    console.log(`[Transcript] Final: ${speaker}: "${text.substring(0, 50)}..."`);
 
     // Use the file operation manager to safely update the meetings data
     await fileOperationManager.scheduleOperation(async (meetingsData) => {
@@ -2648,12 +3120,19 @@ async function processTranscriptData(evt) {
         meeting.transcript = [];
       }
 
-      // Add the new transcript entry
-      meeting.transcript.push({
+      // Add the new transcript entry with speaker label for later matching
+      const transcriptEntry = {
         text,
         speaker,
         timestamp: new Date().toISOString()
-      });
+      };
+
+      // Include AssemblyAI speaker label if available (for speaker matching)
+      if (speakerLabelStored !== null) {
+        transcriptEntry.speakerLabel = speakerLabelStored;
+      }
+
+      meeting.transcript.push(transcriptEntry);
 
       console.log(`Added transcript data for meeting: ${noteId}`);
 
@@ -2768,6 +3247,8 @@ ${transcriptText}`;
 }
 
 // Function to update a note with recording information when recording ends
+// Note: This now only marks the recording as complete
+// Transcription and summary generation are handled separately by processAsyncTranscription
 async function updateNoteWithRecordingInfo(recordingId) {
   try {
     // Read the current meetings data
@@ -2801,7 +3282,7 @@ async function updateNoteWithRecordingInfo(recordingId) {
     // Replace the "Recording: In Progress..." line with completed information
     let updatedContent = content.replace(
       "Recording: In Progress...",
-      `Recording: Completed at ${formattedDate}\n`
+      `Recording: Completed at ${formattedDate}\nTranscribing audio...\n`
     );
 
     // Update the meeting object
@@ -2809,97 +3290,10 @@ async function updateNoteWithRecordingInfo(recordingId) {
     meeting.recordingComplete = true;
     meeting.recordingEndTime = now.toISOString();
 
-    // Save the initial update
+    // Save the update
     await fileOperationManager.writeData(meetingsData);
 
-    // Generate AI summary if there's a transcript
-    if (meeting.transcript && meeting.transcript.length > 0) {
-      console.log(`Generating AI summary for meeting ${meeting.id}...`);
-
-      // Log summary generation to console instead of showing a notification
-      console.log('Generating AI summary for meeting: ' + meeting.id);
-
-      // Get meeting title for use in the new content
-      const meetingTitle = meeting.title || "Meeting Notes";
-
-      // Create initial content with placeholder
-      meeting.content = `# ${meetingTitle}\nGenerating summary...`;
-
-      // Notify any open editors immediately
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('summary-update', {
-          meetingId: meeting.id,
-          content: meeting.content
-        });
-      }
-
-      // Create progress callback for streaming updates
-      const streamProgress = (currentText) => {
-        // Update content with current streaming text
-        meeting.content = `# ${meetingTitle}\n\n${currentText}`;
-
-        // Send immediate update to renderer if note is open
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          try {
-            mainWindow.webContents.send('summary-update', {
-              meetingId: meeting.id,
-              content: meeting.content,
-              timestamp: Date.now() // Add timestamp to ensure uniqueness
-            });
-          } catch (err) {
-            console.error('Error sending streaming update to renderer:', err);
-          }
-        }
-      };
-
-      // Generate the summary with streaming updates
-      const summary = await generateMeetingSummary(meeting, streamProgress);
-
-      // Check for different possible video file patterns
-      const possibleFilePaths = [
-        path.join(RECORDING_PATH, `${recordingId}.mp4`),
-        path.join(RECORDING_PATH, `macos-desktop-${recordingId}.mp4`),
-        path.join(RECORDING_PATH, `macos-desktop${recordingId}.mp4`),
-        path.join(RECORDING_PATH, `desktop-${recordingId}.mp4`)
-      ];
-
-      // Find the first video file that exists
-      let videoExists = false;
-      let videoFilePath = null;
-
-      try {
-        for (const filePath of possibleFilePaths) {
-          if (fs.existsSync(filePath)) {
-            videoExists = true;
-            videoFilePath = filePath;
-            console.log(`Found video file at: ${videoFilePath}`);
-            break;
-          }
-        }
-      } catch (err) {
-        console.error('Error checking for video files:', err);
-      }
-
-      console.log("Attempting to embed video file", videoFilePath);
-
-      // Set the content to just the summary
-      meeting.content = `${summary}`;
-
-      // If video exists, store the path separately but don't add it to the content
-      if (videoExists) {
-        meeting.videoPath = videoFilePath; // Store the path for future reference
-        console.log(`Stored video path in meeting object: ${videoFilePath}`);
-      } else {
-        console.log('Video file not found, continuing without embedding');
-      }
-
-      meeting.hasSummary = true;
-
-      // Save the updated data with summary
-      await fileOperationManager.writeData(meetingsData);
-
-      console.log('Updated meeting note with AI summary');
-    }
+    console.log('Recording marked as complete - async transcription will begin');
 
     // If the note is currently open, notify the renderer to refresh it
     if (mainWindow && !mainWindow.isDestroyed()) {

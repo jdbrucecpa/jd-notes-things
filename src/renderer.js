@@ -347,12 +347,25 @@ function createMeetingCard(meeting) {
     `;
   }
 
+  // Add Obsidian sync badge if meeting has been exported
+  const syncBadge = meeting.obsidianLink ? `
+    <div class="obsidian-sync-badge" title="Synced to Obsidian">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="white"/>
+        <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  ` : '';
+
   let subtitleHtml = meeting.hasDemo
     ? `<div class="meeting-time"><a class="meeting-demo-link">${meeting.subtitle}</a></div>`
     : `<div class="meeting-time">${meeting.subtitle}</div>`;
 
   card.innerHTML = `
-    ${iconHtml}
+    <div class="meeting-icon-container">
+      ${iconHtml}
+      ${syncBadge}
+    </div>
     <div class="meeting-content">
       <div class="meeting-title">${meeting.title}</div>
       ${subtitleHtml}
@@ -595,6 +608,31 @@ function showHomeView() {
   }
 }
 
+// Function to update Obsidian button state
+function updateObsidianButton(meeting) {
+  const obsidianButton = document.getElementById('obsidianButton');
+  const obsidianButtonText = document.getElementById('obsidianButtonText');
+
+  if (!obsidianButton || !obsidianButtonText) return;
+
+  // Show button if meeting has content or summaries
+  if (meeting && (meeting.content || (meeting.summaries && meeting.summaries.length > 0))) {
+    obsidianButton.style.display = 'flex';
+
+    // Update button text and style based on publish status
+    if (meeting.obsidianLink) {
+      obsidianButtonText.textContent = 'Republish to Obsidian';
+      obsidianButton.classList.add('published');
+    } else {
+      obsidianButtonText.textContent = 'Publish to Obsidian';
+      obsidianButton.classList.remove('published');
+    }
+  } else {
+    // Hide button if no content
+    obsidianButton.style.display = 'none';
+  }
+}
+
 // Function to show editor view
 function showEditorView(meetingId) {
   console.log(`Showing editor view for meeting ID: ${meetingId}`);
@@ -720,6 +758,9 @@ function showEditorView(meetingId) {
         `;
       }
     }
+
+    // Update Obsidian button state
+    updateObsidianButton(meeting);
   }, 50);
 }
 
@@ -2614,10 +2655,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (result.success) {
         console.log('Generated', result.summaries.length, 'summaries');
 
-        // Show success toast
+        // Show success toast with export status
         const toast = document.createElement('div');
-        toast.className = 'toast';
-        toast.textContent = `Generated ${result.summaries.length} summaries successfully!`;
+        toast.className = 'toast success';
+        const exportStatus = result.exported ? ' and exported to Obsidian' : '';
+        toast.textContent = `Generated ${result.summaries.length} summaries successfully${exportStatus}!`;
+        toast.style.cssText = 'position: fixed; top: 80px; right: 20px; background: #4CAF50; color: white; padding: 12px 20px; border-radius: 5px; font-size: 14px; z-index: 10000; box-shadow: 0 2px 8px rgba(0,0,0,0.2); transition: opacity 0.3s ease;';
         document.body.appendChild(toast);
 
         setTimeout(() => {
@@ -2625,15 +2668,24 @@ document.addEventListener('DOMContentLoaded', async () => {
           setTimeout(() => toast.remove(), 300);
         }, 3000);
 
-        // Save summaries to meeting data
+        // Update meeting data (summaries already saved by backend, but update obsidianLink if exported)
         const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
         if (meeting) {
           meeting.summaries = result.summaries;
-          await saveMeetingsData();
+          if (result.obsidianLink) {
+            meeting.obsidianLink = result.obsidianLink;
+          }
+          await loadMeetingsDataFromFile(); // Reload to ensure we have latest data
         }
 
         // Display summaries in UI
         displaySummaries(result.summaries);
+
+        // Update UI to show Obsidian sync status if exported
+        if (result.exported && result.obsidianLink) {
+          console.log('Meeting exported to:', result.obsidianLink);
+          // Update any Obsidian status indicators (will add later)
+        }
 
         console.log('Summaries:', result.summaries);
       } else {
@@ -2692,7 +2744,81 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Handle Obsidian publish/republish button
+  const obsidianButton = document.getElementById('obsidianButton');
+  if (obsidianButton) {
+    obsidianButton.addEventListener('click', async () => {
+      console.log('Obsidian button clicked');
 
+      if (!currentEditingMeetingId) {
+        alert('No meeting is currently open');
+        return;
+      }
+
+      const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
+      if (!meeting) {
+        alert('Meeting not found');
+        return;
+      }
+
+      // Check if this is a republish (meeting already has obsidianLink)
+      const isRepublish = !!meeting.obsidianLink;
+
+      if (isRepublish) {
+        // Confirm republish
+        if (!confirm('This will overwrite the existing files in Obsidian. Continue?')) {
+          return;
+        }
+      }
+
+      // Check if meeting has content to export
+      if (!meeting.content && (!meeting.summaries || meeting.summaries.length === 0)) {
+        alert('No content to export. Please generate summaries first or wait for automatic summary.');
+        return;
+      }
+
+      const originalText = obsidianButton.querySelector('#obsidianButtonText').textContent;
+      obsidianButton.disabled = true;
+      obsidianButton.querySelector('#obsidianButtonText').textContent = 'Publishing...';
+
+      try {
+        const result = await window.electronAPI.obsidianExportMeeting(meeting.id);
+
+        if (result.success) {
+          console.log('Export successful:', result.obsidianLink);
+
+          // Update meeting data
+          meeting.obsidianLink = result.obsidianLink;
+          await loadMeetingsDataFromFile();
+
+          // Show success message
+          const toast = document.createElement('div');
+          toast.className = 'toast success';
+          toast.textContent = isRepublish ? 'Republished to Obsidian!' : 'Published to Obsidian!';
+          toast.style.cssText = 'position: fixed; top: 80px; right: 20px; background: #4CAF50; color: white; padding: 12px 20px; border-radius: 5px; font-size: 14px; z-index: 10000; box-shadow: 0 2px 8px rgba(0,0,0,0.2);';
+          document.body.appendChild(toast);
+
+          setTimeout(() => {
+            toast.style.transition = 'opacity 0.3s ease';
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+          }, 3000);
+
+          // Update button to show "Republish"
+          updateObsidianButton(meeting);
+        } else {
+          alert('Export failed: ' + result.error);
+          obsidianButton.querySelector('#obsidianButtonText').textContent = originalText;
+        }
+      } catch (error) {
+        console.error('Export error:', error);
+        alert('Export error: ' + error.message);
+        obsidianButton.querySelector('#obsidianButtonText').textContent = originalText;
+      } finally {
+        obsidianButton.disabled = false;
+      }
+    });
+  }
 
   // Listen for recording completed events
   window.electronAPI.onRecordingCompleted((meetingId) => {

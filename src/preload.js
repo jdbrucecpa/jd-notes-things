@@ -53,6 +53,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LLM Provider Management
   getLLMProvider: () => ipcRenderer.invoke('llm:getProvider'),
   switchLLMProvider: (provider) => ipcRenderer.invoke('llm:switchProvider', provider),
+  // Obsidian Export (Phase 5)
+  obsidianExportMeeting: (meetingId) => ipcRenderer.invoke('obsidian:exportMeeting', meetingId),
+  obsidianGetStatus: () => ipcRenderer.invoke('obsidian:getStatus'),
   // Google Contacts & Speaker Matching (Phase 6)
   contactsFetchContacts: (forceRefresh) => ipcRenderer.invoke('contacts:fetchContacts', forceRefresh),
   speakersMatchSpeakers: (transcript, participantEmails, options) => ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),
