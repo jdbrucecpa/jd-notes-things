@@ -1,0 +1,551 @@
+
+> jd-notes-things@0.1.0 start
+> electron-forge start
+
+[33m❯[39m Checking your system
+[33m❯[39m Checking package manager version
+[32m✔[39m Found npm@10.8.2
+[32m✔[39m Checking your system
+[?25h[33m❯[39m Locating application
+[32m✔[39m Locating application
+[33m❯[39m Loading configuration
+[32m✔[39m Loading configuration
+[33m❯[39m Preparing native dependencies
+[32m✔[39m Preparing native dependencies
+[33m❯[39m Running generateAssets hook
+[32m✔[39m Running generateAssets hook
+[33m❯[39m Running preStart hook
+[33m❯[39m [plugin-webpack] Preparing webpack bundles
+[33m❯[39m Compiling main process code
+[32m✔[39m Compiling main process code
+[33m❯[39m Launching dev servers for renderer process code
+› Output Available: http://localhost:9000
+
+[32m✔[39m Launching dev servers for renderer process code
+[32m✔[39m [plugin-webpack] Preparing webpack bundles
+[32m✔[39m Running preStart hook
+[32m✔[39m Launched Electron app. Type rs in terminal to restart main process.
+[?25h
+
+[dotenv@17.2.3] injecting env (4) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
+[LLM Service] Initializing Azure OpenAI adapter with deployment: gpt-5-mini
+[Main] LLM Service initialized with provider: Azure OpenAI
+Registering IPC handlers...
+IPC handlers: []
+Initializing Recall.ai SDK
+[SDK Debug] Registered listener for event: meeting-detected
+[SDK Debug] Registered listener for event: meeting-closed
+[SDK Debug] Registered listener for event: recording-ended
+[SDK Debug] Registered listener for event: upload-progress
+[SDK Debug] Registered listener for event: permissions-granted
+[SDK Debug] Registered listener for event: sdk-state-change
+[SDK Debug] Registered listener for event: realtime-event
+[SDK Debug] Registered listener for event: error
+[GoogleAuth] Initializing unified Google authentication...
+[GoogleAuth] Token loaded from: C:\Users\brigh\AppData\Roaming\JD Notes Things\google-token.json
+[GoogleAuth] Initialized with existing token
+[GoogleAuth] Authenticated successfully - initializing services
+[Google Services] Initializing Calendar service...
+[GoogleCalendar] Initialized with existing token
+[Google Services] Initializing Contacts service...
+[GoogleContacts] Initialized with existing token
+[Google Services] Initializing Speaker Matcher...
+[GoogleContacts] Fetching contacts from Google People API...
+[SDK Debug] Event fired: permissions-granted {}
+PERMISSIONS GRANTED
+[GoogleContacts] Fetched 529 contacts (total: 529)
+[GoogleContacts] Processed 523 contacts with emails
+[Google Services] Contacts preloaded successfully
+[Google Services] All services initialized successfully
+[TemplateManager] Initializing template system...
+[TemplateManager] Templates path: C:\Users\brigh\AppData\Roaming\JD Notes Things\config\templates
+[TemplateManager] Development mode - using: C:\Users\brigh\Documents\code\jd-notes-things\config\templates
+[TemplateManager] Loaded template: Client Meeting Summary (client-meeting)
+[TemplateManager] Loaded template: Internal Team Meeting (internal-meeting)
+[TemplateManager] Loaded template: 1-on-1 Meeting (one-on-one)
+[TemplateManager] Loaded template: Quick Notes (quick-notes)
+[TemplateManager] Loaded 4 templates
+[TemplateManager] Loaded 4 templates
+[ObsidianExport] Initializing vault and routing system...
+[ObsidianExport] Vault path: C:\Users\brigh\Documents\code\jd-notes-things\vault
+[ObsidianExport] Development mode - using routing config: C:\Users\brigh\Documents\code\jd-notes-things\config\routing.yaml
+[ConfigLoader] Routing configuration loaded successfully
+[ObsidianExport] Routing engine initialized successfully
+[VaultStructure] Initializing vault structure...
+[VaultStructure] Vault structure initialized
+[ObsidianExport] Vault structure initialized at: C:\Users\brigh\Documents\code\jd-notes-things\vault
+[Meeting Monitor] Starting meeting monitor...
+[Calendar IPC] Fetching upcoming meetings (24 hours ahead)
+[Calendar IPC] Found 0 upcoming meetings
+[Template IPC] Getting all templates
+[IPC] saveMeetingsData called with data: { upcomingCount: 0, pastCount: 9 }
+[IPC] Validating meetings data...
+[IPC] Validation successful
+[IPC] Writing to file...
+[IPC] File write complete
+Starting manual desktop recording for meeting: meeting-1762654103096
+Prepared desktop audio recording with key: bb7f1d42...
+getActiveRecordingId called for note: meeting-1762654103096
+Upload token created successfully: h9YRKUPS...
+[Upload] Saving uploadToken for manual recording meeting-1762654103096, recordingId: bb7f1d42..., token: h9YRKUPS...
+Recording registered in global state: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f for note meeting-1762654103096
+[Upload] Writing meetingsData with uploadToken for meeting meeting-1762654103096...
+[Upload] ✓ Completed writing meetingsData for meeting meeting-1762654103096
+Starting desktop recording with key: bb7f1d42...
+[IPC] saveMeetingsData called with data: { upcomingCount: 0, pastCount: 9 }
+[IPC] Validating meetings data...
+[IPC] Validation successful
+[IPC] Writing to file...
+[IPC] File write complete
+[SDK Debug] Event fired: sdk-state-change {
+  sdk: { state: { code: 'recording' } },
+  window: {
+    id: 'bb7f1d42-a014-4ae1-bd3f-eb5e6691086f',
+    platform: 'whole-desktop',
+    title: 'Whole system audio',
+    url: null
+  }
+}
+Recording state changed: recording for window: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Recording in progress...
+Recording registered in global state: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f for note meeting-1762654103096
+[SDK Debug] Event fired: realtime-event {
+  data: {
+    bot: { id: '00000000-0000-0000-0000-000000000000', metadata: {} },
+    data: {
+      action: 'join',
+      data: null,
+      participant: [Object],
+      timestamp: [Object]
+    },
+    participant_events: { id: '00000000-0000-0000-0000-000000000000', metadata: {} },
+    recording: { id: '00000000-0000-0000-0000-000000000000', metadata: {} }
+  },
+  event: 'participant_events.join',
+  window: {
+    id: 'bb7f1d42-a014-4ae1-bd3f-eb5e6691086f',
+    platform: null,
+    title: null,
+    url: null
+  }
+}
+Received realtime event: participant_events.join
+Participant joined: Host (ID: 32766, Host: true)
+Skipping generic participant name: Host
+[SDK Debug] Event fired: realtime-event {
+  data: {
+    bot: { id: '00000000-0000-0000-0000-000000000000', metadata: {} },
+    data: {
+      action: 'join',
+      data: null,
+      participant: [Object],
+      timestamp: [Object]
+    },
+    participant_events: { id: '00000000-0000-0000-0000-000000000000', metadata: {} },
+    recording: { id: '00000000-0000-0000-0000-000000000000', metadata: {} }
+  },
+  event: 'participant_events.join',
+  window: {
+    id: 'bb7f1d42-a014-4ae1-bd3f-eb5e6691086f',
+    platform: null,
+    title: null,
+    url: null
+  }
+}
+Received realtime event: participant_events.join
+Participant joined: Guest (ID: 32767, Host: false)
+Skipping generic participant name: Guest
+Stopping manual desktop recording: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Recording bb7f1d42-a014-4ae1-bd3f-eb5e6691086f state updated to: stopping
+[SDK Debug] Event fired: sdk-state-change {
+  sdk: { state: { code: 'idle' } },
+  window: {
+    id: 'bb7f1d42-a014-4ae1-bd3f-eb5e6691086f',
+    platform: null,
+    title: null,
+    url: null
+  }
+}
+Recording state changed: idle for window: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Recording stopped
+Recording bb7f1d42-a014-4ae1-bd3f-eb5e6691086f removed from global state
+[SDK Debug] Event fired: recording-ended {
+  window: {
+    id: 'bb7f1d42-a014-4ae1-bd3f-eb5e6691086f',
+    platform: null,
+    title: null,
+    url: null
+  }
+}
+Recording ended: {
+  window: {
+    id: 'bb7f1d42-a014-4ae1-bd3f-eb5e6691086f',
+    platform: null,
+    title: null,
+    url: null
+  }
+}
+[Recording] ✗ No meeting note found for recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Recording] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Recording] Available meeting IDs: meeting-1762654103096, meeting-1762653786271, meeting-1762653378286, meeting-1762652029116, meeting-1762651835490
+Recording processing complete - uploading to Recall.ai for transcription
+Starting upload to Recall.ai for transcription...
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 0% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 25% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 50% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 75% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+Upload progress: 100% for window bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Polling for upload completion: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] API Response structure: {
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "8a1e16ef-bec8-4175-9d84-c4a8fe8cf1ab",
+      "status": {
+        "code": "complete",
+        "sub_code": null,
+        "updated_at": "2025-11-09T02:09:39.706276Z"
+      },
+      "recording_id": "b855c9c9-5d8a-4540-810e-6ba9578d0522",
+      "upload_token": "h9YRKUPSjy8JX1pzuEvzPlN7eRaKBMEC",
+      "created_at": "2025-11-09T02:09:21.765839Z",
+      "metadata": {}
+    },
+    {
+      "id": "d9eb5603-c059-45cb-9c6c-b5719238c9b2",
+      "status": {
+        "code": "complete",
+        "sub_code": null,
+        "updated_at": "2025-11-09T02:04:30.959044Z"
+      },
+      "recording_id": "f2f32dde-7ca6-4caa-90e2-134bf2532dd0",
+      "upload_token": "2yiXVCUo9CU8Y2S104nbyPQYBbTrDWfV",
+      "created_at": "2025-11-09T02:04:04.767914Z",
+      "metadata": {}
+    },
+    {
+      "id": "758e5d66-67f2-4409-b34b-1c05733964ac",
+      "status": {
+        "code": "complete",
+        "sub_code": null,
+        "updated_at": "2025-11-09T01:58:02.455989Z"
+      },
+      "recording_id": "4103f6d9-9f79-4f7b-a20f-d7cac7cabd61",
+      "upload_token": "5D55BDkEPEglNOhGvlhWM9zlTwWaX3oI",
+      "created_at": "2025-11-09T01:57:17.052614Z",
+      "metadata": {}
+    },
+    {
+      "id": "3bffc90a-6a1c-4088-ab1d-9ed540a843fd",
+      "status": {
+        "code": "complete",
+        "sub_code": null,
+        "updated_at": "2025-11-09T01:35:42.868466Z"
+      },
+      "recording_id": "bd7ada80-1bfb-4c39-8f7e-bd09b42f1492",
+      "upload_token": "6CToTUjXjnCAmK9hZXmf3qbOqaBMysi7",
+      "created_at": "2025-11-09T01:34:47.579388Z",
+      "metadata": {}
+    },
+    {
+      "id": "adb3ddae-9cf4-4c6c-aec6-62adce8bf020",
+      "status": {
+        "code": "complete",
+        "sub_code": null,
+        "updated_at": "2025-11-09T01:32:01.741876Z"
+      },
+      "recording_id": "e4209a94-b7f2-46ec-92b5-a82c045506f6",
+      "upload_token": "OOgZS6ryFcVAFYBR9d4BJPK9uz72YhAx",
+      "created_at": "2025-11-09T01:31:34.169412Z",
+      "metadata": {}
+    
+[Upload] Found 58 total uploads in API response
+[Upload] First upload example: {
+  "id": "8a1e16ef-bec8-4175-9d84-c4a8fe8cf1ab",
+  "status": {
+    "code": "complete",
+    "sub_code": null,
+    "updated_at": "2025-11-09T02:09:39.706276Z"
+  },
+  "recording_id": "b855c9c9-5d8a-4540-810e-6ba9578d0522",
+  "upload_token": "h9YRKUPSjy8JX1pzuEvzPlN7eRaKBMEC",
+  "created_at": "2025-11-09T02:09:21.765839Z",
+  "metadata": {}
+}
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[GoogleAuth] Refreshing access token...
+[GoogleAuth] Token saved with restricted permissions (Windows)
+[GoogleAuth] Token saved to: C:\Users\brigh\AppData\Roaming\JD Notes Things\google-token.json
+[GoogleAuth] Access token refreshed successfully
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none
+[Upload] Found 58 total uploads in API response
+[Upload] Could not find meeting with recordingId: bb7f1d42-a014-4ae1-bd3f-eb5e6691086f
+[Upload] Available recordingIds in pastMeetings: none, none, none, ad771058-c10b-4680-995c-87f80a323be0, d81bff26-4e37-4726-817b-3309fb65f208, 06512f9b-74fa-45af-8402-f6f31af6e275, none, none, none

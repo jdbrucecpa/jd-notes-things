@@ -1,0 +1,33 @@
+
+> jd-notes-things@0.1.0 start
+> electron-forge start
+
+[33m❯[39m Checking your system
+[33m❯[39m Checking package manager version
+[32m✔[39m Found npm@10.8.2
+[32m✔[39m Checking your system
+[?25h[33m❯[39m Locating application
+[32m✔[39m Locating application
+[33m❯[39m Loading configuration
+[32m✔[39m Loading configuration
+[33m❯[39m Preparing native dependencies
+[32m✔[39m Preparing native dependencies
+[33m❯[39m Running generateAssets hook
+[32m✔[39m Running generateAssets hook
+[33m❯[39m Running preStart hook
+[33m❯[39m [plugin-webpack] Preparing webpack bundles
+
+An unhandled exception has occurred inside Forge:
+listen EADDRINUSE: address already in use :::9000
+Error: listen EADDRINUSE: address already in use :::9000
+    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
+    at listenInCluster (node:net:1965:12)
+    at Server.listen (node:net:2067:7)
+    at Function.serverListen [as listen] (C:\Users\brigh\Documents\code\jd-notes-things\node_modules\express-ws\lib\index.js:42:40)
+    at C:\Users\brigh\Documents\code\jd-notes-things\node_modules\@electron-forge\web-multi-logger\dist\Logger.js:47:36
+    at new Promise (<anonymous>)
+    at Logger.start (C:\Users\brigh\Documents\code\jd-notes-things\node_modules\@electron-forge\web-multi-logger\dist\Logger.js:46:16)
+    at C:\Users\brigh\Documents\code\jd-notes-things\node_modules\@electron-forge\plugin-webpack\dist\WebpackPlugin.js:275:34
+    at async C:\Users\brigh\Documents\code\jd-notes-things\node_modules\@electron-forge\core\dist\util\plugin-interface.js:93:44
+    at async _Task.taskFn (C:\Users\brigh\Documents\code\jd-notes-things\node_modules\@electron-forge\tracer\dist\index.js:58:20)
+    at async _Task.run (C:\Users\brigh\Documents\code\jd-notes-things\node_modules\listr2\dist\index.cjs:2063:11)
