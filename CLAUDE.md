@@ -14,17 +14,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **React** - Renderer process UI
 - **Webpack + Electron Forge** - Build system
 - **Recall.ai Desktop Recording SDK** - Audio/video capture
-- **Transcription Service** - AssemblyAI v3 (streaming with speaker diarization)
+- **Transcription Service** - Recall.ai Async API (webhook-based with speaker diarization)
 - **LLM Integration** - Multi-provider (OpenAI, Claude, Gemini) for summaries
 - **Windows DPAPI** - Encryption at rest
+- **ngrok** - Webhook tunnel for Recall.ai async transcription callbacks
 
 ## Architecture
 
 ### Electron Process Model
 
 **Main Process** (`src/main/`):
-- Recording Manager - Handles Recall.ai SDK, audio capture
-- Transcription Service - Interfaces with transcription API, speaker diarization
+- Recording Manager - Handles Recall.ai SDK, audio capture, upload to Recall.ai
+- Transcription Service - Webhook-based async transcription via Recall.ai API
+- Webhook Server - Express server on port 13373 for Recall.ai callbacks
+- ngrok Integration - Automatic tunnel establishment for webhook endpoint
 - Routing Engine - Matches participants to organizations, determines save location
 - LLM Service - Template processing, summary generation
 - Google Integration - Unified OAuth 2.0 authentication for Calendar + Contacts
@@ -206,7 +209,7 @@ src/
 ## Current Project State (Nov 8, 2025)
 
 ### Completed Phases
-- ✅ **Phase 1**: Core Recording & Transcription (Recall.ai SDK, AssemblyAI streaming)
+- ✅ **Phase 1**: Core Recording & Transcription (Recall.ai SDK with async webhook-based transcription)
 - ✅ **Phase 2**: Routing System (Email domain matching, vault structure)
 - ✅ **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
 - ✅ **Phase 4**: LLM Integration (OpenAI summaries with templates)
@@ -214,21 +217,38 @@ src/
 - ✅ **Phase 6**: Speaker Recognition & Contact Matching
 - ✅ **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet detection, inherited from Muesli)
 
-### Recent Bug Fixes (Nov 8, 2025)
+### Architectural Migration (Nov 10, 2025)
+- ✅ Migrated from AssemblyAI real-time streaming to Recall.ai async transcription API
+- ✅ Implemented webhook-based workflow with Svix signature verification
+- ✅ Integrated ngrok for automatic webhook tunnel establishment
+- ✅ Removed polling in favor of 100% webhook-driven transcript delivery
+- ✅ Added upload progress tracking UI with animated progress bar
+- ✅ Fixed transcript parsing for Recall.ai format (participant objects with words arrays)
+- ✅ Added participantId and isHost metadata to transcript entries
+
+### Recent Bug Fixes (Nov 10, 2025)
 - ✅ Fixed Zod schema validation (added missing optional fields with `.passthrough()`)
 - ✅ Fixed fileOperationManager deadlock (read waiting for write, write calling read)
 - ✅ Fixed misleading "Generating summary..." toast (now says "Transcript saved")
 - ✅ All button functionality working (Record In-person Meeting, back button navigation)
+- ✅ Fixed ngrok 4.x API compatibility (changed from sync `connect()` to async pattern)
+- ✅ Fixed webhook IPC mismatch (changed from IPC events to direct function calls via `global.webhookHandlers`)
+- ✅ Fixed calendar meeting Zod validation (added `type: 'calendar'`, changed `transcript` to array)
+- ✅ Fixed transcript parsing for Recall.ai format (array of participant objects with words arrays)
+- ✅ Added audio recording download URL to transcript metadata (for manual review)
 
 ### Current Status
 **Working Features:**
 - Manual and automatic meeting recording
-- Real-time transcription with speaker diarization
+- Async webhook-based transcription with speaker diarization (Recall.ai)
+- Upload progress tracking with UI progress bar
+- Automatic ngrok tunnel establishment for webhooks
 - Calendar event detection and display
 - Contact matching for speaker identification
 - AI summary generation with templates
 - Obsidian vault export with routing
 - Two-file meeting architecture (summary + transcript)
+- Svix webhook signature verification for security
 
 **Platform Detection (Nov 8, 2025):**
 - ✅ Zoom meeting detection working (tested with solo meeting)

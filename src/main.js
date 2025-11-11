@@ -16,12 +16,17 @@ const VaultStructure = require('./main/storage/VaultStructure');
 const RoutingEngine = require('./main/routing/RoutingEngine');
 const ConfigLoader = require('./main/routing/ConfigLoader');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
+const expressApp = require('./server');
+const ngrokManager = require('./main/services/ngrokManager');
 require('dotenv').config();
 
 // Initialize LLM service with auto-detection of available provider
 // Priority: Azure OpenAI > Anthropic > OpenAI
 const llmService = createLLMServiceFromEnv();
 console.log(`[Main] LLM Service initialized with provider: ${llmService.getProviderName()}`);
+
+// Express server instance (for webhook endpoint)
+let expressServer = null;
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -154,12 +159,12 @@ async function autoStartRecording(meeting) {
     const meetingId = Date.now().toString();
     const newMeeting = {
       id: meetingId,
+      type: 'calendar',
       title: meeting.title,
       date: new Date().toISOString().split('T')[0],
       content: `# ${meeting.title}\n\n## Meeting Information\n- Date: ${new Date(meeting.startTime).toLocaleDateString()}\n- Time: ${new Date(meeting.startTime).toLocaleTimeString()}\n- Platform: ${meeting.platform}\n${meeting.meetingLink ? `- Link: ${meeting.meetingLink}\n` : ''}${meeting.organizer ? `- Organizer: ${meeting.organizer.name} (${meeting.organizer.email})\n` : ''}\n\n## Participants\n${meeting.participants.map(p => `- ${p.name} (${p.email})`).join('\n')}\n\n## Recording\nAuto-started at ${new Date().toLocaleTimeString()}\n\n## Transcript\nRecording in progress...\n`,
-      recordingId: null,
       recordingStatus: 'pending',
-      transcript: '',
+      transcript: [],
       summary: '',
       calendarEventId: meeting.id,
       participantEmails: meeting.participantEmails || []
@@ -357,7 +362,40 @@ app.whenReady().then(async () => {
   // Start meeting monitor for auto-recording (only after all services initialized)
   startMeetingMonitor();
 
+  // Start Express server for webhook endpoint
+  expressServer = expressApp.listen(13373, async () => {
+    console.log('[Webhook Server] Listening on http://localhost:13373');
+    console.log('[Webhook Server] Endpoint: http://localhost:13373/webhook/recall');
+
+    // Start ngrok tunnel automatically (if configured)
+    try {
+      const webhookUrl = await ngrokManager.start(13373);
+      console.log('\n' + '='.repeat(70));
+      console.log('🌐 NGROK TUNNEL ESTABLISHED');
+      console.log('='.repeat(70));
+      console.log(`Public Webhook URL: ${webhookUrl}/webhook/recall`);
+      console.log(`\nConfigure this URL in Recall.ai dashboard:`);
+      console.log(`${process.env.RECALLAI_API_URL || 'https://us-west-2.recall.ai'}/webhooks`);
+      console.log('='.repeat(70) + '\n');
+    } catch (error) {
+      console.log('\n' + '⚠'.repeat(35));
+      console.log('⚠️  NGROK NOT CONFIGURED');
+      console.log('⚠'.repeat(35));
+      console.log('Webhooks will not work until ngrok is configured.');
+      console.log('See docs/WEBHOOK_SETUP.md for setup instructions.');
+      console.log('Error:', error.message);
+      console.log('⚠'.repeat(35) + '\n');
+    }
+  });
+
+  // Make mainWindow available to server.js for IPC communication
+  // This allows server.js to send webhook events to the main process
+  global.mainWindow = null; // Will be set after createWindow()
+
   createWindow();
+
+  // Set global reference after window is created
+  global.mainWindow = mainWindow;
 
   // When the window is ready, send the initial meeting detection status
   mainWindow.webContents.on('did-finish-load', () => {
@@ -384,10 +422,20 @@ app.on('window-all-closed', () => {
 });
 
 // Cleanup meeting monitor when app quits
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
   if (meetingMonitorInterval) {
     clearInterval(meetingMonitorInterval);
     console.log('[Meeting Monitor] Stopped meeting monitor');
+  }
+
+  // Stop ngrok tunnel
+  await ngrokManager.stop();
+
+  // Close Express server
+  if (expressServer) {
+    expressServer.close(() => {
+      console.log('[Webhook Server] Server closed');
+    });
   }
 });
 
@@ -589,14 +637,15 @@ async function createDesktopSdkUpload() {
 
     const response = await axios.post(url, {
       recording_config: {
-        // Keep video enabled - Recall.ai transcript artifacts require video_mixed media
-        // TODO: Investigate audio-only transcription with direct AssemblyAI/Deepgram integration
+        // Audio-only recording (much faster upload than video)
+        video_mixed_mp4: null,  // Disable video to reduce file size dramatically
+        audio_mixed_mp3: {},     // Audio only - this is all we need for transcription
 
-        // No real-time transcription - we'll use AssemblyAI async API after recording
+        // No real-time transcription - we'll use Recall.ai async API after recording
         // This gives us better quality and proper speaker diarization
         realtime_endpoints: [
           {
-            type: "desktop-sdk-callback",
+            type: "desktop_sdk_callback",  // Fixed: underscore not hyphen
             events: [
               "participant_events.join",  // Still need participant info for speaker matching
             ]
@@ -764,13 +813,9 @@ function initSDK() {
         console.log('Starting upload to Recall.ai for transcription...');
         RecallAiSdk.uploadRecording({ windowId: windowId });
 
-        // Start polling for upload completion after 10 seconds
-        // (webhooks don't work for desktop apps, so we poll the API)
-        setTimeout(() => {
-          pollForUploadCompletion(windowId).catch(error => {
-            console.error('[Upload] Failed to poll for upload completion:', error);
-          });
-        }, 10000);
+        // Webhooks are now configured to handle upload completion
+        // No need to poll - the webhook will trigger when upload is complete
+        console.log('[Upload] Upload started - waiting for webhook notification...');
       }, 3000); // Wait 3 seconds to ensure file is fully written
 
     } catch (error) {
@@ -778,27 +823,36 @@ function initSDK() {
     }
   });
 
+  // Track last logged progress to avoid spam
+  const lastLoggedProgress = new Map();
+
   // Track upload progress
   RecallAiSdk.addEventListener('upload-progress', async (evt) => {
     const { progress, window } = evt;
+    const windowId = window?.id;
 
-    // Only log at key milestones to reduce console spam
-    if (progress === 0 || progress === 25 || progress === 50 || progress === 75 || progress === 100) {
-      console.log(`Upload progress: ${progress}% for window ${window?.id}`);
+    // Only log when progress changes (not on every event)
+    const lastProgress = lastLoggedProgress.get(windowId);
+    if (lastProgress !== progress) {
+      // Round to nearest integer for cleaner display
+      const roundedProgress = Math.round(progress);
+      console.log(`Upload progress: ${roundedProgress.toFixed(1)}% for window ${windowId}`);
+
+      lastLoggedProgress.set(windowId, progress);
 
       // Log upload progress
       sdkLogger.logEvent('upload-progress', {
-        windowId: window?.id,
-        progress: progress
+        windowId: windowId,
+        progress: roundedProgress
       });
     }
 
     // Notify renderer of upload progress (send all updates to UI)
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('recording-state-change', {
-        windowId: window?.id,
+        windowId: windowId,
         state: 'uploading',
-        progress: progress
+        progress: Math.round(progress)
       });
     }
   });
@@ -2303,6 +2357,223 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
   }
 });
 
+// ===== WEBHOOK EVENT HANDLERS =====
+
+// Export webhook handlers for server.js to call directly
+// (server.js runs in main process, so we can call these directly instead of using IPC)
+global.webhookHandlers = {
+  handleUploadComplete: async ({ recordingId, sdkUploadId }) => {
+    console.log(`[Webhook] Upload complete for recording: ${recordingId}`);
+
+    try {
+      // Find the meeting by matching the recording ID
+      const meetingsData = await fileOperationManager.readMeetingsData();
+      const meeting = meetingsData.pastMeetings.find(m => {
+        // The recordingId from our app (windowId) won't match Recall's recording ID
+        // We need to match by upload token or other identifier
+        // For now, find the most recent meeting without a recallRecordingId
+        return !m.recallRecordingId && m.recordingId;
+      });
+
+      if (!meeting) {
+        console.error(`[Webhook] No meeting found for recording: ${recordingId}`);
+        return;
+      }
+
+      // Store the Recall.ai recording ID for later reference
+      meeting.recallRecordingId = recordingId;
+      await fileOperationManager.writeData(meetingsData);
+      console.log(`[Webhook] Linked recording ${recordingId} to meeting ${meeting.id}`);
+
+      // Start async transcription
+      await startRecallAIAsyncTranscription(recordingId, meeting.recordingId);
+
+    } catch (error) {
+      console.error('[Webhook] Error handling upload complete:', error);
+    }
+  },
+
+  handleTranscriptDone: async ({ transcriptId, recordingId }) => {
+    console.log(`[Webhook] Transcript ready. ID: ${transcriptId}, Recording: ${recordingId}`);
+
+    try {
+      const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+      const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+
+      // Fetch the transcript
+      const response = await axios.get(
+        `${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`,
+        {
+          headers: { 'Authorization': `Token ${RECALLAI_API_KEY}` }
+        }
+      );
+
+      const transcript = response.data;
+      console.log(`[Webhook] Fetched transcript. Status: ${transcript.status?.code}`);
+
+      // Find the meeting
+      const meetingsData = await fileOperationManager.readMeetingsData();
+      const meeting = meetingsData.pastMeetings.find(m => m.recallRecordingId === recordingId);
+
+      if (!meeting) {
+        console.error(`[Webhook] No meeting found for recording: ${recordingId}`);
+        return;
+      }
+
+      // Process the transcript
+      if (transcript.words && transcript.words.length > 0) {
+        console.log(`[Webhook] Processing transcript with ${transcript.words.length} words`);
+        await processRecallAITranscript(transcript, meeting.id, meeting.recordingId);
+      } else if (transcript.data?.download_url) {
+        console.log(`[Webhook] Downloading transcript from URL`);
+        const transcriptData = await axios.get(transcript.data.download_url);
+        await processRecallAITranscript(transcriptData.data, meeting.id, meeting.recordingId);
+      } else {
+        throw new Error('Transcript has no words data or download URL');
+      }
+
+      // Notify renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('transcript-ready', {
+          meetingId: meeting.id,
+          transcriptId
+        });
+      }
+
+      console.log(`[Webhook] ✓ Transcript processed successfully for meeting ${meeting.id}`);
+
+    } catch (error) {
+      console.error('[Webhook] Error handling transcript done:', error);
+    }
+  },
+
+  handleTranscriptFailed: async ({ transcriptId, recordingId, error }) => {
+    console.error(`[Webhook] Transcript failed for recording: ${recordingId}`, error);
+
+    try {
+      // Find the meeting and update status
+      const meetingsData = await fileOperationManager.readMeetingsData();
+      const meeting = meetingsData.pastMeetings.find(m => m.recallRecordingId === recordingId);
+
+      if (meeting) {
+        meeting.transcriptError = error;
+        meeting.transcriptStatus = 'failed';
+        await fileOperationManager.writeData(meetingsData);
+
+        // Notify renderer
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('transcript-failed', {
+            meetingId: meeting.id,
+            error
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Webhook] Error handling transcript failed:', err);
+    }
+  }
+};
+
+// Keep old IPC handlers for backwards compatibility (in case renderer sends events)
+ipcMain.on('webhook-upload-complete', async (event, data) => {
+  await global.webhookHandlers.handleUploadComplete(data);
+});
+
+// Handle transcript done webhook
+ipcMain.on('webhook-transcript-done', async (event, { transcriptId, recordingId }) => {
+  console.log(`[Webhook] Transcript ready. ID: ${transcriptId}, Recording: ${recordingId}`);
+
+  try {
+    const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+    const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+
+    // Fetch the transcript
+    const response = await axios.get(
+      `${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`,
+      {
+        headers: { 'Authorization': `Token ${RECALLAI_API_KEY}` }
+      }
+    );
+
+    const transcript = response.data;
+    console.log(`[Webhook] Fetched transcript. Status: ${transcript.status?.code}`);
+
+    // Find the meeting
+    const meetingsData = await fileOperationManager.readMeetingsData();
+    const meeting = meetingsData.pastMeetings.find(m => m.recallRecordingId === recordingId);
+
+    if (!meeting) {
+      console.error(`[Webhook] No meeting found for recording: ${recordingId}`);
+      return;
+    }
+
+    // Process the transcript
+    if (transcript.words && transcript.words.length > 0) {
+      console.log(`[Webhook] Processing transcript with ${transcript.words.length} words`);
+      await processRecallAITranscript(transcript, meeting.id, meeting.recordingId);
+    } else if (transcript.data?.download_url) {
+      console.log(`[Webhook] Downloading transcript from URL`);
+      const transcriptData = await axios.get(transcript.data.download_url);
+      await processRecallAITranscript(transcriptData.data, meeting.id, meeting.recordingId);
+    } else {
+      throw new Error('Transcript has no words data or download URL');
+    }
+
+    // Notify renderer
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('transcript-ready', {
+        meetingId: meeting.id,
+        transcriptId
+      });
+    }
+
+    console.log(`[Webhook] ✓ Transcript processed successfully for meeting ${meeting.id}`);
+
+  } catch (error) {
+    console.error('[Webhook] Error handling transcript done:', error);
+  }
+});
+
+// Handle transcript failed webhook
+ipcMain.on('webhook-transcript-failed', async (event, { transcriptId, recordingId, error }) => {
+  console.error(`[Webhook] Transcript failed for recording: ${recordingId}`, error);
+
+  try {
+    // Find the meeting and update status
+    const meetingsData = await fileOperationManager.readMeetingsData();
+    const meeting = meetingsData.pastMeetings.find(m => m.recallRecordingId === recordingId);
+
+    if (meeting) {
+      meeting.transcriptError = error;
+      meeting.transcriptStatus = 'failed';
+      await fileOperationManager.writeData(meetingsData);
+
+      // Notify renderer
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('transcript-failed', {
+          meetingId: meeting.id,
+          error
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[Webhook] Error handling transcript failure:', err);
+  }
+});
+
+// Handle upload failed webhook
+ipcMain.on('webhook-upload-failed', async (event, { recordingId, error }) => {
+  console.error(`[Webhook] Upload failed for recording: ${recordingId}`, error);
+
+  // Notify renderer
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('upload-failed', {
+      recordingId,
+      error
+    });
+  }
+});
+
 // Handle generating AI summary with streaming
 ipcMain.handle('generateMeetingSummaryStreaming', async (event, meetingId) => {
   try {
@@ -3026,22 +3297,19 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
     // Get expected speaker count from participants
     const speakersExpected = meeting.participants ? meeting.participants.length : null;
 
-    // Call Recall.ai API to create async transcript with AssemblyAI
-    const url = `${RECALLAI_API_URL}/api/v1/recording/${recordingId}/create_transcript`;
+    // Call Recall.ai API to create async transcript with built-in provider
+    const url = `${RECALLAI_API_URL}/api/v1/recording/${recordingId}/create_transcript/`;
 
     const transcriptConfig = {
       provider: {
-        assembly_ai_async: {
-          speaker_labels: true,  // Enable speaker diarization
+        recallai_async: {  // Use Recall.ai's built-in async transcription
           language_code: "en"
         }
+      },
+      diarization: {
+        use_separate_streams_when_available: true  // Enable perfect diarization
       }
     };
-
-    // Optionally set expected speaker count
-    if (speakersExpected && speakersExpected > 0) {
-      transcriptConfig.provider.assembly_ai_async.speakers_expected = speakersExpected;
-    }
 
     console.log(`[Recall.ai] Requesting transcript with config:`, JSON.stringify(transcriptConfig, null, 2));
 
@@ -3052,12 +3320,11 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
       }
     });
 
-    console.log(`[Recall.ai] Transcript request submitted successfully`);
+    const transcriptId = response.data.id;
+    console.log(`[Recall.ai] Transcript request submitted successfully. Transcript ID: ${transcriptId}`);
+    console.log(`[Recall.ai] Waiting for transcript.done webhook...`);
 
-    // Start polling for transcript completion
-    pollRecallAITranscript(recordingId, windowId, meeting.id).catch(error => {
-      console.error('[Recall.ai] Transcript polling failed:', error);
-    });
+    // No polling needed - we'll receive a transcript.done webhook when ready
 
   } catch (error) {
     console.error('[Recall.ai] Failed to start async transcription:', error.response?.data || error.message);
@@ -3068,16 +3335,18 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
 /**
  * Poll Recall.ai for transcript completion
  * @param {string} recordingId - Recall.ai recording ID
+ * @param {string} transcriptId - Transcript ID returned from create_transcript
  * @param {string} windowId - Window ID from Desktop SDK
  * @param {string} meetingId - Our meeting ID
  */
-async function pollRecallAITranscript(recordingId, windowId, meetingId) {
+async function pollRecallAITranscript(recordingId, transcriptId, windowId, meetingId) {
   const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
   const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
 
-  const pollingEndpoint = `${RECALLAI_API_URL}/api/v1/recording/${recordingId}`;
+  // Poll the specific transcript endpoint
+  const pollingEndpoint = `${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`;
 
-  console.log(`[Recall.ai] Polling for transcript completion: ${recordingId}`);
+  console.log(`[Recall.ai] Polling for transcript completion. Recording: ${recordingId}, Transcript: ${transcriptId}`);
 
   while (true) {
     try {
@@ -3087,41 +3356,34 @@ async function pollRecallAITranscript(recordingId, windowId, meetingId) {
         }
       });
 
-      const recording = response.data;
+      const transcript = response.data;
+      const transcriptStatus = transcript.status?.code;
 
-      // Check if transcript artifact exists
-      const transcriptArtifact = recording.media_shortcuts?.transcript;
-      const transcriptStatus = transcriptArtifact?.status?.code;
-
-      console.log(`[Recall.ai] Transcript artifact status: ${transcriptStatus || 'not found'}`);
+      console.log(`[Recall.ai] Transcript status: ${transcriptStatus || 'unknown'}`);
 
       if (transcriptStatus === 'done') {
-        console.log('[Recall.ai] Transcript is ready - fetching from download URL');
+        console.log('[Recall.ai] Transcript is ready - fetching data');
 
-        // Get the download URL from the transcript artifact
-        const downloadUrl = transcriptArtifact.data?.download_url;
+        // The transcript data should be in the response
+        // Check if we have words array or need to fetch from URL
+        if (transcript.words && transcript.words.length > 0) {
+          console.log(`[Recall.ai] Transcript data retrieved (${transcript.words.length} words)`);
 
-        if (!downloadUrl) {
-          throw new Error('Transcript artifact is done but has no download_url');
+          // Process and save the transcript
+          await processRecallAITranscript(transcript, meetingId, windowId);
+          break; // Exit polling loop
+        } else if (transcript.data?.download_url) {
+          // If data is in a separate URL, fetch it
+          console.log(`[Recall.ai] Fetching transcript from download URL`);
+          const transcriptResponse = await axios.get(transcript.data.download_url);
+          await processRecallAITranscript(transcriptResponse.data, meetingId, windowId);
+          break;
+        } else {
+          throw new Error('Transcript is done but has no words data or download URL');
         }
 
-        console.log(`[Recall.ai] Fetching transcript from: ${downloadUrl.substring(0, 50)}...`);
-
-        // Fetch the transcript from the download URL
-        const transcriptResponse = await axios.get(downloadUrl);
-        const transcript = transcriptResponse.data;
-
-        console.log('[Recall.ai] Transcript fetched successfully');
-
-        // Process and save the transcript
-        await processRecallAITranscript(transcript, meetingId, windowId);
-
-        break; // Exit polling loop
-
-      } else if (transcriptStatus === 'error') {
-        throw new Error(`Transcript generation failed for recording ${recordingId}`);
-      } else if (!transcriptArtifact) {
-        console.log('[Recall.ai] Transcript artifact not yet created - continuing to poll');
+      } else if (transcriptStatus === 'error' || transcriptStatus === 'failed') {
+        throw new Error(`Transcript generation failed for recording ${recordingId}: ${transcript.status?.message || 'Unknown error'}`);
       } else {
         console.log(`[Recall.ai] Transcript still processing (status: ${transcriptStatus}) - continuing to poll`);
       }
@@ -3130,7 +3392,14 @@ async function pollRecallAITranscript(recordingId, windowId, meetingId) {
       await new Promise(resolve => setTimeout(resolve, 5000));
 
     } catch (error) {
-      // Only log and throw if it's not the transcript 404 (which we handle above)
+      // If it's a 404, the transcript might not be available yet
+      if (error.response?.status === 404) {
+        console.log('[Recall.ai] Transcript not found yet (404) - continuing to poll');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        continue;
+      }
+
+      // For other errors, log and throw
       if (error.message && error.message.includes('Transcript generation failed')) {
         throw error;
       }
@@ -3160,32 +3429,47 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
 
     const participants = meeting.participants || [];
 
-    // Recall.ai transcript format has "words" array with speaker labels
-    // Group into utterances by speaker and timing
+    // Recall.ai transcript format: array of participants, each with words array
     const utterances = [];
-    let currentUtterance = null;
 
-    if (transcript.words && transcript.words.length > 0) {
-      transcript.words.forEach(word => {
-        const speaker = word.speaker || 'Unknown';
+    // Handle array format (each element is a participant object with words)
+    const participantSegments = Array.isArray(transcript) ? transcript : [transcript];
 
-        // Start new utterance if speaker changes or there's a pause
-        if (!currentUtterance || currentUtterance.speaker !== speaker) {
+    for (const segment of participantSegments) {
+      const participantName = segment.participant?.name || 'Unknown Speaker';
+      const participantId = segment.participant?.id;
+      const isHost = segment.participant?.is_host || false;
+      const words = segment.words || [];
+
+      if (words.length === 0) continue;
+
+      // Group words into utterances by pauses (> 1 second gap)
+      let currentUtterance = null;
+
+      words.forEach((word, index) => {
+        const startTime = word.start_timestamp?.relative || 0;
+        const endTime = word.end_timestamp?.relative || 0;
+
+        // Start new utterance if first word or long pause
+        const isNewUtterance = !currentUtterance ||
+          (index > 0 && startTime - currentUtterance.end > 1.0);
+
+        if (isNewUtterance) {
           if (currentUtterance) {
             utterances.push(currentUtterance);
           }
           currentUtterance = {
-            speaker: speaker,
+            speaker: participantName,
+            participantId: participantId,
+            isHost: isHost,
             text: word.text,
-            start: word.start,
-            end: word.end,
-            words: [word]
+            start: startTime,
+            end: endTime
           };
         } else {
           // Add to current utterance
           currentUtterance.text += ' ' + word.text;
-          currentUtterance.end = word.end;
-          currentUtterance.words.push(word);
+          currentUtterance.end = endTime;
         }
       });
 
@@ -3235,6 +3519,8 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
         speakerLabel: utterance.speaker,
         speakerEmail: speakerInfo.email,
         speakerConfidence: speakerInfo.confidence,
+        participantId: utterance.participantId,
+        isHost: utterance.isHost,
         text: utterance.text,
         start: utterance.start,
         end: utterance.end

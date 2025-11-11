@@ -4,7 +4,7 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: {
-      unpackDir: "node_modules/@recallai"
+      unpackDir: "{node_modules/@recallai,node_modules/ngrok}"
     },
     osxSign: {
       continueOnError: false,

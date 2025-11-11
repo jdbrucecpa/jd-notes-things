@@ -2362,6 +2362,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.electronAPI.onRecordingStateChange((data) => {
     console.log('Recording state change received:', data);
 
+    // Handle upload progress updates
+    if (data.state === 'uploading') {
+      const uploadProgress = document.getElementById('uploadProgress');
+      const uploadProgressFill = document.getElementById('uploadProgressFill');
+      const uploadProgressText = document.getElementById('uploadProgressText');
+
+      if (uploadProgress && uploadProgressFill && uploadProgressText) {
+        uploadProgress.style.display = 'block';
+        uploadProgressFill.style.width = `${data.progress}%`;
+        uploadProgressText.textContent = `Uploading ${data.progress}%`;
+
+        // Hide progress bar when upload is complete
+        if (data.progress >= 100) {
+          setTimeout(() => {
+            uploadProgress.style.display = 'none';
+          }, 2000); // Show 100% for 2 seconds before hiding
+        }
+      }
+    }
+
     // If this state change is for the current note, update the UI
     if (data.noteId === currentEditingMeetingId) {
       console.log('Updating recording button for current note');

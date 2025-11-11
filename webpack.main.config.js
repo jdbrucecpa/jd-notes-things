@@ -9,6 +9,8 @@ module.exports = {
     rules: require('./webpack.rules'),
   },
   externals: {
-    '@recallai/desktop-sdk': 'commonjs @recallai/desktop-sdk'
+    '@recallai/desktop-sdk': 'commonjs @recallai/desktop-sdk',
+    'ngrok': 'commonjs ngrok',
+    'svix': 'commonjs svix'
   }
 };

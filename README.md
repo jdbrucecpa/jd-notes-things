@@ -13,7 +13,7 @@
 - **Node.js** v18+ (tested with v22.20.0)
 - **npm** v10+
 - **Recall.ai API Key** ([Get one here](https://recall.ai))
-- **AssemblyAI API Key** ([Get one here](https://assemblyai.com))
+- **ngrok Account** (free tier sufficient) for webhook tunnel ([Get one here](https://ngrok.com))
 
 ### Installation
 
@@ -26,7 +26,8 @@ cp .env.example .env
 
 # Add your API keys to .env
 # RECALLAI_API_KEY=your_key_here
-# ASSEMBLYAI_API_KEY=your_key_here
+# NGROK_AUTHTOKEN=your_token_here
+# RECALL_WEBHOOK_SECRET=your_secret_here
 ```
 
 ### Development
@@ -97,7 +98,8 @@ jdnotesthings/
 - **UI:** React 19.2.0 + TypeScript
 - **Build System:** Webpack + Electron Forge
 - **Recording:** Recall.ai Desktop SDK 1.3.2
-- **Transcription:** AssemblyAI 4.19.0
+- **Transcription:** Recall.ai Async API (webhook-based)
+- **Webhooks:** Express 4.x + ngrok 5.x + Svix
 
 ---
 
@@ -106,9 +108,12 @@ jdnotesthings/
 ### ✅ Phase 1: Core Recording & Transcription (Complete)
 - Manual and automatic meeting recording
 - System audio capture via Recall.ai SDK
-- Real-time transcription with AssemblyAI v3 streaming
-- Speaker diarization (Speaker 1, Speaker 2, etc.)
+- Async webhook-based transcription with Recall.ai API
+- Speaker diarization with participant metadata (participantId, isHost)
 - Microphone audio capture confirmed working
+- Automatic ngrok tunnel establishment for webhooks
+- Upload progress tracking with animated UI progress bar
+- Svix signature verification for webhook security
 
 ### ✅ Phase 2: Routing System (Complete)
 - Automatic file organization by client/project/industry
@@ -186,9 +191,11 @@ npm run make
 # Recall.ai Configuration
 RECALLAI_API_URL=https://us-west-2.recall.ai
 RECALLAI_API_KEY=your_api_key
+RECALL_WEBHOOK_SECRET=your_webhook_secret
 
-# AssemblyAI Configuration
-ASSEMBLYAI_API_KEY=your_api_key
+# ngrok Configuration (for webhook tunnel)
+NGROK_AUTHTOKEN=your_ngrok_token
+NGROK_DOMAIN=your-domain.ngrok-free.dev
 
 # OpenAI Configuration (for AI summaries)
 OPENAI_API_KEY=your_api_key
@@ -203,8 +210,12 @@ VAULT_PATH=./vault
 ```
 
 ### API Keys Required
-- **Recall.ai**: For desktop audio recording
-- **AssemblyAI**: For transcription with speaker diarization
+- **Recall.ai**: For desktop audio recording and async transcription
+  - API Key: For SDK authentication
+  - Webhook Secret: For Svix signature verification (get from Recall.ai dashboard)
+- **ngrok**: For webhook tunnel (free tier sufficient)
+  - Authtoken: From ngrok dashboard
+  - Domain: Optional static domain (or use auto-generated)
 - **OpenAI**: For AI-generated meeting summaries (gpt-4o-mini)
 - **Google OAuth**: For Calendar + Contacts access (unified authentication)
   - Set up OAuth 2.0 credentials at [Google Cloud Console](https://console.cloud.google.com/)

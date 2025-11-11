@@ -15,7 +15,7 @@
 **Status:** Export workflow refinement in progress
 
 **Completed Phases:**
-- ✅ Phase 1: Core Recording & Transcription
+- ✅ Phase 1: Core Recording & Transcription (Recall.ai SDK + Async Webhook Transcription)
 - ✅ Phase 2: Routing System
 - ✅ Phase 3: Calendar Integration & Auto-Recording
 - ✅ Phase 4: LLM Integration & Summaries (Template System + Modular Provider Architecture)
@@ -23,6 +23,13 @@
 - ✅ Phase 6: Speaker Recognition & Contact Matching
 - ✅ Phase 7: Platform-Specific Recording (Zoom/Teams/Meet)
 - 🔧 Phase 11 (Partial): LLM Provider Selection UI
+
+**Recent Architectural Changes (Nov 10, 2025):**
+- ✅ Migrated from AssemblyAI real-time streaming to Recall.ai async transcription
+- ✅ Implemented webhook-based workflow with ngrok tunnel automation
+- ✅ Removed polling dependencies, now 100% webhook-driven
+- ✅ Added Svix signature verification for webhook security
+- ✅ Implemented upload progress tracking with UI progress bar
 
 **Recent Updates (November 8, 2025):**
 - ✅ Implemented modular LLM service architecture with adapter pattern
@@ -56,7 +63,8 @@ The application will be developed in phases, with each phase delivering usable f
 - **Platform:** Electron + Node.js + TypeScript
 - **UI Framework:** React (for renderer process)
 - **Recording SDK:** Recall.ai Desktop Recording SDK
-- **Transcription:** AssemblyAI v3 (streaming with speaker diarization)
+- **Transcription:** Recall.ai Async Transcription API (webhook-based with speaker diarization)
+- **Webhook Infrastructure:** Express server (port 13373) + ngrok tunnel + Svix signature verification
 - **LLM Integration:** Modular adapter pattern with runtime provider switching
   - **Supported Providers:** OpenAI (gpt-4o-mini), Anthropic (Claude Haiku 4.5), Azure OpenAI (gpt-5-mini)
   - **Current Provider:** Azure OpenAI with gpt-5-mini reasoning model
@@ -791,25 +799,32 @@ const decrypted = dpapi.unprotect(
 2. ✅ Recall.ai SDK integration (v1.3.2)
 3. ✅ Manual recording with start/stop controls
 4. ✅ Desktop audio recording (system audio capture)
-5. ✅ Transcription integration (AssemblyAI v3 streaming)
+5. ✅ Transcription integration (Recall.ai async API with webhooks)
 6. ✅ Save transcripts to file system
 7. ✅ Recording widget UI
 8. ✅ Meeting detection (Zoom, Teams, Google Meet, Slack)
+9. ✅ Webhook server with ngrok tunnel automation
+10. ✅ Upload progress tracking with UI progress bar
 
 #### Success Criteria
 - ✅ User can start manual recording
 - ✅ Audio is captured clearly (microphone confirmed working)
 - ✅ Transcript is generated with timestamps
-- ✅ Real-time transcription with AssemblyAI streaming
-- ✅ Speaker diarization (Speaker 1, Speaker 2, etc.)
+- ✅ Async webhook-based transcription (Recall.ai)
+- ✅ Speaker diarization with participant metadata (participantId, isHost)
+- ✅ Webhook signature verification for security
 
 #### Implementation Details
 - **Built on**: Muesli (Recall.ai reference implementation) - November 6, 2025
 - **Recording**: Manual desktop audio with `prepareDesktopAudioRecording()`
 - **Auto-detection**: Automatic meeting detection for supported platforms
-- **Transcription**: AssemblyAI v3 streaming with speaker diarization
+- **Transcription**: Recall.ai async API (webhook-based, no polling)
+  - **Workflow**: Upload → `sdk_upload.complete` webhook → Create transcript → `transcript.done` webhook
+  - **Security**: Svix signature verification on all webhook payloads
+  - **Infrastructure**: Express server (port 13373) + ngrok automatic tunnel
 - **Storage**: Meetings stored in `userData/meetings.json`
 - **Files**: Recording files saved to `userData/recordings/`
+- **Transcript Format**: Array of participant objects with words arrays, includes participantId and isHost metadata
 
 #### User Value
 Can manually record meetings and get transcribed notes saved locally.
@@ -1519,22 +1534,27 @@ Take notes and review what was said during the meeting.
 - Desktop Recording SDK
 - Documentation: https://docs.recall.ai/docs/getting-started
 
-### Transcription Service (Provider Pattern)
-**Architecture**: Pluggable provider system supporting multiple backends
+### Transcription Service
+**Architecture**: Recall.ai Async Transcription API (webhook-based)
 
-**Phase 1 - AssemblyAI Provider**:
-- **AssemblyAI**: Excellent diarization (50 speakers), mid-tier pricing ($0.27/hr)
-- Primary implementation for immediate use
-- Cloud-based, requires API key
+**Current Implementation**:
+- **Recall.ai Async API**: Built-in transcription with speaker diarization
+- Webhook-driven workflow with automatic ngrok tunnel
+- No polling required - 100% event-driven via webhooks
+- Transcript format: Array of participant objects with words arrays
+- Metadata: participantId, isHost, speaker name, platform info
+- Security: Svix signature verification on all webhooks
+- Cost: Included with Recall.ai recording service
 
-**Phase 1.5 - Parakeet Provider** (Future):
-- **Parakeet (NVIDIA)**: Local transcription, privacy-focused, offline, free
-- Similar to Meetify's implementation
-- Requires GPU for optimal performance
+**Webhook Workflow**:
+1. Recording upload completes → `sdk_upload.complete` webhook
+2. App creates transcript via POST `/api/v1/recording/{id}/create_transcript/`
+3. Recall.ai processes transcript → `transcript.done` webhook
+4. App downloads and parses transcript from provided URL
 
-**Other Options Considered**:
-- **Deepgram**: Real-time + speaker diarization, good pricing (may use in Phase 12)
-- **Whisper API**: OpenAI, high quality, potentially expensive
+**Historical Note**:
+- Previously used AssemblyAI v3 streaming (real-time transcription)
+- Migrated to Recall.ai async API (November 10, 2025) for better integration with recording workflow
 
 ### LLM Services
 - **OpenAI**: GPT-4o (for complex summaries)
@@ -1699,20 +1719,8 @@ This is a phase-based project without hard deadlines. Each phase should be:
 
 Phases 1-3 create the MVP. Phases 4-11 add intelligence and automation. Phase 12 is optional polish.
 
----
-
-## Next Steps
-
-1. **Review this specification** - Confirm alignment with vision
-2. **Set up development environment** - Install Electron, Node.js, TypeScript
-3. **Create Recall.ai account** - Obtain API key and test SDK
-4. **Select transcription service** - Test quality and pricing
-5. **Begin Phase 1 implementation** - Core recording and transcription
-6. **Iterate based on real-world usage** - Refine and improve
 
 ---
 
 **Document Version:** 1.0
 **Last Updated:** November 8, 2025
-**Author:** Claude Code
-**Approved By:** J.D. Bruce
