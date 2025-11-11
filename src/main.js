@@ -637,20 +637,20 @@ async function createDesktopSdkUpload() {
 
     const response = await axios.post(url, {
       recording_config: {
-        // Audio-only recording (much faster upload than video)
-        video_mixed_mp4: null,  // Disable video to reduce file size dramatically
-        audio_mixed_mp3: {},     // Audio only - this is all we need for transcription
+        // Audio-only recording - omit video_mixed_mp4 entirely (don't set to null)
+        // This dramatically reduces file size and upload time
+        audio_mixed_mp3: {},
 
         // No real-time transcription - we'll use Recall.ai async API after recording
         // This gives us better quality and proper speaker diarization
         realtime_endpoints: [
           {
-            type: "desktop_sdk_callback",  // Fixed: underscore not hyphen
+            type: "desktop_sdk_callback",
             events: [
-              "participant_events.join",  // Still need participant info for speaker matching
+              "participant_events.join"  // Only track participant info
             ]
-          },
-        ],
+          }
+        ]
       }
     }, {
       headers: { 'Authorization': `Token ${RECALLAI_API_KEY}` },
@@ -816,7 +816,7 @@ function initSDK() {
         // Webhooks are now configured to handle upload completion
         // No need to poll - the webhook will trigger when upload is complete
         console.log('[Upload] Upload started - waiting for webhook notification...');
-      }, 3000); // Wait 3 seconds to ensure file is fully written
+      }, 500); // Brief delay to ensure file is fully written
 
     } catch (error) {
       console.error("Error handling recording ended:", error);
