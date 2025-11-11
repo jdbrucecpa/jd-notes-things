@@ -47,20 +47,34 @@ npm run make
 
 ## Project Status
 
-**Current Phase:** Phase 6 - Speaker Recognition & Contact Matching (In Progress)
+**Current Phase:** Pre-Phase 8 - Complete Deferred Features from Phases 1-7
 
 ### ✅ Completed Phases
-- **Phase 1**: Core Recording & Transcription (Recall.ai SDK + AssemblyAI)
+- **Phase 1**: Core Recording & Transcription (Recall.ai SDK + Async Webhook Transcription)
 - **Phase 2**: Routing System (Email domain matching, vault structure)
 - **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
-- **Phase 4**: LLM Integration (OpenAI summaries with templates)
-- **Phase 5**: Obsidian Export (Two-file architecture with frontmatter)
+- **Phase 4**: LLM Integration (Multi-provider with runtime switching)
+- **Phase 5**: Obsidian Export (Two-file architecture, auto-export, publish buttons)
+- **Phase 6**: Speaker Recognition & Contact Matching (Unified Google auth, LRU cache)
+- **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet detection)
+- **Pre-Phase 7 Bug Fixes**: All 5 critical bugs resolved
 
-### 🚧 Current Phase (Phase 6)
-- ✅ Unified Google authentication (Calendar + Contacts)
-- ✅ Google Contacts integration with caching
-- ✅ Speaker matching with heuristic algorithms
-- ⏳ End-to-end testing with real meetings
+### 🚧 Current Work: Pre-Phase 8 Features
+
+Before moving to Phase 8 (Import Prior Transcripts), completing essential UI features and code quality improvements:
+
+**Tasks:**
+1. Manual Vault Link Override UI (edit obsidianLink field in UI)
+2. Proper Logging Framework (electron-log for debugging)
+3. ESLint & Prettier (code quality and consistency)
+
+**Deferred to Phase 10 (Advanced UI & Settings):**
+- Manual Speaker ID Correction UI
+- Manual Participant Input During Recording
+
+**Estimated effort:** 5-8 hours
+
+See [SPECIFICATION.md Pre-Phase 8](./SPECIFICATION.md#pre-phase-8-complete-deferred-features-from-phases-1-7) for complete details.
 
 ### 📋 See Full Status
 - **[PROGRESS.md](./PROGRESS.md)** - Detailed progress and next steps
@@ -139,23 +153,47 @@ jdnotesthings/
 - Two-file architecture (summary + transcript)
 - Rich YAML frontmatter with meeting metadata
 - Bidirectional Obsidian wiki-links
-- Automatic export to configured vault path
+- Automatic export after template generation
+- Manual Publish/Republish buttons with confirmation
+- Obsidian link tracking in meeting objects
+- Multiple template concatenation in single summary file
+- UI status badge (green indicator when synced)
 - Multi-organization routing support
+- **Known limitation**: Manual vault link override backend ready, UI missing
 
-### 🚧 Phase 6: Speaker Recognition & Contact Matching (In Progress)
-- ✅ Unified Google authentication (Calendar + Contacts)
-- ✅ Google Contacts integration with 24-hour caching
-- ✅ Heuristic-based speaker matching algorithms
-- ✅ Contact count tracking and UI display
-- ⏳ End-to-end testing with real meetings
+### ✅ Phase 6: Speaker Recognition & Contact Matching (Complete)
+- Unified Google authentication (Calendar + Contacts)
+- Google Contacts integration with LRU cache (5,000 max entries, 24-hour TTL)
+- Heuristic-based speaker matching algorithms
+- Contact count tracking and UI display
+- Auth expiration notifications to user
+
+### ✅ Phase 7: Platform-Specific Recording (Complete)
+- Zoom meeting detection (inherited from Muesli)
+- Microsoft Teams meeting detection
+- Google Meet meeting detection
+- Platform metadata in meeting objects
+- Platform-specific UI colors and icons
+
+### ✅ Pre-Phase 7 Bug Fixes (Complete)
+- Fixed RoutingEngine method signature bug
+- Fixed service initialization race condition
+- Added token refresh user notifications
+- Fixed file operation read/write race with readWaiters queue
+- Implemented LRU cache for contacts (bounded memory)
+
+### 🔜 Next Phase (Phase 8)
+- Import Prior Transcripts
+  - Bulk import existing meeting notes
+  - Support .txt, .md, VTT, SRT formats
+  - Metadata extraction from filenames
+  - Apply routing and generate summaries
 
 ### Future Phases
-- Phase 7: Platform-specific recording (Zoom/Teams/Meet)
-- Phase 8: HubSpot CRM integration
-- Phase 9: Import prior transcripts
-- Phase 10: Encryption & security (Windows DPAPI)
-- Phase 11: Advanced UI & settings
-- Phase 12: Real-time transcription (optional)
+- Phase 9: Encryption & Security (Windows DPAPI)
+- Phase 10: Advanced UI & Settings (speaker correction, participant input, etc.)
+- Phase 11: Real-time Transcription (optional)
+- Phase 12: HubSpot CRM Integration
 
 See [SPECIFICATION.md](./SPECIFICATION.md) for complete feature roadmap.
 

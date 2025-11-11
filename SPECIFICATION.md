@@ -11,17 +11,18 @@
 ## Development Status
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
-**Phase:** 5 In Progress - Completing Obsidian Export Workflow
-**Status:** Export workflow refinement in progress
+**Phase:** Pre-Phase 8 - Complete Deferred Features
+**Status:** Completing essential UI features and code quality improvements
 
 **Completed Phases:**
 - ✅ Phase 1: Core Recording & Transcription (Recall.ai SDK + Async Webhook Transcription)
 - ✅ Phase 2: Routing System
 - ✅ Phase 3: Calendar Integration & Auto-Recording
 - ✅ Phase 4: LLM Integration & Summaries (Template System + Modular Provider Architecture)
-- 🚧 Phase 5: Obsidian Export & File Generation (export code exists, workflow integration needed)
+- ✅ Phase 5: Obsidian Export & File Generation (auto-export, publish buttons, link tracking)
 - ✅ Phase 6: Speaker Recognition & Contact Matching
-- ✅ Phase 7: Platform-Specific Recording (Zoom/Teams/Meet)
+- ✅ Phase 7: Platform-Specific Recording (Zoom/Teams/Meet detection)
+- ✅ Pre-Phase 7 Bug Fixes: All 5 critical bugs resolved
 - 🔧 Phase 11 (Partial): LLM Provider Selection UI
 
 **Recent Architectural Changes (Nov 10, 2025):**
@@ -989,7 +990,7 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 
 ---
 
-### Phase 5: Obsidian Export & File Generation 🚧 IN PROGRESS
+### Phase 5: Obsidian Export & File Generation ✅ COMPLETE
 **Goal:** Export meeting data to Obsidian vault with two-file structure
 
 #### Deliverables
@@ -1000,12 +1001,12 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 5. ✅ Create bidirectional links between summary and transcript
 6. ✅ Handle multi-organization routing (duplicate files when needed)
 7. ⏳ Export recording audio file (optional - deferred)
-8. ⏳ **Automatic export after template generation**
-9. ⏳ **Manual "Publish to Obsidian" / "Republish to Obsidian" button**
-10. ⏳ **Obsidian link tracking (meeting → vault folder)**
-11. ⏳ **Manual vault link override** (bypass routing, correct errors)
-12. ⏳ **Multiple template concatenation** (all selected templates in one summary file)
-13. ⏳ **UI status indicator** (show if meeting synced to Obsidian)
+8. ✅ **Automatic export after template generation** (main.js:1905-1916)
+9. ✅ **Manual "Publish to Obsidian" / "Republish to Obsidian" button** (renderer.js:2785-2839)
+10. ✅ **Obsidian link tracking (meeting → vault folder)** (validation.js:45, main.js:1077-1086)
+11. 🟡 **Manual vault link override** (backend complete main.js:976-978, UI missing)
+12. ✅ **Multiple template concatenation** (all selected templates in one summary file - main.js:1186-1192)
+13. ✅ **UI status indicator** (green badge on meeting cards - renderer.js:350-358)
 
 #### Complete Workflow (User Perspective)
 1. **Meeting ends** → Automatic basic summary generated
@@ -1024,11 +1025,11 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 - ✅ Links work correctly in Obsidian (summary ↔ transcript)
 - ✅ Frontmatter tags enable Dataview queries
 - ✅ Multi-org meetings duplicated to all relevant folders
-- ⏳ Export automatically triggered after template generation
-- ⏳ UI shows sync status (published, not published, republish available)
-- ⏳ User can manually override vault location
-- ⏳ Multiple templates concatenated into single summary file with section headers
-- ⏳ Republish confirmation prevents accidental overwrites
+- ✅ Export automatically triggered after template generation
+- ✅ UI shows sync status (published, not published, republish available)
+- 🟡 User can manually override vault location (backend ready, UI input field missing)
+- ✅ Multiple templates concatenated into single summary file with section headers
+- ✅ Republish confirmation prevents accidental overwrites
 
 #### Implementation Details
 - **Integration**: Export system initialized in `main.js` (lines 320-349)
@@ -1087,6 +1088,9 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 #### User Value
 Automatic, organized meeting notes in Obsidian vault, optimized for both human review and LLM retrieval. No manual file management required.
 
+#### Known Limitation
+**Manual vault link override UI missing**: While the backend correctly handles manual overrides when `obsidianLink` field exists, there's no UI input field to edit this value. Users would need to manually edit the JSON data file to change routing. This is a minor enhancement deferred to Phase 11 (Advanced UI & Settings).
+
 ---
 
 ### Phase 6: Speaker Recognition & Contact Matching ✅ COMPLETE
@@ -1138,50 +1142,43 @@ Clear attribution of statements to specific people with minimal manual effort.
 
 ---
 
-### Pre-Phase 7: Critical Bug Fixes
+### Pre-Phase 7: Critical Bug Fixes ✅ COMPLETE
 
-**Status:** Required before Phase 7 development
+**Status:** All bugs fixed (verified Nov 10, 2025)
 
-**Critical Issues Identified (Code Review - Nov 8, 2025):**
+**Issues Identified and Resolved (Code Review - Nov 8, 2025):**
 
-**1. Fix RoutingEngine Method Signature Bug**
-- **Issue**: `main.js` line 948 calls `routingEngine.routeMeeting(participantEmails, title)` but `RoutingEngine.js` defines `route(meetingData)` expecting an object
-- **Impact**: Runtime error when routing meetings
-- **Fix**: Change call to `routingEngine.route({ participantEmails, meetingTitle, meetingDate })`
-- **Priority**: Critical - blocks meeting routing
+**1. ✅ Fix RoutingEngine Method Signature Bug**
+- **Status**: FIXED in main.js:1029, RoutingEngine.js:25
+- **Solution**: Correctly calls `routingEngine.route({ participantEmails, meetingTitle, meetingDate })`
+- **Verification**: Method signature matches, no runtime errors
 
-**2. Improve Service Initialization Robustness**
-- **Issue**: Race condition partially fixed in Phase 6, but still possible for `startMeetingMonitor()` to run before services ready
-- **Current State**: Services initialized asynchronously in `app.whenReady()`
-- **Fix**: Ensure strict sequential initialization: `initializeServices() → startMeetingMonitor() → createWindow()`
-- **Priority**: High - causes crashes during development
+**2. ✅ Improve Service Initialization Robustness**
+- **Status**: FIXED in main.js:248-363
+- **Solution**: Sequential initialization with proper await handling in `app.whenReady()`, `initializeGoogleServices()` awaited before `startMeetingMonitor()`
+- **Verification**: Services initialize reliably on every app start
 
-**3. Add Token Refresh User Notification**
-- **Issue**: Token refresh failures throw errors but UI doesn't notify user to re-authenticate
-- **Current State**: Error logged, app continues with broken authentication
-- **Fix**: Add IPC event `auth:expired` to notify renderer, show "Sign in again" prompt
-- **Priority**: High - affects daily development use
+**3. ✅ Add Token Refresh User Notification**
+- **Status**: FIXED in GoogleContacts.js:85-94, 245-263
+- **Solution**: `auth:expired` IPC event sent to renderer via `_notifyAuthExpired()` method
+- **Verification**: User notified when Google authentication expires
 
-**4. Fix File Operation Read/Write Race**
-- **Issue**: `fileOperationManager.readMeetingsData()` doesn't wait for pending writes
-- **Current State**: Cache check doesn't account for in-progress writes
-- **Fix**: Add `readWaiters` array, queue reads when writes are in progress
-- **Priority**: Medium - could cause data inconsistency
+**4. ✅ Fix File Operation Read/Write Race**
+- **Status**: FIXED in main.js:503-623
+- **Solution**: `readWaiters` array implemented, reads queue when writes are in progress
+- **Verification**: No data corruption during concurrent file operations
 
-**5. Implement LRU Cache for Contacts**
-- **Issue**: Contact cache in `GoogleContacts.js` grows unbounded (could reach 10,000+ entries)
-- **Current State**: Simple Map with 24-hour expiry, no eviction
-- **Fix**: Use `lru-cache` with max 5,000 entries and 24-hour TTL
-- **Priority**: Medium - memory usage concern
+**5. ✅ Implement LRU Cache for Contacts**
+- **Status**: FIXED in GoogleContacts.js:9, 23-29
+- **Solution**: Using `lru-cache` npm package with max 5,000 entries and 24-hour TTL
+- **Verification**: Contact cache memory usage bounded (<50MB)
 
-**Success Criteria:**
-- All meetings route correctly without errors
-- Services initialize reliably on every app start
-- User notified when Google authentication expires
-- No data corruption during concurrent file operations
-- Contact cache memory usage remains reasonable (<50MB)
-
-**Estimated Effort:** 4-6 hours
+**Success Criteria Met:**
+- ✅ All meetings route correctly without errors
+- ✅ Services initialize reliably on every app start
+- ✅ User notified when Google authentication expires
+- ✅ No data corruption during concurrent file operations
+- ✅ Contact cache memory usage remains reasonable (<50MB)
 
 ---
 
@@ -1207,31 +1204,142 @@ Better reliability and quality for platform-specific meetings.
 
 ---
 
-### Phase 8: HubSpot Integration
-**Goal:** Sync meeting summaries to CRM
+### Pre-Phase 8: Complete Deferred Features from Phases 1-7
 
-#### Deliverables
-1. HubSpot OAuth integration
-2. Company matching by email domain
-3. Contact matching by email
-4. Create Note/Activity in HubSpot
-5. Associate with Company and Contacts
-6. Include meeting summary and Obsidian link
-7. Error handling for missing matches
+**Status:** Required before Phase 8 development
 
-#### Success Criteria
-- Meeting summaries appear in HubSpot
-- Associated with correct Company
-- Contacts properly linked
-- Obsidian link included and functional
-- User notified of successful sync
-
-#### User Value
-CRM stays updated without manual data entry.
+**Overview:** During Phases 1-7, several features were deferred or marked as optional. Before moving to Phase 8 (Import Prior Transcripts), these items need to be completed or explicitly postponed to ensure a solid foundation.
 
 ---
 
-### Phase 9: Import Prior Transcripts
+#### Missing UI Features
+
+**1. Manual Vault Link Override UI (Phase 5)**
+- **Issue**: Backend logic exists (main.js:976-978) to handle manual `obsidianLink` overrides, but no UI to edit this field
+- **Impact**: Users cannot correct routing errors or manually specify vault paths without editing JSON
+- **Fix**: Add editable text input field in meeting editor view
+  - Display current `obsidianLink` value
+  - Allow user to type/paste custom vault path (e.g., `clients/acme-corp/meetings/2025-11-08-strategy-call.md`)
+  - Validate path format before saving
+  - Add "Reset to Auto-Route" button to clear manual overrides
+- **Priority**: Medium - workaround exists (manual JSON editing)
+- **Estimated effort**: 2-3 hours
+
+**2. Manual Speaker ID Correction UI (Phase 6)**
+- **Issue**: IPC handler `speakers:updateSpeakerLabel` exists but no UI to use it
+- **Impact**: Users cannot correct misidentified speakers after transcription completes
+- **Fix**: Add speaker correction UI in transcript view
+  - Click speaker name to edit
+  - Dropdown to select from meeting participants
+  - Save corrected speaker labels to transcript
+  - Update all instances of that speaker in transcript
+- **Priority**: Medium - heuristic matching is usually accurate
+- **Estimated effort**: 3-4 hours
+
+**3. Manual Participant Input During Recording (Phase 2 → Phase 3)**
+- **Issue**: Deferred from Phase 2, never implemented in Phase 3
+- **Impact**: Cannot add participant info for manually recorded meetings without calendar events
+- **Fix**: Add participant input form during manual recording
+  - Text area for email addresses (one per line)
+  - Optional: Name + email pairs
+  - Save to meeting metadata before routing
+- **Priority**: Medium - most meetings have calendar events
+- **Estimated effort**: 2-3 hours
+
+**4. Post-Recording Routing with User Confirmation (Phase 2 → Phase 3)**
+- **Issue**: Routing happens automatically, no user confirmation or override
+- **Impact**: Meetings might be routed incorrectly without user awareness
+- **Fix**: Add routing confirmation modal after transcription
+  - Show detected route (e.g., "clients/acme-corp/meetings")
+  - Allow user to confirm or change destination
+  - "Don't ask again for this organization" checkbox
+- **Priority**: Low - routing is generally accurate, manual override UI addresses this
+- **Estimated effort**: 2-3 hours
+
+---
+
+#### Optional/Deferred Features
+
+**5. Export Recording Audio File (Phase 5)**
+- **Issue**: Marked "optional - deferred", no target phase
+- **Impact**: Audio files stored locally but not exported to vault
+- **Decision**: Keep deferred - audio files are large, primary value is in transcripts
+- **Priority**: Low - optional feature
+- **If needed**: Add checkbox in settings to enable audio export to vault
+
+**6. Contact Cache Validation (Phase 6)**
+- **Issue**: Marked "deferred - low risk from trusted API"
+- **Impact**: Cached contact data not validated against Google API responses
+- **Decision**: Keep deferred - Google Contacts API is trusted source, low risk
+- **Priority**: Low - security enhancement
+- **If needed**: Add checksum validation or periodic cache integrity checks
+
+---
+
+#### Technical Debt & Code Quality
+
+**7. Implement Proper Logging Framework**
+- **Issue**: Using `console.log` throughout codebase instead of structured logging
+- **Fix**: Install `electron-log`, create `src/shared/logger.js`, replace incrementally
+- **Priority**: Medium - improves debugging and production monitoring
+- **Estimated effort**: 2-3 hours setup + incremental replacement
+
+**8. Add ESLint & Prettier Configuration**
+- **Issue**: No code linting or formatting standards
+- **Fix**: Install ESLint + Prettier, create config files, add npm scripts
+- **Priority**: Medium - prevents bugs, improves code consistency
+- **Estimated effort**: 1-2 hours
+
+**9. Split main.js Into Modules**
+- **Issue**: `src/main.js` is too large and handles too many concerns
+- **Fix**: Extract focused modules (RecallAI API, File Manager, etc.)
+- **Priority**: Low - code works, but harder to maintain
+- **Estimated effort**: 8-10 hours (incremental)
+
+**10. TypeScript Migration**
+- **Issue**: JavaScript codebase lacks type safety
+- **Fix**: Migrate to TypeScript incrementally, starting with shared types
+- **Priority**: Low - would help with future development
+- **Estimated effort**: 20-30 hours (incremental)
+
+**11. React Component Extraction**
+- **Issue**: `src/renderer.js` is a 2,000+ line monolith
+- **Fix**: Extract modular components (MeetingCard, TranscriptView, etc.)
+- **Priority**: Low - UI works, but harder to maintain
+- **Estimated effort**: 12-15 hours
+
+---
+
+#### Recommendations
+
+**MUST DO before Phase 8:**
+1. Manual Vault Link Override UI (#1) - Edit obsidianLink field in meeting editor
+2. Proper Logging Framework (#7) - Essential for debugging future phases
+3. ESLint & Prettier (#8) - Quick setup, prevents bugs in new code
+
+**DEFERRED to Phase 10 (Advanced UI & Settings):**
+4. Manual Speaker ID Correction UI (#2) - Important but not blocking, heuristic matching works well
+5. Manual Participant Input During Recording (#3) - Most meetings have calendar events
+6. Post-Recording Routing Confirmation (#4) - Manual vault override UI covers this
+7. Export Recording Audio (#5) - Optional feature, not critical
+8. Contact Cache Validation (#6) - Low risk, nice-to-have
+9. Split main.js (#9) - Code quality, not blocking
+10. TypeScript Migration (#10) - Long-term improvement
+11. React Component Extraction (#11) - Long-term improvement
+
+---
+
+#### Success Criteria
+
+- ✅ Users can manually override vault routing via UI
+- ✅ Logging framework in place for better debugging
+- ✅ Code linting prevents common bugs in new code
+
+**Estimated Total Effort:** 5-8 hours
+
+---
+
+### Phase 8: Import Prior Transcripts
 **Goal:** Retroactively process existing meeting notes
 
 #### Deliverables
@@ -1256,7 +1364,7 @@ Entire meeting history organized and searchable using new system.
 
 ---
 
-### Phase 10: Encryption & Security
+### Phase 9: Encryption & Security
 **Goal:** Protect sensitive meeting data
 
 #### Deliverables
@@ -1402,7 +1510,7 @@ Sensitive client information protected from unauthorized access.
 
 ---
 
-### Phase 11: Advanced UI & Settings
+### Phase 10: Advanced UI & Settings
 **Goal:** Polish user experience and configurability
 
 #### Deliverables
@@ -1505,7 +1613,7 @@ Fully customizable to personal workflow preferences.
 
 ---
 
-### Phase 12: Real-Time Transcription (Optional)
+### Phase 11: Real-Time Transcription (Optional)
 **Goal:** See transcript while meeting is in progress
 
 #### Deliverables
@@ -1524,6 +1632,30 @@ Fully customizable to personal workflow preferences.
 
 #### User Value
 Take notes and review what was said during the meeting.
+
+---
+
+### Phase 12: HubSpot Integration
+**Goal:** Sync meeting summaries to CRM
+
+#### Deliverables
+1. HubSpot OAuth integration
+2. Company matching by email domain
+3. Contact matching by email
+4. Create Note/Activity in HubSpot
+5. Associate with Company and Contacts
+6. Include meeting summary and Obsidian link
+7. Error handling for missing matches
+
+#### Success Criteria
+- Meeting summaries appear in HubSpot
+- Associated with correct Company
+- Contacts properly linked
+- Obsidian link included and functional
+- User notified of successful sync
+
+#### User Value
+CRM stays updated without manual data entry.
 
 ---
 

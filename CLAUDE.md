@@ -99,21 +99,22 @@ The LLM service scans this folder, presents available templates in UI, and gener
 
 ## Development Phases
 
-**Currently**: Phase 5 In Progress - Completing Obsidian Export Workflow
+**Currently**: Pre-Phase 8 - Essential UI & Code Quality
 
 The project follows a 12-phase plan (see `SPECIFICATION.md`):
-1. Core recording & transcription (MVP)
-2. Routing system
-3. Calendar integration & auto-recording
-4. LLM integration & summaries
-5. Meeting index generation
-6. Speaker recognition & contact matching
-7. Platform-specific recording (Zoom/Teams/Meet)
-8. HubSpot integration
-9. Import prior transcripts
+1. ✅ Core recording & transcription (MVP)
+2. ✅ Routing system
+3. ✅ Calendar integration & auto-recording
+4. ✅ LLM integration & summaries
+5. ✅ Obsidian export & file generation
+6. ✅ Speaker recognition & contact matching
+7. ✅ Platform-specific recording (Zoom/Teams/Meet)
+8. 🚧 Pre-Phase 8: Vault override UI + logging + linting (CURRENT - 5-8 hours)
+9. 🔜 Import prior transcripts (NEXT)
 10. Encryption & security
-11. Advanced UI & settings
+11. Advanced UI & settings (speaker correction, participant input, etc.)
 12. Real-time transcription (optional)
+13. HubSpot CRM integration
 
 Each phase delivers independently useful functionality.
 
@@ -206,16 +207,17 @@ src/
 - **Recall.ai Docs**: https://docs.recall.ai/docs/getting-started
 - **Recall.ai Example**: https://github.com/recallai/muesli-public
 
-## Current Project State (Nov 8, 2025)
+## Current Project State (Nov 10, 2025)
 
 ### Completed Phases
 - ✅ **Phase 1**: Core Recording & Transcription (Recall.ai SDK with async webhook-based transcription)
 - ✅ **Phase 2**: Routing System (Email domain matching, vault structure)
 - ✅ **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
-- ✅ **Phase 4**: LLM Integration (OpenAI summaries with templates)
-- 🚧 **Phase 5**: Obsidian Export (Export code complete, workflow integration in progress)
-- ✅ **Phase 6**: Speaker Recognition & Contact Matching
+- ✅ **Phase 4**: LLM Integration (Multi-provider with runtime switching)
+- ✅ **Phase 5**: Obsidian Export (Auto-export, publish buttons, link tracking - manual override UI deferred)
+- ✅ **Phase 6**: Speaker Recognition & Contact Matching (LRU cache, auth notifications)
 - ✅ **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet detection, inherited from Muesli)
+- ✅ **Pre-Phase 7 Bug Fixes**: All 5 critical bugs resolved
 
 ### Architectural Migration (Nov 10, 2025)
 - ✅ Migrated from AssemblyAI real-time streaming to Recall.ai async transcription API
@@ -256,27 +258,40 @@ src/
 - ✅ Calendar integration detects platform from meeting links
 - ✅ UI displays platform-specific colors and icons
 
-**Phase 5 Workflow Requirements (Nov 8, 2025):**
-- ✅ Complete export workflow documented in SPECIFICATION.md
-- Auto-export after template generation
-- Manual Publish/Republish buttons with confirmation
-- Obsidian link tracking (`meeting.obsidianLink` field)
-- Manual vault link override (bypass routing for error correction)
-- Multiple templates concatenated in single summary.md file
-- UI status indicator (synced/not synced to Obsidian)
+**Phase 5 Status (Nov 10, 2025):**
+- ✅ Auto-export after template generation (main.js:1905-1916)
+- ✅ Manual Publish/Republish buttons with confirmation (renderer.js:2785-2839)
+- ✅ Obsidian link tracking (`meeting.obsidianLink` field - validation.js:45, main.js:1077-1086)
+- 🟡 Manual vault link override (backend complete main.js:976-978, UI input field missing - deferred to Phase 11)
+- ✅ Multiple templates concatenated in single summary.md file (main.js:1186-1192)
+- ✅ UI status indicator - green badge on meeting cards (renderer.js:350-358)
 
 **Feature Requests Added to Phase 11:**
 - Separate LLM model configuration for auto-summary vs template-based summaries
 - Auto-summary template file (editable like other templates, instead of hardcoded prompt)
 
 ### Next Steps
-1. **Complete Phase 5**: Implement Obsidian export workflow (auto-export, UI buttons, link tracking)
-2. **Fix Current Bug**: Investigate "Invalid data format: undefined" error when saving after template generation
-3. **Production Testing**: Test complete system end-to-end with real meetings
-4. **Phase 8**: HubSpot Integration (CRM sync)
-5. **Phase 9**: Import Prior Transcripts (bulk import existing meeting notes)
-6. **Phase 10**: Security hardening (XSS, CSRF, IPC validation, credential manager)
-7. **Phase 11**: Advanced UI & Settings (including LLM model config, auto-summary template editing)
+
+**Pre-Phase 8 (CURRENT - 5-8 hours):**
+Essential UI and code quality before HubSpot integration:
+
+**Tasks:**
+1. Manual Vault Link Override UI - Edit obsidianLink field in meeting editor (2-3h)
+2. Proper Logging Framework - Install electron-log for structured logging (2-3h)
+3. ESLint & Prettier - Code linting and formatting (1-2h)
+
+**Then:**
+4. **Phase 8**: Import Prior Transcripts (bulk import existing meeting notes)
+5. **Phase 9**: Security hardening (XSS, CSRF, IPC validation, credential manager, DPAPI encryption)
+6. **Phase 10**: Advanced UI & Settings
+   - Manual Speaker ID Correction UI
+   - Manual Participant Input During Recording
+   - Separate LLM model config for auto-summary vs template summaries
+   - Auto-summary template file (editable like other templates)
+   - Additional deferred code quality improvements (TypeScript, component extraction, etc.)
+7. **Phase 11**: Real-time Transcription (optional - streaming transcript during meetings)
+8. **Phase 12**: HubSpot Integration (CRM sync)
+9. **Production Testing**: End-to-end system validation with real meetings
 
 ### Running the App
 - Development: `npm start` (launches Electron with hot reload)
