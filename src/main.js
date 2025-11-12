@@ -16,6 +16,7 @@ const VaultStructure = require('./main/storage/VaultStructure');
 const RoutingEngine = require('./main/routing/RoutingEngine');
 const ConfigLoader = require('./main/routing/ConfigLoader');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
+const transcriptionService = require('./main/services/transcriptionService');
 const expressApp = require('./server');
 const ngrokManager = require('./main/services/ngrokManager');
 const log = require('electron-log');
@@ -663,8 +664,9 @@ async function createDesktopSdkUpload() {
 
     const requestBody = {
       recording_config: {
-        // Audio-only recording - omit video_mixed_mp4 entirely (don't set to null)
-        // This dramatically reduces file size and upload time
+        // Audio-only recording - must EXPLICITLY set video to null to disable it
+        // Per docs: video_mixed_mp4 is enabled by DEFAULT if not set to null
+        video_mixed_mp4: null,  // ← THIS IS REQUIRED to disable video
         audio_mixed_mp3: {},
 
         // No real-time transcription - we'll use Recall.ai async API after recording
@@ -702,16 +704,18 @@ function initSDK() {
 
   // Log the SDK initialization
   sdkLogger.logApiCall('init', {
-    dev: process.env.NODE_ENV === 'development',
-    api_url: process.env.RECALLAI_API_URL,
+    apiUrl: process.env.RECALLAI_API_URL,
+    acquirePermissionsOnStartup: ["accessibility", "screen-capture", "microphone"],
+    restartOnError: true,
     config: {
       recording_path: RECORDING_PATH
     }
   });
 
   RecallAiSdk.init({
-    // dev: true,
-    api_url: process.env.RECALLAI_API_URL,
+    apiUrl: process.env.RECALLAI_API_URL,
+    acquirePermissionsOnStartup: ["accessibility", "screen-capture", "microphone"],
+    restartOnError: true,
     config: {
       recording_path: RECORDING_PATH
     }
@@ -836,18 +840,120 @@ function initSDK() {
     try {
       // Update the note with recording information (marks as complete)
       await updateNoteWithRecordingInfo(windowId);
-      console.log('Recording processing complete - uploading to Recall.ai for transcription');
+      console.log('Recording processing complete - preparing for transcription');
 
-      // Upload to Recall.ai for async transcription
-      // This gives us better quality transcription with proper speaker diarization
+      // Get the transcription provider from the meeting
+      let transcriptionProvider = 'recallai'; // Default
+      try {
+        const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
+        const meetingsData = JSON.parse(fileData);
+        const meeting = meetingsData.pastMeetings.find(m => m.recordingId === windowId);
+        if (meeting && meeting.transcriptionProvider) {
+          transcriptionProvider = meeting.transcriptionProvider;
+          console.log(`[Transcription] Using provider: ${transcriptionProvider}`);
+        }
+      } catch (error) {
+        console.error('[Transcription] Error reading transcription provider, using default:', error);
+      }
+
+      // Wait for file to be fully written
       setTimeout(async () => {
-        console.log('Starting upload to Recall.ai for transcription...');
-        RecallAiSdk.uploadRecording({ windowId: windowId });
+        console.log('[Transcription] Starting transcription after 3 second delay...');
+        console.log('[Transcription] Window ID:', windowId);
+        console.log('[Transcription] Provider:', transcriptionProvider);
 
-        // Webhooks are now configured to handle upload completion
-        // No need to poll - the webhook will trigger when upload is complete
-        console.log('[Upload] Upload started - waiting for webhook notification...');
-      }, 500); // Brief delay to ensure file is fully written
+        // Check if recording file exists
+        const fs = require('fs');
+        const recordingPath = path.join(RECORDING_PATH, `windows-desktop-${windowId}.mp3`);
+        console.log('[Transcription] Checking for recording file:', recordingPath);
+
+        if (fs.existsSync(recordingPath)) {
+          const stats = fs.statSync(recordingPath);
+          console.log('[Transcription] ✓ File exists, size:', (stats.size / 1024).toFixed(2), 'KB');
+        } else {
+          console.error('[Transcription] ✗ Recording file NOT found!');
+          return;
+        }
+
+        try {
+          if (transcriptionProvider === 'recallai') {
+            // Recall.ai: Upload via SDK for async webhook-based transcription
+            console.log('[Upload] Calling uploadRecording() with ONLY windowId (per docs)...');
+            const result = await RecallAiSdk.uploadRecording({
+              windowId: windowId
+            });
+            console.log('[Upload] uploadRecording() completed with result:', result);
+            console.log('[Upload] Waiting for webhook notification...');
+          } else {
+            // AssemblyAI or Deepgram: Direct transcription
+            console.log(`[Transcription] Starting ${transcriptionProvider} transcription...`);
+            console.log(`[Transcription] Audio file path: ${recordingPath}`);
+
+            // Notify renderer of upload progress (simulate progress for UI)
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('recording-state-change', {
+                windowId: windowId,
+                state: 'uploading',
+                progress: 10
+              });
+            }
+
+            console.log(`[Transcription] Calling transcriptionService.transcribe()...`);
+            const transcript = await transcriptionService.transcribe(
+              transcriptionProvider,
+              recordingPath
+            );
+
+            console.log(`[Transcription] ✓ ${transcriptionProvider} transcription complete`);
+            console.log(`[Transcription] Transcript object:`, JSON.stringify(transcript, null, 2));
+            console.log(`[Transcription] Entries: ${transcript.entries ? transcript.entries.length : 'undefined'}`);
+
+            // Update the meeting with the transcript
+            console.log('[Transcription] Reading meetings data to save transcript...');
+            const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
+            const meetingsData = JSON.parse(fileData);
+            const meetingIndex = meetingsData.pastMeetings.findIndex(m => m.recordingId === windowId);
+
+            console.log(`[Transcription] Meeting index: ${meetingIndex}`);
+            if (meetingIndex !== -1) {
+              console.log(`[Transcription] Updating meeting: ${meetingsData.pastMeetings[meetingIndex].id}`);
+              meetingsData.pastMeetings[meetingIndex].transcript = transcript.entries;
+              meetingsData.pastMeetings[meetingIndex].transcriptProvider = transcript.provider;
+              meetingsData.pastMeetings[meetingIndex].transcriptConfidence = transcript.confidence;
+
+              console.log('[Transcription] Writing updated meeting data...');
+              await fileOperationManager.writeData(meetingsData);
+              console.log('[Transcription] ✓ Transcript saved to meeting');
+
+              // Notify renderer of completion
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                console.log('[Transcription] Notifying renderer of completion...');
+                mainWindow.webContents.send('recording-state-change', {
+                  windowId: windowId,
+                  state: 'completed',
+                  progress: 100
+                });
+                mainWindow.webContents.send('transcript-updated', meetingsData.pastMeetings[meetingIndex].id);
+                console.log('[Transcription] ✓ Renderer notified');
+              }
+            } else {
+              console.error('[Transcription] ✗ Meeting not found with recordingId:', windowId);
+            }
+          }
+        } catch (error) {
+          console.error('[Transcription] ERROR during transcription:', error);
+          console.error('[Transcription] Error stack:', error.stack);
+
+          // Notify renderer of error
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('recording-state-change', {
+              windowId: windowId,
+              state: 'failed',
+              error: error.message
+            });
+          }
+        }
+      }, 3000); // 3 second delay to ensure file is fully written (matches muesli timing)
 
     } catch (error) {
       console.error("Error handling recording ended:", error);
@@ -1330,7 +1436,13 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
               participants: currentMeeting.participants || rendererMeeting.participants,
               recordingComplete: currentMeeting.recordingComplete || rendererMeeting.recordingComplete,
               recordingEndTime: currentMeeting.recordingEndTime || rendererMeeting.recordingEndTime,
-              summaries: currentMeeting.summaries || rendererMeeting.summaries
+              summaries: currentMeeting.summaries || rendererMeeting.summaries,
+              // Preserve transcription provider and SDK IDs
+              transcriptionProvider: currentMeeting.transcriptionProvider || rendererMeeting.transcriptionProvider,
+              sdkUploadId: currentMeeting.sdkUploadId || rendererMeeting.sdkUploadId,
+              recallRecordingId: currentMeeting.recallRecordingId || rendererMeeting.recallRecordingId,
+              transcriptProvider: currentMeeting.transcriptProvider || rendererMeeting.transcriptProvider,
+              transcriptConfidence: currentMeeting.transcriptConfidence || rendererMeeting.transcriptConfidence
             };
           }
 
@@ -2261,11 +2373,12 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
 });
 
 // Handle starting a manual desktop recording
-ipcMain.handle('startManualRecording', async (event, meetingId) => {
+ipcMain.handle('startManualRecording', async (event, meetingId, transcriptionProvider = 'recallai') => {
   try {
     // Validate meetingId
     const validatedId = MeetingIdSchema.parse(meetingId);
     console.log(`Starting manual desktop recording for meeting: ${validatedId}`);
+    console.log(`Using transcription provider: ${transcriptionProvider}`);
 
     // Read current data
     const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
@@ -2301,11 +2414,13 @@ ipcMain.handle('startManualRecording', async (event, meetingId) => {
       meeting.uploadToken = uploadData.upload_token; // Store for later matching
       meeting.sdkUploadId = uploadData.id; // Store SDK Upload ID for webhook matching
       meeting.recallRecordingId = uploadData.recording_id; // Store Recall Recording ID
+      meeting.transcriptionProvider = transcriptionProvider; // Store transcription provider
       console.log(`[Upload] Saving IDs for manual recording ${validatedId}:`);
       console.log(`  - recordingId (SDK window): ${key.substring(0, 8)}...`);
       console.log(`  - uploadToken: ${uploadData.upload_token.substring(0, 8)}...`);
       console.log(`  - sdkUploadId: ${uploadData.id}`);
       console.log(`  - recallRecordingId: ${uploadData.recording_id}`);
+      console.log(`  - transcriptionProvider: ${transcriptionProvider}`);
 
       // Initialize transcript array if not present
       if (!meeting.transcript) {

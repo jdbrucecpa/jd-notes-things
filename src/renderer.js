@@ -908,8 +908,12 @@ async function createNewMeeting() {
   // Automatically start recording for the new note
   try {
     console.log('Auto-starting recording for new note');
+    // Get transcription provider from localStorage
+    const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
+    console.log('[Auto-start] Transcription provider from localStorage:', transcriptionProvider);
+    console.log('[Auto-start] localStorage value:', localStorage.getItem('transcriptionProvider'));
     // Start manual recording for the new note
-    window.electronAPI.startManualRecording(id)
+    window.electronAPI.startManualRecording(id, transcriptionProvider)
       .then(result => {
         if (result.success) {
           console.log('Auto-started recording for new note with ID:', result.recordingId);
@@ -2236,6 +2240,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Transcription Provider Selection
+  const transcriptionProviderSelect = document.getElementById('transcriptionProviderSelect');
+  if (transcriptionProviderSelect) {
+    // Load saved provider preference
+    const savedTranscriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
+    transcriptionProviderSelect.value = savedTranscriptionProvider;
+    console.log('Current transcription provider:', savedTranscriptionProvider);
+
+    // Handle provider change
+    transcriptionProviderSelect.addEventListener('change', (e) => {
+      const newProvider = e.target.value;
+      console.log('[Provider Change] Switching transcription provider to:', newProvider);
+      localStorage.setItem('transcriptionProvider', newProvider);
+      console.log('[Provider Change] Saved to localStorage:', localStorage.getItem('transcriptionProvider'));
+
+      // Show confirmation toast
+      const toast = document.createElement('div');
+      toast.className = 'toast success';
+      const providerNames = {
+        'recallai': 'Recall.ai',
+        'assemblyai': 'AssemblyAI',
+        'deepgram': 'Deepgram'
+      };
+      toast.textContent = `Transcription provider: ${providerNames[newProvider] || newProvider}`;
+      toast.style.cssText = 'position: fixed; top: 80px; right: 20px; background: #4CAF50; color: white; padding: 12px 20px; border-radius: 5px; font-size: 14px; z-index: 10000; box-shadow: 0 2px 8px rgba(0,0,0,0.2);';
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.transition = 'opacity 0.3s ease';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
+    });
+  }
+
   // Set up the initial auto-save handler
   setupAutoSaveHandler();
 
@@ -2382,6 +2421,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
+    // Handle transcription completion
+    if (data.state === 'completed') {
+      const uploadProgress = document.getElementById('uploadProgress');
+      const uploadProgressFill = document.getElementById('uploadProgressFill');
+      const uploadProgressText = document.getElementById('uploadProgressText');
+
+      if (uploadProgress && uploadProgressFill && uploadProgressText) {
+        uploadProgressFill.style.width = '100%';
+        uploadProgressText.textContent = 'Transcription complete';
+
+        // Hide progress bar after showing completion
+        setTimeout(() => {
+          uploadProgress.style.display = 'none';
+        }, 2000);
+      }
+    }
+
     // If this state change is for the current note, update the UI
     if (data.noteId === currentEditingMeetingId) {
       console.log('Updating recording button for current note');
@@ -2418,8 +2474,13 @@ document.addEventListener('DOMContentLoaded', async () => {
           recordIcon.style.display = 'none';
           stopIcon.style.display = 'block';
 
+          // Get transcription provider from localStorage
+          const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
+          console.log('[Recording] Transcription provider from localStorage:', transcriptionProvider);
+          console.log('[Recording] localStorage keys:', Object.keys(localStorage));
+          console.log('[Recording] localStorage value:', localStorage.getItem('transcriptionProvider'));
           // Call the API to start recording
-          const result = await window.electronAPI.startManualRecording(currentEditingMeetingId);
+          const result = await window.electronAPI.startManualRecording(currentEditingMeetingId, transcriptionProvider);
           recordButton.disabled = false;
 
           if (result.success) {

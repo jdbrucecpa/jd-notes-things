@@ -26,7 +26,9 @@ app.get('/start-recording', async (req, res) => {
     try {
         const requestBody = {
             recording_config: {
-                // Audio-only recording - omit video_mixed_mp4 entirely (don't set to null)
+                // Audio-only recording - must EXPLICITLY set video to null to disable it
+                // Per docs: video_mixed_mp4 is enabled by DEFAULT if not set to null
+                video_mixed_mp4: null,  // ← THIS IS REQUIRED to disable video
                 audio_mixed_mp3: {},
 
                 // No real-time transcription - we use Recall.ai async API after recording

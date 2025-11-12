@@ -19,7 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteMeeting: (meetingId) => ipcRenderer.invoke('deleteMeeting', meetingId),
   generateMeetingSummary: (meetingId) => ipcRenderer.invoke('generateMeetingSummary', meetingId),
   generateMeetingSummaryStreaming: (meetingId) => ipcRenderer.invoke('generateMeetingSummaryStreaming', meetingId),
-  startManualRecording: (meetingId) => ipcRenderer.invoke('startManualRecording', meetingId),
+  startManualRecording: (meetingId, transcriptionProvider) => ipcRenderer.invoke('startManualRecording', meetingId, transcriptionProvider),
   stopManualRecording: (recordingId) => ipcRenderer.invoke('stopManualRecording', recordingId),
   debugGetHandlers: () => ipcRenderer.invoke('debugGetHandlers'),
   checkForDetectedMeeting: () => ipcRenderer.invoke('checkForDetectedMeeting'),

@@ -171,6 +171,36 @@ body {
   box-shadow: 0 0 0 2px rgba(0, 119, 255, 0.1);
 }
 
+/* Transcription Provider Selector */
+.transcription-provider-selector {
+  margin-right: 10px;
+  -webkit-app-region: no-drag;
+}
+
+.transcription-dropdown {
+  padding: 8px 12px;
+  border-radius: 5px;
+  border: 1px solid var(--border-color);
+  background-color: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-app-region: no-drag;
+  outline: none;
+}
+
+.transcription-dropdown:hover {
+  background-color: #f5f5f5;
+  border-color: #999;
+}
+
+.transcription-dropdown:focus {
+  border-color: #0077FF;
+  box-shadow: 0 0 0 2px rgba(0, 119, 255, 0.1);
+}
+
 /* Unified Google Button (Calendar + Contacts - Phase 6) */
 .google-btn {
   background-color: var(--card-bg);
