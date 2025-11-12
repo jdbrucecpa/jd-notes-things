@@ -20,8 +20,11 @@ app.get('/start-recording', async (req, res) => {
 
     const url = `${RECALLAI_API_URL}/api/v1/sdk_upload/`;
 
+    // Note: Webhook URL is configured in Recall.ai dashboard, not in the request
+    console.log('[Upload Token] Creating upload token (webhook configured in dashboard)');
+
     try {
-        const response = await axios.post(url, {
+        const requestBody = {
             recording_config: {
                 // Audio-only recording - omit video_mixed_mp4 entirely (don't set to null)
                 audio_mixed_mp3: {},
@@ -37,11 +40,16 @@ app.get('/start-recording', async (req, res) => {
                     }
                 ]
             }
-        }, {
+        };
+
+        console.log('[Upload Token] Request body:', JSON.stringify(requestBody, null, 2));
+
+        const response = await axios.post(url, requestBody, {
             headers: { 'Authorization': `Token ${RECALLAI_API_KEY}` },
             timeout: 9000,
         });
 
+        console.log('[Upload Token] Response:', JSON.stringify(response.data, null, 2));
         res.json({ status: 'success', upload_token: response.data.upload_token });
     } catch (e) {
         console.error('Error creating upload token:', e.response?.data || e.message);

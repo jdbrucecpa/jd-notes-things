@@ -1,0 +1,14 @@
+# Dependencies
+node_modules
+
+# Build outputs
+.webpack
+out
+dist
+
+# Vault (user data)
+vault
+
+# Logs
+logs
+*.log

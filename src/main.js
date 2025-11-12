@@ -18,12 +18,29 @@ const ConfigLoader = require('./main/routing/ConfigLoader');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
 const expressApp = require('./server');
 const ngrokManager = require('./main/services/ngrokManager');
+const log = require('electron-log');
 require('dotenv').config();
+
+// Configure electron-log
+log.transports.file.level = 'info';
+log.transports.console.level = 'debug';
+log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
+log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
+log.transports.console.format = '[{y}-{m}-{d} {h}:{i}:{s}] [{level}] {text}';
+
+// Create scoped loggers for different modules
+const logger = {
+  main: log.scope('Main'),
+  monitor: log.scope('MeetingMonitor'),
+  ipc: log.scope('IPC'),
+  recording: log.scope('Recording'),
+  webhook: log.scope('Webhook'),
+};
 
 // Initialize LLM service with auto-detection of available provider
 // Priority: Azure OpenAI > Anthropic > OpenAI
 const llmService = createLLMServiceFromEnv();
-console.log(`[Main] LLM Service initialized with provider: ${llmService.getProviderName()}`);
+logger.main.info(`LLM Service initialized with provider: ${llmService.getProviderName()}`);
 
 // Express server instance (for webhook endpoint)
 let expressServer = null;
@@ -46,7 +63,7 @@ let templateManager = null;
 // Obsidian export system (Phase 5)
 let vaultStructure = null;
 let routingEngine = null;
-let configLoader = null;
+const configLoader = null;
 
 // Speaker recognition system (Phase 6)
 let googleContacts = null;
@@ -63,7 +80,7 @@ let meetingMonitorInterval = null;
  * Meeting monitor - checks for upcoming meetings and auto-starts recording
  */
 function startMeetingMonitor() {
-  console.log('[Meeting Monitor] Starting meeting monitor...');
+  logger.monitor.info('Starting meeting monitor...');
 
   // Check immediately on start
   checkUpcomingMeetings();
@@ -99,14 +116,14 @@ async function checkUpcomingMeetings() {
 
       // Show notification 2 minutes before meeting starts
       if (minutesUntilStart <= 2 && minutesUntilStart >= 0 && !notifiedMeetings.has(meeting.id)) {
-        console.log(`[Meeting Monitor] Meeting starting soon: ${meeting.title}`);
+        logger.monitor.info(`Meeting starting soon: ${meeting.title} (in ${minutesUntilStart} minutes)`);
         showMeetingNotification(meeting, minutesUntilStart);
         notifiedMeetings.add(meeting.id);
       }
 
       // Auto-start recording when meeting starts (within 1 minute window)
       if (minutesUntilStart <= 0 && minutesUntilStart >= -1 && !autoStartedMeetings.has(meeting.id)) {
-        console.log(`[Meeting Monitor] Auto-starting recording for: ${meeting.title}`);
+        logger.monitor.info(`Auto-starting recording for: ${meeting.title}`);
         await autoStartRecording(meeting);
         autoStartedMeetings.add(meeting.id);
       }
@@ -122,7 +139,7 @@ async function checkUpcomingMeetings() {
       }
     }
   } catch (error) {
-    console.error('[Meeting Monitor] Error checking meetings:', error);
+    logger.monitor.error('Error checking meetings:', error);
   }
 }
 
@@ -246,9 +263,9 @@ const createWindow = () => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
-  console.log("Registering IPC handlers...");
-  // Log all registered IPC handlers
-  console.log("IPC handlers:", Object.keys(ipcMain._invokeHandlers));
+  logger.main.info('Application ready, initializing...');
+  logger.ipc.debug('Registering IPC handlers...');
+  logger.ipc.debug('Registered IPC handlers:', Object.keys(ipcMain._invokeHandlers));
 
   // Set up SDK logger IPC handlers
   ipcMain.on('sdk-log', (event, logEntry) => {
@@ -269,9 +286,10 @@ app.whenReady().then(async () => {
   try {
     if (!fs.existsSync(RECORDING_PATH)) {
       fs.mkdirSync(RECORDING_PATH, { recursive: true });
+      logger.main.info('Created recordings directory:', RECORDING_PATH);
     }
   } catch (e) {
-    console.error("Couldn't create the recording path:", e);
+    logger.main.error("Couldn't create the recording path:", e);
   }
 
   // Create meetings file if it doesn't exist
@@ -279,9 +297,10 @@ app.whenReady().then(async () => {
     if (!fs.existsSync(meetingsFilePath)) {
       const initialData = { upcomingMeetings: [], pastMeetings: [] };
       fs.writeFileSync(meetingsFilePath, JSON.stringify(initialData, null, 2));
+      logger.main.info('Created meetings data file:', meetingsFilePath);
     }
   } catch (e) {
-    console.error("Couldn't create the meetings file:", e);
+    logger.main.error("Couldn't create the meetings file:", e);
   }
 
   // Initialize the Recall.ai SDK
@@ -370,12 +389,15 @@ app.whenReady().then(async () => {
     // Start ngrok tunnel automatically (if configured)
     try {
       const webhookUrl = await ngrokManager.start(13373);
+
+      // Store webhook URL globally so server.js can access it
+      global.webhookUrl = `${webhookUrl}/webhook/recall`;
+
       console.log('\n' + '='.repeat(70));
       console.log('🌐 NGROK TUNNEL ESTABLISHED');
       console.log('='.repeat(70));
-      console.log(`Public Webhook URL: ${webhookUrl}/webhook/recall`);
-      console.log(`\nConfigure this URL in Recall.ai dashboard:`);
-      console.log(`${process.env.RECALLAI_API_URL || 'https://us-west-2.recall.ai'}/webhooks`);
+      console.log(`Public Webhook URL: ${global.webhookUrl}`);
+      console.log(`\nWebhook URL will be automatically included in upload tokens.`);
       console.log('='.repeat(70) + '\n');
     } catch (error) {
       console.log('\n' + '⚠'.repeat(35));
@@ -635,7 +657,11 @@ async function createDesktopSdkUpload() {
 
     const url = `${RECALLAI_API_URL}/api/v1/sdk_upload/`;
 
-    const response = await axios.post(url, {
+    // Note: Webhook URL is configured in Recall.ai dashboard, not in the request
+    // Dashboard configuration: https://api.recall.ai/dashboard/webhooks/
+    console.log('[Upload Token] Creating upload token (webhook configured in dashboard)');
+
+    const requestBody = {
       recording_config: {
         // Audio-only recording - omit video_mixed_mp4 entirely (don't set to null)
         // This dramatically reduces file size and upload time
@@ -652,11 +678,16 @@ async function createDesktopSdkUpload() {
           }
         ]
       }
-    }, {
+    };
+
+    console.log('[Upload Token] Request body:', JSON.stringify(requestBody, null, 2));
+
+    const response = await axios.post(url, requestBody, {
       headers: { 'Authorization': `Token ${RECALLAI_API_KEY}` },
       timeout: 9000,
     });
 
+    console.log('[Upload Token] Response:', JSON.stringify(response.data, null, 2));
     console.log("Upload token created successfully:", response.data.upload_token?.substring(0, 8) + '...');
     return response.data;
   } catch (error) {
@@ -730,7 +761,7 @@ function initSDK() {
     const platformName = platformNames[evt.window.platform] || evt.window.platform;
 
     // Send a notification
-    let notification = new Notification({
+    const notification = new Notification({
       title: `${platformName} Meeting Detected`,
       body: platformName
     });
@@ -946,7 +977,7 @@ function initSDK() {
     });
 
     // Show notification for errors
-    let notification = new Notification({
+    const notification = new Notification({
       title: 'Recording Error',
       body: `Error: ${type} - ${message}`
     });
@@ -1017,7 +1048,7 @@ async function exportMeetingToObsidian(meeting) {
     if (meeting.obsidianLink) {
       // Manual override - use existing path
       // Extract folder path from obsidianLink (remove filename)
-      const linkPath = meeting.obsidianLink.replace(/[^\/]+\.md$/, '');
+      const linkPath = meeting.obsidianLink.replace(/[^/]+\.md$/, '');
       routes = [{
         fullPath: linkPath,
         organizationName: 'Manual Override',
@@ -1200,7 +1231,7 @@ meeting_type: "external"
 
   // Add link to transcript
   markdown += `\n**Full Transcript:** [[${baseFilename}-transcript]]\n\n`;
-  markdown += `*Generated by JD Notes Things*\n`;
+  markdown += `*Generated by jd-notes-things*\n`;
 
   return markdown;
 }
@@ -1260,7 +1291,7 @@ summary_file: "${baseFilename}.md"
   }
 
   markdown += `\n---\n\n`;
-  markdown += `*Generated by JD Notes Things*\n`;
+  markdown += `*Generated by jd-notes-things*\n`;
 
   return markdown;
 }
@@ -2268,7 +2299,13 @@ ipcMain.handle('startManualRecording', async (event, meetingId) => {
       // Store the recording ID and upload token in the meeting
       meeting.recordingId = key;
       meeting.uploadToken = uploadData.upload_token; // Store for later matching
-      console.log(`[Upload] Saving uploadToken for manual recording ${validatedId}, recordingId: ${key.substring(0, 8)}..., token: ${uploadData.upload_token.substring(0, 8)}...`);
+      meeting.sdkUploadId = uploadData.id; // Store SDK Upload ID for webhook matching
+      meeting.recallRecordingId = uploadData.recording_id; // Store Recall Recording ID
+      console.log(`[Upload] Saving IDs for manual recording ${validatedId}:`);
+      console.log(`  - recordingId (SDK window): ${key.substring(0, 8)}...`);
+      console.log(`  - uploadToken: ${uploadData.upload_token.substring(0, 8)}...`);
+      console.log(`  - sdkUploadId: ${uploadData.id}`);
+      console.log(`  - recallRecordingId: ${uploadData.recording_id}`);
 
       // Initialize transcript array if not present
       if (!meeting.transcript) {
@@ -2363,27 +2400,28 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
 // (server.js runs in main process, so we can call these directly instead of using IPC)
 global.webhookHandlers = {
   handleUploadComplete: async ({ recordingId, sdkUploadId }) => {
-    console.log(`[Webhook] Upload complete for recording: ${recordingId}`);
+    console.log(`[Webhook] Upload complete - SDK Upload ID: ${sdkUploadId}, Recording ID: ${recordingId}`);
 
     try {
-      // Find the meeting by matching the recording ID
+      // Find the meeting by matching the SDK Upload ID
       const meetingsData = await fileOperationManager.readMeetingsData();
-      const meeting = meetingsData.pastMeetings.find(m => {
-        // The recordingId from our app (windowId) won't match Recall's recording ID
-        // We need to match by upload token or other identifier
-        // For now, find the most recent meeting without a recallRecordingId
-        return !m.recallRecordingId && m.recordingId;
-      });
+      const meeting = meetingsData.pastMeetings.find(m => m.sdkUploadId === sdkUploadId);
 
       if (!meeting) {
-        console.error(`[Webhook] No meeting found for recording: ${recordingId}`);
+        console.error(`[Webhook] No meeting found for SDK Upload ID: ${sdkUploadId}`);
+        console.error(`[Webhook] Checked ${meetingsData.pastMeetings.length} past meetings`);
         return;
       }
 
-      // Store the Recall.ai recording ID for later reference
-      meeting.recallRecordingId = recordingId;
+      console.log(`[Webhook] Found meeting: ${meeting.id} (${meeting.title})`);
+
+      // Verify the recording ID matches (it should since we stored it)
+      if (meeting.recallRecordingId !== recordingId) {
+        console.warn(`[Webhook] Recording ID mismatch! Stored: ${meeting.recallRecordingId}, Webhook: ${recordingId}`);
+      }
+
       await fileOperationManager.writeData(meetingsData);
-      console.log(`[Webhook] Linked recording ${recordingId} to meeting ${meeting.id}`);
+      console.log(`[Webhook] Confirmed upload complete for meeting ${meeting.id}`);
 
       // Start async transcription
       await startRecallAIAsyncTranscription(recordingId, meeting.recordingId);
@@ -3853,7 +3891,7 @@ async function updateNoteWithRecordingInfo(recordingId) {
     const content = meeting.content;
 
     // Replace the "Recording: In Progress..." line with completed information
-    let updatedContent = content.replace(
+    const updatedContent = content.replace(
       "Recording: In Progress...",
       `Recording: Completed at ${formattedDate}\nTranscribing audio...\n`
     );

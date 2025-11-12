@@ -14,7 +14,8 @@
       "Bash(service *):*",
       "WebFetch",
       "WebSearch",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(npm outdated:*)"
     ],
     "deny": [
       "Bash(rm -rf *):*",

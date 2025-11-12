@@ -357,7 +357,7 @@ function createMeetingCard(meeting) {
     </div>
   ` : '';
 
-  let subtitleHtml = meeting.hasDemo
+  const subtitleHtml = meeting.hasDemo
     ? `<div class="meeting-time"><a class="meeting-demo-link">${meeting.subtitle}</a></div>`
     : `<div class="meeting-time">${meeting.subtitle}</div>`;
 
@@ -651,7 +651,7 @@ function showEditorView(meetingId) {
   }
 
   // Find the meeting in either upcoming or past meetings
-  let meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === meetingId);
+  const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === meetingId);
 
   if (!meeting) {
     console.error(`Meeting not found: ${meetingId}`);
