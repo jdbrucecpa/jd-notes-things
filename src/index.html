@@ -55,6 +55,11 @@
             </svg>
             <span id="googleStatus" class="google-status"></span>
           </button>
+          <button class="btn import-btn" id="importBtn" title="Import Transcripts">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/>
+            </svg>
+          </button>
           <div class="user-avatar">
             <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect width="40" height="40" rx="20" fill="#f0f0f0"/>
@@ -108,6 +113,22 @@
                   </svg>
                   Me
                 </span>
+              </div>
+              <div class="obsidian-link-editor">
+                <label for="obsidianLinkInput" class="obsidian-link-label">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#6947BD"/>
+                    <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="#6947BD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  Obsidian Vault Path:
+                </label>
+                <input
+                  type="text"
+                  id="obsidianLinkInput"
+                  class="obsidian-link-input"
+                  placeholder="e.g., clients/acme-corp/meetings/2025-01-15-kickoff.md"
+                  title="Vault-relative path to the meeting file in Obsidian"
+                />
               </div>
             </div>
             <textarea id="simple-editor"># Meeting Title
@@ -363,6 +384,75 @@ Chat with meeting transcript: </textarea>
         <div class="modal-footer">
           <button class="btn btn-secondary" id="cancelGenerate">Cancel</button>
           <button class="btn btn-primary" id="confirmGenerate" disabled>Generate Summaries</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import Transcripts Modal -->
+    <div class="modal-overlay" id="importModal" style="display: none;">
+      <div class="modal-content import-modal">
+        <div class="modal-header">
+          <h2>Import Transcripts</h2>
+          <button class="modal-close" id="closeImportModal">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <p class="import-description">Import existing meeting transcripts from .txt, .md, .vtt, or .srt files.</p>
+
+          <!-- File Selection Area -->
+          <div class="file-drop-zone" id="fileDropZone">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="#999"/>
+            </svg>
+            <h3>Drop files here or click to browse</h3>
+            <p>Supported formats: .txt, .md, .vtt, .srt</p>
+            <input type="file" id="fileInput" multiple accept=".txt,.md,.vtt,.srt" style="display: none;" />
+          </div>
+
+          <!-- Selected Files List -->
+          <div class="selected-files" id="selectedFilesList" style="display: none;">
+            <div class="selected-files-header">
+              <h3>Selected Files (<span id="fileCount">0</span>)</h3>
+              <button class="btn btn-secondary btn-sm" id="clearFilesBtn">Clear All</button>
+            </div>
+            <div class="files-list" id="filesListContainer">
+              <!-- File items will be added here dynamically -->
+            </div>
+          </div>
+
+          <!-- Import Options -->
+          <div class="import-options" id="importOptions" style="display: none;">
+            <h3>Import Options</h3>
+            <label class="checkbox-label">
+              <input type="checkbox" id="generateSummariesCheck" checked />
+              <span>Generate AI summaries after import</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="autoExportCheck" checked />
+              <span>Auto-export to Obsidian vault</span>
+            </label>
+          </div>
+
+          <!-- Progress Indicator -->
+          <div class="import-progress" id="importProgress" style="display: none;">
+            <div class="progress-header">
+              <span>Importing...</span>
+              <span id="progressText">0 / 0</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="importProgressFill"></div>
+            </div>
+            <div id="currentFileStatus"></div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="cancelImport">Cancel</button>
+          <button class="btn btn-primary" id="startImport" disabled>Import Files</button>
         </div>
       </div>
     </div>

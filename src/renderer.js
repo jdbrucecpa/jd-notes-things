@@ -696,6 +696,16 @@ function showEditorView(meetingId) {
       console.log(`Created new template for meeting: ${meetingId}`);
     }
 
+    // Set up Obsidian Link input field
+    const obsidianLinkInput = document.getElementById('obsidianLinkInput');
+    if (obsidianLinkInput) {
+      // Populate with existing value if available
+      obsidianLinkInput.value = meeting.obsidianLink || '';
+
+      // Set up auto-save for obsidianLink field
+      setupObsidianLinkAutoSave();
+    }
+
     // Set up auto-save handler for this specific note
     setupAutoSaveHandler();
 
@@ -798,13 +808,11 @@ let currentAutoSaveHandler = null;
 function setupAutoSaveHandler() {
   // Create a debounced auto-save handler
   const autoSaveHandler = debounce(async () => {
-    console.log('Auto-saving note due to content change');
     if (currentEditingMeetingId) {
       console.log(`Auto-save triggered for meeting: ${currentEditingMeetingId}`);
       await saveCurrentNote();
-    } else {
-      console.warn('Cannot auto-save: No active meeting ID');
     }
+    // Silently ignore if no meeting is active - this is expected behavior
   }, 1000);
 
   // First remove any existing handler
@@ -832,6 +840,64 @@ function setupAutoSaveHandler() {
     }, 500);
   } else {
     console.warn('Editor element not found for auto-save setup');
+  }
+}
+
+// Create a single reference to the obsidian link auto-save handler
+let currentObsidianLinkAutoSaveHandler = null;
+
+// Function to set up auto-save handler for Obsidian link input
+function setupObsidianLinkAutoSave() {
+  // Create a debounced auto-save handler
+  const obsidianLinkAutoSaveHandler = debounce(async () => {
+    if (!currentEditingMeetingId) {
+      console.warn('Cannot save Obsidian link: No active meeting ID');
+      return;
+    }
+
+    const obsidianLinkInput = document.getElementById('obsidianLinkInput');
+    if (!obsidianLinkInput) {
+      console.warn('Obsidian link input not found');
+      return;
+    }
+
+    // Find the current meeting
+    const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
+    if (!meeting) {
+      console.error(`Meeting not found for ID: ${currentEditingMeetingId}`);
+      return;
+    }
+
+    // Get the new value (trim whitespace)
+    const newValue = obsidianLinkInput.value.trim();
+
+    // Only save if the value has actually changed
+    if (meeting.obsidianLink !== newValue) {
+      meeting.obsidianLink = newValue;
+      await saveMeetingsData();
+      console.log(`Auto-saved Obsidian link for meeting ${currentEditingMeetingId}: "${newValue}"`);
+
+      // Update the Obsidian button state
+      updateObsidianButton(meeting);
+    }
+  }, 1000);
+
+  // First remove any existing handler
+  if (currentObsidianLinkAutoSaveHandler) {
+    const obsidianLinkInput = document.getElementById('obsidianLinkInput');
+    if (obsidianLinkInput) {
+      obsidianLinkInput.removeEventListener('input', currentObsidianLinkAutoSaveHandler);
+    }
+  }
+
+  // Store the reference for future cleanup
+  currentObsidianLinkAutoSaveHandler = obsidianLinkAutoSaveHandler;
+
+  // Get the input element and attach the new handler
+  const obsidianLinkInput = document.getElementById('obsidianLinkInput');
+  if (obsidianLinkInput) {
+    obsidianLinkInput.addEventListener('input', obsidianLinkAutoSaveHandler);
+    console.log(`Set up Obsidian link auto-save handler for meeting: ${currentEditingMeetingId || 'none'}`);
   }
 }
 
@@ -2802,6 +2868,326 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ========================================
   // End Template Selection Modal Logic
+  // ========================================
+
+  // ========================================
+  // Import Modal (Phase 8)
+  // ========================================
+
+  let selectedFiles = [];
+
+  // Open import modal
+  function openImportModal() {
+    const modal = document.getElementById('importModal');
+    modal.style.display = 'flex';
+    selectedFiles = [];
+    updateImportUI();
+  }
+
+  // Close import modal
+  function closeImportModal() {
+    const modal = document.getElementById('importModal');
+    modal.style.display = 'none';
+    selectedFiles = [];
+    updateImportUI();
+  }
+
+  // Update import UI based on selected files
+  function updateImportUI() {
+    const dropZone = document.getElementById('fileDropZone');
+    const filesList = document.getElementById('selectedFilesList');
+    const importOptions = document.getElementById('importOptions');
+    const startImportBtn = document.getElementById('startImport');
+    const fileCount = document.getElementById('fileCount');
+    const filesListContainer = document.getElementById('filesListContainer');
+
+    if (selectedFiles.length === 0) {
+      dropZone.style.display = 'block';
+      filesList.style.display = 'none';
+      importOptions.style.display = 'none';
+      startImportBtn.disabled = true;
+    } else {
+      dropZone.style.display = 'none';
+      filesList.style.display = 'block';
+      importOptions.style.display = 'block';
+      startImportBtn.disabled = false;
+
+      fileCount.textContent = selectedFiles.length;
+
+      // Render file list
+      filesListContainer.innerHTML = selectedFiles.map((file, index) => {
+        const ext = file.name.split('.').pop().toUpperCase();
+        const sizeKB = (file.size / 1024).toFixed(1);
+
+        return `
+          <div class="file-item" data-index="${index}">
+            <div class="file-item-info">
+              <div class="file-icon">${ext}</div>
+              <div class="file-details">
+                <div class="file-name">${file.name}</div>
+                <div class="file-size">${sizeKB} KB</div>
+              </div>
+            </div>
+            <button class="file-remove" data-index="${index}" title="Remove file">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      // Add event listeners to remove buttons
+      filesListContainer.querySelectorAll('.file-remove').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const index = parseInt(e.currentTarget.getAttribute('data-index'));
+          selectedFiles.splice(index, 1);
+          updateImportUI();
+        });
+      });
+    }
+  }
+
+  // Handle file selection from browser File API
+  function handleFiles(files) {
+    const fileArray = Array.from(files);
+    const validExtensions = ['.txt', '.md', '.vtt', '.srt'];
+
+    const validFiles = fileArray.filter(file => {
+      const ext = '.' + file.name.split('.').pop().toLowerCase();
+      return validExtensions.includes(ext);
+    });
+
+    if (validFiles.length === 0) {
+      alert('No valid files selected. Please choose .txt, .md, .vtt, or .srt files.');
+      return;
+    }
+
+    // Add to selected files (avoid duplicates)
+    validFiles.forEach(file => {
+      const exists = selectedFiles.some(f => f.name === file.name && f.size === file.size);
+      if (!exists) {
+        selectedFiles.push(file);
+      }
+    });
+
+    updateImportUI();
+  }
+
+  // Handle file paths from Electron dialog or drag-and-drop
+  function handleFilePaths(fileObjects) {
+    console.log('[Import] handleFilePaths called with', fileObjects.length, 'files');
+
+    const validExtensions = ['.txt', '.md', '.vtt', '.srt'];
+
+    const validFiles = fileObjects.filter(file => {
+      const ext = '.' + file.name.split('.').pop().toLowerCase();
+      const isValid = validExtensions.includes(ext);
+      console.log('[Import] File validation:', file.name, 'ext:', ext, 'valid:', isValid, 'has path:', !!file.path);
+      return isValid;
+    });
+
+    if (validFiles.length === 0) {
+      alert('No valid files selected. Please choose .txt, .md, .vtt, or .srt files.');
+      return;
+    }
+
+    // Add to selected files (avoid duplicates)
+    validFiles.forEach(file => {
+      const exists = selectedFiles.some(f => f.path === file.path);
+      if (!exists) {
+        console.log('[Import] Adding file to selection:', file.name, 'path:', file.path);
+        selectedFiles.push(file);
+      } else {
+        console.log('[Import] Skipping duplicate:', file.name);
+      }
+    });
+
+    console.log('[Import] Total selected files:', selectedFiles.length);
+    updateImportUI();
+  }
+
+  // Import button click handler
+  document.getElementById('importBtn').addEventListener('click', openImportModal);
+
+  // Close modal buttons
+  document.getElementById('closeImportModal').addEventListener('click', closeImportModal);
+  document.getElementById('cancelImport').addEventListener('click', closeImportModal);
+
+  // File input browse - Use Electron dialog instead of HTML file input
+  const fileInput = document.getElementById('fileInput');
+  const fileDropZone = document.getElementById('fileDropZone');
+
+  fileDropZone.addEventListener('click', async () => {
+    // Use Electron's dialog to get file paths
+    const files = await window.electronAPI.selectImportFiles();
+
+    if (files && files.length > 0) {
+      // Files already have the right format: { path, name, size }
+      handleFilePaths(files);
+    }
+  });
+
+  // Keep this for drag-and-drop (won't work in Electron, but keep for completeness)
+  fileInput.addEventListener('change', (e) => {
+    // This won't work in Electron due to security, but keep it
+    handleFiles(e.target.files);
+    e.target.value = ''; // Reset input
+  });
+
+  // Drag and drop - Handle Electron file paths
+  fileDropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    fileDropZone.classList.add('drag-over');
+  });
+
+  fileDropZone.addEventListener('dragleave', () => {
+    fileDropZone.classList.remove('drag-over');
+  });
+
+  fileDropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    fileDropZone.classList.remove('drag-over');
+
+    // In Electron, we can get file paths from dataTransfer
+    const files = [];
+    for (const file of e.dataTransfer.files) {
+      // Log ALL properties to debug
+      console.log('[Import] Drag-and-drop file object:', file);
+      console.log('[Import] File properties:', Object.keys(file));
+      console.log('[Import] File.path:', file.path);
+
+      // Try different ways to get the path
+      const filePath = file.path || (file.constructor && file.constructor.name === 'File' ? null : file.path);
+
+      console.log('[Import] Resolved path:', filePath);
+
+      if (!filePath) {
+        console.warn('[Import] File missing path property:', file.name);
+        console.warn('[Import] Available properties:', Object.getOwnPropertyNames(file));
+        alert(`File "${file.name}" is missing path information. This may be a browser security restriction. Please use the file browser button instead.`);
+        return;
+      }
+
+      files.push({
+        name: file.name,
+        path: file.path, // Electron provides the full path
+        size: file.size,
+        type: file.name.split('.').pop()
+      });
+    }
+
+    if (files.length > 0) {
+      console.log('[Import] Processing', files.length, 'dropped files');
+      handleFilePaths(files);
+    }
+  });
+
+  // Clear all files
+  document.getElementById('clearFilesBtn').addEventListener('click', () => {
+    selectedFiles = [];
+    updateImportUI();
+  });
+
+  // Close modal on overlay click
+  document.getElementById('importModal').addEventListener('click', (e) => {
+    if (e.target.id === 'importModal') {
+      closeImportModal();
+    }
+  });
+
+  // Start import button
+  document.getElementById('startImport').addEventListener('click', async () => {
+    const generateSummaries = document.getElementById('generateSummariesCheck').checked;
+    const autoExport = document.getElementById('autoExportCheck').checked;
+
+    console.log('Starting import of', selectedFiles.length, 'files');
+
+    // Show progress UI
+    const filesList = document.getElementById('selectedFilesList');
+    const importOptions = document.getElementById('importOptions');
+    const importProgress = document.getElementById('importProgress');
+    const startImportBtn = document.getElementById('startImport');
+    const cancelImportBtn = document.getElementById('cancelImport');
+
+    filesList.style.display = 'none';
+    importOptions.style.display = 'none';
+    importProgress.style.display = 'block';
+    startImportBtn.disabled = true;
+    cancelImportBtn.disabled = true;
+
+    const progressFill = document.getElementById('importProgressFill');
+    const progressText = document.getElementById('progressText');
+    const fileStatus = document.getElementById('currentFileStatus');
+
+    try {
+      // Extract file paths from selected files
+      const filePaths = selectedFiles.map(file => file.path);
+      console.log('[Import] Extracted file paths:', filePaths);
+
+      // Validate that we have valid paths
+      const invalidFiles = selectedFiles.filter(f => !f.path);
+      if (invalidFiles.length > 0) {
+        console.error('[Import] Files missing paths:', invalidFiles.map(f => f.name));
+        throw new Error(`Some files do not have valid paths: ${invalidFiles.map(f => f.name).join(', ')}. Please use the file browser button.`);
+      }
+
+      let currentFile = 0;
+      const total = filePaths.length;
+
+      // Listen for progress updates
+      window.electronAPI.onImportProgress((progress) => {
+        if (progress.step === 'batch-progress') {
+          currentFile = progress.current;
+          const percent = (currentFile / total) * 100;
+          progressFill.style.width = `${percent}%`;
+          progressText.textContent = `${currentFile} / ${total}`;
+          fileStatus.textContent = `Processing: ${progress.file}`;
+        } else {
+          fileStatus.textContent = `${progress.step.replace(/-/g, ' ')}: ${progress.file}`;
+        }
+      });
+
+      // Start batch import
+      const result = await window.electronAPI.importBatch(filePaths, {
+        generateSummary: generateSummaries,
+        autoExport: autoExport
+      });
+
+      // Show results
+      if (result.successful > 0) {
+        const message = `Successfully imported ${result.successful} of ${result.total} files!`;
+
+        if (result.failed > 0) {
+          alert(`${message}\n\n${result.failed} files failed to import. Check console for details.`);
+          console.error('Import errors:', result.errors);
+        } else {
+          alert(message);
+        }
+
+        // Reload meetings data to show imported meetings
+        await loadMeetingsDataFromFile();
+        renderMeetings();
+
+        // Close modal
+        closeImportModal();
+      } else {
+        alert(`Import failed: ${result.error || 'All files failed to import'}`);
+        console.error('Import errors:', result.errors);
+      }
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('Import failed: ' + error.message);
+    } finally {
+      // Reset UI
+      importProgress.style.display = 'none';
+      startImportBtn.disabled = false;
+      cancelImportBtn.disabled = false;
+    }
+  });
+
+  // ========================================
+  // End Import Modal Logic
   // ========================================
 
   // Handle generate notes button - opens template modal

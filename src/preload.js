@@ -60,5 +60,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   contactsFetchContacts: (forceRefresh) => ipcRenderer.invoke('contacts:fetchContacts', forceRefresh),
   speakersMatchSpeakers: (transcript, participantEmails, options) => ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),
   speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) => ipcRenderer.invoke('speakers:updateMapping', { meetingId, speakerLabel, participantEmail }),
-  openExternal: (url) => ipcRenderer.send('open-external', url)
+  openExternal: (url) => ipcRenderer.send('open-external', url),
+  // Import Transcripts (Phase 8)
+  importFile: (filePath, options) => ipcRenderer.invoke('import:importFile', { filePath, options }),
+  importBatch: (filePaths, options) => ipcRenderer.invoke('import:importBatch', { filePaths, options }),
+  importGetStatus: () => ipcRenderer.invoke('import:getStatus'),
+  selectImportFiles: () => ipcRenderer.invoke('import:selectFiles'),
+  onImportProgress: (callback) => ipcRenderer.on('import:progress', (_, data) => callback(data))
 });

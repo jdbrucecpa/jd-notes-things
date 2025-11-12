@@ -236,6 +236,32 @@ body {
   background-color: #4285F4;
 }
 
+/* Import Button */
+.import-btn {
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  margin-right: 10px;
+  padding: 8px 12px;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.import-btn:hover {
+  background-color: #f5f5f5;
+  color: var(--primary-color);
+}
+
+.import-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.import-btn:hover svg {
+  transform: translateY(2px);
+}
+
 .user-avatar {
   width: 32px;
   height: 32px;
@@ -472,6 +498,49 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+/* Obsidian Link Editor */
+.obsidian-link-editor {
+  margin-top: 15px;
+  padding: 12px;
+  background-color: rgba(105, 71, 189, 0.05);
+  border-radius: 6px;
+  border: 1px solid rgba(105, 71, 189, 0.2);
+}
+
+.obsidian-link-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6947BD;
+  margin-bottom: 8px;
+  cursor: default;
+}
+
+.obsidian-link-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #333;
+  background-color: white;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.obsidian-link-input:focus {
+  border-color: #6947BD;
+  box-shadow: 0 0 0 3px rgba(105, 71, 189, 0.1);
+}
+
+.obsidian-link-input::placeholder {
+  color: #999;
+  font-style: italic;
 }
 
 /* Simple text editor styles */
@@ -1456,6 +1525,226 @@ body {
   background: #ccc;
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Import Modal (Phase 8) */
+.import-modal {
+  max-width: 800px;
+}
+
+.import-description {
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+
+/* File Drop Zone */
+.file-drop-zone {
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #fafafa;
+}
+
+.file-drop-zone:hover {
+  border-color: var(--primary-color);
+  background: #f0f7ff;
+}
+
+.file-drop-zone.drag-over {
+  border-color: var(--primary-color);
+  background: #e3f2fd;
+  border-style: solid;
+}
+
+.file-drop-zone svg {
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.file-drop-zone h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.file-drop-zone p {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* Selected Files List */
+.selected-files {
+  margin-top: 24px;
+}
+
+.selected-files-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.selected-files-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.files-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: white;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.2s ease;
+}
+
+.file-item:last-child {
+  border-bottom: none;
+}
+
+.file-item:hover {
+  background: #f5f5f5;
+}
+
+.file-item-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.file-icon {
+  width: 32px;
+  height: 32px;
+  background: #e3f2fd;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 10px;
+  color: #1976d2;
+}
+
+.file-details {
+  flex: 1;
+}
+
+.file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.file-size {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.file-remove {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.file-remove:hover {
+  background: #ffebee;
+  color: #d32f2f;
+}
+
+/* Import Options */
+.import-options {
+  margin-top: 24px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.import-options h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+/* Import Progress */
+.import-progress {
+  margin-top: 24px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4285F4 0%, #34A853 100%);
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+#currentFileStatus {
+  font-size: 13px;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  font-family: monospace;
 }
 
 /* Generating state */

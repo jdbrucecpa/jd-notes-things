@@ -15,6 +15,7 @@ const TemplateManager = require('./main/templates/TemplateManager');
 const VaultStructure = require('./main/storage/VaultStructure');
 const RoutingEngine = require('./main/routing/RoutingEngine');
 const ConfigLoader = require('./main/routing/ConfigLoader');
+const ImportManager = require('./main/import/ImportManager');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const expressApp = require('./server');
@@ -65,6 +66,9 @@ let templateManager = null;
 let vaultStructure = null;
 let routingEngine = null;
 const configLoader = null;
+
+// Import system (Phase 8)
+let importManager = null;
 
 // Speaker recognition system (Phase 6)
 let googleContacts = null;
@@ -367,6 +371,15 @@ app.whenReady().then(async () => {
     // Initialize vault structure
     vaultStructure.initializeVault();
     console.log('[ObsidianExport] Vault structure initialized at:', vaultPath);
+
+    // Initialize import manager (Phase 8)
+    importManager = new ImportManager({
+      routingEngine,
+      llmService,
+      vaultStructure,
+      fileOperationManager
+    });
+    console.log('[Import] Import manager initialized successfully');
   } catch (error) {
     console.error('[ObsidianExport] Failed to initialize:', error.message);
     console.log('[ObsidianExport] Obsidian export will be disabled');
@@ -2180,6 +2193,138 @@ ipcMain.handle('obsidian:getStatus', async () => {
 
 // ===================================================================
 // End Obsidian Export IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Import Transcripts IPC Handlers (Phase 8)
+// ===================================================================
+
+// Import a single file
+ipcMain.handle('import:importFile', async (event, { filePath, options }) => {
+  if (!importManager) {
+    return { success: false, error: 'Import manager not initialized' };
+  }
+
+  try {
+    const result = await importManager.importFile(filePath, {
+      ...options,
+      onProgress: (progress) => {
+        event.sender.send('import:progress', progress);
+      }
+    });
+
+    // If successful, add meeting to meetings.json
+    if (result.success) {
+      const data = await fileOperationManager.readMeetingsData();
+      data.pastMeetings.unshift(result.meeting);
+      await fileOperationManager.writeData(data);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('[Import] Import file failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Import multiple files in batch
+ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
+  if (!importManager) {
+    return {
+      success: false,
+      error: 'Import manager not initialized',
+      total: filePaths.length,
+      successful: 0,
+      failed: filePaths.length,
+      meetings: [],
+      errors: filePaths.map(fp => ({ file: fp, error: 'Import manager not initialized' }))
+    };
+  }
+
+  try {
+    const result = await importManager.importBatch(filePaths, {
+      ...options,
+      onProgress: (progress) => {
+        event.sender.send('import:progress', progress);
+      }
+    });
+
+    // Add all successful meetings to meetings.json
+    if (result.meetings.length > 0) {
+      const data = await fileOperationManager.readMeetingsData();
+      result.meetings.forEach(meeting => {
+        data.pastMeetings.unshift(meeting);
+      });
+      await fileOperationManager.writeData(data);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('[Import] Batch import failed:', error);
+    return {
+      success: false,
+      error: error.message,
+      total: filePaths.length,
+      successful: 0,
+      failed: filePaths.length,
+      meetings: [],
+      errors: []
+    };
+  }
+});
+
+// Get import manager status
+ipcMain.handle('import:getStatus', async () => {
+  return {
+    initialized: !!importManager,
+    supportedFormats: ['.txt', '.md', '.vtt', '.srt']
+  };
+});
+
+// Select files for import using Electron dialog
+ipcMain.handle('import:selectFiles', async () => {
+  const { dialog } = require('electron');
+  const fs = require('fs').promises;
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Transcript Files',
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Transcript Files', extensions: ['txt', 'md', 'vtt', 'srt'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled) {
+    return [];
+  }
+
+  // Get file stats to include file sizes
+  const filesWithStats = await Promise.all(
+    result.filePaths.map(async (filePath) => {
+      try {
+        const stats = await fs.stat(filePath);
+        return {
+          path: filePath,
+          name: path.basename(filePath),
+          size: stats.size
+        };
+      } catch (error) {
+        console.error(`Error getting stats for ${filePath}:`, error);
+        return {
+          path: filePath,
+          name: path.basename(filePath),
+          size: 0
+        };
+      }
+    })
+  );
+
+  return filesWithStats;
+});
+
+// ===================================================================
+// End Import IPC Handlers
 // ===================================================================
 
 // Handle open-external IPC (for opening URLs in default browser)
