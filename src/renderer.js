@@ -3045,36 +3045,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     fileDropZone.classList.remove('drag-over');
   });
 
-  fileDropZone.addEventListener('drop', (e) => {
+  fileDropZone.addEventListener('drop', async (e) => {
     e.preventDefault();
     fileDropZone.classList.remove('drag-over');
 
-    // In Electron, we can get file paths from dataTransfer
+    // In modern Electron, use webUtils.getPathForFile() to get file paths
     const files = [];
     for (const file of e.dataTransfer.files) {
-      // Log ALL properties to debug
-      console.log('[Import] Drag-and-drop file object:', file);
-      console.log('[Import] File properties:', Object.keys(file));
-      console.log('[Import] File.path:', file.path);
+      try {
+        // Use Electron's webUtils to get the real file path
+        const filePath = window.electronAPI.getPathForFile(file);
 
-      // Try different ways to get the path
-      const filePath = file.path || (file.constructor && file.constructor.name === 'File' ? null : file.path);
+        console.log('[Import] Drag-and-drop file:', {
+          name: file.name,
+          path: filePath,
+          size: file.size
+        });
 
-      console.log('[Import] Resolved path:', filePath);
-
-      if (!filePath) {
-        console.warn('[Import] File missing path property:', file.name);
-        console.warn('[Import] Available properties:', Object.getOwnPropertyNames(file));
-        alert(`File "${file.name}" is missing path information. This may be a browser security restriction. Please use the file browser button instead.`);
+        files.push({
+          name: file.name,
+          path: filePath,
+          size: file.size,
+          type: file.name.split('.').pop()
+        });
+      } catch (error) {
+        console.error('[Import] Error getting path for file:', file.name, error);
+        alert(`Could not get path for file "${file.name}". Please use the file browser button instead.`);
         return;
       }
-
-      files.push({
-        name: file.name,
-        path: file.path, // Electron provides the full path
-        size: file.size,
-        type: file.name.split('.').pop()
-      });
     }
 
     if (files.length > 0) {

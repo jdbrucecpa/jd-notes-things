@@ -13,13 +13,17 @@ const MetadataExtractor = require('./MetadataExtractor');
 const path = require('path');
 
 class ImportManager {
-  constructor({ routingEngine, llmService, vaultStructure, fileOperationManager }) {
+  constructor({ routingEngine, llmService, vaultStructure, fileOperationManager, templateManager, exportFunction, summaryFunction, autoSummaryFunction }) {
     this.parser = new TranscriptParser();
     this.extractor = new MetadataExtractor();
     this.routingEngine = routingEngine;
     this.llmService = llmService;
     this.vaultStructure = vaultStructure;
     this.fileOperationManager = fileOperationManager;
+    this.templateManager = templateManager;
+    this.exportFunction = exportFunction;
+    this.summaryFunction = summaryFunction;
+    this.autoSummaryFunction = autoSummaryFunction;
   }
 
   /**
@@ -54,13 +58,19 @@ class ImportManager {
       if (onProgress) onProgress({ step: 'creating-meeting', file: path.basename(filePath) });
       const meeting = await this.createMeeting(parsedData, metadata);
 
-      // Step 5: Generate summary (optional)
+      // Step 5: Generate auto-summary (optional)
       if (generateSummary && meeting.transcript && meeting.transcript.length > 0) {
-        if (onProgress) onProgress({ step: 'generating-summary', file: path.basename(filePath) });
+        if (onProgress) onProgress({ step: 'generating-auto-summary', file: path.basename(filePath) });
         await this.generateSummary(meeting);
       }
 
-      // Step 6: Export to Obsidian (optional)
+      // Step 6: Generate template-based summaries (optional)
+      if (generateSummary && this.templateManager && meeting.transcript && meeting.transcript.length > 0) {
+        if (onProgress) onProgress({ step: 'generating-template-summaries', file: path.basename(filePath) });
+        await this.generateTemplateSummaries(meeting);
+      }
+
+      // Step 7: Export to Obsidian (optional)
       if (autoExport) {
         if (onProgress) onProgress({ step: 'exporting', file: path.basename(filePath) });
         await this.exportToObsidian(meeting);
@@ -228,166 +238,100 @@ class ImportManager {
   }
 
   /**
-   * Generate AI summary for imported meeting
+   * Generate template-based summaries for imported meeting using shared function
    */
-  async generateSummary(meeting) {
-    if (!this.llmService || !meeting.transcript) {
+  async generateTemplateSummaries(meeting) {
+    if (!this.summaryFunction) {
+      console.warn('[Import] Summary function not available');
+      return;
+    }
+
+    if (!meeting.transcript) {
+      console.warn('[Import] Meeting has no transcript');
       return;
     }
 
     try {
-      // Create transcript text from entries (simple format with speaker and text)
-      const transcriptText = meeting.transcript
-        .map(entry => `${entry.speaker}: ${entry.text}`)
-        .join('\n');
+      console.log('[Import] Using shared generateTemplateSummaries function');
 
-      // Skip if transcript is empty
-      if (!transcriptText || transcriptText.trim().length === 0) {
-        console.log('[Import] Skipping summary generation - transcript is empty');
+      // Use shared function (pass null to generate for all templates)
+      const summaries = await this.summaryFunction(meeting, null);
+
+      // Store summaries on meeting object
+      meeting.summaries = summaries;
+
+      console.log(`[Import] Generated ${summaries.length} template-based summaries`);
+    } catch (error) {
+      console.error('[Import] Error generating template summaries:', error);
+      // Non-fatal error, continue without template summaries
+    }
+  }
+
+  /**
+   * Generate AI auto-summary for imported meeting using shared function
+   */
+  async generateSummary(meeting) {
+    if (!this.autoSummaryFunction) {
+      console.warn('[Import] Auto-summary function not available');
+      return;
+    }
+
+    if (!meeting.transcript || meeting.transcript.length === 0) {
+      console.log('[Import] Skipping summary generation - transcript is empty');
+      return;
+    }
+
+    try {
+      console.log('[Import] Using shared generateMeetingSummary function');
+
+      // Use shared function (no streaming for imports)
+      const summaryContent = await this.autoSummaryFunction(meeting, null);
+
+      if (!summaryContent) {
+        console.warn('[Import] No summary content returned');
         return;
       }
 
-      const prompt = `Please provide a brief summary of this meeting transcript:
-
-${transcriptText}
-
-Include:
-1. Main topics discussed
-2. Key decisions made
-3. Action items (if any)
-4. Overall outcome`;
-
-      const summary = await this.llmService.generateCompletion({
-        systemPrompt: 'You are a helpful assistant that summarizes meeting transcripts.',
-        userPrompt: prompt,
-        temperature: 0.3,
-        maxTokens: 500
-      });
-
       // Update meeting content with summary
-      const summaryContent = summary.content || summary;
       meeting.content = `# Meeting: ${meeting.title}\n\n`;
       meeting.content += `**AI Summary:**\n\n${summaryContent}\n\n`;
       meeting.content += `---\n\n`;
       meeting.content += meeting.content.split('---')[1] || ''; // Keep the rest of the content
+
+      console.log('[Import] Auto-summary generated successfully');
     } catch (error) {
-      console.error('Error generating summary:', error);
+      console.error('[Import] Error generating summary:', error);
       // Non-fatal error, continue without summary
     }
   }
 
   /**
-   * Export imported meeting to Obsidian vault
+   * Export imported meeting to Obsidian vault using shared export function
    */
   async exportToObsidian(meeting) {
-    if (!this.routingEngine || !this.vaultStructure) {
-      console.warn('Routing engine or vault structure not available');
+    if (!this.exportFunction) {
+      console.warn('[Import] Export function not available');
       return;
     }
 
     try {
-      // Determine routing based on participant emails
-      const decision = this.routingEngine.route({
-        participantEmails: meeting.participantEmails || [],
-        meetingTitle: meeting.title,
-        meetingDate: new Date(meeting.date)
-      });
+      console.log('[Import] Exporting meeting to Obsidian...');
 
-      if (!decision || !decision.routes || decision.routes.length === 0) {
-        console.warn('No routes found for imported meeting');
-        return;
+      const result = await this.exportFunction(meeting);
+
+      if (result.success && result.obsidianLink) {
+        // Update meeting with Obsidian link
+        meeting.obsidianLink = result.obsidianLink;
+        console.log(`[Import] Exported to: ${result.obsidianLink}`);
+      } else if (!result.success) {
+        console.error('[Import] Export failed:', result.error);
       }
 
-      // Use first route
-      const route = decision.routes[0];
-
-      // Generate file paths
-      const dateStr = new Date(meeting.date).toISOString().split('T')[0];
-      const slug = meeting.title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      const summaryFilename = `${dateStr}-${slug}.md`;
-      const transcriptFilename = `${dateStr}-${slug}-transcript.md`;
-
-      // Create summary content
-      const summaryContent = this.createSummaryMarkdown(meeting);
-
-      // Create transcript content
-      const transcriptContent = this.createTranscriptMarkdown(meeting);
-
-      // Write files using the route's base path
-      const meetingsPath = path.dirname(route.fullPath);
-
-      const summaryPath = path.join(meetingsPath, summaryFilename);
-      const transcriptPath = path.join(meetingsPath, transcriptFilename);
-
-      this.vaultStructure.ensureDirectory(meetingsPath);
-      await this.fileOperationManager.writeFile(summaryPath, summaryContent);
-      await this.fileOperationManager.writeFile(transcriptPath, transcriptContent);
-
-      // Update meeting with Obsidian link
-      meeting.obsidianLink = summaryPath.replace(this.vaultStructure.getAbsolutePath(''), '').replace(/\\/g, '/').replace(/^\//, '');
-
-      console.log(`Exported imported meeting to: ${summaryPath}`);
+      return result;
     } catch (error) {
-      console.error('Error exporting to Obsidian:', error);
+      console.error('[Import] Error exporting to Obsidian:', error);
       // Non-fatal error
     }
-  }
-
-  /**
-   * Create summary markdown file content
-   */
-  createSummaryMarkdown(meeting) {
-    const date = new Date(meeting.date);
-
-    let content = '---\n';
-    content += `title: "${meeting.title}"\n`;
-    content += `date: ${date.toISOString()}\n`;
-    content += `participants:\n`;
-    meeting.participants.forEach(p => {
-      content += `  - ${p.name}\n`;
-    });
-    content += `platform: ${meeting.platform || 'unknown'}\n`;
-    content += `duration: ${meeting.duration || 0}\n`;
-    content += `source: import\n`;
-    content += `imported_from: "${meeting.importedFrom}"\n`;
-    content += '---\n\n';
-
-    content += meeting.content;
-
-    content += `\n\n---\n\n`;
-    content += `*This meeting was imported from ${meeting.importedFrom}*\n\n`;
-    content += `[[${path.basename(meeting.title)}-transcript|View Full Transcript]]\n`;
-
-    return content;
-  }
-
-  /**
-   * Create transcript markdown file content
-   */
-  createTranscriptMarkdown(meeting) {
-    let content = '---\n';
-    content += `title: "${meeting.title} - Transcript"\n`;
-    content += `date: ${meeting.date}\n`;
-    content += '---\n\n';
-
-    content += `# ${meeting.title} - Full Transcript\n\n`;
-    content += `**Date:** ${new Date(meeting.date).toLocaleDateString()}\n\n`;
-
-    if (meeting.transcript && meeting.transcript.length > 0) {
-      meeting.transcript.forEach(participant => {
-        if (participant.words && participant.words.length > 0) {
-          content += `\n## ${participant.name}\n\n`;
-
-          const text = participant.words.map(w => w.word).join(' ');
-          content += `${text}\n`;
-        }
-      });
-    }
-
-    content += `\n\n---\n\n`;
-    content += `*Generated from imported transcript*\n`;
-
-    return content;
   }
 }
 

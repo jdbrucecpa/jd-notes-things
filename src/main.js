@@ -377,7 +377,11 @@ app.whenReady().then(async () => {
       routingEngine,
       llmService,
       vaultStructure,
-      fileOperationManager
+      fileOperationManager,
+      templateManager,
+      exportFunction: exportMeetingToObsidian,  // Share export logic with recordings
+      summaryFunction: generateTemplateSummaries,  // Share template generation with recordings
+      autoSummaryFunction: generateMeetingSummary  // Share auto-summary generation with recordings
     });
     console.log('[Import] Import manager initialized successfully');
   } catch (error) {
@@ -1415,6 +1419,147 @@ summary_file: "${baseFilename}.md"
   return markdown;
 }
 
+/**
+ * Generate template-based summaries for a meeting (shared function)
+ * @param {Object} meeting - Meeting object with transcript
+ * @param {Array<string>} templateIds - Template IDs to use (or null for all)
+ * @returns {Promise<Array>} Generated summaries
+ */
+async function generateTemplateSummaries(meeting, templateIds = null) {
+  if (!templateManager || !llmService) {
+    throw new Error('Template manager or LLM service not available');
+  }
+
+  // Use all templates if none specified
+  if (!templateIds) {
+    const allTemplates = templateManager.getAllTemplates();
+    templateIds = allTemplates.map(t => t.id);
+  }
+
+  // Convert transcript to text format
+  let transcriptText = '';
+  if (Array.isArray(meeting.transcript)) {
+    transcriptText = meeting.transcript.map(segment => {
+      if (typeof segment === 'object') {
+        return `${segment.speaker || 'Speaker'}: ${segment.text}`;
+      }
+      return String(segment);
+    }).join('\n');
+  } else if (typeof meeting.transcript === 'string') {
+    transcriptText = meeting.transcript;
+  } else {
+    transcriptText = String(meeting.transcript);
+  }
+
+  console.log(`[TemplateSummary] Transcript length: ${transcriptText.length} characters`);
+
+  // Collect all section generation tasks to run in parallel
+  const sectionTasks = [];
+
+  for (const templateId of templateIds) {
+    const template = templateManager.getTemplate(templateId);
+    if (!template) {
+      console.warn('[TemplateSummary] Template not found:', templateId);
+      continue;
+    }
+
+    console.log('[TemplateSummary] Generating summary with template:', template.name);
+
+    for (const section of template.sections) {
+      console.log(`[TemplateSummary] Queuing section: ${section.title}`);
+
+      sectionTasks.push({
+        templateId: template.id,
+        templateName: template.name,
+        sectionTitle: section.title,
+        promise: (async () => {
+          try {
+            const result = await llmService.generateCompletion({
+              systemPrompt: 'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.',
+              userPrompt: `${section.prompt}\n\nMeeting Transcript:\n${transcriptText}`,
+              temperature: 0.7,
+              maxTokens: 500
+            });
+
+            return {
+              success: true,
+              content: result.content
+            };
+          } catch (error) {
+            console.error(`[TemplateSummary] Error generating section ${section.title}:`, error);
+            return {
+              success: false,
+              content: '*Error generating this section*'
+            };
+          }
+        })()
+      });
+    }
+  }
+
+  console.log(`[TemplateSummary] Firing ${sectionTasks.length} API calls in parallel...`);
+  const startTime = Date.now();
+
+  // Execute all API calls in parallel
+  const sectionResults = await Promise.all(sectionTasks.map(task => task.promise));
+
+  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+  console.log(`[TemplateSummary] All API calls completed in ${duration}s`);
+
+  // Group results by template and reconstruct summaries
+  const summaries = [];
+  const templateMap = new Map();
+
+  // Initialize template summaries
+  for (const templateId of templateIds) {
+    const template = templateManager.getTemplate(templateId);
+    if (!template) continue;
+
+    templateMap.set(template.id, {
+      templateId: template.id,
+      templateName: template.name,
+      sections: []
+    });
+  }
+
+  // Add section results to their templates
+  sectionTasks.forEach((task, index) => {
+    const result = sectionResults[index];
+    const templateData = templateMap.get(task.templateId);
+
+    if (templateData) {
+      templateData.sections.push({
+        title: task.sectionTitle,
+        content: result.content
+      });
+    }
+  });
+
+  // Build final markdown for each template
+  for (const [templateId, templateData] of templateMap) {
+    let summaryMarkdown = `# ${meeting.title}\n\n`;
+    summaryMarkdown += `Generated using template: **${templateData.templateName}**\n\n`;
+    summaryMarkdown += `---\n\n`;
+
+    for (const section of templateData.sections) {
+      summaryMarkdown += `## ${section.title}\n\n${section.content}\n\n`;
+    }
+
+    summaries.push({
+      templateId: templateData.templateId,
+      templateName: templateData.templateName,
+      content: summaryMarkdown
+    });
+  }
+
+  console.log(`[TemplateSummary] Generated ${summaries.length} template-based summaries`);
+  return summaries;
+}
+
+// ============================================================================
+// IPC Handlers
+// ============================================================================
+
 // Handle saving meetings data
 ipcMain.handle('saveMeetingsData', async (event, data) => {
   console.log('[IPC] saveMeetingsData called with data:', {
@@ -1935,123 +2080,9 @@ ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templat
       return { success: false, error: 'Meeting has no transcript' };
     }
 
-    // Convert transcript to string if it's an array of objects
-    let transcriptText = '';
-    if (Array.isArray(meeting.transcript)) {
-      transcriptText = meeting.transcript.map(segment => {
-        if (typeof segment === 'object' && segment.text) {
-          return `${segment.speaker || 'Speaker'}: ${segment.text}`;
-        }
-        return String(segment);
-      }).join('\n');
-    } else if (typeof meeting.transcript === 'string') {
-      transcriptText = meeting.transcript;
-    } else {
-      transcriptText = String(meeting.transcript);
-    }
-
-    console.log(`[Template IPC] Transcript length: ${transcriptText.length} characters`);
-
-    // Collect all section generation tasks to run in parallel
-    const sectionTasks = [];
-
-    for (const templateId of templateIds) {
-      const template = templateManager.getTemplate(templateId);
-      if (!template) {
-        console.warn('[Template IPC] Template not found:', templateId);
-        continue;
-      }
-
-      console.log('[Template IPC] Generating summary with template:', template.name);
-
-      for (const section of template.sections) {
-        console.log(`[Template IPC] Queuing section: ${section.title}`);
-
-        sectionTasks.push({
-          templateId: template.id,
-          templateName: template.name,
-          sectionTitle: section.title,
-          promise: (async () => {
-            try {
-              const result = await llmService.generateCompletion({
-                systemPrompt: 'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.',
-                userPrompt: `${section.prompt}\n\nMeeting Transcript:\n${transcriptText}`,
-                temperature: 0.7,
-                maxTokens: 500
-              });
-
-              return {
-                success: true,
-                content: result.content
-              };
-            } catch (error) {
-              console.error(`[Template IPC] Error generating section ${section.title}:`, error);
-              return {
-                success: false,
-                content: '*Error generating this section*'
-              };
-            }
-          })()
-        });
-      }
-    }
-
-    console.log(`[Template IPC] Firing ${sectionTasks.length} API calls in parallel...`);
-    const startTime = Date.now();
-
-    // Execute all API calls in parallel
-    const sectionResults = await Promise.all(sectionTasks.map(task => task.promise));
-
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`[Template IPC] All API calls completed in ${duration}s`);
-
-    // Group results by template and reconstruct summaries
-    const summaries = [];
-    const templateMap = new Map();
-
-    // Initialize template summaries
-    for (const templateId of templateIds) {
-      const template = templateManager.getTemplate(templateId);
-      if (!template) continue;
-
-      templateMap.set(template.id, {
-        templateId: template.id,
-        templateName: template.name,
-        sections: []
-      });
-    }
-
-    // Add section results to their templates
-    sectionTasks.forEach((task, index) => {
-      const result = sectionResults[index];
-      const templateData = templateMap.get(task.templateId);
-
-      if (templateData) {
-        templateData.sections.push({
-          title: task.sectionTitle,
-          content: result.content
-        });
-      }
-    });
-
-    // Build final markdown for each template
-    for (const [templateId, templateData] of templateMap) {
-      let summaryMarkdown = `# ${meeting.title}\n\n`;
-      summaryMarkdown += `Generated using template: **${templateData.templateName}**\n\n`;
-      summaryMarkdown += `---\n\n`;
-
-      for (const section of templateData.sections) {
-        summaryMarkdown += `## ${section.title}\n\n${section.content}\n\n`;
-      }
-
-      summaries.push({
-        templateId: templateData.templateId,
-        templateName: templateData.templateName,
-        content: summaryMarkdown
-      });
-    }
-
-    console.log(`[Template IPC] Generated ${summaries.length} summaries`);
+    // Use shared template generation function
+    console.log('[Template IPC] Using shared generateTemplateSummaries function');
+    const summaries = await generateTemplateSummaries(meeting, templateIds);
 
     // Save summaries to meeting object
     meeting.summaries = summaries;

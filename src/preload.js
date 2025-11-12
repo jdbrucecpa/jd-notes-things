@@ -1,7 +1,7 @@
 // See the Electron documentation for details on how to use preload scripts:
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // Set up the SDK logger bridge between main and renderer
 contextBridge.exposeInMainWorld('sdkLoggerBridge', {
@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('sdkLoggerBridge', {
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  // File path utilities (for drag-and-drop)
+  getPathForFile: (file) => webUtils.getPathForFile(file),
+
   navigate: (page) => ipcRenderer.send('navigate', page),
   saveMeetingsData: (data) => ipcRenderer.invoke('saveMeetingsData', data),
   loadMeetingsData: () => ipcRenderer.invoke('loadMeetingsData'),

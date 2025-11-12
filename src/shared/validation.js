@@ -11,7 +11,10 @@ const ParticipantSchema = z.object({
 const TranscriptEntrySchema = z.object({
   speaker: z.string(),
   text: z.string(),
-  timestamp: z.union([z.number(), z.string()]).optional().transform(val => {
+  timestamp: z.union([z.number(), z.string(), z.null()]).optional().transform(val => {
+    if (val === null || val === undefined) {
+      return undefined; // Omit null/undefined timestamps
+    }
     if (typeof val === 'string') {
       // Try to parse string timestamp to number
       const parsed = parseFloat(val);
@@ -24,7 +27,7 @@ const TranscriptEntrySchema = z.object({
 // Meeting schema
 const MeetingSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(['profile', 'calendar', 'document']),
+  type: z.enum(['profile', 'calendar', 'document', 'imported']), // 'imported' for backwards compatibility
   title: z.string(),
   date: z.string(),
   participants: z.array(ParticipantSchema).optional(),
@@ -32,7 +35,7 @@ const MeetingSchema = z.object({
   content: z.string().optional(),
   summary: z.string().optional(),
   recordingId: z.string().optional(),
-  platform: z.string().optional(),
+  platform: z.string().nullable().optional().transform(val => val === null ? undefined : val),
   subtitle: z.string().optional(),  // Added for UI display
   hasDemo: z.boolean().optional(),   // Added for UI display
   summaries: z.array(z.any()).optional(), // Added for LLM summaries
