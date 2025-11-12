@@ -1929,7 +1929,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const hasDetectedMeeting = await window.electronAPI.checkForDetectedMeeting();
         if (hasDetectedMeeting) {
           console.log('Found detected meeting, joining...');
-          await window.electronAPI.joinDetectedMeeting();
+          // Get transcription provider from localStorage
+          const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
+          console.log('[Join Meeting] Using transcription provider:', transcriptionProvider);
+          await window.electronAPI.joinDetectedMeeting(transcriptionProvider);
           // Keep button disabled as we're navigating to a different view
         } else {
           console.log('No active meeting detected');

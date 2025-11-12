@@ -2887,8 +2887,9 @@ ipcMain.handle('loadMeetingsData', async () => {
 });
 
 // Function to create a new meeting note and start recording
-async function createMeetingNoteAndRecord(platformName) {
+async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 'recallai') {
   console.log("Creating meeting note for platform:", platformName);
+  console.log("Using transcription provider:", transcriptionProvider);
   try {
     if (!detectedMeeting) {
       console.error('No active meeting detected');
@@ -2932,9 +2933,10 @@ async function createMeetingNoteAndRecord(platformName) {
       content: template,
       recordingId: detectedMeeting.window.id,
       platform: platformName,
-      transcript: [] // Initialize an empty array for transcript data
+      transcript: [], // Initialize an empty array for transcript data
+      transcriptionProvider: transcriptionProvider // Save the transcription provider
     };
-    console.log(`[Meeting Creation] ✓ Created meeting object - id: ${id}, recordingId: ${newMeeting.recordingId}`);
+    console.log(`[Meeting Creation] ✓ Created meeting object - id: ${id}, recordingId: ${newMeeting.recordingId}, transcriptionProvider: ${transcriptionProvider}`);
 
     // Update the active meeting tracking with the note ID
     if (global.activeMeetingIds && global.activeMeetingIds[detectedMeeting.window.id]) {
@@ -4036,14 +4038,15 @@ ipcMain.handle('checkForDetectedMeeting', async () => {
 });
 
 // Function to join the detected meeting
-ipcMain.handle('joinDetectedMeeting', async () => {
-  return joinDetectedMeeting();
+ipcMain.handle('joinDetectedMeeting', async (event, transcriptionProvider = 'recallai') => {
+  return joinDetectedMeeting(transcriptionProvider);
 });
 
 // Function to handle joining a detected meeting
-async function joinDetectedMeeting() {
+async function joinDetectedMeeting(transcriptionProvider = 'recallai') {
   try {
     console.log("Join detected meeting called");
+    console.log("Using transcription provider:", transcriptionProvider);
 
     if (!detectedMeeting) {
       console.log("No detected meeting available");
@@ -4082,7 +4085,7 @@ async function joinDetectedMeeting() {
 
         try {
           // Create a new meeting note and start recording
-          const id = await createMeetingNoteAndRecord(platformName);
+          const id = await createMeetingNoteAndRecord(platformName, transcriptionProvider);
 
           console.log("Created new meeting with ID:", id);
           resolve({ success: true, meetingId: id });

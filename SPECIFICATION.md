@@ -64,7 +64,12 @@ The application will be developed in phases, with each phase delivering usable f
 - **Platform:** Electron + Node.js + TypeScript
 - **UI Framework:** React (for renderer process)
 - **Recording SDK:** Recall.ai Desktop Recording SDK
-- **Transcription:** Recall.ai Async Transcription API (webhook-based with speaker diarization)
+- **Transcription:** Flexible multi-provider system with runtime switching
+  - **Supported Providers:** Recall.ai (async webhook), AssemblyAI, Deepgram
+  - **Current Primary:** AssemblyAI or Deepgram (Recall.ai SDK upload broken)
+  - **Provider Selection:** UI dropdown with localStorage persistence
+  - **Architecture:** Unified `TranscriptionService` with provider-specific adapters
+  - **Cost Comparison:** AssemblyAI ($0.37/hr) or Deepgram ($0.43/hr) vs Recall.ai ($0.85/hr)
 - **Webhook Infrastructure:** Express server (port 13373) + ngrok tunnel + Svix signature verification
 - **LLM Integration:** Modular adapter pattern with runtime provider switching
   - **Supported Providers:** OpenAI (gpt-4o-mini), Anthropic (Claude Haiku 4.5), Azure OpenAI (gpt-5-mini)
@@ -819,10 +824,16 @@ const decrypted = dpapi.unprotect(
 - **Built on**: Muesli (Recall.ai reference implementation) - November 6, 2025
 - **Recording**: Manual desktop audio with `prepareDesktopAudioRecording()`
 - **Auto-detection**: Automatic meeting detection for supported platforms
-- **Transcription**: Recall.ai async API (webhook-based, no polling)
-  - **Workflow**: Upload → `sdk_upload.complete` webhook → Create transcript → `transcript.done` webhook
-  - **Security**: Svix signature verification on all webhook payloads
-  - **Infrastructure**: Express server (port 13373) + ngrok automatic tunnel
+- **Transcription**: Flexible multi-provider system (November 12, 2025)
+  - **Providers**: AssemblyAI, Deepgram, Recall.ai (3 options)
+  - **UI Selection**: Dropdown in main UI with real-time switching
+  - **Persistence**: localStorage saves user's provider choice
+  - **Recall.ai Status**: SDK upload broken (returns null, no progress events), kept as fallback option for when SDK is fixed
+  - **Current Workflow**: Recall.ai SDK records locally → Direct upload to AssemblyAI or Deepgram → Transcript with speaker diarization
+  - **AssemblyAI**: 3-step process (upload file → request transcription → poll for completion)
+  - **Deepgram**: Direct upload with immediate transcription response
+  - **Cost Savings**: 49-57% cheaper than Recall.ai full stack ($0.37-$0.43/hr vs $0.85/hr)
+  - **Module**: `src/main/services/transcriptionService.js` with unified interface
 - **Storage**: Meetings stored in `userData/meetings.json`
 - **Files**: Recording files saved to `userData/recordings/`
 - **Transcript Format**: Array of participant objects with words arrays, includes participantId and isHost metadata
@@ -1667,26 +1678,54 @@ CRM stays updated without manual data entry.
 - Documentation: https://docs.recall.ai/docs/getting-started
 
 ### Transcription Service
-**Architecture**: Recall.ai Async Transcription API (webhook-based)
+**Architecture**: Flexible multi-provider system with runtime switching (November 12, 2025)
 
 **Current Implementation**:
-- **Recall.ai Async API**: Built-in transcription with speaker diarization
-- Webhook-driven workflow with automatic ngrok tunnel
-- No polling required - 100% event-driven via webhooks
-- Transcript format: Array of participant objects with words arrays
-- Metadata: participantId, isHost, speaker name, platform info
-- Security: Svix signature verification on all webhooks
-- Cost: Included with Recall.ai recording service
+- **Multi-Provider Support**: AssemblyAI, Deepgram, Recall.ai (3 options)
+- **Provider Selection**: UI dropdown with localStorage persistence
+- **Module**: `src/main/services/transcriptionService.js` - Unified interface with provider-specific adapters
+- **Workflow**: Recall.ai SDK records locally → Direct file upload to selected provider → Speaker diarization transcript
 
-**Webhook Workflow**:
-1. Recording upload completes → `sdk_upload.complete` webhook
-2. App creates transcript via POST `/api/v1/recording/{id}/create_transcript/`
-3. Recall.ai processes transcript → `transcript.done` webhook
-4. App downloads and parses transcript from provided URL
+**Provider Details**:
+
+**AssemblyAI** (Primary - Most Cost-Effective):
+- **Cost**: $0.37/hour (57% cheaper than Recall.ai full stack)
+- **API**: 3-step process (upload → request transcription → poll for completion)
+- **Features**: Speaker diarization, utterances, word-level timestamps, confidence scores
+- **Endpoint**: `https://api.assemblyai.com/v2/`
+- **Polling**: 5-second intervals, max 10 minutes
+- **Format**: `utterances` array with speaker labels
+
+**Deepgram** (Alternative):
+- **Cost**: $0.43/hour (49% cheaper than Recall.ai full stack)
+- **API**: Direct upload with immediate transcription
+- **Features**: Speaker diarization, punctuation, utterances, word-level data
+- **Endpoint**: `https://api.deepgram.com/v1/listen?diarize=true&punctuate=true&utterances=true`
+- **Format**: `results.utterances` array with speaker labels
+
+**Recall.ai** (Fallback - Currently Broken):
+- **Cost**: $0.85/hour (recording + transcription)
+- **Status**: SDK `uploadRecording()` method broken (returns null, no progress events)
+- **Kept**: Code preserved for when SDK is fixed
+- **Workflow**: Upload via SDK → Webhook-driven transcript processing
+- **Infrastructure**: Express server (port 13373) + ngrok tunnel + Svix signature verification
+
+**Cost Comparison**:
+| Provider | Cost/Hour | Savings vs Recall.ai | Status |
+|----------|-----------|---------------------|---------|
+| AssemblyAI | $0.37 | 57% cheaper | ✅ Working |
+| Deepgram | $0.43 | 49% cheaper | ✅ Working |
+| Recall.ai | $0.85 | Baseline | ⚠️ SDK broken |
+
+**Transcript Format** (Standardized):
+- Array of entries with: `speaker`, `speakerId`, `text`, `timestamp`, `words[]`
+- Provider metadata: `provider`, `confidence`
+- Supports mapping to participant names via speaker matching
 
 **Historical Note**:
-- Previously used AssemblyAI v3 streaming (real-time transcription)
-- Migrated to Recall.ai async API (November 10, 2025) for better integration with recording workflow
+- November 6, 2025: Migrated from AssemblyAI v3 streaming to Recall.ai async API
+- November 10, 2025: Implemented webhook-based workflow with ngrok tunnel
+- November 12, 2025: Discovered Recall.ai SDK upload broken, implemented flexible multi-provider system as workaround
 
 ### LLM Services
 - **OpenAI**: GPT-4o (for complex summaries)

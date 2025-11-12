@@ -112,7 +112,7 @@ jdnotesthings/
 - **UI:** React 19.2.0 + TypeScript
 - **Build System:** Webpack + Electron Forge
 - **Recording:** Recall.ai Desktop SDK 1.3.2
-- **Transcription:** Recall.ai Async API (webhook-based)
+- **Transcription:** Multi-provider (AssemblyAI, Deepgram, Recall.ai) with runtime switching
 - **Webhooks:** Express 4.x + ngrok 5.x + Svix
 
 ---
@@ -122,7 +122,12 @@ jdnotesthings/
 ### ✅ Phase 1: Core Recording & Transcription (Complete)
 - Manual and automatic meeting recording
 - System audio capture via Recall.ai SDK
-- Async webhook-based transcription with Recall.ai API
+- **Flexible transcription provider system with runtime switching:**
+  - **AssemblyAI** ($0.37/hr) - 3-step API, speaker diarization, 57% cheaper
+  - **Deepgram** ($0.43/hr) - Direct upload, speaker diarization, 49% cheaper
+  - **Recall.ai** ($0.85/hr) - Async webhook-based (SDK upload currently broken)
+  - UI dropdown for provider selection with localStorage persistence
+  - Unified `TranscriptionService` module with provider adapters
 - Speaker diarization with participant metadata (participantId, isHost)
 - Microphone audio capture confirmed working
 - Automatic ngrok tunnel establishment for webhooks
@@ -231,6 +236,10 @@ RECALLAI_API_URL=https://us-west-2.recall.ai
 RECALLAI_API_KEY=your_api_key
 RECALL_WEBHOOK_SECRET=your_webhook_secret
 
+# Transcription Providers (Add at least one)
+ASSEMBLYAI_API_KEY=your_assemblyai_key    # Recommended - $0.37/hr (57% cheaper)
+DEEPGRAM_API_KEY=your_deepgram_key        # Alternative - $0.43/hr (49% cheaper)
+
 # ngrok Configuration (for webhook tunnel)
 NGROK_AUTHTOKEN=your_ngrok_token
 NGROK_DOMAIN=your-domain.ngrok-free.dev
@@ -248,9 +257,14 @@ VAULT_PATH=./vault
 ```
 
 ### API Keys Required
-- **Recall.ai**: For desktop audio recording and async transcription
+- **Recall.ai**: For desktop audio recording (SDK upload currently broken)
   - API Key: For SDK authentication
   - Webhook Secret: For Svix signature verification (get from Recall.ai dashboard)
+  - Note: Currently used only for local recording, transcription via other providers
+- **Transcription Providers** (Choose at least one):
+  - **AssemblyAI**: $0.37/hour - [Get API key](https://www.assemblyai.com/) (Recommended - 57% cheaper)
+  - **Deepgram**: $0.43/hour - [Get API key](https://deepgram.com/) (Alternative - 49% cheaper)
+  - **Recall.ai**: $0.85/hour - Included with recording SDK (fallback when upload fixed)
 - **ngrok**: For webhook tunnel (free tier sufficient)
   - Authtoken: From ngrok dashboard
   - Domain: Optional static domain (or use auto-generated)

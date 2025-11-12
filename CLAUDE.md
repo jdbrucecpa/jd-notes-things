@@ -13,8 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Electron + Node.js + TypeScript** - Desktop application framework
 - **React** - Renderer process UI
 - **Webpack + Electron Forge** - Build system
-- **Recall.ai Desktop Recording SDK** - Audio/video capture
-- **Transcription Service** - Recall.ai Async API (webhook-based with speaker diarization)
+- **Recall.ai Desktop Recording SDK** - Audio/video capture (local recording only)
+- **Transcription Service** - Flexible multi-provider (AssemblyAI, Deepgram, Recall.ai) with runtime switching
 - **LLM Integration** - Multi-provider (OpenAI, Claude, Gemini) for summaries
 - **Windows DPAPI** - Encryption at rest
 - **ngrok** - Webhook tunnel for Recall.ai async transcription callbacks
@@ -24,8 +24,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Electron Process Model
 
 **Main Process** (`src/main/`):
-- Recording Manager - Handles Recall.ai SDK, audio capture, upload to Recall.ai
-- Transcription Service - Webhook-based async transcription via Recall.ai API
+- Recording Manager - Handles Recall.ai SDK, local audio capture
+- Transcription Service - Multi-provider (AssemblyAI, Deepgram, Recall.ai) with runtime switching via UI dropdown
 - Webhook Server - Express server on port 13373 for Recall.ai callbacks
 - ngrok Integration - Automatic tunnel establishment for webhook endpoint
 - Routing Engine - Matches participants to organizations, determines save location
@@ -172,7 +172,8 @@ Each phase delivers independently useful functionality.
 src/
 ├── main/
 │   ├── recording/       # RecordingManager, RecallSDK, AudioCapture
-│   ├── transcription/   # TranscriptionService, SpeakerDiarization
+│   ├── services/
+│   │   └── transcriptionService.js  # Multi-provider transcription (AssemblyAI, Deepgram, Recall.ai)
 │   ├── routing/         # RoutingEngine, ConfigLoader, EmailMatcher
 │   ├── llm/             # LLMService, TemplateProcessor, SummaryGenerator
 │   ├── integrations/
@@ -219,14 +220,20 @@ src/
 - ✅ **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet detection, inherited from Muesli)
 - ✅ **Pre-Phase 7 Bug Fixes**: All 5 critical bugs resolved
 
-### Architectural Migration (Nov 10, 2025)
-- ✅ Migrated from AssemblyAI real-time streaming to Recall.ai async transcription API
-- ✅ Implemented webhook-based workflow with Svix signature verification
-- ✅ Integrated ngrok for automatic webhook tunnel establishment
-- ✅ Removed polling in favor of 100% webhook-driven transcript delivery
-- ✅ Added upload progress tracking UI with animated progress bar
-- ✅ Fixed transcript parsing for Recall.ai format (participant objects with words arrays)
-- ✅ Added participantId and isHost metadata to transcript entries
+### Architectural Migration (Nov 10-12, 2025)
+- ✅ Migrated from AssemblyAI real-time streaming to Recall.ai async transcription API (Nov 10)
+- ✅ Implemented webhook-based workflow with Svix signature verification (Nov 10)
+- ✅ Integrated ngrok for automatic webhook tunnel establishment (Nov 10)
+- ✅ Removed polling in favor of 100% webhook-driven transcript delivery (Nov 10)
+- ✅ Added upload progress tracking UI with animated progress bar (Nov 10)
+- ✅ Fixed transcript parsing for Recall.ai format (participant objects with words arrays) (Nov 10)
+- ✅ Added participantId and isHost metadata to transcript entries (Nov 10)
+- ✅ **Discovered Recall.ai SDK upload broken** (returns null, no progress events) (Nov 12)
+- ✅ **Implemented flexible multi-provider transcription system** (Nov 12)
+  - AssemblyAI ($0.37/hr), Deepgram ($0.43/hr), Recall.ai ($0.85/hr fallback)
+  - UI dropdown for runtime provider switching with localStorage persistence
+  - Unified `TranscriptionService` module (`src/main/services/transcriptionService.js`)
+  - Cost savings: 49-57% cheaper than Recall.ai full stack
 
 ### Recent Bug Fixes (Nov 10, 2025)
 - ✅ Fixed Zod schema validation (added missing optional fields with `.passthrough()`)
@@ -241,8 +248,14 @@ src/
 
 ### Current Status
 **Working Features:**
-- Manual and automatic meeting recording
-- Async webhook-based transcription with speaker diarization (Recall.ai)
+- Manual and automatic meeting recording (Recall.ai SDK - local recording)
+- **Flexible transcription provider system:**
+  - **AssemblyAI** - $0.37/hr, 3-step API, 57% cheaper (Working ✅)
+  - **Deepgram** - $0.43/hr, direct upload, 49% cheaper (Working ✅)
+  - **Recall.ai** - $0.85/hr, async webhook-based (SDK upload broken ⚠️, kept as fallback)
+  - UI dropdown for provider selection (persists via localStorage)
+  - Supports both manual and auto-detected meetings
+  - Unified `TranscriptionService` module with provider adapters
 - Upload progress tracking with UI progress bar
 - Automatic ngrok tunnel establishment for webhooks
 - Calendar event detection and display
