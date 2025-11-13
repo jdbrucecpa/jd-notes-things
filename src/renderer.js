@@ -3118,13 +3118,38 @@ document.addEventListener('DOMContentLoaded', async () => {
   const fileInput = document.getElementById('fileInput');
   const fileDropZone = document.getElementById('fileDropZone');
 
-  fileDropZone.addEventListener('click', async () => {
-    // Use Electron's dialog to get file paths
+  // Browse Files button
+  document.getElementById('browseFilesBtn').addEventListener('click', async (e) => {
+    e.stopPropagation(); // Prevent drop zone click
     const files = await window.electronAPI.selectImportFiles();
 
     if (files && files.length > 0) {
       // Files already have the right format: { path, name, size }
       handleFilePaths(files);
+    }
+  });
+
+  // Browse Folder button
+  document.getElementById('browseFolderBtn').addEventListener('click', async (e) => {
+    e.stopPropagation(); // Prevent drop zone click
+    const files = await window.electronAPI.selectImportFolder();
+
+    if (files && files.length > 0) {
+      // Filter to only supported formats
+      const supportedExts = ['.txt', '.md', '.vtt', '.srt'];
+      const validFiles = files.filter(f => {
+        const ext = f.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+        return ext && supportedExts.includes(ext);
+      });
+
+      if (validFiles.length > 0) {
+        handleFilePaths(validFiles);
+        if (validFiles.length < files.length) {
+          showToast(`Imported ${validFiles.length} of ${files.length} files (filtered unsupported formats)`, 'info');
+        }
+      } else {
+        showToast('No supported transcript files found in folder', 'warning');
+      }
     }
   });
 

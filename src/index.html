@@ -430,9 +430,14 @@ Chat with meeting transcript: </textarea>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="#999"/>
             </svg>
-            <h3>Drop files here or click to browse</h3>
-            <p>Supported formats: .txt, .md, .vtt, .srt</p>
+            <h3>Drop files here or</h3>
+            <div style="display: flex; gap: 12px; justify-content: center; margin-top: 12px;">
+              <button class="btn btn-secondary" id="browseFilesBtn">Browse Files</button>
+              <button class="btn btn-secondary" id="browseFolderBtn">Browse Folder</button>
+            </div>
+            <p style="margin-top: 12px;">Supported formats: .txt, .md, .vtt, .srt</p>
             <input type="file" id="fileInput" multiple accept=".txt,.md,.vtt,.srt" style="display: none;" />
+            <input type="file" id="folderInput" webkitdirectory directory style="display: none;" />
           </div>
 
           <!-- Selected Files List -->

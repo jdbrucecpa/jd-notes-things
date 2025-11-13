@@ -1444,11 +1444,17 @@ summary_file: "${baseFilename}.md"
  */
 async function executeTemplateSectionTask(llmService, task, transcriptText) {
   try {
+    // Use prompt caching: separate transcript (static) from instructions (dynamic)
+    // This saves ~90% on input costs for 2nd+ calls (Azure/OpenAI/Anthropic all support this)
+    // Example savings: 20 sections × 37k tokens = 740k tokens
+    //   Without caching: 740k × $0.25/1M = $0.185
+    //   With caching: 37k × $0.25/1M + (19 × 37k × $0.025/1M) = $0.027 (~85% savings)
     const result = await llmService.generateCompletion({
       systemPrompt: 'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.',
-      userPrompt: `${task.sectionPrompt}\n\nMeeting Transcript:\n${transcriptText}`,
+      userPrompt: task.sectionPrompt,
+      cacheableContext: transcriptText,  // This will be cached across all section calls
       temperature: 0.7,
-      maxTokens: 20000  // Generous budget for reasoning models (~$0.04 per section, ~$0.80 for all 20 sections)
+      maxTokens: 15000  // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
     });
 
     console.log(`[TemplateSummary] LLM result type: ${typeof result}, content type: ${typeof result?.content}`);
@@ -2429,6 +2435,66 @@ ipcMain.handle('import:selectFiles', async () => {
   );
 
   return filesWithStats;
+});
+
+// Select folder for import and return all transcript files recursively
+ipcMain.handle('import:selectFolder', async () => {
+  const { dialog } = require('electron');
+  const fs = require('fs').promises;
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Folder with Transcripts',
+    properties: ['openDirectory']
+  });
+
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return [];
+  }
+
+  const folderPath = result.filePaths[0];
+  const supportedExtensions = ['.txt', '.md', '.vtt', '.srt'];
+
+  // Recursively find all transcript files in folder
+  async function findTranscriptFiles(dir) {
+    const files = [];
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        if (entry.isDirectory()) {
+          // Recurse into subdirectories
+          const subFiles = await findTranscriptFiles(fullPath);
+          files.push(...subFiles);
+        } else if (entry.isFile()) {
+          // Check if file has supported extension
+          const ext = path.extname(entry.name).toLowerCase();
+          if (supportedExtensions.includes(ext)) {
+            try {
+              const stats = await fs.stat(fullPath);
+              files.push({
+                path: fullPath,
+                name: entry.name,
+                size: stats.size
+              });
+            } catch (error) {
+              console.error(`Error getting stats for ${fullPath}:`, error);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`Error reading directory ${dir}:`, error);
+    }
+
+    return files;
+  }
+
+  const transcriptFiles = await findTranscriptFiles(folderPath);
+  console.log(`[Import] Found ${transcriptFiles.length} transcript files in folder: ${folderPath}`);
+
+  return transcriptFiles;
 });
 
 // ===================================================================

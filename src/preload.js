@@ -69,5 +69,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   importBatch: (filePaths, options) => ipcRenderer.invoke('import:importBatch', { filePaths, options }),
   importGetStatus: () => ipcRenderer.invoke('import:getStatus'),
   selectImportFiles: () => ipcRenderer.invoke('import:selectFiles'),
+  selectImportFolder: () => ipcRenderer.invoke('import:selectFolder'),
   onImportProgress: (callback) => ipcRenderer.on('import:progress', (_, data) => callback(data))
 });

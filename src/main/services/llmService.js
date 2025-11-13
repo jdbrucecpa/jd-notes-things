@@ -59,17 +59,46 @@ class OpenAIAdapter extends LLMAdapter {
   }
 
   async generateCompletion(options) {
-    const { systemPrompt, userPrompt, maxTokens = 1000, temperature = 0.7 } = options;
+    const { systemPrompt, userPrompt, cacheableContext, maxTokens = 1000, temperature = 0.7 } = options;
+
+    // Build messages array - use separate messages for caching
+    const messages = [{ role: 'system', content: systemPrompt }];
+
+    if (cacheableContext) {
+      // Cacheable content (e.g., transcript) goes first
+      messages.push({ role: 'user', content: `Here is the meeting transcript:\n\n${cacheableContext}` });
+      // Dynamic instructions go second (will use cached transcript)
+      messages.push({ role: 'user', content: userPrompt });
+    } else {
+      // Standard single message
+      messages.push({ role: 'user', content: userPrompt });
+    }
 
     const completion = await this.client.chat.completions.create({
       model: this.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
+      messages: messages,
       temperature,
       max_tokens: maxTokens
     });
+
+    // Log token usage and cache statistics
+    if (completion.usage) {
+      console.log('[OpenAI] Token Usage:', JSON.stringify(completion.usage, null, 2));
+
+      // Check for cache hits
+      if (completion.usage.prompt_tokens_details) {
+        const cached = completion.usage.prompt_tokens_details.cached_tokens || 0;
+        const total = completion.usage.prompt_tokens || 0;
+        const cacheHitRate = total > 0 ? ((cached / total) * 100).toFixed(1) : 0;
+
+        if (cached > 0) {
+          console.log(`[OpenAI] 🎯 CACHE HIT: ${cached}/${total} tokens cached (${cacheHitRate}% hit rate)`);
+          console.log(`[OpenAI] 💰 Cache savings: ~$${((cached * 0.225) / 1000000).toFixed(4)} (90% discount)`);
+        } else {
+          console.log('[OpenAI] ❌ No cache hit - first call or cache expired');
+        }
+      }
+    }
 
     return {
       content: completion.choices[0].message.content,
@@ -127,40 +156,55 @@ class AzureOpenAIAdapter extends LLMAdapter {
   }
 
   async generateCompletion(options) {
-    const { systemPrompt, userPrompt, maxTokens = 1000 } = options;
+    const { systemPrompt, userPrompt, cacheableContext, maxTokens = 1000 } = options;
     // Note: gpt-5-mini is a reasoning model and does NOT support temperature, top_p,
     // presence_penalty, frequency_penalty, logprobs, or max_tokens parameters
 
     console.log('[Azure] generateCompletion called with:');
     console.log('[Azure] - systemPrompt length:', systemPrompt?.length || 0);
     console.log('[Azure] - userPrompt length:', userPrompt?.length || 0);
+    console.log('[Azure] - cacheableContext length:', cacheableContext?.length || 0);
     console.log('[Azure] - maxTokens:', maxTokens);
     console.log('[Azure] - deployment:', this.deployment);
 
+    // Build messages array - use separate messages for caching
+    const messages = [{ role: 'system', content: systemPrompt }];
+
+    if (cacheableContext) {
+      // Cacheable content (e.g., transcript) goes first
+      messages.push({ role: 'user', content: `Here is the meeting transcript:\n\n${cacheableContext}` });
+      // Dynamic instructions go second (will use cached transcript)
+      messages.push({ role: 'user', content: userPrompt });
+      console.log('[Azure] Using prompt caching structure (2 user messages)');
+    } else {
+      // Standard single message
+      messages.push({ role: 'user', content: userPrompt });
+    }
+
     const completion = await this.client.chat.completions.create({
       model: this.deployment,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
-      ],
+      messages: messages,
       max_completion_tokens: maxTokens  // Reasoning models use max_completion_tokens
     });
 
-    console.log('[Azure] Raw completion object type:', typeof completion);
-    console.log('[Azure] Raw completion keys:', completion ? Object.keys(completion) : 'null');
-    console.log('[Azure] Full completion (first 500 chars):', JSON.stringify(completion).substring(0, 500));
+    // Log token usage and cache statistics
+    if (completion.usage) {
+      console.log('[Azure] Token Usage:', JSON.stringify(completion.usage, null, 2));
 
-    console.log('[Azure] Completion structure:', JSON.stringify({
-      hasChoices: !!completion.choices,
-      choicesLength: completion.choices?.length,
-      firstChoice: completion.choices?.[0] ? {
-        hasMessage: !!completion.choices[0].message,
-        messageKeys: completion.choices[0].message ? Object.keys(completion.choices[0].message) : [],
-        contentType: typeof completion.choices[0].message?.content,
-        contentLength: completion.choices[0].message?.content?.length || 0,
-        contentPreview: completion.choices[0].message?.content?.substring(0, 100)
-      } : null
-    }, null, 2));
+      // Check for cache hits (OpenAI/Azure return this in usage.prompt_tokens_details)
+      if (completion.usage.prompt_tokens_details) {
+        const cached = completion.usage.prompt_tokens_details.cached_tokens || 0;
+        const total = completion.usage.prompt_tokens || 0;
+        const cacheHitRate = total > 0 ? ((cached / total) * 100).toFixed(1) : 0;
+
+        if (cached > 0) {
+          console.log(`[Azure] 🎯 CACHE HIT: ${cached}/${total} tokens cached (${cacheHitRate}% hit rate)`);
+          console.log(`[Azure] 💰 Cache savings: ~$${((cached * 0.225) / 1000000).toFixed(4)} (90% discount)`);
+        } else {
+          console.log('[Azure] ❌ No cache hit - first call or cache expired');
+        }
+      }
+    }
 
     const resultContent = completion.choices[0].message.content;
     const resultModel = completion.model || this.deployment;
@@ -234,17 +278,65 @@ class AnthropicAdapter extends LLMAdapter {
   }
 
   async generateCompletion(options) {
-    const { systemPrompt, userPrompt, maxTokens = 1000, temperature = 0.7 } = options;
+    const { systemPrompt, userPrompt, cacheableContext, maxTokens = 1000, temperature = 0.7 } = options;
+
+    let messages;
+    let systemConfig;
+
+    if (cacheableContext) {
+      // Use Anthropic's explicit prompt caching
+      // Mark the cacheable content (transcript) with cache_control
+      systemConfig = [
+        {
+          type: "text",
+          text: systemPrompt
+        },
+        {
+          type: "text",
+          text: `Here is the meeting transcript:\n\n${cacheableContext}`,
+          cache_control: { type: "ephemeral" }  // Mark for caching
+        }
+      ];
+
+      messages = [
+        { role: 'user', content: userPrompt }
+      ];
+    } else {
+      // Standard message format
+      systemConfig = systemPrompt;
+      messages = [
+        { role: 'user', content: userPrompt }
+      ];
+    }
 
     const message = await this.client.messages.create({
       model: this.model,
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: userPrompt }
-      ],
+      system: systemConfig,
+      messages: messages,
       max_tokens: maxTokens,
       temperature
     });
+
+    // Log token usage and cache statistics
+    if (message.usage) {
+      console.log('[Anthropic] Token Usage:', JSON.stringify(message.usage, null, 2));
+
+      // Anthropic uses different field names for cache statistics
+      const cacheCreated = message.usage.cache_creation_input_tokens || 0;
+      const cacheRead = message.usage.cache_read_input_tokens || 0;
+      const normalInput = message.usage.input_tokens || 0;
+      const totalInput = cacheCreated + cacheRead + normalInput;
+
+      if (cacheRead > 0) {
+        const cacheHitRate = totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : 0;
+        console.log(`[Anthropic] 🎯 CACHE HIT: ${cacheRead}/${totalInput} tokens from cache (${cacheHitRate}% hit rate)`);
+        console.log(`[Anthropic] 💰 Cache savings: ~$${((cacheRead * 0.225) / 1000000).toFixed(4)} (90% discount)`);
+      } else if (cacheCreated > 0) {
+        console.log(`[Anthropic] 📝 Cache created: ${cacheCreated} tokens (next calls will hit cache)`);
+      } else {
+        console.log('[Anthropic] ❌ No cache activity - standard processing');
+      }
+    }
 
     return {
       content: message.content[0].text,
