@@ -215,6 +215,43 @@ function debounce(func, wait) {
   };
 }
 
+// Show toast notification
+function showToast(message, type = 'info') {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 16px 24px;
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 10000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: slideIn 0.3s ease-out;
+    max-width: 400px;
+  `;
+
+  // Set background color based on type
+  const colors = {
+    success: '#4CAF50',
+    error: '#F44336',
+    warning: '#FF9800',
+    info: '#2196F3'
+  };
+  toast.style.backgroundColor = colors[type] || colors.info;
+  toast.textContent = message;
+
+  document.body.appendChild(toast);
+
+  // Auto-remove after 4 seconds
+  setTimeout(() => {
+    toast.style.animation = 'slideOut 0.3s ease-out';
+    setTimeout(() => toast.remove(), 300);
+  }, 4000);
+}
+
 // ========================================
 // Display AI Generated Summaries
 // ========================================
@@ -2877,11 +2914,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   let selectedFiles = [];
 
   // Open import modal
-  function openImportModal() {
+  async function openImportModal() {
     const modal = document.getElementById('importModal');
     modal.style.display = 'flex';
     selectedFiles = [];
     updateImportUI();
+
+    // Load templates and create checkboxes
+    try {
+      const result = await window.electronAPI.templatesGetAll();
+      if (!result.success) {
+        console.error('Failed to load templates:', result.error);
+        return;
+      }
+
+      const templates = result.templates;
+      const templateCheckboxesContainer = document.getElementById('templateCheckboxes');
+      templateCheckboxesContainer.innerHTML = ''; // Clear existing
+
+      templates.forEach(template => {
+        const label = document.createElement('label');
+        label.className = 'checkbox-label';
+        label.innerHTML = `
+          <input type="checkbox" class="template-checkbox" data-template-id="${template.id}" checked />
+          <span>${template.name}</span>
+        `;
+        templateCheckboxesContainer.appendChild(label);
+      });
+    } catch (error) {
+      console.error('Error loading templates for import modal:', error);
+    }
   }
 
   // Close import modal
@@ -2890,6 +2952,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     modal.style.display = 'none';
     selectedFiles = [];
     updateImportUI();
+  }
+
+  // Update background import indicator
+  function updateBackgroundImportIndicator(current = 0, total = 0) {
+    const indicator = document.getElementById('backgroundImportIndicator');
+    if (!indicator) {
+      // Create indicator if it doesn't exist
+      const newIndicator = document.createElement('div');
+      newIndicator.id = 'backgroundImportIndicator';
+      newIndicator.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #2196F3;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9999;
+        font-size: 14px;
+        font-weight: 500;
+        display: none;
+        min-width: 200px;
+      `;
+      document.body.appendChild(newIndicator);
+    }
+
+    const ind = document.getElementById('backgroundImportIndicator');
+    if (backgroundImportRunning) {
+      ind.style.display = 'block';
+      if (total > 0) {
+        ind.textContent = `Importing transcripts... (${current}/${total})`;
+      } else {
+        ind.textContent = 'Starting import...';
+      }
+    } else {
+      ind.style.display = 'none';
+    }
   }
 
   // Update import UI based on selected files
@@ -3095,92 +3195,88 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Start import button
+  // Background import state
+  let backgroundImportRunning = false;
+
   document.getElementById('startImport').addEventListener('click', async () => {
-    const generateSummaries = document.getElementById('generateSummariesCheck').checked;
+    // Read import options
+    const generateAutoSummary = document.getElementById('generateAutoSummaryCheck').checked;
     const autoExport = document.getElementById('autoExportCheck').checked;
 
-    console.log('Starting import of', selectedFiles.length, 'files');
+    // Get selected template IDs
+    const selectedTemplateIds = [];
+    document.querySelectorAll('.template-checkbox:checked').forEach(checkbox => {
+      selectedTemplateIds.push(checkbox.getAttribute('data-template-id'));
+    });
 
-    // Show progress UI
-    const filesList = document.getElementById('selectedFilesList');
-    const importOptions = document.getElementById('importOptions');
-    const importProgress = document.getElementById('importProgress');
-    const startImportBtn = document.getElementById('startImport');
-    const cancelImportBtn = document.getElementById('cancelImport');
+    console.log('Starting background import of', selectedFiles.length, 'files');
+    console.log('Generate auto-summary:', generateAutoSummary);
+    console.log('Selected templates:', selectedTemplateIds);
 
-    filesList.style.display = 'none';
-    importOptions.style.display = 'none';
-    importProgress.style.display = 'block';
-    startImportBtn.disabled = true;
-    cancelImportBtn.disabled = true;
+    // Extract file paths from selected files
+    const filePaths = selectedFiles.map(file => file.path);
+    console.log('[Import] Extracted file paths:', filePaths);
 
-    const progressFill = document.getElementById('importProgressFill');
-    const progressText = document.getElementById('progressText');
-    const fileStatus = document.getElementById('currentFileStatus');
+    // Validate that we have valid paths
+    const invalidFiles = selectedFiles.filter(f => !f.path);
+    if (invalidFiles.length > 0) {
+      console.error('[Import] Files missing paths:', invalidFiles.map(f => f.name));
+      alert(`Some files do not have valid paths: ${invalidFiles.map(f => f.name).join(', ')}. Please use the file browser button.`);
+      return;
+    }
+
+    // Close modal immediately and run in background
+    closeImportModal();
+    backgroundImportRunning = true;
+    updateBackgroundImportIndicator();
+
+    // Show starting notification
+    showToast(`Importing ${filePaths.length} transcript${filePaths.length > 1 ? 's' : ''}...`);
+
+    // Track progress
+    let currentFile = 0;
+    const total = filePaths.length;
+
+    // Listen for progress updates
+    window.electronAPI.onImportProgress((progress) => {
+      if (progress.step === 'batch-progress') {
+        currentFile = progress.current;
+        updateBackgroundImportIndicator(currentFile, total);
+      }
+    });
 
     try {
-      // Extract file paths from selected files
-      const filePaths = selectedFiles.map(file => file.path);
-      console.log('[Import] Extracted file paths:', filePaths);
-
-      // Validate that we have valid paths
-      const invalidFiles = selectedFiles.filter(f => !f.path);
-      if (invalidFiles.length > 0) {
-        console.error('[Import] Files missing paths:', invalidFiles.map(f => f.name));
-        throw new Error(`Some files do not have valid paths: ${invalidFiles.map(f => f.name).join(', ')}. Please use the file browser button.`);
-      }
-
-      let currentFile = 0;
-      const total = filePaths.length;
-
-      // Listen for progress updates
-      window.electronAPI.onImportProgress((progress) => {
-        if (progress.step === 'batch-progress') {
-          currentFile = progress.current;
-          const percent = (currentFile / total) * 100;
-          progressFill.style.width = `${percent}%`;
-          progressText.textContent = `${currentFile} / ${total}`;
-          fileStatus.textContent = `Processing: ${progress.file}`;
-        } else {
-          fileStatus.textContent = `${progress.step.replace(/-/g, ' ')}: ${progress.file}`;
-        }
-      });
-
-      // Start batch import
+      // Start batch import (runs in background)
       const result = await window.electronAPI.importBatch(filePaths, {
-        generateSummary: generateSummaries,
+        generateAutoSummary: generateAutoSummary,
+        templateIds: selectedTemplateIds,
         autoExport: autoExport
       });
 
-      // Show results
+      // Show completion notification
       if (result.successful > 0) {
-        const message = `Successfully imported ${result.successful} of ${result.total} files!`;
+        const message = `Successfully imported ${result.successful} of ${result.total} transcript${result.total > 1 ? 's' : ''}!`;
 
         if (result.failed > 0) {
-          alert(`${message}\n\n${result.failed} files failed to import. Check console for details.`);
+          showToast(`${message} (${result.failed} failed)`, 'warning');
           console.error('Import errors:', result.errors);
         } else {
-          alert(message);
+          showToast(message, 'success');
         }
 
         // Reload meetings data to show imported meetings
         await loadMeetingsDataFromFile();
         renderMeetings();
-
-        // Close modal
-        closeImportModal();
       } else {
-        alert(`Import failed: ${result.error || 'All files failed to import'}`);
+        showToast(`Import failed: ${result.error || 'All files failed'}`, 'error');
         console.error('Import errors:', result.errors);
       }
     } catch (error) {
       console.error('Import error:', error);
-      alert('Import failed: ' + error.message);
+      showToast('Import failed: ' + error.message, 'error');
     } finally {
-      // Reset UI
-      importProgress.style.display = 'none';
-      startImportBtn.disabled = false;
-      cancelImportBtn.disabled = false;
+      backgroundImportRunning = false;
+      updateBackgroundImportIndicator();
     }
   });
 

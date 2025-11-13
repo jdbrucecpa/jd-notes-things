@@ -131,6 +131,12 @@ class AzureOpenAIAdapter extends LLMAdapter {
     // Note: gpt-5-mini is a reasoning model and does NOT support temperature, top_p,
     // presence_penalty, frequency_penalty, logprobs, or max_tokens parameters
 
+    console.log('[Azure] generateCompletion called with:');
+    console.log('[Azure] - systemPrompt length:', systemPrompt?.length || 0);
+    console.log('[Azure] - userPrompt length:', userPrompt?.length || 0);
+    console.log('[Azure] - maxTokens:', maxTokens);
+    console.log('[Azure] - deployment:', this.deployment);
+
     const completion = await this.client.chat.completions.create({
       model: this.deployment,
       messages: [
@@ -140,9 +146,46 @@ class AzureOpenAIAdapter extends LLMAdapter {
       max_completion_tokens: maxTokens  // Reasoning models use max_completion_tokens
     });
 
+    console.log('[Azure] Raw completion object type:', typeof completion);
+    console.log('[Azure] Raw completion keys:', completion ? Object.keys(completion) : 'null');
+    console.log('[Azure] Full completion (first 500 chars):', JSON.stringify(completion).substring(0, 500));
+
+    console.log('[Azure] Completion structure:', JSON.stringify({
+      hasChoices: !!completion.choices,
+      choicesLength: completion.choices?.length,
+      firstChoice: completion.choices?.[0] ? {
+        hasMessage: !!completion.choices[0].message,
+        messageKeys: completion.choices[0].message ? Object.keys(completion.choices[0].message) : [],
+        contentType: typeof completion.choices[0].message?.content,
+        contentLength: completion.choices[0].message?.content?.length || 0,
+        contentPreview: completion.choices[0].message?.content?.substring(0, 100)
+      } : null
+    }, null, 2));
+
+    const resultContent = completion.choices[0].message.content;
+    const resultModel = completion.model || this.deployment;
+    const finishReason = completion.choices[0].finish_reason;
+
+    console.log('[Azure] Extracted content type:', typeof resultContent);
+    console.log('[Azure] Extracted content length:', resultContent?.length || 0);
+    console.log('[Azure] Finish reason:', finishReason);
+    console.log('[Azure] Is content falsy?', !resultContent);
+
+    // Warn if we hit token limit with empty/truncated content
+    if (finishReason === 'length') {
+      if (!resultContent || resultContent.length === 0) {
+        console.error('[Azure] ERROR: Hit token limit during reasoning phase - no content generated!');
+        console.error('[Azure] This usually means max_completion_tokens is too low for the reasoning model.');
+        console.error('[Azure] Consider increasing maxTokens parameter.');
+        throw new Error('Reasoning model exhausted token budget before generating content. Increase maxTokens.');
+      } else {
+        console.warn('[Azure] WARNING: Response truncated due to token limit (finish_reason: length)');
+      }
+    }
+
     return {
-      content: completion.choices[0].message.content,
-      model: completion.model || this.deployment
+      content: resultContent,
+      model: resultModel
     };
   }
 

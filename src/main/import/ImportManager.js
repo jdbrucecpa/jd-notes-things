@@ -34,7 +34,8 @@ class ImportManager {
    */
   async importFile(filePath, options = {}) {
     const {
-      generateSummary = false,
+      generateAutoSummary = false,
+      templateIds = null,
       autoExport = false,
       onProgress = null
     } = options;
@@ -59,15 +60,15 @@ class ImportManager {
       const meeting = await this.createMeeting(parsedData, metadata);
 
       // Step 5: Generate auto-summary (optional)
-      if (generateSummary && meeting.transcript && meeting.transcript.length > 0) {
+      if (generateAutoSummary && meeting.transcript && meeting.transcript.length > 0) {
         if (onProgress) onProgress({ step: 'generating-auto-summary', file: path.basename(filePath) });
         await this.generateSummary(meeting);
       }
 
       // Step 6: Generate template-based summaries (optional)
-      if (generateSummary && this.templateManager && meeting.transcript && meeting.transcript.length > 0) {
+      if (templateIds && templateIds.length > 0 && this.templateManager && meeting.transcript && meeting.transcript.length > 0) {
         if (onProgress) onProgress({ step: 'generating-template-summaries', file: path.basename(filePath) });
-        await this.generateTemplateSummaries(meeting);
+        await this.generateTemplateSummaries(meeting, templateIds);
       }
 
       // Step 7: Export to Obsidian (optional)
@@ -239,8 +240,10 @@ class ImportManager {
 
   /**
    * Generate template-based summaries for imported meeting using shared function
+   * @param {Object} meeting - Meeting object with transcript
+   * @param {Array<string>} templateIds - Array of template IDs to generate (null for all)
    */
-  async generateTemplateSummaries(meeting) {
+  async generateTemplateSummaries(meeting, templateIds = null) {
     if (!this.summaryFunction) {
       console.warn('[Import] Summary function not available');
       return;
@@ -253,9 +256,10 @@ class ImportManager {
 
     try {
       console.log('[Import] Using shared generateTemplateSummaries function');
+      console.log('[Import] Template IDs:', templateIds || 'all templates');
 
-      // Use shared function (pass null to generate for all templates)
-      const summaries = await this.summaryFunction(meeting, null);
+      // Use shared function with specified template IDs
+      const summaries = await this.summaryFunction(meeting, templateIds);
 
       // Store summaries on meeting object
       meeting.summaries = summaries;
@@ -287,7 +291,9 @@ class ImportManager {
       // Use shared function (no streaming for imports)
       const summaryContent = await this.autoSummaryFunction(meeting, null);
 
-      if (!summaryContent) {
+      console.log('[Import] Summary content received:', typeof summaryContent, summaryContent ? `${summaryContent.length} chars` : 'empty/null');
+
+      if (!summaryContent || summaryContent.length === 0) {
         console.warn('[Import] No summary content returned');
         return;
       }

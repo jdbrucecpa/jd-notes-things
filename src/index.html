@@ -3,6 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <title>Muesli - Debug Notes</title>
+    <style>
+      @keyframes slideIn {
+        from {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      @keyframes slideOut {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+      }
+    </style>
   </head>
   <body>
     <div class="app-container">
@@ -427,14 +449,25 @@ Chat with meeting transcript: </textarea>
           <!-- Import Options -->
           <div class="import-options" id="importOptions" style="display: none;">
             <h3>Import Options</h3>
-            <label class="checkbox-label">
-              <input type="checkbox" id="generateSummariesCheck" checked />
-              <span>Generate AI summaries after import</span>
-            </label>
-            <label class="checkbox-label">
-              <input type="checkbox" id="autoExportCheck" checked />
-              <span>Auto-export to Obsidian vault</span>
-            </label>
+
+            <div class="import-option-group">
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Summaries</h4>
+              <label class="checkbox-label">
+                <input type="checkbox" id="generateAutoSummaryCheck" checked />
+                <span>Generate auto-summary</span>
+              </label>
+              <div id="templateCheckboxes" style="margin-left: 20px;">
+                <!-- Template checkboxes will be dynamically added here -->
+              </div>
+            </div>
+
+            <div class="import-option-group" style="margin-top: 16px;">
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Export</h4>
+              <label class="checkbox-label">
+                <input type="checkbox" id="autoExportCheck" checked />
+                <span>Auto-export to Obsidian vault</span>
+              </label>
+            </div>
           </div>
 
           <!-- Progress Indicator -->
@@ -451,6 +484,9 @@ Chat with meeting transcript: </textarea>
         </div>
 
         <div class="modal-footer">
+          <div style="flex: 1; font-size: 12px; color: #666; text-align: left;">
+            Import runs in background - you can close this window after starting
+          </div>
           <button class="btn btn-secondary" id="cancelImport">Cancel</button>
           <button class="btn btn-primary" id="startImport" disabled>Import Files</button>
         </div>

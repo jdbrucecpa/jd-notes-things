@@ -1201,20 +1201,39 @@ async function exportMeetingToObsidian(meeting) {
       const titleSlug = meeting.title
         ? meeting.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
         : 'meeting';
-      const baseFilename = `${dateStr}-${titleSlug}`;
+      let baseFilename = `${dateStr}-${titleSlug}`;
 
       // Create meeting folder path
       const meetingFolder = vaultStructure.getAbsolutePath(route.fullPath);
       vaultStructure.ensureDirectory(meetingFolder);
 
+      // Check for existing files and find unique filename
+      let summaryPath = path.join(meetingFolder, `${baseFilename}.md`);
+      let transcriptPath = path.join(meetingFolder, `${baseFilename}-transcript.md`);
+
+      if (fs.existsSync(summaryPath) || fs.existsSync(transcriptPath)) {
+        console.log(`[ObsidianExport] File already exists: ${baseFilename}.md`);
+
+        // Find next available number
+        let counter = 2;
+        let uniqueFilename;
+        do {
+          uniqueFilename = `${baseFilename}-${counter}`;
+          summaryPath = path.join(meetingFolder, `${uniqueFilename}.md`);
+          transcriptPath = path.join(meetingFolder, `${uniqueFilename}-transcript.md`);
+          counter++;
+        } while (fs.existsSync(summaryPath) || fs.existsSync(transcriptPath));
+
+        console.log(`[ObsidianExport] Using unique filename: ${uniqueFilename}.md`);
+        baseFilename = uniqueFilename;
+      }
+
       // Generate summary markdown (primary file)
-      const summaryPath = path.join(meetingFolder, `${baseFilename}.md`);
       const summaryContent = generateSummaryMarkdown(meeting, baseFilename);
       fs.writeFileSync(summaryPath, summaryContent, 'utf8');
       console.log(`[ObsidianExport] Created summary: ${summaryPath}`);
 
       // Generate transcript markdown (secondary file)
-      const transcriptPath = path.join(meetingFolder, `${baseFilename}-transcript.md`);
       const transcriptContent = generateTranscriptMarkdown(meeting, baseFilename);
       fs.writeFileSync(transcriptPath, transcriptContent, 'utf8');
       console.log(`[ObsidianExport] Created transcript: ${transcriptPath}`);
@@ -1420,6 +1439,42 @@ summary_file: "${baseFilename}.md"
 }
 
 /**
+ * Execute a single section task with LLM call
+ * Defined at module level to avoid closure memory issues
+ */
+async function executeTemplateSectionTask(llmService, task, transcriptText) {
+  try {
+    const result = await llmService.generateCompletion({
+      systemPrompt: 'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.',
+      userPrompt: `${task.sectionPrompt}\n\nMeeting Transcript:\n${transcriptText}`,
+      temperature: 0.7,
+      maxTokens: 20000  // Generous budget for reasoning models (~$0.04 per section, ~$0.80 for all 20 sections)
+    });
+
+    console.log(`[TemplateSummary] LLM result type: ${typeof result}, content type: ${typeof result?.content}`);
+    console.log(`[TemplateSummary] LLM result keys:`, result ? Object.keys(result) : 'null');
+    console.log(`[TemplateSummary] Content length:`, result?.content?.length || 0);
+
+    // Check if content exists
+    if (!result || !result.content) {
+      console.warn(`[TemplateSummary] No content in LLM response for ${task.sectionTitle}:`, JSON.stringify(result));
+      return {
+        success: false,
+        content: '*LLM returned empty response*'
+      };
+    }
+
+    return {
+      success: true,
+      content: result.content
+    };
+  } catch (error) {
+    console.error(`[TemplateSummary] Error generating section ${task.sectionTitle}:`, error);
+    throw error; // Re-throw for retry logic
+  }
+}
+
+/**
  * Generate template-based summaries for a meeting (shared function)
  * @param {Object} meeting - Meeting object with transcript
  * @param {Array<string>} templateIds - Template IDs to use (or null for all)
@@ -1453,7 +1508,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
 
   console.log(`[TemplateSummary] Transcript length: ${transcriptText.length} characters`);
 
-  // Collect all section generation tasks to run in parallel
+  // Collect section metadata only - NO FUNCTIONS to avoid memory issues
   const sectionTasks = [];
 
   for (const templateId of templateIds) {
@@ -1468,40 +1523,62 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
     for (const section of template.sections) {
       console.log(`[TemplateSummary] Queuing section: ${section.title}`);
 
+      // Store ONLY data - no functions (functions capture context and cause OOM)
       sectionTasks.push({
         templateId: template.id,
         templateName: template.name,
         sectionTitle: section.title,
-        promise: (async () => {
-          try {
-            const result = await llmService.generateCompletion({
-              systemPrompt: 'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.',
-              userPrompt: `${section.prompt}\n\nMeeting Transcript:\n${transcriptText}`,
-              temperature: 0.7,
-              maxTokens: 500
-            });
-
-            return {
-              success: true,
-              content: result.content
-            };
-          } catch (error) {
-            console.error(`[TemplateSummary] Error generating section ${section.title}:`, error);
-            return {
-              success: false,
-              content: '*Error generating this section*'
-            };
-          }
-        })()
+        sectionPrompt: section.prompt,
+        name: `${template.name} - ${section.title}`
       });
     }
   }
 
-  console.log(`[TemplateSummary] Firing ${sectionTasks.length} API calls in parallel...`);
+  // Estimate tokens per request (rough estimate: 1 token ≈ 4 chars)
+  const estimatedTokensPerRequest = Math.ceil(transcriptText.length / 4) + 200; // +200 for prompts
+
+  // Azure limit: 200k tokens/min. Use 70% to be safe
+  const tokenBudgetPerMinute = 140000;
+
+  // Calculate safe concurrency based on token budget
+  const safeConcurrency = Math.max(1, Math.floor(tokenBudgetPerMinute / estimatedTokensPerRequest));
+  const actualConcurrency = Math.min(3, safeConcurrency); // Cap at 3 for safety
+
+  console.log(`[TemplateSummary] Transcript: ~${estimatedTokensPerRequest} tokens/request`);
+  console.log(`[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`);
   const startTime = Date.now();
 
-  // Execute all API calls in parallel
-  const sectionResults = await Promise.all(sectionTasks.map(task => task.promise));
+  // Process completely sequentially - NO concurrency, NO closures
+  // This is slower but avoids OOM with large transcripts
+  const sectionResults = new Array(sectionTasks.length);
+
+  for (let i = 0; i < sectionTasks.length; i++) {
+    const task = sectionTasks[i];
+    let retries = 0;
+    const maxRetries = 3;
+
+    console.log(`[TemplateSummary] Processing ${i + 1}/${sectionTasks.length}: ${task.name}`);
+
+    while (retries <= maxRetries) {
+      try {
+        const result = await executeTemplateSectionTask(llmService, task, transcriptText);
+        sectionResults[i] = result;
+        break; // Success, move to next task
+      } catch (error) {
+        if (error.status === 429 && retries < maxRetries) {
+          const retryAfter = error.headers?.get?.('retry-after') || 60;
+          const delayMs = (parseInt(retryAfter) + 1) * 1000;
+          console.log(`[RateLimit] Hit rate limit. Retry ${retries + 1}/${maxRetries} after ${delayMs}ms`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          retries++;
+        } else {
+          console.error(`[RateLimit] Failed after ${retries} retries:`, error.message);
+          sectionResults[i] = { success: false, content: '*Error generating this section*' };
+          break; // Give up, move to next task
+        }
+      }
+    }
+  }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(2);
   console.log(`[TemplateSummary] All API calls completed in ${duration}s`);
@@ -4061,6 +4138,24 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
 
     console.log(`Generating AI summary for meeting: ${meeting.id}`);
 
+    // Check if title is generic and needs suggestion
+    const genericTitles = [
+      'transcript', 'meeting', 'imported', 'untitled', 'new meeting', 'call',
+      'zoom', 'teams', 'google meet', 'krisp', 'recording', 'audio', 'video'
+    ];
+    const currentTitle = (meeting.title || '').toLowerCase().trim();
+    const needsTitleSuggestion = genericTitles.some(generic => {
+      // Match if title IS the generic word, starts with it, or contains it as a word
+      return currentTitle === generic ||
+             currentTitle.startsWith(generic + '-') ||
+             currentTitle.includes(' ' + generic) ||
+             currentTitle.includes(generic + ' ');
+    });
+
+    if (needsTitleSuggestion) {
+      console.log(`[AutoSummary] Generic title detected: "${meeting.title}" - will suggest better title`);
+    }
+
     // Format the transcript into a single text for the AI to process
     const transcriptText = meeting.transcript.map(entry =>
       `${entry.speaker}: ${entry.text}`
@@ -4075,9 +4170,17 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
     }
 
     // Define a system prompt to guide the AI's response with a specific format
-    const systemMessage =
+    let systemMessage =
       "You are an AI assistant that summarizes meeting transcripts. " +
-      "You MUST format your response using the following structure:\n\n" +
+      "You MUST format your response using the following structure:\n\n";
+
+    if (needsTitleSuggestion) {
+      systemMessage +=
+        "# Suggested Title\n" +
+        "[A concise, descriptive meeting title (5-8 words max) based on the main topic discussed]\n\n";
+    }
+
+    systemMessage +=
       "# Participants\n" +
       "- [List all participants mentioned in the transcript]\n\n" +
       "# Summary\n" +
@@ -4102,18 +4205,31 @@ ${transcriptText}`;
       const result = await llmService.generateCompletion({
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
-        maxTokens: 1000,
+        maxTokens: 50000,  // Generous budget for reasoning models (~$0.10 output cost per summary)
         temperature: 0.7
       });
 
       console.log(`AI summary generated successfully using ${llmService.getProviderName()} (${result.model})`);
+      console.log(`[AutoSummary] Returning content:`, typeof result.content, result.content ? `${result.content.length} chars` : 'empty/null');
+
+      // Extract suggested title if present and update meeting
+      if (needsTitleSuggestion && result.content) {
+        const titleMatch = result.content.match(/# Suggested Title\s*\n([^\n]+)/i);
+        if (titleMatch && titleMatch[1]) {
+          const suggestedTitle = titleMatch[1].trim();
+          console.log(`[AutoSummary] Extracted suggested title: "${suggestedTitle}"`);
+          meeting.title = suggestedTitle;
+          console.log(`[AutoSummary] Updated meeting title to: "${meeting.title}"`);
+        }
+      }
+
       return result.content;
     } else {
       // Use streaming version with progress callback
       const fullText = await llmService.streamCompletion({
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
-        maxTokens: 1000,
+        maxTokens: 50000,  // Generous budget for reasoning models (~$0.10 output cost per summary)
         temperature: 0.7,
         onChunk: (cumulativeText) => {
           if (progressCallback) {
@@ -4126,6 +4242,17 @@ ${transcriptText}`;
 
       if (fullText.length === 0) {
         console.warn('WARNING: AI returned empty summary!');
+      }
+
+      // Extract suggested title if present and update meeting
+      if (needsTitleSuggestion && fullText) {
+        const titleMatch = fullText.match(/# Suggested Title\s*\n([^\n]+)/i);
+        if (titleMatch && titleMatch[1]) {
+          const suggestedTitle = titleMatch[1].trim();
+          console.log(`[AutoSummary] Extracted suggested title: "${suggestedTitle}"`);
+          meeting.title = suggestedTitle;
+          console.log(`[AutoSummary] Updated meeting title to: "${meeting.title}"`);
+        }
       }
 
       return fullText;
