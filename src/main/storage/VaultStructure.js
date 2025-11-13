@@ -27,12 +27,57 @@ class VaultStructure {
    * @throws {Error} If path traversal is detected
    */
   getAbsolutePath(relativePath) {
+    // Security: Validate relative path BEFORE joining with vault path
+    this.validateRelativePath(relativePath);
+
     const absolutePath = path.join(this.vaultBasePath, relativePath);
 
-    // Validate that the resolved path is within the vault directory
+    // Additional validation that resolved path is within vault
     this.validatePathWithinVault(absolutePath);
 
     return absolutePath;
+  }
+
+  /**
+   * Validate a relative path for security issues
+   * Rejects paths containing directory traversal attempts
+   * @param {string} relativePath - Relative path to validate
+   * @throws {Error} If path contains suspicious patterns
+   */
+  validateRelativePath(relativePath) {
+    if (!relativePath && relativePath !== '') {
+      throw new Error('Path cannot be null or undefined');
+    }
+
+    // Reject absolute paths (security)
+    if (path.isAbsolute(relativePath)) {
+      const error = new Error(`Absolute paths not allowed: ${relativePath}`);
+      console.error('[VaultStructure Security]', error.message);
+      throw error;
+    }
+
+    // Reject Windows UNC paths (\\server\share)
+    if (relativePath.startsWith('\\\\')) {
+      const error = new Error(`UNC paths not allowed: ${relativePath}`);
+      console.error('[VaultStructure Security]', error.message);
+      throw error;
+    }
+
+    // Reject paths starting with / or \ (should be relative)
+    if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+      const error = new Error(`Path must be relative, not start with / or \\: ${relativePath}`);
+      console.error('[VaultStructure Security]', error.message);
+      throw error;
+    }
+
+    // Reject paths containing directory traversal (..)
+    // Check RAW path BEFORE normalization (normalize() resolves .. segments)
+    // This prevents attacks like "clients/../../config/routing.yaml"
+    if (relativePath.includes('..')) {
+      const error = new Error(`Directory traversal detected in path: ${relativePath}`);
+      console.error('[VaultStructure Security]', error.message);
+      throw error;
+    }
   }
 
   /**

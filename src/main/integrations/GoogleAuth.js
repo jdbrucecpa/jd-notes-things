@@ -208,12 +208,14 @@ class GoogleAuth {
       throw new Error('[GoogleAuth] OAuth2 client not initialized. Call initialize() first.');
     }
 
-    // Validate state parameter for CSRF protection
-    if (state) {
-      this.validateState(state);
-    } else {
-      console.warn('[GoogleAuth Security] WARNING: No state parameter provided. CSRF protection bypassed.');
+    // SECURITY: State parameter is REQUIRED for CSRF protection
+    // Do not allow authentication without state validation
+    if (!state) {
+      throw new Error('[GoogleAuth Security] CSRF protection failed: State parameter is required.');
     }
+
+    // Validate state parameter matches expected value
+    this.validateState(state);
 
     const { tokens } = await this.oauth2Client.getToken(code);
     this.oauth2Client.setCredentials(tokens);
