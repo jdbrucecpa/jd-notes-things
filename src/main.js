@@ -2641,6 +2641,29 @@ ipcMain.handle('import:selectFolder', async () => {
 // End Import IPC Handlers
 // ===================================================================
 
+// ===================================================================
+// Settings IPC Handlers (Phase 10.1)
+// ===================================================================
+
+// Get app version information
+ipcMain.handle('settings:getAppVersion', async () => {
+  return {
+    electron: process.versions.electron,
+    node: process.versions.node,
+    chrome: process.versions.chrome,
+    app: app.getVersion(),
+  };
+});
+
+// Get vault path
+ipcMain.handle('settings:getVaultPath', async () => {
+  return vaultStructure?.vaultBasePath || null;
+});
+
+// ===================================================================
+// End Settings IPC Handlers
+// ===================================================================
+
 // Handle open-external IPC (for opening URLs in default browser)
 ipcMain.on('open-external', (event, url) => {
   console.log('[IPC] open-external called with url:', url);

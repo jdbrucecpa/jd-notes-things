@@ -8,6 +8,7 @@
 
 import './index.css';
 import { sanitizeHtml, escapeHtml, markdownToSafeHtml, safeSetInnerHTML } from './renderer/security.js';
+import { initializeSettingsUI } from './renderer/settings.js';
 
 // Create empty meetings data structure to be filled from the file
 const meetingsData = {
@@ -1722,6 +1723,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize the debug panel
   initDebugPanel();
+
+  // Initialize Settings UI (Phase 10.1)
+  initializeSettingsUI();
 
   // Initialize Google integration (Calendar + Contacts)
   await initializeGoogle();
