@@ -103,7 +103,7 @@ The LLM service scans this folder, presents available templates in UI, and gener
 
 ## Development Phases
 
-**Currently**: Phase 8 - Import Prior Transcripts (Testing in Production)
+**Currently**: Phase 9 - Security & Encryption
 
 The project follows a 12-phase plan (see `SPECIFICATION.md`):
 
@@ -254,7 +254,7 @@ src/
   - Cache verification logging with performance metrics
   - Total cost per meeting: ~$0.70 (well under $1 budget target)
 
-### Recent Bug Fixes (Nov 10, 2025)
+### Recent Bug Fixes (Nov 10-12, 2025)
 
 - ✅ Fixed Zod schema validation (added missing optional fields with `.passthrough()`)
 - ✅ Fixed fileOperationManager deadlock (read waiting for write, write calling read)
@@ -265,6 +265,9 @@ src/
 - ✅ Fixed calendar meeting Zod validation (added `type: 'calendar'`, changed `transcript` to array)
 - ✅ Fixed transcript parsing for Recall.ai format (array of participant objects with words arrays)
 - ✅ Added audio recording download URL to transcript metadata (for manual review)
+- ✅ Fixed generic title detection to catch numbered variants (Transcript2, Meeting1, etc.) (Nov 12)
+- ✅ Enhanced MetadataExtractor with fallback speaker detection from transcript content (Nov 12)
+- ✅ Fixed auto-summary token limit for OpenAI gpt-4o-mini (15,000 tokens, not 50,000) (Nov 12)
 
 ### Current Status
 
@@ -321,7 +324,7 @@ src/
 
 ### Next Steps
 
-**Phase 9 (NEXT):** Security hardening
+**Phase 9 (CURRENT):** Security hardening
 
 - XSS vulnerability mitigation (DOMPurify)
 - Path traversal validation

@@ -48,7 +48,7 @@ npm run make
 
 ## Project Status
 
-**Current Phase:** Phase 8 - Import Prior Transcripts (Testing in Production)
+**Current Phase:** Phase 9 - Security & Encryption
 
 ### ✅ Completed Phases
 
@@ -77,8 +77,9 @@ npm run make
 - ✅ Background import with progress notifications
 - ✅ Folder import with recursive scanning
 - ✅ Granular template selection (checkboxes per template)
-- ✅ LLM-based title suggestions for generic titles
+- ✅ LLM-based title suggestions for generic titles (including numbered variants like "Transcript2")
 - ✅ File overwrite protection
+- ✅ Enhanced speaker extraction from transcript content
 
 See [SPECIFICATION.md](./SPECIFICATION.md) for complete phase details.
 
@@ -221,7 +222,7 @@ jdnotesthings/
 - **Automatic routing** and summary generation for historical transcripts
 - **Prompt caching** optimization for batch imports (85-90% cost savings)
 
-### 🔜 Next Phase (Phase 9)
+### 🔧 Current Phase (Phase 9)
 
 - Encryption & Security
   - Windows DPAPI integration for file encryption

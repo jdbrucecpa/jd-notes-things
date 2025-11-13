@@ -19,6 +19,30 @@ const transcriptionService = require('./main/services/transcriptionService');
 const expressApp = require('./server');
 const ngrokManager = require('./main/services/ngrokManager');
 const log = require('electron-log');
+// IPC Input Validation - Phase 9 Security Hardening
+// ===================================================
+// To add validation to remaining IPC handlers, follow this pattern:
+//
+// Before:
+//   ipcMain.handle('my:handler', async (event, data) => { ... });
+//
+// After:
+//   ipcMain.handle('my:handler', withValidation(myHandlerSchema, async (event, data) => { ... }));
+//
+// All schemas are defined in src/main/validation/ipcSchemas.js
+// Validated handlers: templates:generateSummaries, llm:switchProvider
+// Remaining handlers (34): Apply the same pattern using appropriate schemas
+// ===================================================
+const {
+  withValidation,
+  saveMeetingsDataSchema,
+  googleAuthenticateSchema,
+  templatesGenerateSummariesSchema,
+  llmSwitchProviderSchema,
+  obsidianExportMeetingSchema,
+  importFileSchema,
+  importBatchSchema,
+} = require('./main/validation/ipcSchemas');
 require('dotenv').config();
 
 // Configure electron-log
@@ -466,8 +490,11 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Cleanup meeting monitor when app quits
+// Cleanup resources when app quits (Phase 9: Memory Leak Prevention)
 app.on('before-quit', async () => {
+  console.log('[App] Cleaning up resources before quit...');
+
+  // Stop meeting monitor
   if (meetingMonitorInterval) {
     clearInterval(meetingMonitorInterval);
     console.log('[Meeting Monitor] Stopped meeting monitor');
@@ -482,6 +509,11 @@ app.on('before-quit', async () => {
       console.log('[Webhook Server] Server closed');
     });
   }
+
+  // Note: IPC listeners are automatically cleaned up by Electron on app quit
+  // Event listeners on individual windows (like auth window) must be cleaned up manually
+  // See google:openAuthWindow handler for proper event listener cleanup pattern
+  console.log('[App Security] All resources cleaned up successfully');
 });
 
 // In this file you can include the rest of your app's specific main process
@@ -1869,15 +1901,16 @@ ipcMain.handle('google:getAuthUrl', async () => {
   }
 });
 
-// Authenticate with authorization code
-ipcMain.handle('google:authenticate', async (event, code) => {
+// Authenticate with authorization code (with CSRF protection)
+ipcMain.handle('google:authenticate', async (event, { code, state }) => {
   try {
-    console.log('[Google IPC] Authenticating with code');
+    console.log('[Google IPC] Authenticating with code and state');
     if (!googleAuth) {
       return { success: false, error: 'GoogleAuth not initialized' };
     }
 
-    await googleAuth.getTokenFromCode(code);
+    // Pass state parameter for CSRF validation
+    await googleAuth.getTokenFromCode(code, state);
 
     // Use centralized initialization to prevent race conditions
     if (googleAuth.isAuthenticated()) {
@@ -1950,13 +1983,32 @@ ipcMain.handle('google:signOut', async () => {
 // Open OAuth window for Google authentication
 ipcMain.handle('google:openAuthWindow', async () => {
   let authWindow = null;
+  let timeout = null;
+  let redirectHandler = null;
+  let closedHandler = null;
 
-  // Helper function to safely clean up the auth window
+  // Helper function to safely clean up the auth window and all listeners
   const cleanup = () => {
+    // Clear timeout if it exists
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+
+    // Remove event listeners to prevent memory leaks
     if (authWindow && !authWindow.isDestroyed()) {
+      if (redirectHandler) {
+        authWindow.webContents.removeListener('will-redirect', redirectHandler);
+        redirectHandler = null;
+      }
+      if (closedHandler) {
+        authWindow.removeListener('closed', closedHandler);
+        closedHandler = null;
+      }
       authWindow.destroy();
     }
     authWindow = null;
+    console.log('[Google OAuth Security] Auth window and listeners cleaned up');
   };
 
   try {
@@ -1980,8 +2032,8 @@ ipcMain.handle('google:openAuthWindow', async () => {
     authWindow.loadURL(authUrl);
 
     return new Promise(resolve => {
-      // Timeout after 5 minutes to prevent hanging
-      const timeout = setTimeout(
+      // Timeout after 5 minutes to prevent hanging and memory leaks
+      timeout = setTimeout(
         () => {
           if (authWindow && !authWindow.isDestroyed()) {
             console.log('[Google OAuth] Authentication timeout');
@@ -1992,18 +2044,19 @@ ipcMain.handle('google:openAuthWindow', async () => {
         5 * 60 * 1000
       );
 
-      // Listen for the redirect
-      authWindow.webContents.on('will-redirect', async (event, url) => {
+      // Define redirect handler
+      redirectHandler = async (event, url) => {
         if (url.startsWith('http://localhost:3000/oauth2callback')) {
           event.preventDefault();
-          clearTimeout(timeout);
 
           const parsedUrl = new URL(url);
           const code = parsedUrl.searchParams.get('code');
+          const state = parsedUrl.searchParams.get('state');
 
           if (code) {
             try {
-              await googleAuth.getTokenFromCode(code);
+              // Pass state parameter for CSRF validation
+              await googleAuth.getTokenFromCode(code, state);
 
               // Use centralized initialization to prevent race conditions
               await initializeGoogleServices();
@@ -2021,13 +2074,17 @@ ipcMain.handle('google:openAuthWindow', async () => {
             resolve({ success: false, error: error || 'No authorization code received' });
           }
         }
-      });
+      };
 
-      authWindow.on('closed', () => {
-        clearTimeout(timeout);
+      // Define closed handler
+      closedHandler = () => {
         cleanup();
         resolve({ success: false, error: 'Authentication window closed' });
-      });
+      };
+
+      // Attach event listeners
+      authWindow.webContents.on('will-redirect', redirectHandler);
+      authWindow.on('closed', closedHandler);
     });
   } catch (error) {
     console.error('[Google IPC] Failed to open auth window:', error);
@@ -2223,15 +2280,17 @@ ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript
 });
 
 // Generate summaries using multiple templates
-ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templateIds }) => {
-  try {
-    console.log(
-      '[Template IPC] Generating summaries for meeting:',
-      meetingId,
-      'with',
-      templateIds.length,
-      'templates'
-    );
+ipcMain.handle(
+  'templates:generateSummaries',
+  withValidation(templatesGenerateSummariesSchema, async (event, { meetingId, templateIds }) => {
+    try {
+      console.log(
+        '[Template IPC] Generating summaries for meeting:',
+        meetingId,
+        'with',
+        templateIds.length,
+        'templates'
+      );
 
     // Load meeting data
     const data = await fileOperationManager.readMeetingsData();
@@ -2279,7 +2338,8 @@ ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templat
     console.error('[Template IPC] Failed to generate summaries:', error);
     return { success: false, error: error.message };
   }
-});
+  })
+);
 
 // Reload templates from disk
 ipcMain.handle('templates:reload', async () => {
@@ -2315,30 +2375,26 @@ ipcMain.handle('llm:getProvider', async () => {
 });
 
 // Switch LLM provider
-ipcMain.handle('llm:switchProvider', async (event, provider) => {
-  try {
-    console.log(`[LLM] Switching provider to: ${provider}`);
+ipcMain.handle(
+  'llm:switchProvider',
+  withValidation(llmSwitchProviderSchema, async (event, { provider }) => {
+    try {
+      console.log(`[LLM] Switching provider to: ${provider}`);
 
-    // Validate provider
-    const validProviders = ['openai', 'azure', 'anthropic'];
-    if (!validProviders.includes(provider)) {
+      // Validation is now handled by Zod schema
+
+      llmService.switchProvider(provider);
+
       return {
-        success: false,
-        error: `Invalid provider. Must be one of: ${validProviders.join(', ')}`,
+        success: true,
+        provider: llmService.getProviderName(),
       };
+    } catch (error) {
+      console.error('[LLM] Error switching provider:', error);
+      return { success: false, error: error.message };
     }
-
-    llmService.switchProvider(provider);
-
-    return {
-      success: true,
-      provider: llmService.getProviderName(),
-    };
-  } catch (error) {
-    console.error('[LLM] Error switching provider:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // ===================================================================
 // End LLM Provider Management

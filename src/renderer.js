@@ -7,6 +7,7 @@
  */
 
 import './index.css';
+import { sanitizeHtml, escapeHtml, markdownToSafeHtml, safeSetInnerHTML } from './renderer/security.js';
 
 // Create empty meetings data structure to be filled from the file
 const meetingsData = {
@@ -280,9 +281,10 @@ function displaySummaries(summaries) {
     card.className = 'summary-card';
     card.dataset.summaryId = summary.templateId;
 
-    card.innerHTML = `
+    // Sanitize template name and content to prevent XSS
+    card.innerHTML = sanitizeHtml(`
       <div class="summary-card-header">
-        <div class="summary-card-title">${summary.templateName}</div>
+        <div class="summary-card-title">${escapeHtml(summary.templateName)}</div>
         <div class="summary-card-toggle">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M7 10L12 15L17 10H7Z" fill="currentColor"/>
@@ -290,9 +292,9 @@ function displaySummaries(summaries) {
         </div>
       </div>
       <div class="summary-card-body">
-        ${markdownToHtml(summary.content)}
+        ${markdownToSafeHtml(summary.content)}
       </div>
-    `;
+    `);
 
     // Add click handler to toggle collapse
     const header = card.querySelector('.summary-card-header');
@@ -322,39 +324,9 @@ function displaySummaries(summaries) {
   };
 }
 
-// Simple markdown to HTML converter
-function markdownToHtml(markdown) {
-  let html = markdown;
-
-  // Headers
-  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
-  html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
-  html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
-
-  // Bold
-  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-
-  // Italic
-  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-
-  // Lists
-  html = html.replace(/^\* (.+)$/gim, '<li>$1</li>');
-  html = html.replace(/^- (.+)$/gim, '<li>$1</li>');
-  html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
-
-  // Line breaks
-  html = html.replace(/\n\n/g, '</p><p>');
-  html = '<p>' + html + '</p>';
-
-  // Clean up empty paragraphs
-  html = html.replace(/<p>\s*<\/p>/g, '');
-  html = html.replace(/<p>(<h[1-3]>)/g, '$1');
-  html = html.replace(/(<\/h[1-3]>)<\/p>/g, '$1');
-  html = html.replace(/<p>(<ul>)/g, '$1');
-  html = html.replace(/(<\/ul>)<\/p>/g, '$1');
-
-  return html;
-}
+// Markdown conversion is now handled by the security module
+// using the marked library + DOMPurify sanitization
+// See: src/renderer/security.js - markdownToSafeHtml()
 
 // Function to create meeting card elements
 function createMeetingCard(meeting) {
@@ -400,27 +372,28 @@ function createMeetingCard(meeting) {
   `
     : '';
 
+  // Sanitize meeting title and subtitle to prevent XSS
   const subtitleHtml = meeting.hasDemo
-    ? `<div class="meeting-time"><a class="meeting-demo-link">${meeting.subtitle}</a></div>`
-    : `<div class="meeting-time">${meeting.subtitle}</div>`;
+    ? `<div class="meeting-time"><a class="meeting-demo-link">${escapeHtml(meeting.subtitle)}</a></div>`
+    : `<div class="meeting-time">${escapeHtml(meeting.subtitle)}</div>`;
 
-  card.innerHTML = `
+  card.innerHTML = sanitizeHtml(`
     <div class="meeting-icon-container">
       ${iconHtml}
       ${syncBadge}
     </div>
     <div class="meeting-content">
-      <div class="meeting-title">${meeting.title}</div>
+      <div class="meeting-title">${escapeHtml(meeting.title)}</div>
       ${subtitleHtml}
     </div>
     <div class="meeting-actions">
-      <button class="delete-meeting-btn" data-id="${meeting.id}" title="Delete note">
+      <button class="delete-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Delete note">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
         </svg>
       </button>
     </div>
-  `;
+  `);
 
   return card;
 }
@@ -459,22 +432,23 @@ function createCalendarMeetingCard(meeting) {
   };
   const platformName = platformNames[meeting.platform] || 'Meeting';
 
-  card.innerHTML = `
+  // Sanitize calendar meeting title and IDs to prevent XSS
+  card.innerHTML = sanitizeHtml(`
     <div class="meeting-icon calendar" style="background-color: ${platformColor}20;">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M19 4H18V2H16V4H8V2H6V4H5C3.89 4 3.01 4.9 3.01 6L3 20C3 21.1 3.89 22 5 22H19C20.1 22 21 21.1 21 20V6C21 4.9 20.1 4 19 4ZM19 20H5V10H19V20ZM19 8H5V6H19V8Z" fill="${platformColor}"/>
       </svg>
     </div>
     <div class="meeting-content">
-      <div class="meeting-title">${meeting.title}</div>
-      <div class="meeting-time">${timeString} • ${platformName}</div>
+      <div class="meeting-title">${escapeHtml(meeting.title)}</div>
+      <div class="meeting-time">${escapeHtml(timeString)} • ${escapeHtml(platformName)}</div>
       <div class="meeting-participants">${meeting.participants.length} participant${meeting.participants.length !== 1 ? 's' : ''}</div>
     </div>
     <div class="meeting-actions">
       ${
         meeting.meetingLink
           ? `
-        <button class="join-calendar-meeting-btn" data-id="${meeting.id}" data-link="${meeting.meetingLink}" title="Join meeting">
+        <button class="join-calendar-meeting-btn" data-id="${escapeHtml(meeting.id)}" data-link="${escapeHtml(meeting.meetingLink)}" title="Join meeting">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
           </svg>
@@ -482,13 +456,13 @@ function createCalendarMeetingCard(meeting) {
       `
           : ''
       }
-      <button class="record-calendar-meeting-btn" data-id="${meeting.id}" title="Record meeting">
+      <button class="record-calendar-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Record meeting">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="12" cy="12" r="8" fill="currentColor"/>
         </svg>
       </button>
     </div>
-  `;
+  `);
 
   return card;
 }
@@ -1237,12 +1211,12 @@ function updateDebugTranscript(transcript) {
       second: '2-digit',
     });
 
-    // Create HTML for this entry
-    entryDiv.innerHTML = `
-      <div class="transcript-speaker">${entry.speaker || 'Unknown'}</div>
-      <div class="transcript-text">${entry.text}</div>
-      <div class="transcript-timestamp">${formattedTime}</div>
-    `;
+    // Create HTML for this entry - sanitize speaker names and transcript text
+    entryDiv.innerHTML = sanitizeHtml(`
+      <div class="transcript-speaker">${escapeHtml(entry.speaker || 'Unknown')}</div>
+      <div class="transcript-text">${escapeHtml(entry.text)}</div>
+      <div class="transcript-timestamp">${escapeHtml(formattedTime)}</div>
+    `);
 
     // Add a highlight class for the newest entry
     if (index === transcript.length - 1) {
@@ -1410,7 +1384,8 @@ function updateDebugParticipants(participants) {
     const participantDiv = document.createElement('div');
     participantDiv.className = 'participant-entry';
 
-    participantDiv.innerHTML = `
+    // Sanitize participant names and status to prevent XSS
+    participantDiv.innerHTML = sanitizeHtml(`
       <div class="participant-avatar">
         <svg width="24" height="24" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
           <rect width="40" height="40" rx="20" fill="#f0f0f0"/>
@@ -1418,9 +1393,9 @@ function updateDebugParticipants(participants) {
           <path d="M12 31C12 26.0294 15.5817 22 20 22C24.4183 22 28 26.0294 28 31" stroke="#a0a0a0" stroke-width="4"/>
         </svg>
       </div>
-      <div class="participant-name">${participant.name || 'Unknown'}</div>
-      <div class="participant-status">${participant.status || 'Active'}</div>
-    `;
+      <div class="participant-name">${escapeHtml(participant.name || 'Unknown')}</div>
+      <div class="participant-status">${escapeHtml(participant.status || 'Active')}</div>
+    `);
 
     participantsList.appendChild(participantDiv);
   });
@@ -1790,13 +1765,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.electronAPI.onAuthExpired(data => {
     console.log('Authentication expired:', data);
 
-    // Show notification to user
+    // Show notification to user - sanitize service name and message
     const notificationDiv = document.createElement('div');
     notificationDiv.className = 'auth-expired-notification';
-    notificationDiv.innerHTML = `
+    notificationDiv.innerHTML = sanitizeHtml(`
       <div class="notification-content">
-        <strong>${data.service} Authentication Expired</strong>
-        <p>${data.message}</p>
+        <strong>${escapeHtml(data.service)} Authentication Expired</strong>
+        <p>${escapeHtml(data.message)}</p>
         <button onclick="this.parentElement.parentElement.remove(); window.location.reload();">
           Sign In Again
         </button>
@@ -1804,7 +1779,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           Dismiss
         </button>
       </div>
-    `;
+    `);
 
     document.body.appendChild(notificationDiv);
 

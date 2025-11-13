@@ -2,6 +2,7 @@ const { google } = require('googleapis');
 const fs = require('fs').promises;
 const path = require('path');
 const { app } = require('electron');
+const crypto = require('crypto');
 
 /**
  * Shared Google OAuth2 authentication for Calendar and Contacts APIs
@@ -20,6 +21,7 @@ class GoogleAuth {
     this.tokenPath = tokenPath || path.join(app.getPath('userData'), 'google-token.json');
     this.oauth2Client = null;
     this.initialized = false;
+    this.pendingState = null; // CSRF protection: stores expected state parameter
 
     // Combined scopes for both Calendar and Contacts
     this.scopes = [
@@ -112,15 +114,34 @@ class GoogleAuth {
           const execAsync = promisify(exec);
 
           const username = process.env.USERNAME || process.env.USER;
-          if (username) {
-            // Remove inheritance and grant full control to current user only
-            await execAsync(`icacls "${this.tokenPath}" /inheritance:r /grant:r "${username}:F"`);
-            console.log('[GoogleAuth] Token saved with restricted permissions (Windows)');
-          } else {
-            console.warn('[GoogleAuth] Could not set file permissions - USERNAME not found');
+          if (!username) {
+            // Delete token file if we can't secure it
+            await fs.unlink(this.tokenPath).catch(() => {});
+            throw new Error('[GoogleAuth Security] Cannot determine current username - unable to secure token file');
           }
+
+          // Remove inheritance and grant full control to current user only
+          const { stdout, stderr } = await execAsync(
+            `icacls "${this.tokenPath}" /inheritance:r /grant:r "${username}:F"`
+          );
+
+          // Verify the command succeeded
+          if (stderr && stderr.toLowerCase().includes('error')) {
+            throw new Error(`icacls failed: ${stderr}`);
+          }
+
+          // Verify permissions were actually set by reading them back
+          const { stdout: verifyOutput } = await execAsync(`icacls "${this.tokenPath}"`);
+          if (!verifyOutput.includes(username)) {
+            throw new Error('Failed to verify token file permissions were set correctly');
+          }
+
+          console.log('[GoogleAuth Security] Token saved with restricted permissions (Windows)');
         } catch (err) {
-          console.error('[GoogleAuth] Failed to set token file permissions:', err.message);
+          // Delete the insecurely-created token file
+          await fs.unlink(this.tokenPath).catch(() => {});
+          console.error('[GoogleAuth Security] Failed to secure token file, deleted for safety:', err.message);
+          throw new Error(`Failed to secure token file: ${err.message}`);
         }
       }
 
@@ -132,7 +153,7 @@ class GoogleAuth {
   }
 
   /**
-   * Generate OAuth2 authorization URL
+   * Generate OAuth2 authorization URL with CSRF protection
    *
    * @returns {string} Authorization URL for user to visit
    */
@@ -141,22 +162,57 @@ class GoogleAuth {
       throw new Error('[GoogleAuth] OAuth2 client not initialized. Call initialize() first.');
     }
 
+    // Generate random state parameter for CSRF protection
+    const state = crypto.randomBytes(32).toString('hex');
+    this.pendingState = state;
+    console.log('[GoogleAuth Security] Generated OAuth state parameter for CSRF protection');
+
     return this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: this.scopes,
       prompt: 'consent', // Force consent screen to ensure refresh token
+      state: state, // CSRF protection
     });
   }
 
   /**
-   * Exchange authorization code for access token
+   * Validate OAuth state parameter for CSRF protection
+   *
+   * @param {string} receivedState - State parameter from OAuth callback
+   * @throws {Error} If state validation fails
+   */
+  validateState(receivedState) {
+    if (!this.pendingState) {
+      throw new Error('[GoogleAuth Security] No pending OAuth state found. Possible CSRF attack.');
+    }
+
+    if (receivedState !== this.pendingState) {
+      this.pendingState = null; // Clear invalid state
+      throw new Error('[GoogleAuth Security] OAuth state mismatch. Possible CSRF attack.');
+    }
+
+    console.log('[GoogleAuth Security] OAuth state validated successfully');
+    this.pendingState = null; // Clear used state
+  }
+
+  /**
+   * Exchange authorization code for access token (with CSRF protection)
    *
    * @param {string} code - Authorization code from OAuth callback
+   * @param {string} state - State parameter from OAuth callback (for CSRF validation)
    * @returns {Promise<Object>} Token object
+   * @throws {Error} If state validation fails
    */
-  async getTokenFromCode(code) {
+  async getTokenFromCode(code, state = null) {
     if (!this.oauth2Client) {
       throw new Error('[GoogleAuth] OAuth2 client not initialized. Call initialize() first.');
+    }
+
+    // Validate state parameter for CSRF protection
+    if (state) {
+      this.validateState(state);
+    } else {
+      console.warn('[GoogleAuth Security] WARNING: No state parameter provided. CSRF protection bypassed.');
     }
 
     const { tokens } = await this.oauth2Client.getToken(code);

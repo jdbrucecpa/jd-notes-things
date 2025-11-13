@@ -24,9 +24,38 @@ class VaultStructure {
    * Get absolute path within vault
    * @param {string} relativePath - Path relative to vault root
    * @returns {string} Absolute path
+   * @throws {Error} If path traversal is detected
    */
   getAbsolutePath(relativePath) {
-    return path.join(this.vaultBasePath, relativePath);
+    const absolutePath = path.join(this.vaultBasePath, relativePath);
+
+    // Validate that the resolved path is within the vault directory
+    this.validatePathWithinVault(absolutePath);
+
+    return absolutePath;
+  }
+
+  /**
+   * Validate that a path is within the vault directory
+   * Prevents path traversal attacks (e.g., ../../../etc/passwd)
+   * @param {string} targetPath - Absolute path to validate
+   * @throws {Error} If path is outside vault
+   */
+  validatePathWithinVault(targetPath) {
+    // Normalize both paths to resolve any .. or . segments
+    const normalizedVault = path.normalize(path.resolve(this.vaultBasePath));
+    const normalizedTarget = path.normalize(path.resolve(targetPath));
+
+    // Ensure target path starts with vault path
+    // Add path.sep to prevent partial directory name matches
+    // e.g., /vault should not match /vault-evil
+    const vaultWithSep = normalizedVault + path.sep;
+
+    if (normalizedTarget !== normalizedVault && !normalizedTarget.startsWith(vaultWithSep)) {
+      const error = new Error(`Path traversal detected: Attempted to access ${normalizedTarget} outside vault ${normalizedVault}`);
+      console.error('[VaultStructure Security]', error.message);
+      throw error;
+    }
   }
 
   /**

@@ -68,16 +68,30 @@ class NgrokManager {
    */
   async stop() {
     if (this.connected) {
+      console.log('[ngrok] Disconnecting tunnel...');
+
+      // Try to disconnect the specific URL first (more reliable)
+      if (this.url) {
+        try {
+          await ngrok.disconnect(this.url);
+        } catch (error) {
+          // Ignore disconnect errors - tunnel may already be closed
+          console.log('[ngrok] Disconnect returned error (ignoring):', error.message);
+        }
+      }
+
+      // Kill the ngrok process
       try {
-        console.log('[ngrok] Disconnecting tunnel...');
-        await ngrok.disconnect();
         await ngrok.kill();
-        this.connected = false;
-        this.url = null;
         console.log('[ngrok] ✓ Tunnel disconnected');
       } catch (error) {
-        console.error('[ngrok] Error disconnecting:', error.message);
+        // Ignore kill errors - process may already be terminated
+        console.log('[ngrok] Kill returned error (ignoring):', error.message);
       }
+
+      // Always clean up state
+      this.connected = false;
+      this.url = null;
     }
   }
 
