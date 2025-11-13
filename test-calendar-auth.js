@@ -20,7 +20,8 @@ async function testCalendarIntegration() {
     const credentials = {
       client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID,
       client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
-      redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback'
+      redirect_uri:
+        process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback',
     };
 
     if (!credentials.client_id || !credentials.client_secret) {
@@ -95,7 +96,7 @@ async function testCalendarIntegration() {
           const routingDecision = routingEngine.route({
             participantEmails: meeting.participantEmails,
             meetingTitle: meeting.title,
-            meetingDate: meeting.startTime
+            meetingDate: meeting.startTime,
           });
 
           console.log(`  Routes: ${routingDecision.routes.length}`);
@@ -111,7 +112,6 @@ async function testCalendarIntegration() {
         console.log('─────────────────────────────────────────────────────\n');
       }
     }
-
   } catch (error) {
     console.error('\n❌ Test failed with error:');
     console.error(error.message);

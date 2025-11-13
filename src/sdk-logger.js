@@ -8,12 +8,12 @@ const logger = new EventEmitter();
 // Export the logger
 module.exports = {
   // Log an SDK API call
-  logApiCall: function(method, params = {}) {
+  logApiCall: function (method, params = {}) {
     const logEntry = {
       type: 'api-call',
       method,
       params,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     // Emit the log event
@@ -24,12 +24,12 @@ module.exports = {
   },
 
   // Log an SDK event
-  logEvent: function(eventType, data = {}) {
+  logEvent: function (eventType, data = {}) {
     const logEntry = {
       type: 'event',
       eventType,
       data,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     // Emit the log event
@@ -40,12 +40,12 @@ module.exports = {
   },
 
   // Log an error
-  logError: function(errorType, message) {
+  logError: function (errorType, message) {
     const logEntry = {
       type: 'error',
       errorType,
       message,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     // Emit the log event
@@ -56,11 +56,11 @@ module.exports = {
   },
 
   // Log a generic message
-  log: function(message, level = 'info') {
+  log: function (message, level = 'info') {
     const logEntry = {
       type: level,
       message,
-      timestamp: new Date()
+      timestamp: new Date(),
     };
 
     // Emit the log event
@@ -71,14 +71,14 @@ module.exports = {
   },
 
   // Set up a listener for logs
-  onLog: function(callback) {
+  onLog: function (callback) {
     logger.on('log', callback);
     return this;
   },
 
   // Remove a log listener
-  removeLogListener: function(callback) {
+  removeLogListener: function (callback) {
     logger.off('log', callback);
     return this;
-  }
+  },
 };

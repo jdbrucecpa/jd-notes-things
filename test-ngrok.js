@@ -16,7 +16,7 @@ async function testNgrok() {
     console.log('\n2. Testing basic connection (random URL)...');
     const randomUrl = await ngrok.connect({
       addr: 8080,
-      proto: 'http'
+      proto: 'http',
       // ngrok v3 doesn't use 'region' option the same way
     });
     console.log('✓ Basic connection successful!');
@@ -35,7 +35,7 @@ async function testNgrok() {
     const customUrl = await ngrok.connect({
       addr: 8080,
       proto: 'http',
-      domain: cleanDomain
+      domain: cleanDomain,
     });
     console.log('✓ Custom domain connection successful!');
     console.log('   Custom URL:', customUrl);

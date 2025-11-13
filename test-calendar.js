@@ -14,13 +14,13 @@ const readline = require('readline');
 // Create readline interface for user input
 const rl = readline.createInterface({
   input: process.stdin,
-  output: process.stdout
+  output: process.stdout,
 });
 
 // Helper to prompt user for input
 function prompt(question) {
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
+  return new Promise(resolve => {
+    rl.question(question, answer => {
       resolve(answer);
     });
   });
@@ -39,7 +39,8 @@ async function testCalendarIntegration() {
     const credentials = {
       client_id: process.env.GOOGLE_CALENDAR_CLIENT_ID,
       client_secret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
-      redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback'
+      redirect_uri:
+        process.env.GOOGLE_CALENDAR_REDIRECT_URI || 'http://localhost:3000/oauth2callback',
     };
 
     if (!credentials.client_id || !credentials.client_secret) {
@@ -133,7 +134,7 @@ async function testCalendarIntegration() {
         const routingDecision = routingEngine.route({
           participantEmails: meeting.participantEmails,
           meetingTitle: meeting.title,
-          meetingDate: meeting.startTime
+          meetingDate: meeting.startTime,
         });
 
         console.log(`  Routes: ${routingDecision.routes.length}`);
@@ -144,7 +145,6 @@ async function testCalendarIntegration() {
 
       console.log('\n─────────────────────────────────────────────────────\n');
     }
-
   } catch (error) {
     console.error('\n❌ Test failed with error:');
     console.error(error.message);

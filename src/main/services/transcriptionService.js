@@ -12,7 +12,7 @@ class TranscriptionService {
     this.providers = {
       recallai: this.transcribeWithRecallAI.bind(this),
       assemblyai: this.transcribeWithAssemblyAI.bind(this),
-      deepgram: this.transcribeWithDeepgram.bind(this)
+      deepgram: this.transcribeWithDeepgram.bind(this),
     };
   }
 
@@ -84,24 +84,28 @@ class TranscriptionService {
 
     const response = await axios.post('https://api.assemblyai.com/v2/upload', audioData, {
       headers: {
-        'authorization': apiKey,
-        'content-type': 'application/octet-stream'
-      }
+        authorization: apiKey,
+        'content-type': 'application/octet-stream',
+      },
     });
 
     return response.data.upload_url;
   }
 
   async requestAssemblyAITranscription(uploadUrl, apiKey) {
-    const response = await axios.post('https://api.assemblyai.com/v2/transcript', {
-      audio_url: uploadUrl,
-      speaker_labels: true  // Enable speaker diarization
-    }, {
-      headers: {
-        'authorization': apiKey,
-        'content-type': 'application/json'
+    const response = await axios.post(
+      'https://api.assemblyai.com/v2/transcript',
+      {
+        audio_url: uploadUrl,
+        speaker_labels: true, // Enable speaker diarization
+      },
+      {
+        headers: {
+          authorization: apiKey,
+          'content-type': 'application/json',
+        },
       }
-    });
+    );
 
     return response.data.id;
   }
@@ -111,12 +115,9 @@ class TranscriptionService {
     let attempts = 0;
 
     while (attempts < maxAttempts) {
-      const response = await axios.get(
-        `https://api.assemblyai.com/v2/transcript/${transcriptId}`,
-        {
-          headers: { 'authorization': apiKey }
-        }
-      );
+      const response = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+        headers: { authorization: apiKey },
+      });
 
       const status = response.data.status;
       console.log(`[AssemblyAI] Status: ${status}`);
@@ -146,7 +147,7 @@ class TranscriptionService {
           speakerId: utterance.speaker,
           text: utterance.text,
           timestamp: utterance.start,
-          words: utterance.words || []
+          words: utterance.words || [],
         });
       });
     }
@@ -155,7 +156,7 @@ class TranscriptionService {
       text: assemblyData.text,
       entries: entries,
       provider: 'assemblyai',
-      confidence: assemblyData.confidence
+      confidence: assemblyData.confidence,
     };
   }
 
@@ -179,9 +180,9 @@ class TranscriptionService {
       audioData,
       {
         headers: {
-          'Authorization': `Token ${DEEPGRAM_API_KEY}`,
-          'Content-Type': 'audio/mpeg'
-        }
+          Authorization: `Token ${DEEPGRAM_API_KEY}`,
+          'Content-Type': 'audio/mpeg',
+        },
       }
     );
 
@@ -200,7 +201,7 @@ class TranscriptionService {
           speakerId: utterance.speaker,
           text: utterance.transcript,
           timestamp: utterance.start,
-          words: utterance.words || []
+          words: utterance.words || [],
         });
       });
     }
@@ -209,7 +210,7 @@ class TranscriptionService {
       text: deepgramData.results?.channels?.[0]?.alternatives?.[0]?.transcript || '',
       entries: entries,
       provider: 'deepgram',
-      confidence: deepgramData.results?.channels?.[0]?.alternatives?.[0]?.confidence
+      confidence: deepgramData.results?.channels?.[0]?.alternatives?.[0]?.confidence,
     };
   }
 }

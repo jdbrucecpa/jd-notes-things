@@ -9,6 +9,7 @@
 ## Quick Start
 
 ### Prerequisites
+
 - **Windows** (required for Recall.ai Desktop SDK)
 - **Node.js** v18+ (tested with v22.20.0)
 - **npm** v10+
@@ -47,36 +48,42 @@ npm run make
 
 ## Project Status
 
-**Current Phase:** Pre-Phase 8 - Complete Deferred Features from Phases 1-7
+**Current Phase:** Phase 8 - Import Prior Transcripts (Testing in Production)
 
 ### ✅ Completed Phases
+
 - **Phase 1**: Core Recording & Transcription (Recall.ai SDK + Async Webhook Transcription)
 - **Phase 2**: Routing System (Email domain matching, vault structure)
 - **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
-- **Phase 4**: LLM Integration (Multi-provider with runtime switching)
+- **Phase 4**: LLM Integration (Multi-provider with runtime switching + Prompt Caching)
 - **Phase 5**: Obsidian Export (Two-file architecture, auto-export, publish buttons)
 - **Phase 6**: Speaker Recognition & Contact Matching (Unified Google auth, LRU cache)
 - **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet detection)
 - **Pre-Phase 7 Bug Fixes**: All 5 critical bugs resolved
+- **Phase 8**: Import Prior Transcripts (bulk import, folder scanning, template selection)
 
-### 🚧 Current Work: Pre-Phase 8 Features
+### 🎯 Recent Achievements (November 12, 2025)
 
-Before moving to Phase 8 (Import Prior Transcripts), completing essential UI features and code quality improvements:
+**Prompt Caching Implementation:**
 
-**Tasks:**
-1. Manual Vault Link Override UI (edit obsidianLink field in UI)
-2. Proper Logging Framework (electron-log for debugging)
-3. ESLint & Prettier (code quality and consistency)
+- ✅ 85-90% cost reduction on template generation
+- ✅ All three LLM providers support caching (Azure OpenAI, OpenAI, Anthropic Claude)
+- ✅ Token budgets optimized: 50,000 for auto-summary, 15,000 for template sections
+- ✅ Total cost per meeting: ~$0.70 (well under $1 budget target)
+- ✅ Cache verification logging with performance metrics
 
-**Deferred to Phase 10 (Advanced UI & Settings):**
-- Manual Speaker ID Correction UI
-- Manual Participant Input During Recording
+**Import Transcripts Feature:**
 
-**Estimated effort:** 5-8 hours
+- ✅ Background import with progress notifications
+- ✅ Folder import with recursive scanning
+- ✅ Granular template selection (checkboxes per template)
+- ✅ LLM-based title suggestions for generic titles
+- ✅ File overwrite protection
 
-See [SPECIFICATION.md Pre-Phase 8](./SPECIFICATION.md#pre-phase-8-complete-deferred-features-from-phases-1-7) for complete details.
+See [SPECIFICATION.md](./SPECIFICATION.md) for complete phase details.
 
 ### 📋 See Full Status
+
 - **[PROGRESS.md](./PROGRESS.md)** - Detailed progress and next steps
 - **[SPECIFICATION.md](./SPECIFICATION.md)** - Complete product specification
 - **[CODE_REVIEW.md](./CODE_REVIEW.md)** - Security and code quality findings
@@ -120,6 +127,7 @@ jdnotesthings/
 ## Features
 
 ### ✅ Phase 1: Core Recording & Transcription (Complete)
+
 - Manual and automatic meeting recording
 - System audio capture via Recall.ai SDK
 - **Flexible transcription provider system with runtime switching:**
@@ -135,6 +143,7 @@ jdnotesthings/
 - Svix signature verification for webhook security
 
 ### ✅ Phase 2: Routing System (Complete)
+
 - Automatic file organization by client/project/industry
 - Email domain-based routing with priority system
 - YAML configuration (`config/routing.yaml`)
@@ -142,6 +151,7 @@ jdnotesthings/
 - Email override system for personal emails
 
 ### ✅ Phase 3: Calendar Integration (Complete)
+
 - Google Calendar OAuth 2.0 integration (unified with Contacts)
 - Calendar event fetching (next 24 hours)
 - Meeting platform detection (Zoom, Teams, Meet, Webex, Whereby)
@@ -149,12 +159,21 @@ jdnotesthings/
 - Upcoming meetings display in main UI
 
 ### ✅ Phase 4: LLM Integration (Complete)
-- AI-generated meeting summaries with OpenAI (gpt-4o-mini)
-- Template-based summary generation
+
+- **Multi-provider LLM support:** OpenAI (gpt-4o-mini), Anthropic (Claude), Azure OpenAI (gpt-5-mini)
+- **Runtime provider switching** via UI dropdown (no restart required)
+- **Prompt caching implementation** across all providers (85-90% cost savings)
+  - Azure OpenAI, OpenAI, Anthropic Claude all support automatic caching
+  - First call creates cache, subsequent calls achieve 99%+ hit rate
+  - Token budgets: 50,000 for auto-summary, 15,000 per template section
+  - Total cost per meeting: ~$0.70 (well under $1 budget)
+- Template-based summary generation with parallel processing
 - Streaming summary generation with progress updates
 - Structured summaries (participants, key points, action items)
+- Cache verification logging with performance metrics
 
 ### ✅ Phase 5: Obsidian Export (Complete)
+
 - Two-file architecture (summary + transcript)
 - Rich YAML frontmatter with meeting metadata
 - Bidirectional Obsidian wiki-links
@@ -167,6 +186,7 @@ jdnotesthings/
 - **Known limitation**: Manual vault link override backend ready, UI missing
 
 ### ✅ Phase 6: Speaker Recognition & Contact Matching (Complete)
+
 - Unified Google authentication (Calendar + Contacts)
 - Google Contacts integration with LRU cache (5,000 max entries, 24-hour TTL)
 - Heuristic-based speaker matching algorithms
@@ -174,6 +194,7 @@ jdnotesthings/
 - Auth expiration notifications to user
 
 ### ✅ Phase 7: Platform-Specific Recording (Complete)
+
 - Zoom meeting detection (inherited from Muesli)
 - Microsoft Teams meeting detection
 - Google Meet meeting detection
@@ -181,21 +202,35 @@ jdnotesthings/
 - Platform-specific UI colors and icons
 
 ### ✅ Pre-Phase 7 Bug Fixes (Complete)
+
 - Fixed RoutingEngine method signature bug
 - Fixed service initialization race condition
 - Added token refresh user notifications
 - Fixed file operation read/write race with readWaiters queue
 - Implemented LRU cache for contacts (bounded memory)
 
-### 🔜 Next Phase (Phase 8)
-- Import Prior Transcripts
-  - Bulk import existing meeting notes
-  - Support .txt, .md, VTT, SRT formats
-  - Metadata extraction from filenames
-  - Apply routing and generate summaries
+### ✅ Phase 8: Import Prior Transcripts (Complete)
+
+- **Bulk import** of existing meeting transcripts (.txt, .md, VTT, SRT formats)
+- **Folder import** with recursive scanning
+- **Background processing** - imports run in background with progress notifications
+- **Granular template selection** - checkboxes for each template
+- **LLM-based title suggestions** for generic titles (e.g., "Krisp Transcript")
+- **File overwrite protection** with confirmation dialogs
+- **Metadata extraction** from filenames and content
+- **Automatic routing** and summary generation for historical transcripts
+- **Prompt caching** optimization for batch imports (85-90% cost savings)
+
+### 🔜 Next Phase (Phase 9)
+
+- Encryption & Security
+  - Windows DPAPI integration for file encryption
+  - API key storage in Windows Credential Manager
+  - XSS/CSRF protection
+  - IPC handler input validation
 
 ### Future Phases
-- Phase 9: Encryption & Security (Windows DPAPI)
+
 - Phase 10: Advanced UI & Settings (speaker correction, participant input, etc.)
 - Phase 11: Real-time Transcription (optional)
 - Phase 12: HubSpot CRM Integration
@@ -257,6 +292,7 @@ VAULT_PATH=./vault
 ```
 
 ### API Keys Required
+
 - **Recall.ai**: For desktop audio recording (SDK upload currently broken)
   - API Key: For SDK authentication
   - Webhook Secret: For Svix signature verification (get from Recall.ai dashboard)

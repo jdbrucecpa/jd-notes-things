@@ -32,7 +32,7 @@ class NgrokManager {
       // Let ngrok find the global v3 binary automatically (works in test-ngrok.js)
       const options = {
         addr: port,
-        proto: 'http'
+        proto: 'http',
       };
 
       if (domain) {

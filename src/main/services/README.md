@@ -32,20 +32,20 @@ const llmService = new LLMService({
 
   openai: {
     apiKey: process.env.OPENAI_API_KEY,
-    model: 'gpt-4o-mini'
+    model: 'gpt-4o-mini',
   },
 
   azure: {
     apiKey: process.env.AZURE_OPENAI_API_KEY,
     endpoint: process.env.AZURE_OPENAI_ENDPOINT,
     deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
-    apiVersion: '2025-01-01-preview'
+    apiVersion: '2025-01-01-preview',
   },
 
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY,
-    model: 'claude-haiku-4-5-20251001'
-  }
+    model: 'claude-haiku-4-5-20251001',
+  },
 });
 ```
 
@@ -58,11 +58,11 @@ const result = await llmService.generateCompletion({
   systemPrompt: 'You are a helpful assistant.',
   userPrompt: 'Summarize this meeting transcript...',
   maxTokens: 1000,
-  temperature: 0.7
+  temperature: 0.7,
 });
 
 console.log(result.content); // Generated text
-console.log(result.model);   // Model that was used
+console.log(result.model); // Model that was used
 ```
 
 ### Streaming Completion
@@ -73,10 +73,10 @@ const fullText = await llmService.streamCompletion({
   userPrompt: 'Summarize this meeting transcript...',
   maxTokens: 1000,
   temperature: 0.7,
-  onChunk: (cumulativeText) => {
+  onChunk: cumulativeText => {
     // Called for each chunk with accumulated text
     console.log('Progress:', cumulativeText);
-  }
+  },
 });
 
 console.log('Final:', fullText);
@@ -142,11 +142,11 @@ When using `createLLMServiceFromEnv()`, providers are selected in this order:
 
 Based on testing with 4 templates, 6 sections each (24 parallel API calls):
 
-| Provider | Model | Time | Cost/1K tokens | Notes |
-|----------|-------|------|---------------|-------|
-| OpenAI | gpt-4o-mini | 22s | $0.00015 | Sequential: ~60s |
-| Anthropic | claude-haiku-4-5 | 5s | $0.00025 | ~4.3x faster than OpenAI |
-| Azure OpenAI | gpt-5-mini | TBD | ~$0.00010 | Cheapest option |
+| Provider     | Model            | Time | Cost/1K tokens | Notes                    |
+| ------------ | ---------------- | ---- | -------------- | ------------------------ |
+| OpenAI       | gpt-4o-mini      | 22s  | $0.00015       | Sequential: ~60s         |
+| Anthropic    | claude-haiku-4-5 | 5s   | $0.00025       | ~4.3x faster than OpenAI |
+| Azure OpenAI | gpt-5-mini       | TBD  | ~$0.00010      | Cheapest option          |
 
 ## Architecture
 
@@ -161,6 +161,7 @@ LLMService (Factory)
 ```
 
 Each adapter implements:
+
 - `generateCompletion(options)` - Non-streaming
 - `streamCompletion(options)` - Streaming with callbacks
 - `getProviderName()` - Provider identification
@@ -181,6 +182,7 @@ try {
 ```
 
 Common error types:
+
 - API authentication errors (invalid API key)
 - Rate limit errors (too many requests)
 - Network errors (connection timeout)

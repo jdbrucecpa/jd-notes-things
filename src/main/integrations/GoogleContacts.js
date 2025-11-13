@@ -25,7 +25,7 @@ class GoogleContacts {
       max: 5000, // Maximum 5,000 contacts in cache
       ttl: 24 * 60 * 60 * 1000, // 24 hour TTL per entry
       updateAgeOnGet: true, // Reset TTL when accessed
-      allowStale: false
+      allowStale: false,
     });
 
     this.contactCount = 0; // actual number of unique contacts
@@ -77,7 +77,7 @@ class GoogleContacts {
     }
 
     // Check cache
-    if (!forceRefresh && this.lastFetch && (Date.now() - this.lastFetch < this.cacheExpiry)) {
+    if (!forceRefresh && this.lastFetch && Date.now() - this.lastFetch < this.cacheExpiry) {
       console.log('[GoogleContacts] Using cached contacts');
       return Array.from(this.contactsCache.values());
     }
@@ -103,14 +103,16 @@ class GoogleContacts {
           resourceName: 'people/me',
           pageSize: 1000,
           personFields: 'names,emailAddresses,phoneNumbers,organizations,photos',
-          pageToken: pageToken
+          pageToken: pageToken,
         });
 
         const connections = response.data.connections || [];
         allContacts.push(...connections);
 
         pageToken = response.data.nextPageToken;
-        console.log(`[GoogleContacts] Fetched ${connections.length} contacts (total: ${allContacts.length})`);
+        console.log(
+          `[GoogleContacts] Fetched ${connections.length} contacts (total: ${allContacts.length})`
+        );
       } while (pageToken);
 
       // Process and cache contacts
@@ -150,13 +152,9 @@ class GoogleContacts {
       const givenName = contact.names?.[0]?.givenName || '';
       const familyName = contact.names?.[0]?.familyName || '';
 
-      const emails = (contact.emailAddresses || [])
-        .map(e => e.value)
-        .filter(e => e);
+      const emails = (contact.emailAddresses || []).map(e => e.value).filter(e => e);
 
-      const phones = (contact.phoneNumbers || [])
-        .map(p => p.value)
-        .filter(p => p);
+      const phones = (contact.phoneNumbers || []).map(p => p.value).filter(p => p);
 
       const organization = contact.organizations?.[0]?.name || null;
       const title = contact.organizations?.[0]?.title || null;
@@ -171,7 +169,7 @@ class GoogleContacts {
         phones,
         organization,
         title,
-        photoUrl
+        photoUrl,
       };
     } catch (error) {
       console.error('[GoogleContacts] Error processing contact:', error.message);
@@ -252,7 +250,8 @@ class GoogleContacts {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('auth:expired', {
             service: 'Google',
-            message: 'Your Google authentication has expired. Please sign in again to continue using Calendar and Contacts features.'
+            message:
+              'Your Google authentication has expired. Please sign in again to continue using Calendar and Contacts features.',
           });
           console.log('[GoogleContacts] Sent auth:expired notification to renderer');
         }

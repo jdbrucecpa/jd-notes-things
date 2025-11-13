@@ -1,11 +1,10 @@
-const { app, BrowserWindow, ipcMain, protocol, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification } = require('electron');
 const path = require('node:path');
-const url = require('url');
 const fs = require('fs');
 const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
 const sdkLogger = require('./sdk-logger');
-const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema} = require('./shared/validation');
+const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema } = require('./shared/validation');
 const { z } = require('zod');
 const GoogleAuth = require('./main/integrations/GoogleAuth');
 const GoogleCalendar = require('./main/integrations/GoogleCalendar');
@@ -14,7 +13,6 @@ const SpeakerMatcher = require('./main/integrations/SpeakerMatcher');
 const TemplateManager = require('./main/templates/TemplateManager');
 const VaultStructure = require('./main/storage/VaultStructure');
 const RoutingEngine = require('./main/routing/RoutingEngine');
-const ConfigLoader = require('./main/routing/ConfigLoader');
 const ImportManager = require('./main/import/ImportManager');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
@@ -65,7 +63,6 @@ let templateManager = null;
 // Obsidian export system (Phase 5)
 let vaultStructure = null;
 let routingEngine = null;
-const configLoader = null;
 
 // Import system (Phase 8)
 let importManager = null;
@@ -121,13 +118,19 @@ async function checkUpcomingMeetings() {
 
       // Show notification 2 minutes before meeting starts
       if (minutesUntilStart <= 2 && minutesUntilStart >= 0 && !notifiedMeetings.has(meeting.id)) {
-        logger.monitor.info(`Meeting starting soon: ${meeting.title} (in ${minutesUntilStart} minutes)`);
+        logger.monitor.info(
+          `Meeting starting soon: ${meeting.title} (in ${minutesUntilStart} minutes)`
+        );
         showMeetingNotification(meeting, minutesUntilStart);
         notifiedMeetings.add(meeting.id);
       }
 
       // Auto-start recording when meeting starts (within 1 minute window)
-      if (minutesUntilStart <= 0 && minutesUntilStart >= -1 && !autoStartedMeetings.has(meeting.id)) {
+      if (
+        minutesUntilStart <= 0 &&
+        minutesUntilStart >= -1 &&
+        !autoStartedMeetings.has(meeting.id)
+      ) {
         logger.monitor.info(`Auto-starting recording for: ${meeting.title}`);
         await autoStartRecording(meeting);
         autoStartedMeetings.add(meeting.id);
@@ -135,7 +138,7 @@ async function checkUpcomingMeetings() {
     }
 
     // Clean up old meeting IDs (remove meetings from more than 1 hour ago)
-    const oneHourAgo = now - (60 * 60 * 1000);
+    const oneHourAgo = now - 60 * 60 * 1000;
     for (const meeting of meetings) {
       const startTime = new Date(meeting.startTime);
       if (startTime < oneHourAgo) {
@@ -156,7 +159,7 @@ function showMeetingNotification(meeting, minutesUntilStart) {
     title: 'Meeting Starting Soon',
     body: `${meeting.title} starts in ${minutesUntilStart} minute${minutesUntilStart !== 1 ? 's' : ''}`,
     icon: null, // You can add an icon path here
-    timeoutType: 'default'
+    timeoutType: 'default',
   });
 
   notification.on('click', () => {
@@ -189,7 +192,7 @@ async function autoStartRecording(meeting) {
       transcript: [],
       summary: '',
       calendarEventId: meeting.id,
-      participantEmails: meeting.participantEmails || []
+      participantEmails: meeting.participantEmails || [],
     };
 
     // Save the meeting
@@ -206,7 +209,7 @@ async function autoStartRecording(meeting) {
     const recordingNotification = new Notification({
       title: 'Recording Started',
       body: `Auto-recording: ${meeting.title}`,
-      icon: null
+      icon: null,
     });
     recordingNotification.show();
 
@@ -281,7 +284,7 @@ app.whenReady().then(async () => {
   });
 
   // Set up logger event listener to send logs from main to renderer
-  sdkLogger.onLog((logEntry) => {
+  sdkLogger.onLog(logEntry => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('sdk-log', logEntry);
     }
@@ -379,9 +382,9 @@ app.whenReady().then(async () => {
       vaultStructure,
       fileOperationManager,
       templateManager,
-      exportFunction: exportMeetingToObsidian,  // Share export logic with recordings
-      summaryFunction: generateTemplateSummaries,  // Share template generation with recordings
-      autoSummaryFunction: generateMeetingSummary  // Share auto-summary generation with recordings
+      exportFunction: exportMeetingToObsidian, // Share export logic with recordings
+      summaryFunction: generateTemplateSummaries, // Share template generation with recordings
+      autoSummaryFunction: generateMeetingSummary, // Share auto-summary generation with recordings
     });
     console.log('[Import] Import manager initialized successfully');
   } catch (error) {
@@ -392,7 +395,9 @@ app.whenReady().then(async () => {
   // Note: Speaker Recognition System (Phase 6) is initialized within initializeGoogleServices()
   // This ensures all Google services (Calendar, Contacts, Speaker Matcher) are initialized together
   if (!googleAuth || !googleAuth.isAuthenticated()) {
-    console.log('[SpeakerRecognition] Google not authenticated - speaker matching will use fallback');
+    console.log(
+      '[SpeakerRecognition] Google not authenticated - speaker matching will use fallback'
+    );
     console.log('[SpeakerRecognition] Speaker names will fall back to email-based extraction');
   }
 
@@ -486,7 +491,7 @@ app.on('before-quit', async () => {
 const meetingsFilePath = path.join(app.getPath('userData'), 'meetings.json');
 
 // Path for RecallAI SDK recordings
-const RECORDING_PATH = path.join(app.getPath("userData"), 'recordings');
+const RECORDING_PATH = path.join(app.getPath('userData'), 'recordings');
 
 // Global state to track active recordings
 const activeRecordings = {
@@ -499,7 +504,7 @@ const activeRecordings = {
       noteId,
       platform,
       state: 'recording',
-      startTime: new Date()
+      startTime: new Date(),
     };
     console.log(`Recording registered in global state: ${recordingId} for note ${noteId}`);
   },
@@ -537,7 +542,7 @@ const activeRecordings = {
   // Get all active recordings
   getAll: function () {
     return { ...this.recordings };
-  }
+  },
 };
 
 // File operation manager to prevent race conditions on both reads and writes
@@ -559,7 +564,7 @@ const fileOperationManager = {
 
     // If we have cached data that's recent (less than 500ms old), use it
     const now = Date.now();
-    if (this.cachedData && (now - this.lastReadTime < 500)) {
+    if (this.cachedData && now - this.lastReadTime < 500) {
       return JSON.parse(JSON.stringify(this.cachedData)); // Deep clone
     }
 
@@ -587,7 +592,7 @@ const fileOperationManager = {
       this.pendingOperations.push({
         operationFn, // This function will receive the current data and return updated data
         resolve,
-        reject
+        reject,
       });
 
       // Process the queue if not already processing
@@ -659,7 +664,7 @@ const fileOperationManager = {
   // Helper to write data directly - internally uses scheduleOperation
   writeData: async function (data) {
     return this.scheduleOperation(() => data); // Simply return the data to write
-  }
+  },
 };
 
 // Create a desktop SDK upload token directly (no separate server needed)
@@ -669,7 +674,7 @@ async function createDesktopSdkUpload() {
     const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
 
     if (!RECALLAI_API_KEY) {
-      console.error("RECALLAI_API_KEY is missing! Set it in .env file");
+      console.error('RECALLAI_API_KEY is missing! Set it in .env file');
       return null;
     }
 
@@ -683,72 +688,75 @@ async function createDesktopSdkUpload() {
       recording_config: {
         // Audio-only recording - must EXPLICITLY set video to null to disable it
         // Per docs: video_mixed_mp4 is enabled by DEFAULT if not set to null
-        video_mixed_mp4: null,  // ← THIS IS REQUIRED to disable video
+        video_mixed_mp4: null, // ← THIS IS REQUIRED to disable video
         audio_mixed_mp3: {},
 
         // No real-time transcription - we'll use Recall.ai async API after recording
         // This gives us better quality and proper speaker diarization
         realtime_endpoints: [
           {
-            type: "desktop_sdk_callback",
+            type: 'desktop_sdk_callback',
             events: [
-              "participant_events.join"  // Only track participant info
-            ]
-          }
-        ]
-      }
+              'participant_events.join', // Only track participant info
+            ],
+          },
+        ],
+      },
     };
 
     console.log('[Upload Token] Request body:', JSON.stringify(requestBody, null, 2));
 
     const response = await axios.post(url, requestBody, {
-      headers: { 'Authorization': `Token ${RECALLAI_API_KEY}` },
+      headers: { Authorization: `Token ${RECALLAI_API_KEY}` },
       timeout: 9000,
     });
 
     console.log('[Upload Token] Response:', JSON.stringify(response.data, null, 2));
-    console.log("Upload token created successfully:", response.data.upload_token?.substring(0, 8) + '...');
+    console.log(
+      'Upload token created successfully:',
+      response.data.upload_token?.substring(0, 8) + '...'
+    );
     return response.data;
   } catch (error) {
-    console.error("Error creating upload token:", error.response?.data || error.message);
+    console.error('Error creating upload token:', error.response?.data || error.message);
     return null;
   }
 }
 
 // Initialize the Recall.ai SDK
 function initSDK() {
-  console.log("Initializing Recall.ai SDK");
+  console.log('Initializing Recall.ai SDK');
 
   // Log the SDK initialization
   sdkLogger.logApiCall('init', {
     apiUrl: process.env.RECALLAI_API_URL,
-    acquirePermissionsOnStartup: ["accessibility", "screen-capture", "microphone"],
+    acquirePermissionsOnStartup: ['accessibility', 'screen-capture', 'microphone'],
     restartOnError: true,
     config: {
-      recording_path: RECORDING_PATH
-    }
+      recording_path: RECORDING_PATH,
+    },
   });
 
   RecallAiSdk.init({
     apiUrl: process.env.RECALLAI_API_URL,
-    acquirePermissionsOnStartup: ["accessibility", "screen-capture", "microphone"],
+    acquirePermissionsOnStartup: ['accessibility', 'screen-capture', 'microphone'],
     restartOnError: true,
     config: {
-      recording_path: RECORDING_PATH
-    }
+      recording_path: RECORDING_PATH,
+    },
   });
 
   // Debug: Log ALL SDK events to see what we're actually getting
   const originalAddEventListener = RecallAiSdk.addEventListener;
   const eventLog = new Set();
-  RecallAiSdk.addEventListener = function(eventName, handler) {
+  RecallAiSdk.addEventListener = function (eventName, handler) {
     if (!eventLog.has(eventName)) {
       console.log(`[SDK Debug] Registered listener for event: ${eventName}`);
       eventLog.add(eventName);
     }
 
     // Wrap handler to log when events fire (skip upload-progress to reduce spam)
-    const wrappedHandler = function(...args) {
+    const wrappedHandler = function (...args) {
       if (eventName !== 'upload-progress') {
         console.log(`[SDK Debug] Event fired: ${eventName}`, args[0]);
       }
@@ -759,23 +767,23 @@ function initSDK() {
   };
 
   // Listen for meeting detected events
-  RecallAiSdk.addEventListener('meeting-detected', (evt) => {
-    console.log("Meeting detected:", evt);
+  RecallAiSdk.addEventListener('meeting-detected', evt => {
+    console.log('Meeting detected:', evt);
 
     // Log the meeting detected event
     sdkLogger.logEvent('meeting-detected', {
       platform: evt.window.platform,
-      windowId: evt.window.id
+      windowId: evt.window.id,
     });
 
     detectedMeeting = evt;
 
     // Map platform codes to readable names
     const platformNames = {
-      'zoom': 'Zoom',
+      zoom: 'Zoom',
       'google-meet': 'Google Meet',
-      'slack': 'Slack',
-      'teams': 'Microsoft Teams'
+      slack: 'Slack',
+      teams: 'Microsoft Teams',
     };
 
     // Get a user-friendly platform name, or use the raw platform name if not in our map
@@ -784,12 +792,12 @@ function initSDK() {
     // Send a notification
     const notification = new Notification({
       title: `${platformName} Meeting Detected`,
-      body: platformName
+      body: platformName,
     });
 
     // Handle notification click
     notification.on('click', () => {
-      console.log("Notification clicked for platform:", platformName);
+      console.log('Notification clicked for platform:', platformName);
       joinDetectedMeeting();
     });
 
@@ -802,12 +810,12 @@ function initSDK() {
   });
 
   // Listen for meeting closed events
-  RecallAiSdk.addEventListener('meeting-closed', (evt) => {
-    console.log("Meeting closed:", evt);
+  RecallAiSdk.addEventListener('meeting-closed', evt => {
+    console.log('Meeting closed:', evt);
 
     // Log the SDK meeting-closed event
     sdkLogger.logEvent('meeting-closed', {
-      windowId: evt.window.id
+      windowId: evt.window.id,
     });
 
     const windowId = evt.window?.id;
@@ -824,7 +832,7 @@ function initSDK() {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('recording-state-change', {
           windowId: windowId,
-          state: 'stopping'
+          state: 'stopping',
         });
       }
     }
@@ -844,12 +852,12 @@ function initSDK() {
   });
 
   // Listen for recording ended events
-  RecallAiSdk.addEventListener('recording-ended', async (evt) => {
-    console.log("Recording ended:", evt);
+  RecallAiSdk.addEventListener('recording-ended', async evt => {
+    console.log('Recording ended:', evt);
 
     // Log the SDK recording-ended event
     sdkLogger.logEvent('recording-ended', {
-      windowId: evt.window.id
+      windowId: evt.window.id,
     });
 
     const windowId = evt.window.id;
@@ -870,7 +878,10 @@ function initSDK() {
           console.log(`[Transcription] Using provider: ${transcriptionProvider}`);
         }
       } catch (error) {
-        console.error('[Transcription] Error reading transcription provider, using default:', error);
+        console.error(
+          '[Transcription] Error reading transcription provider, using default:',
+          error
+        );
       }
 
       // Wait for file to be fully written
@@ -897,7 +908,7 @@ function initSDK() {
             // Recall.ai: Upload via SDK for async webhook-based transcription
             console.log('[Upload] Calling uploadRecording() with ONLY windowId (per docs)...');
             const result = await RecallAiSdk.uploadRecording({
-              windowId: windowId
+              windowId: windowId,
             });
             console.log('[Upload] uploadRecording() completed with result:', result);
             console.log('[Upload] Waiting for webhook notification...');
@@ -911,7 +922,7 @@ function initSDK() {
               mainWindow.webContents.send('recording-state-change', {
                 windowId: windowId,
                 state: 'uploading',
-                progress: 10
+                progress: 10,
               });
             }
 
@@ -923,17 +934,23 @@ function initSDK() {
 
             console.log(`[Transcription] ✓ ${transcriptionProvider} transcription complete`);
             console.log(`[Transcription] Transcript object:`, JSON.stringify(transcript, null, 2));
-            console.log(`[Transcription] Entries: ${transcript.entries ? transcript.entries.length : 'undefined'}`);
+            console.log(
+              `[Transcription] Entries: ${transcript.entries ? transcript.entries.length : 'undefined'}`
+            );
 
             // Update the meeting with the transcript
             console.log('[Transcription] Reading meetings data to save transcript...');
             const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
             const meetingsData = JSON.parse(fileData);
-            const meetingIndex = meetingsData.pastMeetings.findIndex(m => m.recordingId === windowId);
+            const meetingIndex = meetingsData.pastMeetings.findIndex(
+              m => m.recordingId === windowId
+            );
 
             console.log(`[Transcription] Meeting index: ${meetingIndex}`);
             if (meetingIndex !== -1) {
-              console.log(`[Transcription] Updating meeting: ${meetingsData.pastMeetings[meetingIndex].id}`);
+              console.log(
+                `[Transcription] Updating meeting: ${meetingsData.pastMeetings[meetingIndex].id}`
+              );
               meetingsData.pastMeetings[meetingIndex].transcript = transcript.entries;
               meetingsData.pastMeetings[meetingIndex].transcriptProvider = transcript.provider;
               meetingsData.pastMeetings[meetingIndex].transcriptConfidence = transcript.confidence;
@@ -948,9 +965,12 @@ function initSDK() {
                 mainWindow.webContents.send('recording-state-change', {
                   windowId: windowId,
                   state: 'completed',
-                  progress: 100
+                  progress: 100,
                 });
-                mainWindow.webContents.send('transcript-updated', meetingsData.pastMeetings[meetingIndex].id);
+                mainWindow.webContents.send(
+                  'transcript-updated',
+                  meetingsData.pastMeetings[meetingIndex].id
+                );
                 console.log('[Transcription] ✓ Renderer notified');
               }
             } else {
@@ -966,14 +986,13 @@ function initSDK() {
             mainWindow.webContents.send('recording-state-change', {
               windowId: windowId,
               state: 'failed',
-              error: error.message
+              error: error.message,
             });
           }
         }
       }, 3000); // 3 second delay to ensure file is fully written (matches muesli timing)
-
     } catch (error) {
-      console.error("Error handling recording ended:", error);
+      console.error('Error handling recording ended:', error);
     }
   });
 
@@ -981,7 +1000,7 @@ function initSDK() {
   const lastLoggedProgress = new Map();
 
   // Track upload progress
-  RecallAiSdk.addEventListener('upload-progress', async (evt) => {
+  RecallAiSdk.addEventListener('upload-progress', async evt => {
     const { progress, window } = evt;
     const windowId = window?.id;
 
@@ -997,7 +1016,7 @@ function initSDK() {
       // Log upload progress
       sdkLogger.logEvent('upload-progress', {
         windowId: windowId,
-        progress: roundedProgress
+        progress: roundedProgress,
       });
     }
 
@@ -1006,7 +1025,7 @@ function initSDK() {
       mainWindow.webContents.send('recording-state-change', {
         windowId: windowId,
         state: 'uploading',
-        progress: Math.round(progress)
+        progress: Math.round(progress),
       });
     }
   });
@@ -1015,19 +1034,24 @@ function initSDK() {
   // Desktop apps can't receive webhooks, so we poll the API instead
   // See pollForUploadCompletion() function below
 
-  RecallAiSdk.addEventListener('permissions-granted', async (evt) => {
-    console.log("PERMISSIONS GRANTED");
+  RecallAiSdk.addEventListener('permissions-granted', async evt => {
+    console.log('PERMISSIONS GRANTED');
   });
 
   // Track SDK state changes
-  RecallAiSdk.addEventListener('sdk-state-change', async (evt) => {
-    const { sdk: { state: { code } }, window } = evt;
-    console.log("Recording state changed:", code, "for window:", window?.id);
+  RecallAiSdk.addEventListener('sdk-state-change', async evt => {
+    const {
+      sdk: {
+        state: { code },
+      },
+      window,
+    } = evt;
+    console.log('Recording state changed:', code, 'for window:', window?.id);
 
     // Log the SDK sdk-state-change event
     sdkLogger.logEvent('sdk-state-change', {
       state: code,
-      windowId: window?.id
+      windowId: window?.id,
     });
 
     // Update recording state in our global tracker
@@ -1058,7 +1082,7 @@ function initSDK() {
         mainWindow.webContents.send('recording-state-change', {
           recordingId: window.id,
           state: code,
-          noteId
+          noteId,
         });
       }
     }
@@ -1066,43 +1090,42 @@ function initSDK() {
 
   // Listen for real-time events (participant joins and video frames)
   // Note: No longer processing real-time transcripts - we use async transcription after recording
-  RecallAiSdk.addEventListener('realtime-event', async (evt) => {
+  RecallAiSdk.addEventListener('realtime-event', async evt => {
     // Only log non-video frame events to prevent flooding the logger
     if (evt.event !== 'video_separate_png.data') {
-      console.log("Received realtime event:", evt.event);
+      console.log('Received realtime event:', evt.event);
 
       // Log the SDK realtime-event event
       sdkLogger.logEvent('realtime-event', {
         eventType: evt.event,
-        windowId: evt.window?.id
+        windowId: evt.window?.id,
       });
     }
 
     // Handle participant join events (needed for speaker matching later)
     if (evt.event === 'participant_events.join' && evt.data && evt.data.data) {
       await processParticipantJoin(evt);
-    }
-    else if (evt.event === 'video_separate_png.data' && evt.data && evt.data.data) {
+    } else if (evt.event === 'video_separate_png.data' && evt.data && evt.data.data) {
       await processVideoFrame(evt);
     }
     // Real-time transcript events removed - using async transcription instead
   });
 
   // Handle errors
-  RecallAiSdk.addEventListener('error', async (evt) => {
-    console.error("RecallAI SDK Error:", evt);
+  RecallAiSdk.addEventListener('error', async evt => {
+    console.error('RecallAI SDK Error:', evt);
     const { type, message } = evt;
 
     // Log the SDK error event
     sdkLogger.logEvent('error', {
       errorType: type,
-      errorMessage: message
+      errorMessage: message,
     });
 
     // Show notification for errors
     const notification = new Notification({
       title: 'Recording Error',
-      body: `Error: ${type} - ${message}`
+      body: `Error: ${type} - ${message}`,
     });
     notification.show();
   });
@@ -1138,7 +1161,12 @@ async function exportMeetingToObsidian(meeting) {
     }
 
     // Perform speaker matching if available (Phase 6)
-    if (speakerMatcher && meeting.transcript && meeting.transcript.length > 0 && participantEmails.length > 0) {
+    if (
+      speakerMatcher &&
+      meeting.transcript &&
+      meeting.transcript.length > 0 &&
+      participantEmails.length > 0
+    ) {
       try {
         console.log('[ObsidianExport] Attempting speaker matching...');
 
@@ -1160,10 +1188,15 @@ async function exportMeetingToObsidian(meeting) {
 
         console.log('[ObsidianExport] Speaker matching completed successfully');
       } catch (error) {
-        console.warn('[ObsidianExport] Speaker matching failed, continuing without:', error.message);
+        console.warn(
+          '[ObsidianExport] Speaker matching failed, continuing without:',
+          error.message
+        );
       }
     } else if (meeting.transcript && meeting.transcript.length > 0) {
-      console.log('[ObsidianExport] Speaker matching skipped - speaker matcher not available or no participants');
+      console.log(
+        '[ObsidianExport] Speaker matching skipped - speaker matcher not available or no participants'
+      );
     }
 
     // Get routing decisions (or use manual override)
@@ -1172,18 +1205,20 @@ async function exportMeetingToObsidian(meeting) {
       // Manual override - use existing path
       // Extract folder path from obsidianLink (remove filename)
       const linkPath = meeting.obsidianLink.replace(/[^/]+\.md$/, '');
-      routes = [{
-        fullPath: linkPath,
-        organizationName: 'Manual Override',
-        type: 'override'
-      }];
+      routes = [
+        {
+          fullPath: linkPath,
+          organizationName: 'Manual Override',
+          type: 'override',
+        },
+      ];
       console.log(`[ObsidianExport] Using manual override path: ${meeting.obsidianLink}`);
     } else {
       // Use routing engine
       const routingDecision = routingEngine.route({
         participantEmails,
         meetingTitle: meeting.title || 'Untitled Meeting',
-        meetingDate: meeting.date ? new Date(meeting.date) : new Date()
+        meetingDate: meeting.date ? new Date(meeting.date) : new Date(),
       });
       routes = routingDecision.routes;
       console.log(`[ObsidianExport] Found ${routes.length} routing destination(s)`);
@@ -1199,7 +1234,10 @@ async function exportMeetingToObsidian(meeting) {
       const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
       const dateStr = meetingDate.toISOString().split('T')[0]; // YYYY-MM-DD
       const titleSlug = meeting.title
-        ? meeting.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        ? meeting.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '')
         : 'meeting';
       let baseFilename = `${dateStr}-${titleSlug}`;
 
@@ -1241,29 +1279,34 @@ async function exportMeetingToObsidian(meeting) {
       createdPaths.push({
         organization: route.organizationName || route.type,
         summaryPath,
-        transcriptPath
+        transcriptPath,
       });
     }
 
-    console.log(`[ObsidianExport] Successfully exported meeting to ${createdPaths.length} location(s)`);
+    console.log(
+      `[ObsidianExport] Successfully exported meeting to ${createdPaths.length} location(s)`
+    );
 
     // Generate obsidianLink from first created path (relative to vault)
-    const obsidianLink = createdPaths.length > 0
-      ? createdPaths[0].summaryPath.replace(vaultStructure.getAbsolutePath(''), '').replace(/\\/g, '/').replace(/^\//, '')
-      : null;
+    const obsidianLink =
+      createdPaths.length > 0
+        ? createdPaths[0].summaryPath
+            .replace(vaultStructure.getAbsolutePath(''), '')
+            .replace(/\\/g, '/')
+            .replace(/^\//, '')
+        : null;
 
     return {
       success: true,
       paths: createdPaths,
       routeCount: routes.length,
-      obsidianLink  // Return the vault-relative path to save in meeting object
+      obsidianLink, // Return the vault-relative path to save in meeting object
     };
-
   } catch (error) {
     console.error('[ObsidianExport] Export failed:', error);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -1281,52 +1324,56 @@ function generateSummaryMarkdown(meeting, baseFilename) {
 
   // Use meeting.participants (from participant join events) if available
   if (meeting.participants && meeting.participants.length > 0) {
-    participantsYaml = meeting.participants.map(participant => {
-      let participantLine = `  - name: "${participant.name}"`;
+    participantsYaml = meeting.participants
+      .map(participant => {
+        let participantLine = `  - name: "${participant.name}"`;
 
-      // Include email if available
-      if (participant.email) {
-        participantLine += `\n    email: "${participant.email}"`;
-      }
-
-      // Include host status
-      if (participant.isHost) {
-        participantLine += `\n    role: "host"`;
-      }
-
-      // If we have speaker mapping, include which speaker label(s) map to this participant
-      if (meeting.speakerMapping) {
-        const speakerLabels = Object.entries(meeting.speakerMapping)
-          .filter(([label, info]) => info.name === participant.name)
-          .map(([label, info]) => label);
-
-        if (speakerLabels.length > 0) {
-          participantLine += `\n    speaker_labels: [${speakerLabels.join(', ')}]`;
+        // Include email if available
+        if (participant.email) {
+          participantLine += `\n    email: "${participant.email}"`;
         }
-      }
 
-      return participantLine;
-    }).join('\n');
+        // Include host status
+        if (participant.isHost) {
+          participantLine += `\n    role: "host"`;
+        }
+
+        // If we have speaker mapping, include which speaker label(s) map to this participant
+        if (meeting.speakerMapping) {
+          const speakerLabels = Object.entries(meeting.speakerMapping)
+            .filter(([label, info]) => info.name === participant.name)
+            .map(([label, info]) => label);
+
+          if (speakerLabels.length > 0) {
+            participantLine += `\n    speaker_labels: [${speakerLabels.join(', ')}]`;
+          }
+        }
+
+        return participantLine;
+      })
+      .join('\n');
   }
   // Fallback to participantEmails if participants array doesn't exist
   else if (meeting.participantEmails && meeting.participantEmails.length > 0) {
-    participantsYaml = meeting.participantEmails.map(email => {
-      let participantLine = `  - email: "${email}"`;
+    participantsYaml = meeting.participantEmails
+      .map(email => {
+        let participantLine = `  - email: "${email}"`;
 
-      // If we have speaker mapping, include which speaker label(s) map to this participant
-      if (meeting.speakerMapping) {
-        const speakerLabels = Object.entries(meeting.speakerMapping)
-          .filter(([label, info]) => info.email === email)
-          .map(([label, info]) => label);
+        // If we have speaker mapping, include which speaker label(s) map to this participant
+        if (meeting.speakerMapping) {
+          const speakerLabels = Object.entries(meeting.speakerMapping)
+            .filter(([label, info]) => info.email === email)
+            .map(([label, info]) => label);
 
-        if (speakerLabels.length > 0) {
-          participantLine += `\n    name: "${meeting.speakerMapping[speakerLabels[0]].name}"`;
-          participantLine += `\n    speaker_labels: [${speakerLabels.join(', ')}]`;
+          if (speakerLabels.length > 0) {
+            participantLine += `\n    name: "${meeting.speakerMapping[speakerLabels[0]].name}"`;
+            participantLine += `\n    speaker_labels: [${speakerLabels.join(', ')}]`;
+          }
         }
-      }
 
-      return participantLine;
-    }).join('\n');
+        return participantLine;
+      })
+      .join('\n');
   }
 
   // Extract tags from meeting metadata
@@ -1415,9 +1462,10 @@ summary_file: "${baseFilename}.md"
           const text = segment.text || '';
 
           // Add confidence indicator for low-confidence matches (optional)
-          const confidenceNote = segment.speakerConfidence === 'low' || segment.speakerConfidence === 'none'
-            ? ' *(uncertain)*'
-            : '';
+          const confidenceNote =
+            segment.speakerConfidence === 'low' || segment.speakerConfidence === 'none'
+              ? ' *(uncertain)*'
+              : '';
 
           markdown += `### ${timestamp} - ${speaker}${confidenceNote}\n${text}\n\n`;
         } else {
@@ -1450,29 +1498,35 @@ async function executeTemplateSectionTask(llmService, task, transcriptText) {
     //   Without caching: 740k × $0.25/1M = $0.185
     //   With caching: 37k × $0.25/1M + (19 × 37k × $0.025/1M) = $0.027 (~85% savings)
     const result = await llmService.generateCompletion({
-      systemPrompt: 'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.',
+      systemPrompt:
+        'You are a helpful assistant that analyzes meeting transcripts and creates structured summaries.',
       userPrompt: task.sectionPrompt,
-      cacheableContext: transcriptText,  // This will be cached across all section calls
+      cacheableContext: transcriptText, // This will be cached across all section calls
       temperature: 0.7,
-      maxTokens: 15000  // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
+      maxTokens: 15000, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
     });
 
-    console.log(`[TemplateSummary] LLM result type: ${typeof result}, content type: ${typeof result?.content}`);
+    console.log(
+      `[TemplateSummary] LLM result type: ${typeof result}, content type: ${typeof result?.content}`
+    );
     console.log(`[TemplateSummary] LLM result keys:`, result ? Object.keys(result) : 'null');
     console.log(`[TemplateSummary] Content length:`, result?.content?.length || 0);
 
     // Check if content exists
     if (!result || !result.content) {
-      console.warn(`[TemplateSummary] No content in LLM response for ${task.sectionTitle}:`, JSON.stringify(result));
+      console.warn(
+        `[TemplateSummary] No content in LLM response for ${task.sectionTitle}:`,
+        JSON.stringify(result)
+      );
       return {
         success: false,
-        content: '*LLM returned empty response*'
+        content: '*LLM returned empty response*',
       };
     }
 
     return {
       success: true,
-      content: result.content
+      content: result.content,
     };
   } catch (error) {
     console.error(`[TemplateSummary] Error generating section ${task.sectionTitle}:`, error);
@@ -1500,12 +1554,14 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
   // Convert transcript to text format
   let transcriptText = '';
   if (Array.isArray(meeting.transcript)) {
-    transcriptText = meeting.transcript.map(segment => {
-      if (typeof segment === 'object') {
-        return `${segment.speaker || 'Speaker'}: ${segment.text}`;
-      }
-      return String(segment);
-    }).join('\n');
+    transcriptText = meeting.transcript
+      .map(segment => {
+        if (typeof segment === 'object') {
+          return `${segment.speaker || 'Speaker'}: ${segment.text}`;
+        }
+        return String(segment);
+      })
+      .join('\n');
   } else if (typeof meeting.transcript === 'string') {
     transcriptText = meeting.transcript;
   } else {
@@ -1535,7 +1591,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
         templateName: template.name,
         sectionTitle: section.title,
         sectionPrompt: section.prompt,
-        name: `${template.name} - ${section.title}`
+        name: `${template.name} - ${section.title}`,
       });
     }
   }
@@ -1551,7 +1607,9 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
   const actualConcurrency = Math.min(3, safeConcurrency); // Cap at 3 for safety
 
   console.log(`[TemplateSummary] Transcript: ~${estimatedTokensPerRequest} tokens/request`);
-  console.log(`[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`);
+  console.log(
+    `[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`
+  );
   const startTime = Date.now();
 
   // Process completely sequentially - NO concurrency, NO closures
@@ -1574,7 +1632,9 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
         if (error.status === 429 && retries < maxRetries) {
           const retryAfter = error.headers?.get?.('retry-after') || 60;
           const delayMs = (parseInt(retryAfter) + 1) * 1000;
-          console.log(`[RateLimit] Hit rate limit. Retry ${retries + 1}/${maxRetries} after ${delayMs}ms`);
+          console.log(
+            `[RateLimit] Hit rate limit. Retry ${retries + 1}/${maxRetries} after ${delayMs}ms`
+          );
           await new Promise(resolve => setTimeout(resolve, delayMs));
           retries++;
         } else {
@@ -1601,7 +1661,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
     templateMap.set(template.id, {
       templateId: template.id,
       templateName: template.name,
-      sections: []
+      sections: [],
     });
   }
 
@@ -1613,7 +1673,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
     if (templateData) {
       templateData.sections.push({
         title: task.sectionTitle,
-        content: result.content
+        content: result.content,
       });
     }
   });
@@ -1631,7 +1691,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
     summaries.push({
       templateId: templateData.templateId,
       templateName: templateData.templateName,
-      content: summaryMarkdown
+      content: summaryMarkdown,
     });
   }
 
@@ -1647,7 +1707,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
 ipcMain.handle('saveMeetingsData', async (event, data) => {
   console.log('[IPC] saveMeetingsData called with data:', {
     upcomingCount: data?.upcomingMeetings?.length,
-    pastCount: data?.pastMeetings?.length
+    pastCount: data?.pastMeetings?.length,
   });
   try {
     // Validate input data
@@ -1658,7 +1718,7 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
     // CRITICAL: Merge with current data to prevent losing fields managed by main process
     // The renderer has stale data, so we need to preserve fields like recordingId, uploadToken, transcript
     console.log('[IPC] Merging with current file data to preserve main-process-managed fields...');
-    await fileOperationManager.scheduleOperation(async (currentData) => {
+    await fileOperationManager.scheduleOperation(async currentData => {
       // Merge upcoming meetings (renderer manages these)
       const mergedData = {
         upcomingMeetings: validatedData.upcomingMeetings,
@@ -1675,21 +1735,26 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
               uploadToken: currentMeeting.uploadToken || rendererMeeting.uploadToken,
               transcript: currentMeeting.transcript || rendererMeeting.transcript,
               participants: currentMeeting.participants || rendererMeeting.participants,
-              recordingComplete: currentMeeting.recordingComplete || rendererMeeting.recordingComplete,
+              recordingComplete:
+                currentMeeting.recordingComplete || rendererMeeting.recordingComplete,
               recordingEndTime: currentMeeting.recordingEndTime || rendererMeeting.recordingEndTime,
               summaries: currentMeeting.summaries || rendererMeeting.summaries,
               // Preserve transcription provider and SDK IDs
-              transcriptionProvider: currentMeeting.transcriptionProvider || rendererMeeting.transcriptionProvider,
+              transcriptionProvider:
+                currentMeeting.transcriptionProvider || rendererMeeting.transcriptionProvider,
               sdkUploadId: currentMeeting.sdkUploadId || rendererMeeting.sdkUploadId,
-              recallRecordingId: currentMeeting.recallRecordingId || rendererMeeting.recallRecordingId,
-              transcriptProvider: currentMeeting.transcriptProvider || rendererMeeting.transcriptProvider,
-              transcriptConfidence: currentMeeting.transcriptConfidence || rendererMeeting.transcriptConfidence
+              recallRecordingId:
+                currentMeeting.recallRecordingId || rendererMeeting.recallRecordingId,
+              transcriptProvider:
+                currentMeeting.transcriptProvider || rendererMeeting.transcriptProvider,
+              transcriptConfidence:
+                currentMeeting.transcriptConfidence || rendererMeeting.transcriptConfidence,
             };
           }
 
           // New meeting from renderer - use as-is
           return rendererMeeting;
-        })
+        }),
       };
 
       console.log('[IPC] Merge complete');
@@ -1706,7 +1771,10 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
     if (error instanceof z.ZodError) {
       console.error('[IPC] Zod validation errors:', error.errors);
       console.error('[IPC] Full Zod error:', JSON.stringify(error, null, 2));
-      return { success: false, error: `Validation failed: ${JSON.stringify(error.errors, null, 2)}` };
+      return {
+        success: false,
+        error: `Validation failed: ${JSON.stringify(error.errors, null, 2)}`,
+      };
     }
     console.error('[IPC] Non-Zod error:', error.message, error.stack);
     return { success: false, error: error.message };
@@ -1715,9 +1783,9 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
 
 // Debug handler to check if IPC handlers are registered
 ipcMain.handle('debugGetHandlers', async () => {
-  console.log("Checking registered IPC handlers...");
+  console.log('Checking registered IPC handlers...');
   const handlers = Object.keys(ipcMain._invokeHandlers);
-  console.log("Registered handlers:", handlers);
+  console.log('Registered handlers:', handlers);
   return handlers;
 });
 
@@ -1851,7 +1919,7 @@ ipcMain.handle('google:getStatus', async () => {
       authenticated,
       calendarReady,
       contactsReady,
-      contactCount
+      contactCount,
     };
   } catch (error) {
     console.error('[Google IPC] Error getting status:', error);
@@ -1905,21 +1973,24 @@ ipcMain.handle('google:openAuthWindow', async () => {
       height: 800,
       webPreferences: {
         nodeIntegration: false,
-        contextIsolation: true
-      }
+        contextIsolation: true,
+      },
     });
 
     authWindow.loadURL(authUrl);
 
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       // Timeout after 5 minutes to prevent hanging
-      const timeout = setTimeout(() => {
-        if (authWindow && !authWindow.isDestroyed()) {
-          console.log('[Google OAuth] Authentication timeout');
-          cleanup();
-          resolve({ success: false, error: 'Authentication timeout (5 minutes)' });
-        }
-      }, 5 * 60 * 1000);
+      const timeout = setTimeout(
+        () => {
+          if (authWindow && !authWindow.isDestroyed()) {
+            console.log('[Google OAuth] Authentication timeout');
+            cleanup();
+            resolve({ success: false, error: 'Authentication timeout (5 minutes)' });
+          }
+        },
+        5 * 60 * 1000
+      );
 
       // Listen for the redirect
       authWindow.webContents.on('will-redirect', async (event, url) => {
@@ -1998,7 +2069,7 @@ ipcMain.handle('contacts:fetchContacts', async (event, forceRefresh = false) => 
     return {
       success: true,
       contactCount: contacts.length,
-      lastFetch: googleContacts.lastFetch
+      lastFetch: googleContacts.lastFetch,
     };
   } catch (error) {
     console.error('[Contacts IPC] Failed to fetch contacts:', error);
@@ -2007,97 +2078,102 @@ ipcMain.handle('contacts:fetchContacts', async (event, forceRefresh = false) => 
 });
 
 // Match speakers to participants
-ipcMain.handle('speakers:matchSpeakers', async (event, { transcript, participantEmails, options }) => {
-  try {
-    console.log('[Speakers IPC] Matching speakers to participants');
-    if (!speakerMatcher) {
-      throw new Error('Speaker matcher not initialized');
+ipcMain.handle(
+  'speakers:matchSpeakers',
+  async (event, { transcript, participantEmails, options }) => {
+    try {
+      console.log('[Speakers IPC] Matching speakers to participants');
+      if (!speakerMatcher) {
+        throw new Error('Speaker matcher not initialized');
+      }
+
+      // Perform speaker matching
+      const speakerMapping = await speakerMatcher.matchSpeakers(
+        transcript,
+        participantEmails,
+        options
+      );
+
+      // Apply mapping to transcript
+      const updatedTranscript = speakerMatcher.applyMappingToTranscript(transcript, speakerMapping);
+
+      // Get speaker statistics
+      const speakerStats = speakerMatcher.analyzeSpeakers(transcript);
+      const speakerSummary = speakerMatcher.getSpeakerSummary(speakerStats);
+
+      return {
+        success: true,
+        speakerMapping,
+        updatedTranscript,
+        speakerSummary,
+      };
+    } catch (error) {
+      console.error('[Speakers IPC] Failed to match speakers:', error);
+      return { success: false, error: error.message };
     }
-
-    // Perform speaker matching
-    const speakerMapping = await speakerMatcher.matchSpeakers(
-      transcript,
-      participantEmails,
-      options
-    );
-
-    // Apply mapping to transcript
-    const updatedTranscript = speakerMatcher.applyMappingToTranscript(
-      transcript,
-      speakerMapping
-    );
-
-    // Get speaker statistics
-    const speakerStats = speakerMatcher.analyzeSpeakers(transcript);
-    const speakerSummary = speakerMatcher.getSpeakerSummary(speakerStats);
-
-    return {
-      success: true,
-      speakerMapping,
-      updatedTranscript,
-      speakerSummary
-    };
-  } catch (error) {
-    console.error('[Speakers IPC] Failed to match speakers:', error);
-    return { success: false, error: error.message };
   }
-});
+);
 
 // Update speaker mapping manually (for corrections)
-ipcMain.handle('speakers:updateMapping', async (event, { meetingId, speakerLabel, participantEmail }) => {
-  try {
-    console.log(`[Speakers IPC] Updating speaker mapping: ${speakerLabel} -> ${participantEmail}`);
-
-    // Load meeting data
-    const meetingsData = await fileOperationManager.readMeetingsData();
-    const meeting = meetingsData.meetings.find(m => m.id === meetingId);
-
-    if (!meeting) {
-      throw new Error(`Meeting ${meetingId} not found`);
-    }
-
-    if (!meeting.transcript) {
-      throw new Error(`Meeting ${meetingId} has no transcript`);
-    }
-
-    // Update the speaker mapping
-    if (!meeting.speakerMapping) {
-      meeting.speakerMapping = {};
-    }
-
-    // Find contact info for the participant email
-    let participantName = participantEmail;
-    if (googleContacts && googleContacts.isAuthenticated()) {
-      const contact = await googleContacts.findContactByEmail(participantEmail);
-      if (contact) {
-        participantName = contact.name;
-      }
-    }
-
-    meeting.speakerMapping[speakerLabel] = {
-      email: participantEmail,
-      name: participantName,
-      confidence: 'manual',
-      method: 'user-correction'
-    };
-
-    // Apply the updated mapping to transcript
-    if (speakerMatcher) {
-      meeting.transcript = speakerMatcher.applyMappingToTranscript(
-        meeting.transcript,
-        meeting.speakerMapping
+ipcMain.handle(
+  'speakers:updateMapping',
+  async (event, { meetingId, speakerLabel, participantEmail }) => {
+    try {
+      console.log(
+        `[Speakers IPC] Updating speaker mapping: ${speakerLabel} -> ${participantEmail}`
       );
+
+      // Load meeting data
+      const meetingsData = await fileOperationManager.readMeetingsData();
+      const meeting = meetingsData.meetings.find(m => m.id === meetingId);
+
+      if (!meeting) {
+        throw new Error(`Meeting ${meetingId} not found`);
+      }
+
+      if (!meeting.transcript) {
+        throw new Error(`Meeting ${meetingId} has no transcript`);
+      }
+
+      // Update the speaker mapping
+      if (!meeting.speakerMapping) {
+        meeting.speakerMapping = {};
+      }
+
+      // Find contact info for the participant email
+      let participantName = participantEmail;
+      if (googleContacts && googleContacts.isAuthenticated()) {
+        const contact = await googleContacts.findContactByEmail(participantEmail);
+        if (contact) {
+          participantName = contact.name;
+        }
+      }
+
+      meeting.speakerMapping[speakerLabel] = {
+        email: participantEmail,
+        name: participantName,
+        confidence: 'manual',
+        method: 'user-correction',
+      };
+
+      // Apply the updated mapping to transcript
+      if (speakerMatcher) {
+        meeting.transcript = speakerMatcher.applyMappingToTranscript(
+          meeting.transcript,
+          meeting.speakerMapping
+        );
+      }
+
+      // Save updated meeting data
+      await fileOperationManager.writeMeetingsData(meetingsData);
+
+      return { success: true, speakerMapping: meeting.speakerMapping };
+    } catch (error) {
+      console.error('[Speakers IPC] Failed to update mapping:', error);
+      return { success: false, error: error.message };
     }
-
-    // Save updated meeting data
-    await fileOperationManager.writeMeetingsData(meetingsData);
-
-    return { success: true, speakerMapping: meeting.speakerMapping };
-  } catch (error) {
-    console.error('[Speakers IPC] Failed to update mapping:', error);
-    return { success: false, error: error.message };
   }
-});
+);
 
 // ===================================================================
 // End Google Integration IPC Handlers
@@ -2149,7 +2225,13 @@ ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript
 // Generate summaries using multiple templates
 ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templateIds }) => {
   try {
-    console.log('[Template IPC] Generating summaries for meeting:', meetingId, 'with', templateIds.length, 'templates');
+    console.log(
+      '[Template IPC] Generating summaries for meeting:',
+      meetingId,
+      'with',
+      templateIds.length,
+      'templates'
+    );
 
     // Load meeting data
     const data = await fileOperationManager.readMeetingsData();
@@ -2179,7 +2261,10 @@ ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templat
     if (exportResult.success && exportResult.obsidianLink) {
       meeting.obsidianLink = exportResult.obsidianLink;
       await fileOperationManager.writeData(data);
-      console.log('[Template IPC] Auto-export successful, obsidianLink saved:', exportResult.obsidianLink);
+      console.log(
+        '[Template IPC] Auto-export successful, obsidianLink saved:',
+        exportResult.obsidianLink
+      );
     } else if (!exportResult.success) {
       console.warn('[Template IPC] Auto-export failed:', exportResult.error);
     }
@@ -2188,7 +2273,7 @@ ipcMain.handle('templates:generateSummaries', async (event, { meetingId, templat
       success: true,
       summaries,
       exported: exportResult.success,
-      obsidianLink: exportResult.obsidianLink || null
+      obsidianLink: exportResult.obsidianLink || null,
     };
   } catch (error) {
     console.error('[Template IPC] Failed to generate summaries:', error);
@@ -2221,7 +2306,7 @@ ipcMain.handle('llm:getProvider', async () => {
   try {
     return {
       success: true,
-      provider: llmService.getProviderName()
+      provider: llmService.getProviderName(),
     };
   } catch (error) {
     console.error('[LLM] Error getting provider:', error);
@@ -2239,7 +2324,7 @@ ipcMain.handle('llm:switchProvider', async (event, provider) => {
     if (!validProviders.includes(provider)) {
       return {
         success: false,
-        error: `Invalid provider. Must be one of: ${validProviders.join(', ')}`
+        error: `Invalid provider. Must be one of: ${validProviders.join(', ')}`,
       };
     }
 
@@ -2247,7 +2332,7 @@ ipcMain.handle('llm:switchProvider', async (event, provider) => {
 
     return {
       success: true,
-      provider: llmService.getProviderName()
+      provider: llmService.getProviderName(),
     };
   } catch (error) {
     console.error('[LLM] Error switching provider:', error);
@@ -2289,7 +2374,6 @@ ipcMain.handle('obsidian:exportMeeting', async (event, meetingId) => {
     }
 
     return result;
-
   } catch (error) {
     console.error('[Obsidian IPC] Export failed:', error);
     return { success: false, error: error.message };
@@ -2301,7 +2385,7 @@ ipcMain.handle('obsidian:getStatus', async () => {
   return {
     initialized: !!(vaultStructure && routingEngine),
     vaultPath: vaultStructure ? vaultStructure.vaultBasePath : null,
-    routingConfigured: !!routingEngine
+    routingConfigured: !!routingEngine,
   };
 });
 
@@ -2322,9 +2406,9 @@ ipcMain.handle('import:importFile', async (event, { filePath, options }) => {
   try {
     const result = await importManager.importFile(filePath, {
       ...options,
-      onProgress: (progress) => {
+      onProgress: progress => {
         event.sender.send('import:progress', progress);
-      }
+      },
     });
 
     // If successful, add meeting to meetings.json
@@ -2351,16 +2435,16 @@ ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
       successful: 0,
       failed: filePaths.length,
       meetings: [],
-      errors: filePaths.map(fp => ({ file: fp, error: 'Import manager not initialized' }))
+      errors: filePaths.map(fp => ({ file: fp, error: 'Import manager not initialized' })),
     };
   }
 
   try {
     const result = await importManager.importBatch(filePaths, {
       ...options,
-      onProgress: (progress) => {
+      onProgress: progress => {
         event.sender.send('import:progress', progress);
-      }
+      },
     });
 
     // Add all successful meetings to meetings.json
@@ -2382,7 +2466,7 @@ ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
       successful: 0,
       failed: filePaths.length,
       meetings: [],
-      errors: []
+      errors: [],
     };
   }
 });
@@ -2391,7 +2475,7 @@ ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
 ipcMain.handle('import:getStatus', async () => {
   return {
     initialized: !!importManager,
-    supportedFormats: ['.txt', '.md', '.vtt', '.srt']
+    supportedFormats: ['.txt', '.md', '.vtt', '.srt'],
   };
 });
 
@@ -2405,8 +2489,8 @@ ipcMain.handle('import:selectFiles', async () => {
     properties: ['openFile', 'multiSelections'],
     filters: [
       { name: 'Transcript Files', extensions: ['txt', 'md', 'vtt', 'srt'] },
-      { name: 'All Files', extensions: ['*'] }
-    ]
+      { name: 'All Files', extensions: ['*'] },
+    ],
   });
 
   if (result.canceled) {
@@ -2415,20 +2499,20 @@ ipcMain.handle('import:selectFiles', async () => {
 
   // Get file stats to include file sizes
   const filesWithStats = await Promise.all(
-    result.filePaths.map(async (filePath) => {
+    result.filePaths.map(async filePath => {
       try {
         const stats = await fs.stat(filePath);
         return {
           path: filePath,
           name: path.basename(filePath),
-          size: stats.size
+          size: stats.size,
         };
       } catch (error) {
         console.error(`Error getting stats for ${filePath}:`, error);
         return {
           path: filePath,
           name: path.basename(filePath),
-          size: 0
+          size: 0,
         };
       }
     })
@@ -2444,7 +2528,7 @@ ipcMain.handle('import:selectFolder', async () => {
 
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Select Folder with Transcripts',
-    properties: ['openDirectory']
+    properties: ['openDirectory'],
   });
 
   if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
@@ -2476,7 +2560,7 @@ ipcMain.handle('import:selectFolder', async () => {
               files.push({
                 path: fullPath,
                 name: entry.name,
-                size: stats.size
+                size: stats.size,
               });
             } catch (error) {
               console.error(`Error getting stats for ${fullPath}:`, error);
@@ -2517,14 +2601,14 @@ ipcMain.handle('getActiveRecordingId', async (event, noteId) => {
       const recordingInfo = activeRecordings.getForNote(noteId);
       return {
         success: true,
-        data: recordingInfo
+        data: recordingInfo,
       };
     }
 
     // Otherwise return all active recordings
     return {
       success: true,
-      data: activeRecordings.getAll()
+      data: activeRecordings.getAll(),
     };
   } catch (error) {
     console.error('Error getting active recording ID:', error);
@@ -2544,8 +2628,12 @@ ipcMain.handle('deleteMeeting', async (event, meetingId) => {
     const meetingsData = JSON.parse(fileData);
 
     // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === validatedId);
-    const upcomingMeetingIndex = meetingsData.upcomingMeetings.findIndex(meeting => meeting.id === validatedId);
+    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
+      meeting => meeting.id === validatedId
+    );
+    const upcomingMeetingIndex = meetingsData.upcomingMeetings.findIndex(
+      meeting => meeting.id === validatedId
+    );
 
     let meetingDeleted = false;
     let recordingId = null;
@@ -2605,7 +2693,9 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
     const meetingsData = JSON.parse(fileData);
 
     // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === meetingId);
+    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
+      meeting => meeting.id === meetingId
+    );
 
     if (pastMeetingIndex === -1) {
       return { success: false, error: 'Meeting not found' };
@@ -2617,7 +2707,7 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
     if (!meeting.transcript || meeting.transcript.length === 0) {
       return {
         success: false,
-        error: 'No transcript available for this meeting'
+        error: 'No transcript available for this meeting',
       };
     }
 
@@ -2628,18 +2718,20 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
     const summary = await generateMeetingSummary(meeting);
 
     // Get meeting title for use in the new content
-    const meetingTitle = meeting.title || "Meeting Notes";
+    const meetingTitle = meeting.title || 'Meeting Notes';
 
     // Get recording ID
     const recordingId = meeting.recordingId;
 
     // Check for different possible video file patterns
-    const possibleFilePaths = recordingId ? [
-      path.join(RECORDING_PATH, `${recordingId}.mp4`),
-      path.join(RECORDING_PATH, `macos-desktop-${recordingId}.mp4`),
-      path.join(RECORDING_PATH, `macos-desktop${recordingId}.mp4`),
-      path.join(RECORDING_PATH, `desktop-${recordingId}.mp4`)
-    ] : [];
+    const possibleFilePaths = recordingId
+      ? [
+          path.join(RECORDING_PATH, `${recordingId}.mp4`),
+          path.join(RECORDING_PATH, `macos-desktop-${recordingId}.mp4`),
+          path.join(RECORDING_PATH, `macos-desktop${recordingId}.mp4`),
+          path.join(RECORDING_PATH, `desktop-${recordingId}.mp4`),
+        ]
+      : [];
 
     // Find the first video file that exists
     let videoExists = false;
@@ -2683,7 +2775,7 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
 
     return {
       success: true,
-      summary
+      summary,
     };
   } catch (error) {
     console.error('Error generating meeting summary:', error);
@@ -2692,106 +2784,120 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
 });
 
 // Handle starting a manual desktop recording
-ipcMain.handle('startManualRecording', async (event, meetingId, transcriptionProvider = 'recallai') => {
-  try {
-    // Validate meetingId
-    const validatedId = MeetingIdSchema.parse(meetingId);
-    console.log(`Starting manual desktop recording for meeting: ${validatedId}`);
-    console.log(`Using transcription provider: ${transcriptionProvider}`);
-
-    // Read current data
-    const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-    const meetingsData = JSON.parse(fileData);
-
-    // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === validatedId);
-
-    if (pastMeetingIndex === -1) {
-      return { success: false, error: 'Meeting not found' };
-    }
-
-    const meeting = meetingsData.pastMeetings[pastMeetingIndex];
-
+ipcMain.handle(
+  'startManualRecording',
+  async (event, meetingId, transcriptionProvider = 'recallai') => {
     try {
-      // Prepare desktop audio recording - this is the key difference from our previous implementation
-      // It returns a key that we use as the window ID
+      // Validate meetingId
+      const validatedId = MeetingIdSchema.parse(meetingId);
+      console.log(`Starting manual desktop recording for meeting: ${validatedId}`);
+      console.log(`Using transcription provider: ${transcriptionProvider}`);
 
-      // Log the prepareDesktopAudioRecording API call
-      sdkLogger.logApiCall('prepareDesktopAudioRecording');
+      // Read current data
+      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
+      const meetingsData = JSON.parse(fileData);
 
-      const key = await RecallAiSdk.prepareDesktopAudioRecording();
-      console.log('Prepared desktop audio recording with key:', typeof key === 'string' ? key.substring(0, 8) + '...' : key);
+      // Find the meeting
+      const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
+        meeting => meeting.id === validatedId
+      );
 
-      // Create a recording token
-      const uploadData = await createDesktopSdkUpload();
-      if (!uploadData || !uploadData.upload_token) {
-        return { success: false, error: 'Failed to create recording token' };
+      if (pastMeetingIndex === -1) {
+        return { success: false, error: 'Meeting not found' };
       }
 
-      // Store the recording ID and upload token in the meeting
-      meeting.recordingId = key;
-      meeting.uploadToken = uploadData.upload_token; // Store for later matching
-      meeting.sdkUploadId = uploadData.id; // Store SDK Upload ID for webhook matching
-      meeting.recallRecordingId = uploadData.recording_id; // Store Recall Recording ID
-      meeting.transcriptionProvider = transcriptionProvider; // Store transcription provider
-      console.log(`[Upload] Saving IDs for manual recording ${validatedId}:`);
-      console.log(`  - recordingId (SDK window): ${key.substring(0, 8)}...`);
-      console.log(`  - uploadToken: ${uploadData.upload_token.substring(0, 8)}...`);
-      console.log(`  - sdkUploadId: ${uploadData.id}`);
-      console.log(`  - recallRecordingId: ${uploadData.recording_id}`);
-      console.log(`  - transcriptionProvider: ${transcriptionProvider}`);
+      const meeting = meetingsData.pastMeetings[pastMeetingIndex];
 
-      // Initialize transcript array if not present
-      if (!meeting.transcript) {
-        meeting.transcript = [];
+      try {
+        // Prepare desktop audio recording - this is the key difference from our previous implementation
+        // It returns a key that we use as the window ID
+
+        // Log the prepareDesktopAudioRecording API call
+        sdkLogger.logApiCall('prepareDesktopAudioRecording');
+
+        const key = await RecallAiSdk.prepareDesktopAudioRecording();
+        console.log(
+          'Prepared desktop audio recording with key:',
+          typeof key === 'string' ? key.substring(0, 8) + '...' : key
+        );
+
+        // Create a recording token
+        const uploadData = await createDesktopSdkUpload();
+        if (!uploadData || !uploadData.upload_token) {
+          return { success: false, error: 'Failed to create recording token' };
+        }
+
+        // Store the recording ID and upload token in the meeting
+        meeting.recordingId = key;
+        meeting.uploadToken = uploadData.upload_token; // Store for later matching
+        meeting.sdkUploadId = uploadData.id; // Store SDK Upload ID for webhook matching
+        meeting.recallRecordingId = uploadData.recording_id; // Store Recall Recording ID
+        meeting.transcriptionProvider = transcriptionProvider; // Store transcription provider
+        console.log(`[Upload] Saving IDs for manual recording ${validatedId}:`);
+        console.log(`  - recordingId (SDK window): ${key.substring(0, 8)}...`);
+        console.log(`  - uploadToken: ${uploadData.upload_token.substring(0, 8)}...`);
+        console.log(`  - sdkUploadId: ${uploadData.id}`);
+        console.log(`  - recallRecordingId: ${uploadData.recording_id}`);
+        console.log(`  - transcriptionProvider: ${transcriptionProvider}`);
+
+        // Initialize transcript array if not present
+        if (!meeting.transcript) {
+          meeting.transcript = [];
+        }
+
+        // Store tracking info for the recording
+        global.activeMeetingIds = global.activeMeetingIds || {};
+        global.activeMeetingIds[key] = {
+          platformName: 'Desktop Recording',
+          noteId: validatedId,
+        };
+
+        // Register the recording in our active recordings tracker
+        activeRecordings.addRecording(key, validatedId, 'Desktop Recording');
+
+        // Save the updated data
+        console.log(`[Upload] Writing meetingsData with uploadToken for meeting ${validatedId}...`);
+        await fileOperationManager.writeData(meetingsData);
+        console.log(`[Upload] ✓ Completed writing meetingsData for meeting ${validatedId}`);
+
+        // Start recording with the key from prepareDesktopAudioRecording
+        console.log(
+          'Starting desktop recording with key:',
+          typeof key === 'string' ? key.substring(0, 8) + '...' : key
+        );
+
+        // Log the startRecording API call
+        sdkLogger.logApiCall('startRecording', {
+          windowId: key,
+          uploadToken: `${uploadData.upload_token.substring(0, 8)}...`, // Log truncated token for security
+        });
+
+        RecallAiSdk.startRecording({
+          windowId: key,
+          uploadToken: uploadData.upload_token,
+        });
+
+        return {
+          success: true,
+          recordingId: key,
+        };
+      } catch (sdkError) {
+        console.error('RecallAI SDK error:', sdkError);
+        return {
+          success: false,
+          error: 'Failed to prepare desktop recording: ' + sdkError.message,
+        };
       }
-
-      // Store tracking info for the recording
-      global.activeMeetingIds = global.activeMeetingIds || {};
-      global.activeMeetingIds[key] = {
-        platformName: 'Desktop Recording',
-        noteId: validatedId
-      };
-
-      // Register the recording in our active recordings tracker
-      activeRecordings.addRecording(key, validatedId, 'Desktop Recording');
-
-      // Save the updated data
-      console.log(`[Upload] Writing meetingsData with uploadToken for meeting ${validatedId}...`);
-      await fileOperationManager.writeData(meetingsData);
-      console.log(`[Upload] ✓ Completed writing meetingsData for meeting ${validatedId}`);
-
-      // Start recording with the key from prepareDesktopAudioRecording
-      console.log('Starting desktop recording with key:', typeof key === 'string' ? key.substring(0, 8) + '...' : key);
-
-      // Log the startRecording API call
-      sdkLogger.logApiCall('startRecording', {
-        windowId: key,
-        uploadToken: `${uploadData.upload_token.substring(0, 8)}...` // Log truncated token for security
-      });
-
-      RecallAiSdk.startRecording({
-        windowId: key,
-        uploadToken: uploadData.upload_token
-      });
-
-      return {
-        success: true,
-        recordingId: key
-      };
-    } catch (sdkError) {
-      console.error('RecallAI SDK error:', sdkError);
-      return { success: false, error: 'Failed to prepare desktop recording: ' + sdkError.message };
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        console.error('Invalid meeting ID format:', error.message);
+        return { success: false, error: `Invalid meeting ID format: ${error.message}` };
+      }
+      console.error('Error starting manual recording:', error);
+      return { success: false, error: error.message };
     }
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      console.error('Invalid meeting ID format:', error.message);
-      return { success: false, error: `Invalid meeting ID format: ${error.message}` };
-    }
-    console.error('Error starting manual recording:', error);
-    return { success: false, error: error.message };
   }
-});
+);
 
 // Handle stopping a manual desktop recording
 ipcMain.handle('stopManualRecording', async (event, recordingId) => {
@@ -2804,14 +2910,14 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
 
     // Log the stopRecording API call
     sdkLogger.logApiCall('stopRecording', {
-      windowId: validatedId
+      windowId: validatedId,
     });
 
     // Update our active recordings tracker
     activeRecordings.updateState(validatedId, 'stopping');
 
     RecallAiSdk.stopRecording({
-      windowId: validatedId
+      windowId: validatedId,
     });
 
     // The recording-ended event will be triggered automatically,
@@ -2834,7 +2940,9 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
 // (server.js runs in main process, so we can call these directly instead of using IPC)
 global.webhookHandlers = {
   handleUploadComplete: async ({ recordingId, sdkUploadId }) => {
-    console.log(`[Webhook] Upload complete - SDK Upload ID: ${sdkUploadId}, Recording ID: ${recordingId}`);
+    console.log(
+      `[Webhook] Upload complete - SDK Upload ID: ${sdkUploadId}, Recording ID: ${recordingId}`
+    );
 
     try {
       // Find the meeting by matching the SDK Upload ID
@@ -2851,7 +2959,9 @@ global.webhookHandlers = {
 
       // Verify the recording ID matches (it should since we stored it)
       if (meeting.recallRecordingId !== recordingId) {
-        console.warn(`[Webhook] Recording ID mismatch! Stored: ${meeting.recallRecordingId}, Webhook: ${recordingId}`);
+        console.warn(
+          `[Webhook] Recording ID mismatch! Stored: ${meeting.recallRecordingId}, Webhook: ${recordingId}`
+        );
       }
 
       await fileOperationManager.writeData(meetingsData);
@@ -2859,7 +2969,6 @@ global.webhookHandlers = {
 
       // Start async transcription
       await startRecallAIAsyncTranscription(recordingId, meeting.recordingId);
-
     } catch (error) {
       console.error('[Webhook] Error handling upload complete:', error);
     }
@@ -2873,12 +2982,9 @@ global.webhookHandlers = {
       const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
 
       // Fetch the transcript
-      const response = await axios.get(
-        `${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`,
-        {
-          headers: { 'Authorization': `Token ${RECALLAI_API_KEY}` }
-        }
-      );
+      const response = await axios.get(`${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`, {
+        headers: { Authorization: `Token ${RECALLAI_API_KEY}` },
+      });
 
       const transcript = response.data;
       console.log(`[Webhook] Fetched transcript. Status: ${transcript.status?.code}`);
@@ -2908,12 +3014,11 @@ global.webhookHandlers = {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('transcript-ready', {
           meetingId: meeting.id,
-          transcriptId
+          transcriptId,
         });
       }
 
       console.log(`[Webhook] ✓ Transcript processed successfully for meeting ${meeting.id}`);
-
     } catch (error) {
       console.error('[Webhook] Error handling transcript done:', error);
     }
@@ -2936,14 +3041,14 @@ global.webhookHandlers = {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('transcript-failed', {
             meetingId: meeting.id,
-            error
+            error,
           });
         }
       }
     } catch (err) {
       console.error('[Webhook] Error handling transcript failed:', err);
     }
-  }
+  },
 };
 
 // Keep old IPC handlers for backwards compatibility (in case renderer sends events)
@@ -2960,12 +3065,9 @@ ipcMain.on('webhook-transcript-done', async (event, { transcriptId, recordingId 
     const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
 
     // Fetch the transcript
-    const response = await axios.get(
-      `${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`,
-      {
-        headers: { 'Authorization': `Token ${RECALLAI_API_KEY}` }
-      }
-    );
+    const response = await axios.get(`${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`, {
+      headers: { Authorization: `Token ${RECALLAI_API_KEY}` },
+    });
 
     const transcript = response.data;
     console.log(`[Webhook] Fetched transcript. Status: ${transcript.status?.code}`);
@@ -2995,12 +3097,11 @@ ipcMain.on('webhook-transcript-done', async (event, { transcriptId, recordingId 
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('transcript-ready', {
         meetingId: meeting.id,
-        transcriptId
+        transcriptId,
       });
     }
 
     console.log(`[Webhook] ✓ Transcript processed successfully for meeting ${meeting.id}`);
-
   } catch (error) {
     console.error('[Webhook] Error handling transcript done:', error);
   }
@@ -3024,7 +3125,7 @@ ipcMain.on('webhook-transcript-failed', async (event, { transcriptId, recordingI
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('transcript-failed', {
           meetingId: meeting.id,
-          error
+          error,
         });
       }
     }
@@ -3041,7 +3142,7 @@ ipcMain.on('webhook-upload-failed', async (event, { recordingId, error }) => {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('upload-failed', {
       recordingId,
-      error
+      error,
     });
   }
 });
@@ -3056,7 +3157,9 @@ ipcMain.handle('generateMeetingSummaryStreaming', async (event, meetingId) => {
     const meetingsData = JSON.parse(fileData);
 
     // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === meetingId);
+    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
+      meeting => meeting.id === meetingId
+    );
 
     if (pastMeetingIndex === -1) {
       return { success: false, error: 'Meeting not found' };
@@ -3068,7 +3171,7 @@ ipcMain.handle('generateMeetingSummaryStreaming', async (event, meetingId) => {
     if (!meeting.transcript || meeting.transcript.length === 0) {
       return {
         success: false,
-        error: 'No transcript available for this meeting'
+        error: 'No transcript available for this meeting',
       };
     }
 
@@ -3076,7 +3179,7 @@ ipcMain.handle('generateMeetingSummaryStreaming', async (event, meetingId) => {
     console.log('Generating streaming summary for meeting: ' + meetingId);
 
     // Get meeting title for use in the new content
-    const meetingTitle = meeting.title || "Meeting Notes";
+    const meetingTitle = meeting.title || 'Meeting Notes';
 
     // Initial content with placeholders
     meeting.content = `# ${meetingTitle}\n\nGenerating summary...`;
@@ -3084,11 +3187,11 @@ ipcMain.handle('generateMeetingSummaryStreaming', async (event, meetingId) => {
     // Update the note on the frontend right away
     mainWindow.webContents.send('summary-update', {
       meetingId,
-      content: meeting.content
+      content: meeting.content,
     });
 
     // Create progress callback for streaming updates
-    const streamProgress = (currentText) => {
+    const streamProgress = currentText => {
       // Update content with current streaming text
       meeting.content = `# ${meetingTitle}\n\n## AI-Generated Meeting Summary\n${currentText}`;
 
@@ -3099,7 +3202,7 @@ ipcMain.handle('generateMeetingSummaryStreaming', async (event, meetingId) => {
           mainWindow.webContents.send('summary-update', {
             meetingId,
             content: meeting.content,
-            timestamp: Date.now() // Add timestamp to ensure uniqueness
+            timestamp: Date.now(), // Add timestamp to ensure uniqueness
           });
         } catch (err) {
           console.error('Error sending streaming update to renderer:', err);
@@ -3124,7 +3227,7 @@ ipcMain.handle('generateMeetingSummaryStreaming', async (event, meetingId) => {
 
     return {
       success: true,
-      summary
+      summary,
     };
   } catch (error) {
     console.error('Error generating streaming summary:', error);
@@ -3161,7 +3264,7 @@ ipcMain.handle('fetchTranscript', async (event, meetingId) => {
       return {
         success: true,
         message: 'Transcript already exists',
-        hasTranscript: true
+        hasTranscript: true,
       };
     }
 
@@ -3179,9 +3282,8 @@ ipcMain.handle('fetchTranscript', async (event, meetingId) => {
 
     return {
       success: true,
-      message: 'Transcript fetch started - check logs for progress'
+      message: 'Transcript fetch started - check logs for progress',
     };
-
   } catch (error) {
     console.error('[IPC] Error starting transcript fetch:', error);
     return { success: false, error: error.message };
@@ -3197,7 +3299,7 @@ ipcMain.handle('loadMeetingsData', async () => {
     // Return the data
     return {
       success: true,
-      data: data
+      data: data,
     };
   } catch (error) {
     console.error('Failed to load meetings data:', error);
@@ -3207,14 +3309,18 @@ ipcMain.handle('loadMeetingsData', async () => {
 
 // Function to create a new meeting note and start recording
 async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 'recallai') {
-  console.log("Creating meeting note for platform:", platformName);
-  console.log("Using transcription provider:", transcriptionProvider);
+  console.log('Creating meeting note for platform:', platformName);
+  console.log('Using transcription provider:', transcriptionProvider);
   try {
     if (!detectedMeeting) {
       console.error('No active meeting detected');
       return;
     }
-    console.log("Detected meeting info:", detectedMeeting.window.id, detectedMeeting.window.platform);
+    console.log(
+      'Detected meeting info:',
+      detectedMeeting.window.id,
+      detectedMeeting.window.platform
+    );
 
     // Store the meeting window ID for later reference with transcript events
     global.activeMeetingIds = global.activeMeetingIds || {};
@@ -3240,7 +3346,9 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
     const template = `# ${platformName} Meeting Notes\nRecording: In Progress...`;
 
     // Create a new meeting object
-    console.log(`[Meeting Creation] Creating meeting for detected ${platformName}, windowId: ${detectedMeeting.window.id}`);
+    console.log(
+      `[Meeting Creation] Creating meeting for detected ${platformName}, windowId: ${detectedMeeting.window.id}`
+    );
     const newMeeting = {
       id: id,
       type: 'document',
@@ -3253,9 +3361,11 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
       recordingId: detectedMeeting.window.id,
       platform: platformName,
       transcript: [], // Initialize an empty array for transcript data
-      transcriptionProvider: transcriptionProvider // Save the transcription provider
+      transcriptionProvider: transcriptionProvider, // Save the transcription provider
     };
-    console.log(`[Meeting Creation] ✓ Created meeting object - id: ${id}, recordingId: ${newMeeting.recordingId}, transcriptionProvider: ${transcriptionProvider}`);
+    console.log(
+      `[Meeting Creation] ✓ Created meeting object - id: ${id}, recordingId: ${newMeeting.recordingId}, transcriptionProvider: ${transcriptionProvider}`
+    );
 
     // Update the active meeting tracking with the note ID
     if (global.activeMeetingIds && global.activeMeetingIds[detectedMeeting.window.id]) {
@@ -3281,11 +3391,15 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
 
       if (verifyMeeting) {
         console.log(`[Meeting Creation] ✓ Verified meeting ${id} was saved to file`);
-        console.log(`[Meeting Creation] ✓ Verified recordingId in file: ${verifyMeeting.recordingId}`);
+        console.log(
+          `[Meeting Creation] ✓ Verified recordingId in file: ${verifyMeeting.recordingId}`
+        );
         if (!verifyMeeting.recordingId) {
           console.error(`[Meeting Creation] ✗ ERROR: Meeting saved but recordingId is missing!`);
         } else if (verifyMeeting.recordingId !== detectedMeeting.window.id) {
-          console.error(`[Meeting Creation] ✗ ERROR: recordingId mismatch! Expected: ${detectedMeeting.window.id}, Got: ${verifyMeeting.recordingId}`);
+          console.error(
+            `[Meeting Creation] ✗ ERROR: recordingId mismatch! Expected: ${detectedMeeting.window.id}, Got: ${verifyMeeting.recordingId}`
+          );
         }
 
         // Tell the renderer to open the new note
@@ -3318,7 +3432,9 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
     }
 
     // Start recording with upload token
-    console.log(`[Recording Start] Starting recording for meeting ${id}, windowId: ${detectedMeeting.window.id}`);
+    console.log(
+      `[Recording Start] Starting recording for meeting ${id}, windowId: ${detectedMeeting.window.id}`
+    );
 
     try {
       // Get upload token
@@ -3329,26 +3445,38 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
 
         // Log the startRecording API call (no token fallback)
         sdkLogger.logApiCall('startRecording', {
-          windowId: detectedMeeting.window.id
+          windowId: detectedMeeting.window.id,
         });
 
         RecallAiSdk.startRecording({
-          windowId: detectedMeeting.window.id
+          windowId: detectedMeeting.window.id,
         });
       } else {
-        console.log('Starting recording with upload token:', uploadData.upload_token.substring(0, 8) + '...');
+        console.log(
+          'Starting recording with upload token:',
+          uploadData.upload_token.substring(0, 8) + '...'
+        );
 
         // Save the upload token to the meeting for later matching
-        console.log(`[Upload] Attempting to save uploadToken for meeting ${id}, token: ${uploadData.upload_token.substring(0, 8)}...`);
-        await fileOperationManager.scheduleOperation(async (data) => {
-          console.log(`[Upload] scheduleOperation executing, pastMeetings count: ${data.pastMeetings.length}`);
+        console.log(
+          `[Upload] Attempting to save uploadToken for meeting ${id}, token: ${uploadData.upload_token.substring(0, 8)}...`
+        );
+        await fileOperationManager.scheduleOperation(async data => {
+          console.log(
+            `[Upload] scheduleOperation executing, pastMeetings count: ${data.pastMeetings.length}`
+          );
           const meetingIndex = data.pastMeetings.findIndex(m => m.id === id);
           if (meetingIndex !== -1) {
             data.pastMeetings[meetingIndex].uploadToken = uploadData.upload_token;
             console.log(`[Upload] ✓ Saved uploadToken to meeting ${id} at index ${meetingIndex}`);
           } else {
-            console.error(`[Upload] ✗ Could not find meeting ${id} in pastMeetings to save uploadToken!`);
-            console.error(`[Upload] Available meeting IDs:`, data.pastMeetings.map(m => m.id).join(', '));
+            console.error(
+              `[Upload] ✗ Could not find meeting ${id} in pastMeetings to save uploadToken!`
+            );
+            console.error(
+              `[Upload] Available meeting IDs:`,
+              data.pastMeetings.map(m => m.id).join(', ')
+            );
           }
           return data;
         });
@@ -3357,13 +3485,15 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
         // Log the startRecording API call with upload token
         sdkLogger.logApiCall('startRecording', {
           windowId: detectedMeeting.window.id,
-          uploadToken: `${uploadData.upload_token.substring(0, 8)}...` // Log truncated token for security
+          uploadToken: `${uploadData.upload_token.substring(0, 8)}...`, // Log truncated token for security
         });
 
-        console.log(`[Recording Start] ✓ Calling RecallAiSdk.startRecording with windowId: ${detectedMeeting.window.id}`);
+        console.log(
+          `[Recording Start] ✓ Calling RecallAiSdk.startRecording with windowId: ${detectedMeeting.window.id}`
+        );
         RecallAiSdk.startRecording({
           windowId: detectedMeeting.window.id,
-          uploadToken: uploadData.upload_token
+          uploadToken: uploadData.upload_token,
         });
         console.log(`[Recording Start] ✓ RecallAiSdk.startRecording called successfully`);
       }
@@ -3375,11 +3505,11 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
       // Log the startRecording API call (error fallback)
       sdkLogger.logApiCall('startRecording', {
         windowId: detectedMeeting.window.id,
-        error: 'Fallback after error'
+        error: 'Fallback after error',
       });
 
       RecallAiSdk.startRecording({
-        windowId: detectedMeeting.window.id
+        windowId: detectedMeeting.window.id,
       });
     }
 
@@ -3394,7 +3524,7 @@ async function processVideoFrame(evt) {
   try {
     const windowId = evt.window?.id;
     if (!windowId) {
-      console.error("Missing window ID in video frame event");
+      console.error('Missing window ID in video frame event');
       return;
     }
 
@@ -3413,7 +3543,7 @@ async function processVideoFrame(evt) {
     // Extract the video data
     const frameData = evt.data.data;
     if (!frameData || !frameData.buffer) {
-      console.log("No video frame data in event");
+      console.log('No video frame data in event');
       return;
     }
 
@@ -3438,7 +3568,7 @@ async function processVideoFrame(evt) {
         participantName,
         frameType,
         buffer: frameBuffer,
-        timestamp: frameTimestamp
+        timestamp: frameTimestamp,
       });
     }
   } catch (error) {
@@ -3451,7 +3581,7 @@ async function processParticipantJoin(evt) {
   try {
     const windowId = evt.window?.id;
     if (!windowId) {
-      console.error("Missing window ID in participant join event");
+      console.error('Missing window ID in participant join event');
       return;
     }
 
@@ -3470,11 +3600,11 @@ async function processParticipantJoin(evt) {
     // Extract the participant data
     const participantData = evt.data.data.participant;
     if (!participantData) {
-      console.log("No participant data in event");
+      console.log('No participant data in event');
       return;
     }
 
-    const participantName = participantData.name || "Unknown Participant";
+    const participantName = participantData.name || 'Unknown Participant';
     const participantId = participantData.id;
     const isHost = participantData.is_host;
     const platform = participantData.platform;
@@ -3482,13 +3612,18 @@ async function processParticipantJoin(evt) {
     console.log(`Participant joined: ${participantName} (ID: ${participantId}, Host: ${isHost})`);
 
     // Skip "Host" and "Guest" generic names
-    if (participantName === "Host" || participantName === "Guest" || participantName.includes("others") || (participantName.split(" ").length > 3)) {
+    if (
+      participantName === 'Host' ||
+      participantName === 'Guest' ||
+      participantName.includes('others') ||
+      participantName.split(' ').length > 3
+    ) {
       console.log(`Skipping generic participant name: ${participantName}`);
       return;
     }
 
     // Use the file operation manager to safely update the meetings data
-    await fileOperationManager.scheduleOperation(async (meetingsData) => {
+    await fileOperationManager.scheduleOperation(async meetingsData => {
       // Find the meeting note with this ID
       const noteIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === noteId);
       if (noteIndex === -1) {
@@ -3513,7 +3648,7 @@ async function processParticipantJoin(evt) {
           isHost: isHost,
           platform: platform,
           joinTime: new Date().toISOString(),
-          status: 'active'
+          status: 'active',
         };
       } else {
         // Add new participant
@@ -3523,7 +3658,7 @@ async function processParticipantJoin(evt) {
           isHost: isHost,
           platform: platform,
           joinTime: new Date().toISOString(),
-          status: 'active'
+          status: 'active',
         });
       }
 
@@ -3565,7 +3700,7 @@ async function matchSpeakersToParticipants(meeting) {
           label: entry.speakerLabel,
           wordCount: 0,
           utteranceCount: 0,
-          firstAppearance: entry.timestamp
+          firstAppearance: entry.timestamp,
         });
       }
       const stats = speakerStats.get(entry.speakerLabel);
@@ -3579,19 +3714,21 @@ async function matchSpeakersToParticipants(meeting) {
     return;
   }
 
-  console.log(`[Speaker Matching] Found ${speakerStats.size} unique speakers and ${meeting.participants.length} participants`);
+  console.log(
+    `[Speaker Matching] Found ${speakerStats.size} unique speakers and ${meeting.participants.length} participants`
+  );
 
   // Sort speakers by word count (most talkative first)
-  const sortedSpeakers = Array.from(speakerStats.values())
-    .sort((a, b) => b.wordCount - a.wordCount);
+  const sortedSpeakers = Array.from(speakerStats.values()).sort(
+    (a, b) => b.wordCount - a.wordCount
+  );
 
   // Sort participants (host first if available, then by join order)
-  const sortedParticipants = [...meeting.participants]
-    .sort((a, b) => {
-      if (a.isHost && !b.isHost) return -1;
-      if (!a.isHost && b.isHost) return 1;
-      return 0;
-    });
+  const sortedParticipants = [...meeting.participants].sort((a, b) => {
+    if (a.isHost && !b.isHost) return -1;
+    if (!a.isHost && b.isHost) return 1;
+    return 0;
+  });
 
   // Create speaker mapping
   const speakerMapping = new Map();
@@ -3601,7 +3738,9 @@ async function matchSpeakersToParticipants(meeting) {
   // Second most talkative -> second participant, etc.
   for (let i = 0; i < Math.min(sortedSpeakers.length, sortedParticipants.length); i++) {
     speakerMapping.set(sortedSpeakers[i].label, sortedParticipants[i].name);
-    console.log(`[Speaker Matching] Speaker ${String.fromCharCode(65 + sortedSpeakers[i].label)} -> ${sortedParticipants[i].name}`);
+    console.log(
+      `[Speaker Matching] Speaker ${String.fromCharCode(65 + sortedSpeakers[i].label)} -> ${sortedParticipants[i].name}`
+    );
   }
 
   // Update transcript entries with matched names
@@ -3612,19 +3751,22 @@ async function matchSpeakersToParticipants(meeting) {
       const oldSpeaker = entry.speaker;
       entry.speaker = matchedName;
       entry.speakerMatched = true;
-      if (matchedCount < 3) { // Only log first few to avoid spam
+      if (matchedCount < 3) {
+        // Only log first few to avoid spam
         console.log(`[Speaker Matching] Updated "${oldSpeaker}" -> "${matchedName}"`);
       }
       matchedCount++;
     }
   }
-  console.log(`[Speaker Matching] Updated ${matchedCount} transcript entries with matched speaker names`);
+  console.log(
+    `[Speaker Matching] Updated ${matchedCount} transcript entries with matched speaker names`
+  );
 
   // Store the mapping in the meeting object for reference
   meeting.speakerMapping = Object.fromEntries(
     Array.from(speakerMapping.entries()).map(([label, name]) => [
       `Speaker ${String.fromCharCode(65 + label)}`,
-      { name, email: null, confidence: 'medium', method: 'participant-match' }
+      { name, email: null, confidence: 'medium', method: 'participant-match' },
     ])
   );
 }
@@ -3660,13 +3802,16 @@ async function pollForUploadCompletion(windowId) {
       const url = `${RECALLAI_API_URL}/api/v1/sdk_upload/`;
       const response = await axios.get(url, {
         headers: {
-          'Authorization': `Token ${RECALLAI_API_KEY}`
-        }
+          Authorization: `Token ${RECALLAI_API_KEY}`,
+        },
       });
 
       // Debug: Log the raw API response on first attempt
       if (attempts === 1) {
-        console.log('[Upload] API Response structure:', JSON.stringify(response.data, null, 2).substring(0, 2000));
+        console.log(
+          '[Upload] API Response structure:',
+          JSON.stringify(response.data, null, 2).substring(0, 2000)
+        );
       }
 
       // Find the upload with our windowId
@@ -3674,7 +3819,10 @@ async function pollForUploadCompletion(windowId) {
       console.log(`[Upload] Found ${uploads.length} total uploads in API response`);
 
       if (uploads.length > 0 && attempts === 1) {
-        console.log('[Upload] First upload example:', JSON.stringify(uploads[0], null, 2).substring(0, 500));
+        console.log(
+          '[Upload] First upload example:',
+          JSON.stringify(uploads[0], null, 2).substring(0, 500)
+        );
       }
 
       // Get the upload_token for this recording from the meeting data
@@ -3683,14 +3831,19 @@ async function pollForUploadCompletion(windowId) {
 
       if (!meeting) {
         console.log(`[Upload] Could not find meeting with recordingId: ${windowId}`);
-        console.log(`[Upload] Available recordingIds in pastMeetings:`, meetingsData.pastMeetings.map(m => m.recordingId || 'none').join(', '));
+        console.log(
+          `[Upload] Available recordingIds in pastMeetings:`,
+          meetingsData.pastMeetings.map(m => m.recordingId || 'none').join(', ')
+        );
         await new Promise(resolve => setTimeout(resolve, 5000));
         continue;
       }
 
       // Debug: Show what fields the meeting has
       if (attempts === 1) {
-        console.log(`[Upload] Meeting found! ID: ${meeting.id}, has uploadToken: ${!!meeting.uploadToken}`);
+        console.log(
+          `[Upload] Meeting found! ID: ${meeting.id}, has uploadToken: ${!!meeting.uploadToken}`
+        );
         console.log(`[Upload] Meeting fields:`, Object.keys(meeting));
         if (meeting.uploadToken) {
           console.log(`[Upload] uploadToken value: ${meeting.uploadToken.substring(0, 8)}...`);
@@ -3698,7 +3851,9 @@ async function pollForUploadCompletion(windowId) {
       }
 
       if (!meeting.uploadToken) {
-        console.log(`[Upload] Meeting ${meeting.id} found but no uploadToken field yet (attempt ${attempts}/${maxAttempts})`);
+        console.log(
+          `[Upload] Meeting ${meeting.id} found but no uploadToken field yet (attempt ${attempts}/${maxAttempts})`
+        );
         await new Promise(resolve => setTimeout(resolve, 5000));
         continue;
       }
@@ -3719,11 +3874,13 @@ async function pollForUploadCompletion(windowId) {
             await startRecallAIAsyncTranscription(recordingId, windowId);
             return; // Success - exit polling loop
           } catch (transcriptionError) {
-            console.error('[Upload] Failed to start transcription:', transcriptionError.response?.data || transcriptionError.message);
+            console.error(
+              '[Upload] Failed to start transcription:',
+              transcriptionError.response?.data || transcriptionError.message
+            );
             // Stop retrying - transcription errors are usually permanent (e.g., missing video)
             throw new Error(`Transcription failed: ${transcriptionError.message}`);
           }
-
         } else if (statusCode === 'failed') {
           throw new Error(`Upload failed for window ${windowId}`);
         }
@@ -3733,7 +3890,6 @@ async function pollForUploadCompletion(windowId) {
 
       // Wait 5 seconds before next poll
       await new Promise(resolve => setTimeout(resolve, 5000));
-
     } catch (error) {
       console.error('[Upload] Polling error:', error.response?.data || error.message);
       // Continue polling even on errors (might be transient)
@@ -3776,32 +3932,40 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
 
     const transcriptConfig = {
       provider: {
-        recallai_async: {  // Use Recall.ai's built-in async transcription
-          language_code: "en"
-        }
+        recallai_async: {
+          // Use Recall.ai's built-in async transcription
+          language_code: 'en',
+        },
       },
       diarization: {
-        use_separate_streams_when_available: true  // Enable perfect diarization
-      }
+        use_separate_streams_when_available: true, // Enable perfect diarization
+      },
     };
 
-    console.log(`[Recall.ai] Requesting transcript with config:`, JSON.stringify(transcriptConfig, null, 2));
+    console.log(
+      `[Recall.ai] Requesting transcript with config:`,
+      JSON.stringify(transcriptConfig, null, 2)
+    );
 
     const response = await axios.post(url, transcriptConfig, {
       headers: {
-        'Authorization': `Token ${RECALLAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
+        Authorization: `Token ${RECALLAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
     });
 
     const transcriptId = response.data.id;
-    console.log(`[Recall.ai] Transcript request submitted successfully. Transcript ID: ${transcriptId}`);
+    console.log(
+      `[Recall.ai] Transcript request submitted successfully. Transcript ID: ${transcriptId}`
+    );
     console.log(`[Recall.ai] Waiting for transcript.done webhook...`);
 
     // No polling needed - we'll receive a transcript.done webhook when ready
-
   } catch (error) {
-    console.error('[Recall.ai] Failed to start async transcription:', error.response?.data || error.message);
+    console.error(
+      '[Recall.ai] Failed to start async transcription:',
+      error.response?.data || error.message
+    );
     throw error;
   }
 }
@@ -3820,14 +3984,16 @@ async function pollRecallAITranscript(recordingId, transcriptId, windowId, meeti
   // Poll the specific transcript endpoint
   const pollingEndpoint = `${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`;
 
-  console.log(`[Recall.ai] Polling for transcript completion. Recording: ${recordingId}, Transcript: ${transcriptId}`);
+  console.log(
+    `[Recall.ai] Polling for transcript completion. Recording: ${recordingId}, Transcript: ${transcriptId}`
+  );
 
   while (true) {
     try {
       const response = await axios.get(pollingEndpoint, {
         headers: {
-          'Authorization': `Token ${RECALLAI_API_KEY}`
-        }
+          Authorization: `Token ${RECALLAI_API_KEY}`,
+        },
       });
 
       const transcript = response.data;
@@ -3855,16 +4021,18 @@ async function pollRecallAITranscript(recordingId, transcriptId, windowId, meeti
         } else {
           throw new Error('Transcript is done but has no words data or download URL');
         }
-
       } else if (transcriptStatus === 'error' || transcriptStatus === 'failed') {
-        throw new Error(`Transcript generation failed for recording ${recordingId}: ${transcript.status?.message || 'Unknown error'}`);
+        throw new Error(
+          `Transcript generation failed for recording ${recordingId}: ${transcript.status?.message || 'Unknown error'}`
+        );
       } else {
-        console.log(`[Recall.ai] Transcript still processing (status: ${transcriptStatus}) - continuing to poll`);
+        console.log(
+          `[Recall.ai] Transcript still processing (status: ${transcriptStatus}) - continuing to poll`
+        );
       }
 
       // Wait 5 seconds before next poll
       await new Promise(resolve => setTimeout(resolve, 5000));
-
     } catch (error) {
       // If it's a 404, the transcript might not be available yet
       if (error.response?.status === 404) {
@@ -3925,8 +4093,8 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
         const endTime = word.end_timestamp?.relative || 0;
 
         // Start new utterance if first word or long pause
-        const isNewUtterance = !currentUtterance ||
-          (index > 0 && startTime - currentUtterance.end > 1.0);
+        const isNewUtterance =
+          !currentUtterance || (index > 0 && startTime - currentUtterance.end > 1.0);
 
         if (isNewUtterance) {
           if (currentUtterance) {
@@ -3938,7 +4106,7 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
             isHost: isHost,
             text: word.text,
             start: startTime,
-            end: endTime
+            end: endTime,
           };
         } else {
           // Add to current utterance
@@ -3967,13 +4135,13 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
         speakerMap[label] = {
           name: participant.name,
           email: participant.email || null,
-          confidence: participants.length === 1 ? 'high' : 'medium'
+          confidence: participants.length === 1 ? 'high' : 'medium',
         };
       } else {
         speakerMap[label] = {
           name: `Unknown Speaker (${label})`,
           email: null,
-          confidence: 'none'
+          confidence: 'none',
         };
       }
     });
@@ -3985,7 +4153,7 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
       const speakerInfo = speakerMap[utterance.speaker] || {
         name: utterance.speaker,
         email: null,
-        confidence: 'none'
+        confidence: 'none',
       };
 
       return {
@@ -3997,12 +4165,12 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
         isHost: utterance.isHost,
         text: utterance.text,
         start: utterance.start,
-        end: utterance.end
+        end: utterance.end,
       };
     });
 
     // Update the meeting with transcript
-    await fileOperationManager.scheduleOperation(async (data) => {
+    await fileOperationManager.scheduleOperation(async data => {
       const meetingIndex = data.pastMeetings.findIndex(m => m.id === meetingId);
       if (meetingIndex !== -1) {
         data.pastMeetings[meetingIndex].transcript = processedTranscript;
@@ -4023,13 +4191,13 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
     const updatedMeeting = updatedMeetingsData.pastMeetings.find(m => m.id === meetingId);
 
     if (updatedMeeting && updatedMeeting.transcript && updatedMeeting.transcript.length > 0) {
-      const meetingTitle = updatedMeeting.title || "Meeting Notes";
+      const meetingTitle = updatedMeeting.title || 'Meeting Notes';
 
-      const streamProgress = (currentText) => {
+      const streamProgress = currentText => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('summary-update', {
             meetingId: meetingId,
-            content: `# ${meetingTitle}\n\n${currentText}`
+            content: `# ${meetingTitle}\n\n${currentText}`,
           });
         }
       };
@@ -4037,7 +4205,7 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
       try {
         const summary = await generateMeetingSummary(updatedMeeting, streamProgress);
 
-        await fileOperationManager.scheduleOperation(async (data) => {
+        await fileOperationManager.scheduleOperation(async data => {
           const idx = data.pastMeetings.findIndex(m => m.id === meetingId);
           if (idx !== -1) {
             data.pastMeetings[idx].content = `# ${meetingTitle}\n\n${summary}`;
@@ -4056,7 +4224,6 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
     }
 
     console.log(`[Recall.ai] Async transcription workflow complete`);
-
   } catch (error) {
     console.error('[Recall.ai] Error processing transcript:', error);
     throw error;
@@ -4068,7 +4235,7 @@ async function processTranscriptData(evt) {
   try {
     const windowId = evt.window?.id;
     if (!windowId) {
-      console.error("Missing window ID in transcript event");
+      console.error('Missing window ID in transcript event');
       return;
     }
 
@@ -4098,12 +4265,14 @@ async function processTranscriptData(evt) {
     // Debug: Log participant data from RecallAI
     const participantName = evt.data.data.participant?.name;
     const participantId = evt.data.data.participant?.id;
-    console.log(`[Transcript] Participant from RecallAI: "${participantName}" (ID: ${participantId}), Speaker label from AssemblyAI: ${speakerLabel}`);
+    console.log(
+      `[Transcript] Participant from RecallAI: "${participantName}" (ID: ${participantId}), Speaker label from AssemblyAI: ${speakerLabel}`
+    );
 
     // Try to match participant to stored participants in meeting.participants array
     // This is more reliable than the participant info from transcript events
     let matchedParticipant = null;
-    await fileOperationManager.scheduleOperation(async (meetingsData) => {
+    await fileOperationManager.scheduleOperation(async meetingsData => {
       const noteIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === noteId);
       if (noteIndex !== -1) {
         const meeting = meetingsData.pastMeetings[noteIndex];
@@ -4113,7 +4282,9 @@ async function processTranscriptData(evt) {
 
           // If not found and we have exactly one non-host participant, use that
           if (!matchedParticipant) {
-            const nonHostParticipants = meeting.participants.filter(p => !p.isHost && p.name !== "Host" && p.name !== "Guest");
+            const nonHostParticipants = meeting.participants.filter(
+              p => !p.isHost && p.name !== 'Host' && p.name !== 'Guest'
+            );
             if (nonHostParticipants.length === 1) {
               matchedParticipant = nonHostParticipants[0];
               console.log(`[Transcript] Matched to stored participant: ${matchedParticipant.name}`);
@@ -4128,7 +4299,7 @@ async function processTranscriptData(evt) {
     if (matchedParticipant) {
       speaker = matchedParticipant.name;
       console.log(`[Transcript] Using matched participant: ${speaker}`);
-    } else if (participantName && participantName !== "Host" && participantName !== "Guest") {
+    } else if (participantName && participantName !== 'Host' && participantName !== 'Guest') {
       speaker = participantName;
       console.log(`[Transcript] Using RecallAI participant name: ${speaker}`);
     } else if (speakerLabel !== undefined && speakerLabel !== null) {
@@ -4137,17 +4308,17 @@ async function processTranscriptData(evt) {
       speakerLabelStored = speakerLabel;
       console.log(`[Transcript] Using AssemblyAI speaker label: ${speaker}`);
     } else {
-      speaker = "Unknown Speaker";
+      speaker = 'Unknown Speaker';
       console.log(`[Transcript] No speaker info available - using Unknown Speaker`);
     }
 
     // Combine all words into a single text
-    const text = words.map(word => word.text).join(" ");
+    const text = words.map(word => word.text).join(' ');
 
     console.log(`[Transcript] Final: ${speaker}: "${text.substring(0, 50)}..."`);
 
     // Use the file operation manager to safely update the meetings data
-    await fileOperationManager.scheduleOperation(async (meetingsData) => {
+    await fileOperationManager.scheduleOperation(async meetingsData => {
       // Find the meeting note with this ID
       const noteIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === noteId);
       if (noteIndex === -1) {
@@ -4167,7 +4338,7 @@ async function processTranscriptData(evt) {
       const transcriptEntry = {
         text,
         speaker,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       // Include AssemblyAI speaker label if available (for speaker matching)
@@ -4206,63 +4377,78 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
 
     // Check if title is generic and needs suggestion
     const genericTitles = [
-      'transcript', 'meeting', 'imported', 'untitled', 'new meeting', 'call',
-      'zoom', 'teams', 'google meet', 'krisp', 'recording', 'audio', 'video'
+      'transcript',
+      'meeting',
+      'imported',
+      'untitled',
+      'new meeting',
+      'call',
+      'zoom',
+      'teams',
+      'google meet',
+      'krisp',
+      'recording',
+      'audio',
+      'video',
     ];
     const currentTitle = (meeting.title || '').toLowerCase().trim();
     const needsTitleSuggestion = genericTitles.some(generic => {
-      // Match if title IS the generic word, starts with it, or contains it as a word
-      return currentTitle === generic ||
-             currentTitle.startsWith(generic + '-') ||
-             currentTitle.includes(' ' + generic) ||
-             currentTitle.includes(generic + ' ');
+      // Match if title IS the generic word, starts with it (including numbered variants like "transcript2"), or contains it as a word
+      return (
+        currentTitle === generic ||
+        currentTitle.startsWith(generic) || // Matches "transcript", "transcript2", "transcript-foo", etc.
+        currentTitle.includes(' ' + generic) ||
+        currentTitle.includes(generic + ' ')
+      );
     });
 
     if (needsTitleSuggestion) {
-      console.log(`[AutoSummary] Generic title detected: "${meeting.title}" - will suggest better title`);
+      console.log(
+        `[AutoSummary] Generic title detected: "${meeting.title}" - will suggest better title`
+      );
     }
 
     // Format the transcript into a single text for the AI to process
-    const transcriptText = meeting.transcript.map(entry =>
-      `${entry.speaker}: ${entry.text}`
-    ).join('\n');
+    const transcriptText = meeting.transcript
+      .map(entry => `${entry.speaker}: ${entry.text}`)
+      .join('\n');
 
     // Format detected participants if available
-    let participantsText = "";
+    let participantsText = '';
     if (meeting.participants && meeting.participants.length > 0) {
-      participantsText = "Detected participants:\n" + meeting.participants.map(p =>
-        `- ${p.name}${p.isHost ? ' (Host)' : ''}`
-      ).join('\n');
+      participantsText =
+        'Detected participants:\n' +
+        meeting.participants.map(p => `- ${p.name}${p.isHost ? ' (Host)' : ''}`).join('\n');
     }
 
     // Define a system prompt to guide the AI's response with a specific format
     let systemMessage =
-      "You are an AI assistant that summarizes meeting transcripts. " +
-      "You MUST format your response using the following structure:\n\n";
+      'You are an AI assistant that summarizes meeting transcripts. ' +
+      'You MUST format your response using the following structure:\n\n';
 
     if (needsTitleSuggestion) {
       systemMessage +=
-        "# Suggested Title\n" +
-        "[A concise, descriptive meeting title (5-8 words max) based on the main topic discussed]\n\n";
+        '# Suggested Title\n' +
+        '[A concise, descriptive meeting title (5-8 words max) based on the main topic discussed]\n\n';
     }
 
     systemMessage +=
-      "# Participants\n" +
-      "- [List all participants mentioned in the transcript]\n\n" +
-      "# Summary\n" +
-      "- [Key discussion point 1]\n" +
-      "- [Key discussion point 2]\n" +
-      "- [Key decisions made]\n" +
-      "- [Include any important deadlines or dates mentioned]\n\n" +
-      "# Action Items\n" +
-      "- [Action item 1] - [Responsible person if mentioned]\n" +
-      "- [Action item 2] - [Responsible person if mentioned]\n" +
-      "- [Add any other action items discussed]\n\n" +
-      "Stick strictly to this format with these exact section headers. Keep each bullet point concise but informative.";
+      '# Participants\n' +
+      '- [List all participants mentioned in the transcript]\n\n' +
+      '# Summary\n' +
+      '- [Key discussion point 1]\n' +
+      '- [Key discussion point 2]\n' +
+      '- [Key decisions made]\n' +
+      '- [Include any important deadlines or dates mentioned]\n\n' +
+      '# Action Items\n' +
+      '- [Action item 1] - [Responsible person if mentioned]\n' +
+      '- [Action item 2] - [Responsible person if mentioned]\n' +
+      '- [Add any other action items discussed]\n\n' +
+      'Stick strictly to this format with these exact section headers. Keep each bullet point concise but informative.';
 
     // Prepare the user prompt
     const userPrompt = `Summarize the following meeting transcript with the EXACT format specified in your instructions:
-${participantsText ? participantsText + "\n\n" : ""}
+${participantsText ? participantsText + '\n\n' : ''}
 Transcript:
 ${transcriptText}`;
 
@@ -4271,12 +4457,18 @@ ${transcriptText}`;
       const result = await llmService.generateCompletion({
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
-        maxTokens: 50000,  // Generous budget for reasoning models (~$0.10 output cost per summary)
-        temperature: 0.7
+        maxTokens: 15000, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
+        temperature: 0.7,
       });
 
-      console.log(`AI summary generated successfully using ${llmService.getProviderName()} (${result.model})`);
-      console.log(`[AutoSummary] Returning content:`, typeof result.content, result.content ? `${result.content.length} chars` : 'empty/null');
+      console.log(
+        `AI summary generated successfully using ${llmService.getProviderName()} (${result.model})`
+      );
+      console.log(
+        `[AutoSummary] Returning content:`,
+        typeof result.content,
+        result.content ? `${result.content.length} chars` : 'empty/null'
+      );
 
       // Extract suggested title if present and update meeting
       if (needsTitleSuggestion && result.content) {
@@ -4295,13 +4487,13 @@ ${transcriptText}`;
       const fullText = await llmService.streamCompletion({
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
-        maxTokens: 50000,  // Generous budget for reasoning models (~$0.10 output cost per summary)
+        maxTokens: 15000, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
         temperature: 0.7,
-        onChunk: (cumulativeText) => {
+        onChunk: cumulativeText => {
           if (progressCallback) {
             progressCallback(cumulativeText);
           }
-        }
+        },
       });
 
       console.log(`AI summary completed - ${fullText.length} characters`);
@@ -4355,16 +4547,23 @@ async function updateNoteWithRecordingInfo(recordingId) {
     }
 
     // Find the meeting note with this recording ID
-    const noteIndex = meetingsData.pastMeetings.findIndex(meeting =>
-      meeting.recordingId === recordingId
+    const noteIndex = meetingsData.pastMeetings.findIndex(
+      meeting => meeting.recordingId === recordingId
     );
 
     if (noteIndex === -1) {
       console.error(`[Recording] ✗ No meeting note found for recordingId: ${recordingId}`);
-      console.error(`[Recording] Available recordingIds in pastMeetings:`,
-        meetingsData.pastMeetings.map(m => m.recordingId || 'none').join(', '));
-      console.error(`[Recording] Available meeting IDs:`,
-        meetingsData.pastMeetings.map(m => m.id).slice(0, 5).join(', '));
+      console.error(
+        `[Recording] Available recordingIds in pastMeetings:`,
+        meetingsData.pastMeetings.map(m => m.recordingId || 'none').join(', ')
+      );
+      console.error(
+        `[Recording] Available meeting IDs:`,
+        meetingsData.pastMeetings
+          .map(m => m.id)
+          .slice(0, 5)
+          .join(', ')
+      );
       return;
     }
 
@@ -4378,7 +4577,7 @@ async function updateNoteWithRecordingInfo(recordingId) {
 
     // Replace the "Recording: In Progress..." line with completed information
     const updatedContent = content.replace(
-      "Recording: In Progress...",
+      'Recording: In Progress...',
       `Recording: Completed at ${formattedDate}\nTranscribing audio...\n`
     );
 
@@ -4414,30 +4613,31 @@ ipcMain.handle('joinDetectedMeeting', async (event, transcriptionProvider = 'rec
 // Function to handle joining a detected meeting
 async function joinDetectedMeeting(transcriptionProvider = 'recallai') {
   try {
-    console.log("Join detected meeting called");
-    console.log("Using transcription provider:", transcriptionProvider);
+    console.log('Join detected meeting called');
+    console.log('Using transcription provider:', transcriptionProvider);
 
     if (!detectedMeeting) {
-      console.log("No detected meeting available");
-      return { success: false, error: "No active meeting detected" };
+      console.log('No detected meeting available');
+      return { success: false, error: 'No active meeting detected' };
     }
 
     // Map platform codes to readable names
     const platformNames = {
-      'zoom': 'Zoom',
+      zoom: 'Zoom',
       'google-meet': 'Google Meet',
-      'slack': 'Slack',
-      'teams': 'Microsoft Teams'
+      slack: 'Slack',
+      teams: 'Microsoft Teams',
     };
 
     // Get a user-friendly platform name, or use the raw platform name if not in our map
-    const platformName = platformNames[detectedMeeting.window.platform] || detectedMeeting.window.platform;
+    const platformName =
+      platformNames[detectedMeeting.window.platform] || detectedMeeting.window.platform;
 
-    console.log("Joining detected meeting for platform:", platformName);
+    console.log('Joining detected meeting for platform:', platformName);
 
     // Ensure main window exists and is visible
     if (!mainWindow || mainWindow.isDestroyed()) {
-      console.log("Creating new main window");
+      console.log('Creating new main window');
       createWindow();
     }
 
@@ -4447,25 +4647,25 @@ async function joinDetectedMeeting(transcriptionProvider = 'recallai') {
     mainWindow.focus();
 
     // Process with more reliable timing
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       // Wait a moment for the window to be fully focused and ready
       setTimeout(async () => {
-        console.log("Window is ready, creating new meeting note");
+        console.log('Window is ready, creating new meeting note');
 
         try {
           // Create a new meeting note and start recording
           const id = await createMeetingNoteAndRecord(platformName, transcriptionProvider);
 
-          console.log("Created new meeting with ID:", id);
+          console.log('Created new meeting with ID:', id);
           resolve({ success: true, meetingId: id });
         } catch (err) {
-          console.error("Error creating meeting note:", err);
+          console.error('Error creating meeting note:', err);
           resolve({ success: false, error: err.message });
         }
       }, 800); // Increased timeout for more reliability
     });
   } catch (error) {
-    console.error("Error in joinDetectedMeeting:", error);
+    console.error('Error in joinDetectedMeeting:', error);
     return { success: false, error: error.message };
   }
 }

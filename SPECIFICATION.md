@@ -4,43 +4,57 @@
 **Organization:** JD Knows Things
 **Purpose:** Personal AI Meeting Notetaker for Zoom, Microsoft Teams, Google Meet, and Manual Recording
 **Version:** 1.0
-**Last Updated:** November 8, 2025
+**Last Updated:** November 12, 2025
 
 ---
 
 ## Development Status
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
-**Phase:** Pre-Phase 8 - Complete Deferred Features
-**Status:** Completing essential UI features and code quality improvements
+**Phase:** Phase 8 - Import Prior Transcripts
+**Status:** Import functionality complete, testing in production
 
 **Completed Phases:**
+
 - ✅ Phase 1: Core Recording & Transcription (Recall.ai SDK + Async Webhook Transcription)
 - ✅ Phase 2: Routing System
 - ✅ Phase 3: Calendar Integration & Auto-Recording
-- ✅ Phase 4: LLM Integration & Summaries (Template System + Modular Provider Architecture)
+- ✅ Phase 4: LLM Integration & Summaries (Template System + Modular Provider Architecture + Prompt Caching)
 - ✅ Phase 5: Obsidian Export & File Generation (auto-export, publish buttons, link tracking)
 - ✅ Phase 6: Speaker Recognition & Contact Matching
 - ✅ Phase 7: Platform-Specific Recording (Zoom/Teams/Meet detection)
 - ✅ Pre-Phase 7 Bug Fixes: All 5 critical bugs resolved
+- ✅ Phase 8: Import Prior Transcripts (bulk import, folder scanning, template selection)
 - 🔧 Phase 11 (Partial): LLM Provider Selection UI
 
-**Recent Architectural Changes (Nov 10, 2025):**
-- ✅ Migrated from AssemblyAI real-time streaming to Recall.ai async transcription
-- ✅ Implemented webhook-based workflow with ngrok tunnel automation
-- ✅ Removed polling dependencies, now 100% webhook-driven
-- ✅ Added Svix signature verification for webhook security
-- ✅ Implemented upload progress tracking with UI progress bar
+**Recent Architectural Changes (Nov 10-12, 2025):**
 
-**Recent Updates (November 8, 2025):**
-- ✅ Implemented modular LLM service architecture with adapter pattern
-- ✅ Added support for OpenAI, Anthropic Claude, and Azure OpenAI providers
-- ✅ Built UI dropdown for runtime provider switching (no restart required)
-- ✅ Configured Azure OpenAI with gpt-5-mini reasoning model (cheapest option)
-- ✅ Fixed provider-specific parameter handling (max_completion_tokens, temperature constraints)
-- ✅ Achieved 10x speedup with parallel API calls (~6s for 20 template sections)
+- ✅ Migrated from AssemblyAI real-time streaming to Recall.ai async transcription (Nov 10)
+- ✅ Implemented webhook-based workflow with ngrok tunnel automation (Nov 10)
+- ✅ Removed polling dependencies, now 100% webhook-driven (Nov 10)
+- ✅ Added Svix signature verification for webhook security (Nov 10)
+- ✅ Implemented upload progress tracking with UI progress bar (Nov 10)
+- ✅ Discovered Recall.ai SDK upload broken, implemented multi-provider transcription (Nov 12)
+- ✅ **Implemented prompt caching across all LLM providers** (Nov 12)
+  - 85-90% cost reduction on template generation
+  - Azure OpenAI, OpenAI, and Anthropic Claude all support caching
+  - Token budgets optimized: 50,000 for auto-summary, 15,000 for template sections
+  - Cache verification logging with performance metrics
+  - Total cost per meeting: ~$0.70 (well under $1 budget target)
+
+**Recent Updates (November 8-12, 2025):**
+
+- ✅ Implemented modular LLM service architecture with adapter pattern (Nov 8)
+- ✅ Added support for OpenAI, Anthropic Claude, and Azure OpenAI providers (Nov 8)
+- ✅ Built UI dropdown for runtime provider switching (no restart required) (Nov 8)
+- ✅ Configured Azure OpenAI with gpt-5-mini reasoning model (cheapest option) (Nov 8)
+- ✅ Fixed provider-specific parameter handling (max_completion_tokens, temperature constraints) (Nov 8)
+- ✅ Achieved 10x speedup with parallel API calls (~6s for 20 template sections) (Nov 8)
+- ✅ **Prompt caching implementation with 85-90% cost savings** (Nov 12)
+- ✅ **Import transcripts feature with background processing** (Nov 12)
 
 The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
+
 - Recall.ai Desktop SDK integration
 - Real-time transcription with AssemblyAI v3
 - Meeting detection (Zoom, Teams, Google Meet, Slack)
@@ -61,6 +75,7 @@ The application will be developed in phases, with each phase delivering usable f
 ## Technology Stack
 
 ### Core Technologies
+
 - **Platform:** Electron + Node.js + TypeScript
 - **UI Framework:** React (for renderer process)
 - **Recording SDK:** Recall.ai Desktop Recording SDK
@@ -79,7 +94,9 @@ The application will be developed in phases, with each phase delivering usable f
 - **Encryption:** Windows Data Protection API (DPAPI)
 
 ### Rationale
+
 Electron + Node.js provides:
+
 - Cross-platform compatibility (future macOS/Linux support)
 - Strong ecosystem for API integrations
 - Compatible with Recall.ai SDK (proven by muesli-public example app)
@@ -159,6 +176,7 @@ vault/
 ```
 
 ### File Naming Convention
+
 - **Summary file:** `YYYY-MM-DD-meeting-title-slug.md` (primary file with metadata + AI summary)
 - **Transcript file:** `YYYY-MM-DD-meeting-title-slug-transcript.md` (full transcript with timestamps)
 - **Recording audio:** `YYYY-MM-DD-meeting-title-slug.wav` (optional, if audio saved)
@@ -168,6 +186,7 @@ vault/
 Each meeting generates exactly two markdown files:
 
 **Primary File (Summary):**
+
 - YAML frontmatter with complete meeting metadata
 - AI-generated executive summary
 - Key decisions and action items
@@ -177,12 +196,14 @@ Each meeting generates exactly two markdown files:
 - **Token cost:** ~1,500 tokens (~$0.005 per LLM read)
 
 **Secondary File (Transcript):**
+
 - Minimal YAML frontmatter (title, date, link back to summary)
 - Complete timestamped transcript with speaker labels
 - **Purpose:** Deep dives, finding exact quotes, full context retrieval
 - **Token cost:** ~8,000-10,000 tokens (~$0.03 per LLM read)
 
 **Rationale:**
+
 - **60% token cost savings** - Most queries only need summary
 - **Better UX** - Quick reviews use summary, deep dives use transcript
 - **Flexible retention** - Can delete old transcripts, keep summaries
@@ -197,36 +218,38 @@ Each meeting generates exactly two markdown files:
 The routing system determines where meeting notes are saved based on participant email addresses and domains.
 
 #### Structure
+
 ```yaml
 clients:
   client-slug:
-    vault_path: "clients/client-name"
+    vault_path: 'clients/client-name'
     emails:
-      - "clientdomain.com"
+      - 'clientdomain.com'
     contacts:
-      - "person@clientdomain.com"
+      - 'person@clientdomain.com'
 
 industry:
   industry-contact-slug:
-    vault_path: "industry/contact-name"
+    vault_path: 'industry/contact-name'
     emails:
-      - "domain.com"
+      - 'domain.com'
 
 internal:
-  vault_path: "internal/meetings"
+  vault_path: 'internal/meetings'
 
 email_overrides:
-  "personal@gmail.com": "client-slug"
+  'personal@gmail.com': 'client-slug'
 
 settings:
-  unfiled_path: "_unfiled"
-  duplicate_multi_org: "all"              # Options: "all", "primary", "unfiled"
-  domain_priority: "most_attendees"       # Options: "most_attendees", "first"
+  unfiled_path: '_unfiled'
+  duplicate_multi_org: 'all' # Options: "all", "primary", "unfiled"
+  domain_priority: 'most_attendees' # Options: "most_attendees", "first"
   enable_email_overrides: true
   case_sensitive_emails: false
 ```
 
 #### Routing Priority
+
 1. Email overrides (specific email → organization mapping)
 2. Exact contact email match
 3. Domain match from emails list
@@ -235,7 +258,9 @@ settings:
 6. Unfiled (fallback for unknown contacts)
 
 #### Multi-Organization Meetings
+
 When participants from multiple organizations attend:
+
 - **"all"**: Create duplicate notes in each organization's folder
 - **"primary"**: Create note in organization with most attendees
 - **"unfiled"**: Route to unfiled for manual sorting
@@ -250,33 +275,33 @@ Each meeting generates two markdown files with complementary purposes.
 
 ```markdown
 ---
-title: "Strategy Call with Acme Corp"
+title: 'Strategy Call with Acme Corp'
 date: 2025-11-07
-start_time: "14:00"
-end_time: "14:45"
-duration: "45 minutes"
-platform: "zoom"
-recording_file: "2025-11-07-strategy-call.wav"
-transcript_file: "2025-11-07-strategy-call-transcript.md"
+start_time: '14:00'
+end_time: '14:45'
+duration: '45 minutes'
+platform: 'zoom'
+recording_file: '2025-11-07-strategy-call.wav'
+transcript_file: '2025-11-07-strategy-call-transcript.md'
 
 participants:
-  - name: "John Doe"
-    email: "john@acme.com"
-    organization: "Acme Corp"
-    role: "CEO"
-  - name: "Jane Smith"
-    email: "jane@acme.com"
-    organization: "Acme Corp"
-    role: "CFO"
-  - name: "J.D. Bruce"
-    email: "jd@jdknowsthings.com"
-    organization: "JD Knows Things"
-    role: "Consultant"
+  - name: 'John Doe'
+    email: 'john@acme.com'
+    organization: 'Acme Corp'
+    role: 'CEO'
+  - name: 'Jane Smith'
+    email: 'jane@acme.com'
+    organization: 'Acme Corp'
+    role: 'CFO'
+  - name: 'J.D. Bruce'
+    email: 'jd@jdknowsthings.com'
+    organization: 'JD Knows Things'
+    role: 'Consultant'
 
 tags: [meeting, client, acme-corp, strategy, partnership, q4-planning]
 topics: [partnership-structure, revenue-projections, governance]
-meeting_type: "client"
-organization_slug: "acme-corp"
+meeting_type: 'client'
+organization_slug: 'acme-corp'
 crm_synced: false
 ---
 
@@ -305,10 +330,10 @@ Acme Corp leadership discussed transitioning from single-owner structure to broa
 
 ## Action Items
 
-- [ ] **John Doe** - Present partnership proposal to board of advisors - *Due: 2025-11-14*
-- [ ] **Jane Smith** - Prepare 3-year financial model with partnership scenarios - *Due: 2025-11-21*
-- [ ] **J.D. Bruce** - Draft engagement letter and send by EOW - *Due: 2025-11-10*
-- [ ] **J.D. Bruce** - Research legal counsel recommendations - *Due: 2025-11-12*
+- [ ] **John Doe** - Present partnership proposal to board of advisors - _Due: 2025-11-14_
+- [ ] **Jane Smith** - Prepare 3-year financial model with partnership scenarios - _Due: 2025-11-21_
+- [ ] **J.D. Bruce** - Draft engagement letter and send by EOW - _Due: 2025-11-10_
+- [ ] **J.D. Bruce** - Research legal counsel recommendations - _Due: 2025-11-12_
 
 ---
 
@@ -325,6 +350,7 @@ John expressed strong interest in broad-based partnership rather than single suc
 Jane shared current firm financials: $3M revenue, 35% margins with target of 40% over next 18 months. Discussed partner compensation structure and buy-in affordability. Concern about maintaining profitability while adding partners.
 
 Revenue breakdown:
+
 - Recurring advisory: 60% ($1.8M)
 - Project work: 30% ($900k)
 - Other services: 10% ($300k)
@@ -334,6 +360,7 @@ Revenue breakdown:
 Discussion of how decisions would be made with 5-7 partners. Consensus on needing clear operating agreement with voting thresholds, partner roles, and exit mechanisms. Identified this as critical success factor.
 
 **Concerns raised:**
+
 - How to handle deadlocks
 - Partner removal process
 - Buy-out valuations
@@ -366,16 +393,16 @@ Discussion of how decisions would be made with 5-7 partners. Consensus on needin
 
 **Full Transcript:** [[2025-11-07-strategy-call-transcript]]
 
-*Generated by JD Notes Things*
+_Generated by JD Notes Things_
 ```
 
 ### Secondary File: Transcript (Example: `2025-11-07-strategy-call-transcript.md`)
 
 ```markdown
 ---
-title: "Strategy Call with Acme Corp - Full Transcript"
+title: 'Strategy Call with Acme Corp - Full Transcript'
 date: 2025-11-07
-summary_file: "2025-11-07-strategy-call.md"
+summary_file: '2025-11-07-strategy-call.md'
 participants:
   - John Doe (Acme Corp)
   - Jane Smith (Acme Corp)
@@ -393,26 +420,33 @@ participants:
 ---
 
 ### 14:00:15 - John Doe
+
 Let's start by discussing where we are today. We're at about $3M in revenue, 16 employees, and we've been growing at over 30% annually for the past few years.
 
 ### 14:01:02 - Jane Smith
+
 I can add some color on the financials. Our margins are currently around 35%, which is good for our industry, but we're targeting 40% over the next 18 months.
 
 ### 14:01:45 - J.D. Bruce
+
 That's helpful context. Before we dive into the partnership structure, can you tell me a bit about your vision for the future? What does success look like in 3-5 years?
 
 ### 14:02:30 - John Doe
+
 Great question. I see us with a strong partnership team, maybe 5 to 7 partners, all invested in the long-term success of the firm. I don't want the traditional model where it's just me and one other person. I've seen that fail too many times.
 
 [... full transcript continues with timestamps and speaker labels ...]
 
 ### 14:43:15 - J.D. Bruce
+
 Perfect. I'll send over the engagement letter by end of week and we can get started.
 
 ### 14:43:45 - John Doe
+
 Sounds great. Looking forward to it. Thanks for your time today.
 
 ### 14:44:00 - Jane Smith
+
 Thank you!
 
 ---
@@ -422,7 +456,7 @@ Thank you!
 **Speakers:** 3
 **Transcription:** AssemblyAI v3 (speaker diarization enabled)
 
-*Generated by JD Notes Things*
+_Generated by JD Notes Things_
 ```
 
 ---
@@ -430,6 +464,7 @@ Thank you!
 ## Recording Widget
 
 ### UI Design
+
 Based on the Krisp.ai widget example, the recording widget should:
 
 - **Compact overlay window** (always on top)
@@ -446,6 +481,7 @@ Based on the Krisp.ai widget example, the recording widget should:
   - Transcript ready notification
 
 ### Behavior
+
 - Appears when recording starts (auto or manual)
 - Always on top, draggable
 - Minimal, non-intrusive design
@@ -457,6 +493,7 @@ Based on the Krisp.ai widget example, the recording widget should:
 ## Template System
 
 ### Template Storage
+
 Templates are stored as individual files in a dedicated folder:
 
 ```
@@ -469,48 +506,58 @@ config/
 ```
 
 ### Template Format
+
 Templates can be in Markdown, YAML, or JSON format. The system scans this folder and presents available templates in the UI.
 
 #### Example Template (Markdown)
+
 ```markdown
 ---
-name: "Client Meeting Summary"
-description: "Summary for client-facing meetings"
+name: 'Client Meeting Summary'
+description: 'Summary for client-facing meetings'
 ---
 
 # Client Meeting Summary
 
 ## Meeting Overview
+
 [Extract: meeting purpose, key attendees, date]
 
 ## Key Discussion Points
+
 [Extract: main topics discussed with brief summaries]
 
 ## Decisions Made
+
 [Extract: any decisions or agreements reached]
 
 ## Action Items
+
 [Extract: action items with owners and deadlines]
 
 ## Next Steps
+
 [Extract: planned follow-ups and next meeting]
 ```
 
 #### Example Template (YAML)
+
 ```yaml
-name: "Decisions and Actions"
-description: "Focus on actionable outcomes"
+name: 'Decisions and Actions'
+description: 'Focus on actionable outcomes'
 sections:
-  - title: "Key Decisions"
-    prompt: "Extract all decisions made during the meeting"
-  - title: "Action Items"
-    prompt: "List all action items with owner and deadline"
-  - title: "Blockers"
-    prompt: "Identify any blockers or risks mentioned"
+  - title: 'Key Decisions'
+    prompt: 'Extract all decisions made during the meeting'
+  - title: 'Action Items'
+    prompt: 'List all action items with owner and deadline'
+  - title: 'Blockers'
+    prompt: 'Identify any blockers or risks mentioned'
 ```
 
 ### Template Processing
+
 The LLM service reads the template and generates content based on:
+
 - Template structure
 - Prompts/instructions in template
 - Full meeting transcript
@@ -521,6 +568,7 @@ The LLM service reads the template and generates content based on:
 ## Calendar Integration
 
 ### Google Calendar
+
 - **Authentication**: OAuth 2.0
 - **Permissions**: Read-only access to calendar events
 - **Sync Behavior**:
@@ -529,12 +577,14 @@ The LLM service reads the template and generates content based on:
   - Display upcoming meetings (next 24 hours)
 
 ### Meeting Detection
+
 - Query calendar for events with:
   - Meeting links (Zoom, Teams, Google Meet)
   - Multiple participants (not just user)
   - Event status: confirmed
 
 ### UI Display
+
 ```
 ┌─────────────────────────────────────────────┐
 │  JD Notes Things           [⟳] [⚙]  [─][×]  │
@@ -558,17 +608,21 @@ The LLM service reads the template and generates content based on:
 ## Google Contacts Integration
 
 ### Purpose
+
 Match meeting participants to known contacts for:
+
 - Speaker identification
 - Contact routing
 - Richer metadata in notes
 
 ### Integration Strategy
+
 - **On-demand lookup**: Query Google Contacts API during meeting processing
 - **Cache locally**: Store matched contacts for faster future lookups
 - **Privacy**: Only store contact information relevant to routing (name, email, organization)
 
 ### Matching Logic
+
 1. Extract participant emails from meeting invite
 2. Query Google Contacts for matching emails
 3. Extract: Name, Organization, Job Title
@@ -580,9 +634,11 @@ Match meeting participants to known contacts for:
 ## HubSpot Integration
 
 ### Purpose
+
 Automatically log meeting summaries in HubSpot CRM.
 
 ### Workflow
+
 1. After meeting processing completes:
    - Generate meeting summary
    - Extract participant emails
@@ -596,6 +652,7 @@ Automatically log meeting summaries in HubSpot CRM.
    - Add link to Obsidian notes
 
 ### Note Format
+
 ```
 Meeting: [Meeting Title]
 Date: [Date]
@@ -613,7 +670,9 @@ Full Notes: obsidian://vault/[path-to-index]
 ```
 
 ### Obsidian Protocol Links
+
 Research needed: Determine if `obsidian://` protocol links are useful for HubSpot integration. May need to explore:
+
 - Direct file path links
 - Web-based Obsidian Publish links
 - Custom deep linking solution
@@ -623,26 +682,31 @@ Research needed: Determine if `obsidian://` protocol links are useful for HubSpo
 ## Speaker Recognition & Identification
 
 ### Audio Diarization
+
 Use transcription service with speaker diarization support (Deepgram, AssemblyAI).
 
 ### Speaker Labeling Strategy
 
 #### Phase 1: Basic Labeling
+
 - Label speakers as "Speaker 1", "Speaker 2", etc.
 - Include timestamps for each speaker segment
 
 #### Phase 2: Contact Matching
+
 - Match speaker voices to known participants:
   1. Get participant list from calendar invite
   2. Use voice characteristics + context to match
   3. Label as "John Doe" instead of "Speaker 1"
 
 #### Phase 3: Historical Learning
+
 - Build voice profile database over time
 - Improve matching accuracy with historical data
 - Optional: User confirmation/correction of speaker IDs
 
 ### Transcript Format
+
 ```markdown
 ---
 meeting: Client Strategy Call
@@ -656,12 +720,15 @@ participants:
 # Full Meeting Transcript
 
 ## 2:00:05 PM - John Doe
+
 Let's start with the quarterly review. We've seen strong growth in Q3...
 
 ## 2:01:30 PM - You
+
 That's great to hear. Can you break down the growth by segment?
 
 ## 2:02:15 PM - Jane Smith
+
 Sure, our enterprise segment grew by 25%...
 ```
 
@@ -670,6 +737,7 @@ Sure, our enterprise segment grew by 25%...
 ## Import Prior Transcripts
 
 ### Supported Formats
+
 - Plain text (.txt)
 - Markdown (.md)
 - VTT (Video Text Tracks)
@@ -677,6 +745,7 @@ Sure, our enterprise segment grew by 25%...
 - JSON (structured transcripts)
 
 ### Import Process
+
 1. **File Selection**: User selects files or folder to import
 2. **Metadata Extraction**:
    - Try to parse date from filename (e.g., "2025-10-22-meeting.txt")
@@ -691,6 +760,7 @@ Sure, our enterprise segment grew by 25%...
    - Allow manual override for unfiled imports
 
 ### Import UI
+
 ```
 ┌─────────────────────────────────────────────┐
 │  Import Transcripts                         │
@@ -714,12 +784,14 @@ Sure, our enterprise segment grew by 25%...
 ## Encryption & Security
 
 ### Data Protection
+
 - **Transcripts**: Encrypted at rest using Windows DPAPI
 - **Audio Files**: Encrypted at rest using Windows DPAPI
 - **API Keys**: Stored in Windows Credential Manager
 - **Encryption Scope**: All files in vault folder (opt-in per user)
 
 ### Windows DPAPI Integration
+
 ```typescript
 // Pseudo-code example
 import { dpapi } from 'node-dpapi';
@@ -734,14 +806,11 @@ fs.writeFileSync('transcript.md.enc', encrypted);
 
 // Decrypt when reading
 const encrypted = fs.readFileSync('transcript.md.enc');
-const decrypted = dpapi.unprotect(
-  encrypted,
-  null,
-  'CurrentUser'
-);
+const decrypted = dpapi.unprotect(encrypted, null, 'CurrentUser');
 ```
 
 ### Security Settings
+
 - Toggle encryption on/off
 - Re-encrypt existing files when enabling
 - Warning when disabling encryption
@@ -754,40 +823,47 @@ const decrypted = dpapi.unprotect(
 ### Configuration Categories
 
 #### General
+
 - Vault path (Obsidian folder)
 - Default save location
 - Auto-start with Windows
 - Minimize to system tray
 
 #### Recording
+
 - Audio quality (sample rate, bitrate)
 - Audio format (WAV, MP3)
 - Auto-start recording for calendar events
 - Recording notification sounds
 
 #### Transcription
+
 - Transcription service selection
 - Language preferences
 - Enable speaker diarization
 - Real-time transcription (if supported)
 
 #### Routing
+
 - Edit routing.yaml file (with syntax highlighting)
 - Test routing with sample emails
 - View routing logs
 
 #### Templates
+
 - Manage template files
 - Enable/disable templates
 - Set default templates per organization type
 
 #### Integrations
+
 - Google Calendar (connect/disconnect)
 - Google Contacts (connect/disconnect)
 - HubSpot (connect/disconnect, API key)
 - LLM provider settings (API keys, model selection)
 
 #### Security
+
 - Enable/disable encryption
 - Re-encrypt existing files
 - Clear cache
@@ -798,9 +874,11 @@ const decrypted = dpapi.unprotect(
 ## Phase-Based Development Plan
 
 ### Phase 1: Core Recording & Transcription ✅ COMPLETE
+
 **Goal:** Basic functional MVP - record meetings and save transcripts
 
 #### Deliverables
+
 1. ✅ Electron app skeleton with React UI
 2. ✅ Recall.ai SDK integration (v1.3.2)
 3. ✅ Manual recording with start/stop controls
@@ -813,6 +891,7 @@ const decrypted = dpapi.unprotect(
 10. ✅ Upload progress tracking with UI progress bar
 
 #### Success Criteria
+
 - ✅ User can start manual recording
 - ✅ Audio is captured clearly (microphone confirmed working)
 - ✅ Transcript is generated with timestamps
@@ -821,6 +900,7 @@ const decrypted = dpapi.unprotect(
 - ✅ Webhook signature verification for security
 
 #### Implementation Details
+
 - **Built on**: Muesli (Recall.ai reference implementation) - November 6, 2025
 - **Recording**: Manual desktop audio with `prepareDesktopAudioRecording()`
 - **Auto-detection**: Automatic meeting detection for supported platforms
@@ -839,14 +919,17 @@ const decrypted = dpapi.unprotect(
 - **Transcript Format**: Array of participant objects with words arrays, includes participantId and isHost metadata
 
 #### User Value
+
 Can manually record meetings and get transcribed notes saved locally.
 
 ---
 
 ### Phase 2: Routing System ✅ COMPLETE
+
 **Goal:** Intelligent file organization based on participants
 
 #### Deliverables
+
 1. ✅ Routing configuration file (`config/routing.yaml`)
 2. ✅ Email domain matching logic
 3. ✅ Vault folder structure creation
@@ -855,6 +938,7 @@ Can manually record meetings and get transcribed notes saved locally.
 6. ⏳ Post-recording routing with user confirmation (deferred to Phase 3)
 
 #### Success Criteria
+
 - ✅ Routing config file loads correctly
 - ✅ Email domains matched to organizations
 - ✅ Files saved to correct vault paths
@@ -862,6 +946,7 @@ Can manually record meetings and get transcribed notes saved locally.
 - ⏳ User can override routing decisions (deferred to Phase 3 UI)
 
 #### Modules Implemented
+
 - `src/main/routing/ConfigLoader.js` - YAML configuration loader with validation
 - `src/main/routing/EmailMatcher.js` - Priority-based email/domain matching
 - `src/main/routing/RoutingEngine.js` - Main routing decision engine
@@ -869,11 +954,13 @@ Can manually record meetings and get transcribed notes saved locally.
 - `test-routing.js` - Comprehensive test suite (5 scenarios, 9 routes, 100% success)
 
 #### User Value
+
 Meetings automatically organized into proper client/project folders.
 
 #### Technical Debt Items (Phase 2)
 
 **5. Implement Proper Logging Framework**
+
 - Install `electron-log` for structured logging
 - Create `src/shared/logger.js` with log levels and formatting
 - Replace `console.log` statements incrementally as files are modified
@@ -881,6 +968,7 @@ Meetings automatically organized into proper client/project folders.
 - Estimated effort: 2-3 hours initial setup, then incremental
 
 **6. Add ESLint & Prettier Configuration**
+
 - Install ESLint, Prettier, and related plugins
 - Create `.eslintrc.js` and `.prettierrc` configuration files
 - Add lint/format scripts to `package.json`
@@ -888,6 +976,7 @@ Meetings automatically organized into proper client/project folders.
 - Estimated effort: 1 hour setup
 
 **7. Split main.js Into Modules**
+
 - Extract code from 1,818-line `src/main.js` into focused modules:
   - `src/main/api/recallai.js` - Upload token creation
   - `src/main/storage/FileManager.js` - File operations
@@ -900,9 +989,11 @@ Meetings automatically organized into proper client/project folders.
 ---
 
 ### Phase 3: Calendar Integration & Auto-Recording ✅ COMPLETE
+
 **Goal:** Automated meeting detection and recording
 
 #### Deliverables
+
 1. ✅ Google Calendar OAuth integration
 2. ✅ Calendar event fetching
 3. ✅ Upcoming meetings display in UI
@@ -913,6 +1004,7 @@ Meetings automatically organized into proper client/project folders.
 8. ✅ Manual refresh button
 
 #### Success Criteria
+
 - ✅ Calendar events displayed in main window
 - ✅ Meetings with 2+ participants detected
 - ✅ Recording starts automatically (with notification)
@@ -920,6 +1012,7 @@ Meetings automatically organized into proper client/project folders.
 - ✅ User can stop recording via widget
 
 #### Implementation Details
+
 - **Module**: `src/main/integrations/GoogleCalendar.js` (369 lines)
 - **Features**: OAuth 2.0 flow, token storage, meeting platform detection (Zoom/Teams/Meet/Webex/Whereby)
 - **Token Storage**: `C:\Users\brigh\AppData\Roaming\JD Notes Things\google-calendar-token.json`
@@ -928,11 +1021,13 @@ Meetings automatically organized into proper client/project folders.
 - **Model**: Currently using `gpt-4o-mini` for AI summaries (switched from gpt-5-nano due to streaming bug)
 
 #### User Value
+
 No manual intervention needed - app automatically records scheduled meetings.
 
 #### Technical Debt Items (Phase 3)
 
 **8. TypeScript Migration**
+
 - Migrate project from JavaScript to TypeScript for type safety
 - Start with shared types in `src/shared/types.ts`
 - Incrementally migrate modules (prioritize new code over legacy)
@@ -942,6 +1037,7 @@ No manual intervention needed - app automatically records scheduled meetings.
 - Estimated effort: 20-30 hours total, done incrementally
 
 **9. React Component Extraction**
+
 - Extract components from 2,004-line `src/renderer.js` monolith
 - Create modular component structure:
   - `components/MeetingList.jsx`, `MeetingCard.jsx`, `MeetingEditor.jsx`
@@ -953,6 +1049,7 @@ No manual intervention needed - app automatically records scheduled meetings.
 - Estimated effort: 12-15 hours
 
 **10. Comprehensive Testing**
+
 - Set up testing infrastructure: Jest, React Testing Library
 - Install: `jest`, `@testing-library/react`, `@testing-library/jest-dom`
 - Write tests incrementally for new features added in Phase 3+
@@ -964,9 +1061,11 @@ No manual intervention needed - app automatically records scheduled meetings.
 ---
 
 ### Phase 4: LLM Integration & Summaries ✅ COMPLETE
+
 **Goal:** Automated meeting summarization with templates
 
 #### Deliverables
+
 1. ✅ Template system (scan folder for .md/.yaml/.json files)
 2. ✅ Template parser for different formats
 3. ✅ LLM service integration (OpenAI/Claude/Gemini)
@@ -976,6 +1075,7 @@ No manual intervention needed - app automatically records scheduled meetings.
 7. ✅ Template selection UI
 
 #### Success Criteria
+
 - ✅ Templates loaded from config folder
 - ✅ LLM generates summaries matching template structure
 - ✅ Multiple summaries created per meeting
@@ -983,6 +1083,7 @@ No manual intervention needed - app automatically records scheduled meetings.
 - ✅ User can select which templates to apply
 
 #### Implementation Details
+
 - **Modules**: `src/main/templates/TemplateParser.js`, `src/main/templates/TemplateManager.js`, `src/main/services/llmService.js`
 - **Features**: Multi-format support (.md, .yaml, .json), token cost estimation, modal selection UI
 - **Storage**: Summaries stored in `meetings.json` under each meeting object
@@ -993,18 +1094,37 @@ No manual intervention needed - app automatically records scheduled meetings.
   - Runtime provider switching via UI dropdown (no restart required)
   - Unified interface for all providers: `generateCompletion()` and `streamCompletion()`
   - Provider-specific parameter handling (e.g., Azure's `max_completion_tokens`, no temperature for gpt-5-mini reasoning model)
+- **Prompt Caching Implementation** (November 12, 2025):
+  - **Cost Savings**: 85-90% reduction on template generation (from $0.188 to $0.027 per 20 sections)
+  - **Architecture**: Separate static content (transcript) from dynamic content (section prompts) using `cacheableContext` parameter
+  - **Provider Support**:
+    - **Azure OpenAI**: Multi-message structure with automatic caching (minimum 1024 tokens required)
+    - **OpenAI**: Same multi-message structure with `prompt_tokens_details.cached_tokens` tracking
+    - **Anthropic Claude**: Explicit `cache_control: { type: "ephemeral" }` blocks in system prompt
+  - **Cache Verification**: Detailed logging with emoji indicators (🎯 cache hits, ❌ cache misses, 💰 savings)
+  - **Performance Metrics**:
+    - First call: Creates cache (~$0.009 input cost for 37k tokens)
+    - Subsequent calls: 99%+ cache hit rate (~$0.001 input cost each)
+    - Cache savings displayed in logs with dollar amounts
+- **Token Budgets** (Optimized for ~$1 per meeting):
+  - Auto-summary: 50,000 tokens (~$0.10 output cost)
+  - Template sections: 15,000 tokens each (~$0.03 per section, $0.60 for 20 sections)
+  - Total cost per 2-hour meeting: ~$0.70 including transcription
 - **Current Provider**: Azure OpenAI with gpt-5-mini deployment (reasoning model)
 - **Performance**: 20 parallel API calls complete in ~6 seconds (10x faster than sequential)
 
 #### User Value
-Automatic generation of actionable meeting summaries (decisions, action items, etc.).
+
+Automatic generation of actionable meeting summaries (decisions, action items, etc.) at minimal cost with prompt caching optimization.
 
 ---
 
 ### Phase 5: Obsidian Export & File Generation ✅ COMPLETE
+
 **Goal:** Export meeting data to Obsidian vault with two-file structure
 
 #### Deliverables
+
 1. ✅ Connect VaultStructure and RoutingEngine to main.js
 2. ✅ Generate summary file with rich metadata frontmatter
 3. ✅ Generate transcript file with speaker labels and timestamps
@@ -1020,6 +1140,7 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 13. ✅ **UI status indicator** (green badge on meeting cards - renderer.js:350-358)
 
 #### Complete Workflow (User Perspective)
+
 1. **Meeting ends** → Automatic basic summary generated
 2. **Nothing exported yet** → Meeting stored locally only
 3. **Click "Generate"** → User selects templates, all chosen templates are generated
@@ -1030,6 +1151,7 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 8. **Fallback**: If Generate never clicked, user can manually publish with basic summary only
 
 #### Success Criteria
+
 - ✅ Files saved to correct organization folders based on routing rules
 - ✅ Summary file contains all metadata, decisions, and action items
 - ✅ Transcript file contains full conversation with timestamps
@@ -1043,6 +1165,7 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 - ✅ Republish confirmation prevents accidental overwrites
 
 #### Implementation Details
+
 - **Integration**: Export system initialized in `main.js` (lines 320-349)
 - **Vault Path**: Configured via `VAULT_PATH` in `.env` file (currently `./vault` for development)
 - **Two-File Architecture**:
@@ -1056,6 +1179,7 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 #### Technical Specification - Export Workflow
 
 **Data Model - Meeting Object:**
+
 ```javascript
 {
   id: "meeting-123456789",
@@ -1071,43 +1195,55 @@ Automatic generation of actionable meeting summaries (decisions, action items, e
 ```
 
 **Workflow States:**
+
 1. **Not Published** - `obsidianLink` is null/undefined, UI shows "Publish to Obsidian" button
 2. **Published** - `obsidianLink` exists, UI shows Obsidian icon/badge + "Republish" button
 3. **Manual Override** - User edits `obsidianLink` directly, bypasses routing on next export
 
 **Summary File Generation Logic:**
+
 - If `meeting.summaries` exists and has items → Concatenate all templates with section headers:
+
   ```markdown
   ## Client Meeting Summary
+
   [template content]
 
   ## Action Items Summary
+
   [template content]
   ```
+
 - If `meeting.summaries` is empty/missing → Use `meeting.content` (basic auto-summary)
 
 **Export Triggers:**
+
 1. **Manual**: User clicks "Publish to Obsidian" button (IPC: `obsidian:exportMeeting`)
 2. **Automatic**: After template generation completes successfully
 3. **Republish**: User clicks "Republish to Obsidian" with confirmation dialog
 
 **Routing Logic:**
+
 - If `meeting.obsidianLink` exists (manual override) → Use that path, skip routing
 - If `meeting.obsidianLink` is null → Run routing engine based on `participantEmails`
 - After successful export → Save vault path to `meeting.obsidianLink`
 
 #### User Value
+
 Automatic, organized meeting notes in Obsidian vault, optimized for both human review and LLM retrieval. No manual file management required.
 
 #### Known Limitation
+
 **Manual vault link override UI missing**: While the backend correctly handles manual overrides when `obsidianLink` field exists, there's no UI input field to edit this value. Users would need to manually edit the JSON data file to change routing. This is a minor enhancement deferred to Phase 11 (Advanced UI & Settings).
 
 ---
 
 ### Phase 6: Speaker Recognition & Contact Matching ✅ COMPLETE
+
 **Goal:** Identify who said what
 
 #### Deliverables
+
 1. ✅ Speaker diarization in transcription (AssemblyAI)
 2. ✅ Google Contacts integration
 3. ✅ Participant email → contact matching
@@ -1117,6 +1253,7 @@ Automatic, organized meeting notes in Obsidian vault, optimized for both human r
 7. ⏳ Manual speaker ID correction UI (IPC handler ready, UI deferred)
 
 #### Success Criteria
+
 - ✅ Transcript shows speaker names (not just "Speaker 1")
 - ✅ Participant emails matched to Google Contacts
 - ✅ Speaker identification with heuristic algorithms
@@ -1124,6 +1261,7 @@ Automatic, organized meeting notes in Obsidian vault, optimized for both human r
 - ✅ Single authentication flow for Calendar + Contacts
 
 #### Implementation Details
+
 - **Unified Authentication**: `GoogleAuth.js` - Single OAuth 2.0 flow for Calendar + Contacts
   - Combined scopes: `calendar.readonly` + `contacts.readonly`
   - Single token file (`google-token.json`) with automatic refresh
@@ -1149,6 +1287,7 @@ Automatic, organized meeting notes in Obsidian vault, optimized for both human r
 - **UI**: Single Google button with official logo, contact count display
 
 #### User Value
+
 Clear attribution of statements to specific people with minimal manual effort.
 
 ---
@@ -1160,31 +1299,37 @@ Clear attribution of statements to specific people with minimal manual effort.
 **Issues Identified and Resolved (Code Review - Nov 8, 2025):**
 
 **1. ✅ Fix RoutingEngine Method Signature Bug**
+
 - **Status**: FIXED in main.js:1029, RoutingEngine.js:25
 - **Solution**: Correctly calls `routingEngine.route({ participantEmails, meetingTitle, meetingDate })`
 - **Verification**: Method signature matches, no runtime errors
 
 **2. ✅ Improve Service Initialization Robustness**
+
 - **Status**: FIXED in main.js:248-363
 - **Solution**: Sequential initialization with proper await handling in `app.whenReady()`, `initializeGoogleServices()` awaited before `startMeetingMonitor()`
 - **Verification**: Services initialize reliably on every app start
 
 **3. ✅ Add Token Refresh User Notification**
+
 - **Status**: FIXED in GoogleContacts.js:85-94, 245-263
 - **Solution**: `auth:expired` IPC event sent to renderer via `_notifyAuthExpired()` method
 - **Verification**: User notified when Google authentication expires
 
 **4. ✅ Fix File Operation Read/Write Race**
+
 - **Status**: FIXED in main.js:503-623
 - **Solution**: `readWaiters` array implemented, reads queue when writes are in progress
 - **Verification**: No data corruption during concurrent file operations
 
 **5. ✅ Implement LRU Cache for Contacts**
+
 - **Status**: FIXED in GoogleContacts.js:9, 23-29
 - **Solution**: Using `lru-cache` npm package with max 5,000 entries and 24-hour TTL
 - **Verification**: Contact cache memory usage bounded (<50MB)
 
 **Success Criteria Met:**
+
 - ✅ All meetings route correctly without errors
 - ✅ Services initialize reliably on every app start
 - ✅ User notified when Google authentication expires
@@ -1194,9 +1339,11 @@ Clear attribution of statements to specific people with minimal manual effort.
 ---
 
 ### Phase 7: Platform-Specific Recording (Zoom/Teams/Meet)
+
 **Goal:** Optimized recording for specific meeting platforms
 
 #### Deliverables
+
 1. Zoom meeting detection (when Zoom window active)
 2. Microsoft Teams meeting detection
 3. Google Meet meeting detection
@@ -1205,12 +1352,14 @@ Clear attribution of statements to specific people with minimal manual effort.
 6. Platform logo/indicator in UI
 
 #### Success Criteria
+
 - App detects which platform is active
 - Recording quality optimized per platform
 - Calendar events matched to platform type
 - Meeting metadata includes platform
 
 #### User Value
+
 Better reliability and quality for platform-specific meetings.
 
 ---
@@ -1226,6 +1375,7 @@ Better reliability and quality for platform-specific meetings.
 #### Missing UI Features
 
 **1. Manual Vault Link Override UI (Phase 5)**
+
 - **Issue**: Backend logic exists (main.js:976-978) to handle manual `obsidianLink` overrides, but no UI to edit this field
 - **Impact**: Users cannot correct routing errors or manually specify vault paths without editing JSON
 - **Fix**: Add editable text input field in meeting editor view
@@ -1237,6 +1387,7 @@ Better reliability and quality for platform-specific meetings.
 - **Estimated effort**: 2-3 hours
 
 **2. Manual Speaker ID Correction UI (Phase 6)**
+
 - **Issue**: IPC handler `speakers:updateSpeakerLabel` exists but no UI to use it
 - **Impact**: Users cannot correct misidentified speakers after transcription completes
 - **Fix**: Add speaker correction UI in transcript view
@@ -1248,6 +1399,7 @@ Better reliability and quality for platform-specific meetings.
 - **Estimated effort**: 3-4 hours
 
 **3. Manual Participant Input During Recording (Phase 2 → Phase 3)**
+
 - **Issue**: Deferred from Phase 2, never implemented in Phase 3
 - **Impact**: Cannot add participant info for manually recorded meetings without calendar events
 - **Fix**: Add participant input form during manual recording
@@ -1258,6 +1410,7 @@ Better reliability and quality for platform-specific meetings.
 - **Estimated effort**: 2-3 hours
 
 **4. Post-Recording Routing with User Confirmation (Phase 2 → Phase 3)**
+
 - **Issue**: Routing happens automatically, no user confirmation or override
 - **Impact**: Meetings might be routed incorrectly without user awareness
 - **Fix**: Add routing confirmation modal after transcription
@@ -1272,6 +1425,7 @@ Better reliability and quality for platform-specific meetings.
 #### Optional/Deferred Features
 
 **5. Export Recording Audio File (Phase 5)**
+
 - **Issue**: Marked "optional - deferred", no target phase
 - **Impact**: Audio files stored locally but not exported to vault
 - **Decision**: Keep deferred - audio files are large, primary value is in transcripts
@@ -1279,6 +1433,7 @@ Better reliability and quality for platform-specific meetings.
 - **If needed**: Add checkbox in settings to enable audio export to vault
 
 **6. Contact Cache Validation (Phase 6)**
+
 - **Issue**: Marked "deferred - low risk from trusted API"
 - **Impact**: Cached contact data not validated against Google API responses
 - **Decision**: Keep deferred - Google Contacts API is trusted source, low risk
@@ -1290,30 +1445,35 @@ Better reliability and quality for platform-specific meetings.
 #### Technical Debt & Code Quality
 
 **7. Implement Proper Logging Framework**
+
 - **Issue**: Using `console.log` throughout codebase instead of structured logging
 - **Fix**: Install `electron-log`, create `src/shared/logger.js`, replace incrementally
 - **Priority**: Medium - improves debugging and production monitoring
 - **Estimated effort**: 2-3 hours setup + incremental replacement
 
 **8. Add ESLint & Prettier Configuration**
+
 - **Issue**: No code linting or formatting standards
 - **Fix**: Install ESLint + Prettier, create config files, add npm scripts
 - **Priority**: Medium - prevents bugs, improves code consistency
 - **Estimated effort**: 1-2 hours
 
 **9. Split main.js Into Modules**
+
 - **Issue**: `src/main.js` is too large and handles too many concerns
 - **Fix**: Extract focused modules (RecallAI API, File Manager, etc.)
 - **Priority**: Low - code works, but harder to maintain
 - **Estimated effort**: 8-10 hours (incremental)
 
 **10. TypeScript Migration**
+
 - **Issue**: JavaScript codebase lacks type safety
 - **Fix**: Migrate to TypeScript incrementally, starting with shared types
 - **Priority**: Low - would help with future development
 - **Estimated effort**: 20-30 hours (incremental)
 
 **11. React Component Extraction**
+
 - **Issue**: `src/renderer.js` is a 2,000+ line monolith
 - **Fix**: Extract modular components (MeetingCard, TranscriptView, etc.)
 - **Priority**: Low - UI works, but harder to maintain
@@ -1324,19 +1484,12 @@ Better reliability and quality for platform-specific meetings.
 #### Recommendations
 
 **MUST DO before Phase 8:**
+
 1. Manual Vault Link Override UI (#1) - Edit obsidianLink field in meeting editor
 2. Proper Logging Framework (#7) - Essential for debugging future phases
 3. ESLint & Prettier (#8) - Quick setup, prevents bugs in new code
 
-**DEFERRED to Phase 10 (Advanced UI & Settings):**
-4. Manual Speaker ID Correction UI (#2) - Important but not blocking, heuristic matching works well
-5. Manual Participant Input During Recording (#3) - Most meetings have calendar events
-6. Post-Recording Routing Confirmation (#4) - Manual vault override UI covers this
-7. Export Recording Audio (#5) - Optional feature, not critical
-8. Contact Cache Validation (#6) - Low risk, nice-to-have
-9. Split main.js (#9) - Code quality, not blocking
-10. TypeScript Migration (#10) - Long-term improvement
-11. React Component Extraction (#11) - Long-term improvement
+**DEFERRED to Phase 10 (Advanced UI & Settings):** 4. Manual Speaker ID Correction UI (#2) - Important but not blocking, heuristic matching works well 5. Manual Participant Input During Recording (#3) - Most meetings have calendar events 6. Post-Recording Routing Confirmation (#4) - Manual vault override UI covers this 7. Export Recording Audio (#5) - Optional feature, not critical 8. Contact Cache Validation (#6) - Low risk, nice-to-have 9. Split main.js (#9) - Code quality, not blocking 10. TypeScript Migration (#10) - Long-term improvement 11. React Component Extraction (#11) - Long-term improvement
 
 ---
 
@@ -1350,35 +1503,58 @@ Better reliability and quality for platform-specific meetings.
 
 ---
 
-### Phase 8: Import Prior Transcripts
+### Phase 8: Import Prior Transcripts ✅ COMPLETE
+
 **Goal:** Retroactively process existing meeting notes
 
 #### Deliverables
-1. File import UI (single file or bulk)
-2. Support for .txt, .md, VTT, SRT formats
-3. Metadata extraction from filename/content
-4. Manual metadata input form
-5. Batch processing
-6. Apply routing to imported transcripts
-7. Generate summaries for imported transcripts
-8. Progress indicator for bulk imports
+
+1. ✅ File import UI (drag-and-drop + file/folder selection)
+2. ✅ Support for .txt, .md, VTT, SRT formats
+3. ✅ Metadata extraction from filename/content
+4. ✅ Manual metadata input form
+5. ✅ Batch processing with background operation
+6. ✅ Apply routing to imported transcripts
+7. ✅ Generate summaries for imported transcripts
+8. ✅ Progress indicator with toast notifications
+9. ✅ Granular template selection (checkboxes per template)
+10. ✅ LLM-based title suggestions for generic titles
+11. ✅ File overwrite protection with confirmation
+12. ✅ Folder import with recursive scanning
 
 #### Success Criteria
-- Import 100+ transcripts successfully
-- Metadata extracted accurately (>80%)
-- Routing works for historical transcripts
-- Summaries generated for imports
-- User can monitor import progress
+
+- ✅ Import 100+ transcripts successfully
+- ✅ Metadata extracted accurately (>80%)
+- ✅ Routing works for historical transcripts
+- ✅ Summaries generated for imports with prompt caching
+- ✅ User can monitor import progress via background notifications
+- ✅ Supports both single file and bulk folder imports
+
+#### Implementation Details (November 12, 2025)
+
+- **UI Components**: Drag-and-drop zone, file/folder selection buttons, template checkboxes
+- **Background Processing**: Imports run in background, user can continue working
+- **Generic Title Detection**: Automatically detects titles like "Krisp Transcript", "Zoom Meeting", suggests better titles via LLM
+- **File Overwrite Protection**: Warns user before overwriting existing files in vault
+- **Folder Import**: Recursively scans folders for supported transcript formats
+- **Template Selection**: Granular checkboxes allow user to select which templates to generate per import
+- **Cost Optimization**: Uses prompt caching for batch imports (85-90% savings on 2nd+ imports)
+- **IPC Handlers**: `import:importFile`, `import:importBatch`, `import:selectFiles`, `import:selectFolder`, `import:getStatus`
+- **Progress Tracking**: Toast notifications show import progress and completion
 
 #### User Value
-Entire meeting history organized and searchable using new system.
+
+Entire meeting history organized and searchable using new system. Background processing allows continued work during bulk imports.
 
 ---
 
 ### Phase 9: Encryption & Security
+
 **Goal:** Protect sensitive meeting data
 
 #### Deliverables
+
 1. Windows DPAPI integration
 2. Encrypt transcripts at rest
 3. Encrypt audio files at rest
@@ -1388,6 +1564,7 @@ Entire meeting history organized and searchable using new system.
 7. Decryption on read (transparent to user)
 
 #### Success Criteria
+
 - Files encrypted using DPAPI
 - Decryption transparent in Obsidian (if supported)
 - API keys stored securely
@@ -1395,11 +1572,13 @@ Entire meeting history organized and searchable using new system.
 - No performance degradation
 
 #### User Value
+
 Sensitive client information protected from unauthorized access.
 
 #### Security Hardening Items (Phase 10)
 
 **11. XSS Vulnerability Mitigation**
+
 - **Issue**: `renderer.js` uses `innerHTML` with user-controlled data (meeting titles, summaries, template names)
 - **Risk**: Malicious content could execute scripts, potentially stealing OAuth tokens
 - **Files**: `src/renderer.js` lines 240-250, 354-367, 1065-1068
@@ -1408,7 +1587,7 @@ Sensitive client information protected from unauthorized access.
   import DOMPurify from 'dompurify';
   card.innerHTML = DOMPurify.sanitize(htmlContent, {
     ALLOWED_TAGS: ['h1', 'h2', 'h3', 'p', 'ul', 'li', 'strong', 'em', 'code'],
-    ALLOWED_ATTR: []
+    ALLOWED_ATTR: [],
   });
   ```
 - **Also**: Replace custom `markdownToHtml()` function with `marked` + DOMPurify
@@ -1416,6 +1595,7 @@ Sensitive client information protected from unauthorized access.
 - **Estimated effort**: 2-3 hours
 
 **12. Path Traversal Validation**
+
 - **Issue**: `VaultStructure.js` doesn't validate paths stay within vault directory
 - **Risk**: Malicious paths like `../../../sensitive.txt` could write outside vault
 - **File**: `src/main/storage/VaultStructure.js` line 263-277
@@ -1431,6 +1611,7 @@ Sensitive client information protected from unauthorized access.
 - **Estimated effort**: 1 hour
 
 **13. IPC Handler Input Validation**
+
 - **Issue**: All IPC handlers accept data without validation
 - **Risk**: Malformed data from renderer could crash main process
 - **Files**: `src/main.js` lines 1419-1713 (all handlers)
@@ -1438,7 +1619,7 @@ Sensitive client information protected from unauthorized access.
   ```javascript
   const SpeakersMatchSchema = z.object({
     transcript: z.array(z.object({ speaker: z.string(), text: z.string() })),
-    participantEmails: z.array(z.string().email())
+    participantEmails: z.array(z.string().email()),
   });
   ipcMain.handle('speakers:matchSpeakers', async (event, data) => {
     const validated = SpeakersMatchSchema.parse(data);
@@ -1449,6 +1630,7 @@ Sensitive client information protected from unauthorized access.
 - **Estimated effort**: 4-6 hours (all handlers)
 
 **14. OAuth CSRF Protection**
+
 - **Issue**: OAuth callback doesn't validate state parameter
 - **Risk**: CSRF attack could trick user into authorizing attacker's Google account
 - **File**: `src/main.js` lines 1371-1398
@@ -1469,6 +1651,7 @@ Sensitive client information protected from unauthorized access.
 - **Estimated effort**: 1-2 hours
 
 **15. Memory Leak Prevention**
+
 - **Issue**: Event listeners not properly cleaned up, especially auth window handlers
 - **Files**: `src/main.js` lines 1329-1412 (auth window), IPC listeners throughout
 - **Fix**: Implement cleanup handlers:
@@ -1480,6 +1663,7 @@ Sensitive client information protected from unauthorized access.
 - **Estimated effort**: 3-4 hours
 
 **16. API Key Migration to Credential Manager**
+
 - **Issue**: API keys stored in plain text `.env` file
 - **Specification Requirement**: Use Windows Credential Manager for sensitive keys
 - **Current**: `process.env.OPENAI_API_KEY` read from `.env`
@@ -1493,6 +1677,7 @@ Sensitive client information protected from unauthorized access.
 - **Estimated effort**: 4-5 hours (includes UI)
 
 **17. Token File Permission Validation**
+
 - **Issue**: Windows `icacls` command may fail silently
 - **Current**: Error logged but not thrown, token file created anyway
 - **File**: `src/main/integrations/GoogleAuth.js` lines 95-127
@@ -1510,6 +1695,7 @@ Sensitive client information protected from unauthorized access.
 - **Estimated effort**: 1-2 hours
 
 **18. Comprehensive Security Audit**
+
 - Penetration test OAuth flow with various attack vectors
 - Test XSS payloads in all user input fields
 - Verify file permissions across Windows 10/11 versions
@@ -1522,9 +1708,11 @@ Sensitive client information protected from unauthorized access.
 ---
 
 ### Phase 10: Advanced UI & Settings
+
 **Goal:** Polish user experience and configurability
 
 #### Deliverables
+
 1. Comprehensive settings panel
 2. Template editor with syntax highlighting
 3. Routing configuration editor
@@ -1540,6 +1728,7 @@ Sensitive client information protected from unauthorized access.
 13. ⏳ **Auto-Summary Template** - Editable template file for automatic post-recording summary (instead of hardcoded prompt)
 
 #### Success Criteria
+
 - All settings accessible and functional
 - In-app routing config editor works
 - User can customize behavior without editing files
@@ -1549,11 +1738,13 @@ Sensitive client information protected from unauthorized access.
 - Auto-summary prompt editable via template file
 
 #### User Value
+
 Fully customizable to personal workflow preferences.
 
 #### Code Quality Improvements (Phase 11)
 
 **19. Global State Management Refactoring**
+
 - **Issue**: `main.js` uses module-level variables for state (40+ globals)
 - **Current**: `let detectedMeeting, googleAuth, googleCalendar, templateManager...`
 - **Fix**: Create `AppState` class to encapsulate state:
@@ -1563,7 +1754,9 @@ Fully customizable to personal workflow preferences.
       this.detectedMeeting = null;
       this.services = {};
     }
-    async initialize() { /* centralized init */ }
+    async initialize() {
+      /* centralized init */
+    }
   }
   ```
 - **Benefits**: Easier testing, clearer state ownership, better encapsulation
@@ -1571,6 +1764,7 @@ Fully customizable to personal workflow preferences.
 - **Estimated effort**: 6-8 hours
 
 **20. Configuration Centralization**
+
 - **Issue**: Hardcoded values scattered throughout codebase
 - **Examples**:
   - `60000` (meeting check interval)
@@ -1580,13 +1774,14 @@ Fully customizable to personal workflow preferences.
   ```javascript
   module.exports = {
     INTERVALS: { MEETING_CHECK_MS: 60 * 1000 },
-    LLM_PRICING: { 'gpt-4o-mini': { input: 0.150 / 1_000_000 } }
+    LLM_PRICING: { 'gpt-4o-mini': { input: 0.15 / 1_000_000 } },
   };
   ```
 - **Priority**: Medium - improves maintainability
 - **Estimated effort**: 3-4 hours
 
 **21. Routing Configuration Validation**
+
 - **Issue**: `ConfigLoader.js` validates structure but not data validity
 - **Fix**: Use Zod schemas to validate:
   - Email formats (`z.string().email()`)
@@ -1597,6 +1792,7 @@ Fully customizable to personal workflow preferences.
 - **Estimated effort**: 2-3 hours
 
 **22. Code Duplication Cleanup**
+
 - Refactor repeated patterns identified during development:
   - Video file checking logic
   - Upload token creation
@@ -1607,6 +1803,7 @@ Fully customizable to personal workflow preferences.
 - **Estimated effort**: 4-6 hours total, done opportunistically
 
 **23. Async File Operations Migration**
+
 - **Issue**: `VaultStructure.js` and `ConfigLoader.js` use sync operations
 - **Current**: `fs.writeFileSync()`, `fs.readFileSync()` block event loop
 - **Fix**: Migrate to async versions: `fs.promises.writeFile()`, etc.
@@ -1615,6 +1812,7 @@ Fully customizable to personal workflow preferences.
 - **Estimated effort**: 2-3 hours
 
 **24. Environment Configuration**
+
 - Implement dev/staging/production environment separation
 - Create environment-specific configuration files
 - Support for different API endpoints per environment
@@ -1625,9 +1823,11 @@ Fully customizable to personal workflow preferences.
 ---
 
 ### Phase 11: Real-Time Transcription (Optional)
+
 **Goal:** See transcript while meeting is in progress
 
 #### Deliverables
+
 1. Streaming transcription support
 2. Live transcript view in widget or window
 3. Real-time speaker identification
@@ -1636,20 +1836,24 @@ Fully customizable to personal workflow preferences.
 6. Resume transcription after pause
 
 #### Success Criteria
+
 - Transcript appears within 5 seconds of speech
 - Accuracy matches post-processing
 - Live view doesn't impact recording quality
 - User can edit and correct in real-time
 
 #### User Value
+
 Take notes and review what was said during the meeting.
 
 ---
 
 ### Phase 12: HubSpot Integration
+
 **Goal:** Sync meeting summaries to CRM
 
 #### Deliverables
+
 1. HubSpot OAuth integration
 2. Company matching by email domain
 3. Contact matching by email
@@ -1659,6 +1863,7 @@ Take notes and review what was said during the meeting.
 7. Error handling for missing matches
 
 #### Success Criteria
+
 - Meeting summaries appear in HubSpot
 - Associated with correct Company
 - Contacts properly linked
@@ -1666,6 +1871,7 @@ Take notes and review what was said during the meeting.
 - User notified of successful sync
 
 #### User Value
+
 CRM stays updated without manual data entry.
 
 ---
@@ -1673,14 +1879,17 @@ CRM stays updated without manual data entry.
 ## API & Service Requirements
 
 ### Recall.ai
+
 - Account and API key
 - Desktop Recording SDK
 - Documentation: https://docs.recall.ai/docs/getting-started
 
 ### Transcription Service
+
 **Architecture**: Flexible multi-provider system with runtime switching (November 12, 2025)
 
 **Current Implementation**:
+
 - **Multi-Provider Support**: AssemblyAI, Deepgram, Recall.ai (3 options)
 - **Provider Selection**: UI dropdown with localStorage persistence
 - **Module**: `src/main/services/transcriptionService.js` - Unified interface with provider-specific adapters
@@ -1689,6 +1898,7 @@ CRM stays updated without manual data entry.
 **Provider Details**:
 
 **AssemblyAI** (Primary - Most Cost-Effective):
+
 - **Cost**: $0.37/hour (57% cheaper than Recall.ai full stack)
 - **API**: 3-step process (upload → request transcription → poll for completion)
 - **Features**: Speaker diarization, utterances, word-level timestamps, confidence scores
@@ -1697,6 +1907,7 @@ CRM stays updated without manual data entry.
 - **Format**: `utterances` array with speaker labels
 
 **Deepgram** (Alternative):
+
 - **Cost**: $0.43/hour (49% cheaper than Recall.ai full stack)
 - **API**: Direct upload with immediate transcription
 - **Features**: Speaker diarization, punctuation, utterances, word-level data
@@ -1704,6 +1915,7 @@ CRM stays updated without manual data entry.
 - **Format**: `results.utterances` array with speaker labels
 
 **Recall.ai** (Fallback - Currently Broken):
+
 - **Cost**: $0.85/hour (recording + transcription)
 - **Status**: SDK `uploadRecording()` method broken (returns null, no progress events)
 - **Kept**: Code preserved for when SDK is fixed
@@ -1718,25 +1930,30 @@ CRM stays updated without manual data entry.
 | Recall.ai | $0.85 | Baseline | ⚠️ SDK broken |
 
 **Transcript Format** (Standardized):
+
 - Array of entries with: `speaker`, `speakerId`, `text`, `timestamp`, `words[]`
 - Provider metadata: `provider`, `confidence`
 - Supports mapping to participant names via speaker matching
 
 **Historical Note**:
+
 - November 6, 2025: Migrated from AssemblyAI v3 streaming to Recall.ai async API
 - November 10, 2025: Implemented webhook-based workflow with ngrok tunnel
 - November 12, 2025: Discovered Recall.ai SDK upload broken, implemented flexible multi-provider system as workaround
 
 ### LLM Services
+
 - **OpenAI**: GPT-4o (for complex summaries)
 - **Anthropic Claude**: Claude 3.5 Sonnet (for detailed analysis)
 - **Google Gemini**: Gemini 1.5 Pro (cost-effective for long context)
 
 ### Google APIs
+
 - **Google Calendar API**: OAuth 2.0, read-only calendar access
 - **Google Contacts API**: OAuth 2.0, read contacts
 
 ### HubSpot API
+
 - Private App or OAuth integration
 - Scopes needed: `crm.objects.contacts`, `crm.objects.companies`, `timeline`
 
@@ -1821,31 +2038,37 @@ jdnotesthings/
 ## Open Questions & Research Items
 
 ### 1. Obsidian Protocol Links
+
 - Research `obsidian://` URI scheme
 - Test if clickable in HubSpot
 - Alternative: file path, Obsidian Publish URL
 
 ### 2. Recall.ai SDK Capabilities
+
 - Confirm Windows support
 - Test audio quality settings
 - Check system audio capture vs app-specific
 
 ### 3. Transcription Service Selection
+
 - Compare Deepgram vs AssemblyAI vs Whisper
 - Test speaker diarization accuracy
 - Evaluate cost per hour of audio
 
 ### 4. Speaker Matching Algorithms
+
 - Research voice fingerprinting
 - Speaker embedding models
 - Privacy considerations for voice profiles
 
 ### 5. Encryption & Obsidian Compatibility
+
 - Test if encrypted files readable in Obsidian
 - Consider transparent encryption layer
 - Evaluate performance impact
 
 ### 6. Real-Time Transcription Feasibility
+
 - Test streaming transcription latency
 - Evaluate resource usage
 - Determine if worth complexity
@@ -1855,24 +2078,29 @@ jdnotesthings/
 ## Success Metrics
 
 ### Phase 1 Success
+
 - Can record and transcribe a 30-minute meeting
 - Transcript accuracy >85%
 - Files saved correctly
 
 ### Phase 2 Success
+
 - 100% of meetings routed to correct folders
 - Zero manual routing needed for known contacts
 
 ### Phase 3 Success
+
 - Zero missed scheduled meetings
 - 100% auto-start rate for calendar events
 
 ### Phase 4 Success
+
 - Summaries generated in <2 minutes post-meeting
 - Summary quality rated "useful" by user
 - Multiple summary types per meeting
 
 ### Overall Success
+
 - Daily use for all meetings (100% adoption)
 - Manual note-taking time reduced by 80%
 - Meeting notes organized and searchable
@@ -1883,13 +2111,13 @@ jdnotesthings/
 ## Timeline Philosophy
 
 This is a phase-based project without hard deadlines. Each phase should be:
+
 1. **Fully functional** - Delivers real value independently
 2. **Testable** - Can be used in real meetings immediately
 3. **Iterative** - Feedback from one phase informs the next
 4. **Incremental** - Each phase adds new capability without breaking previous functionality
 
 Phases 1-3 create the MVP. Phases 4-11 add intelligence and automation. Phase 12 is optional polish.
-
 
 ---
 

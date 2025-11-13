@@ -16,11 +16,7 @@ class SpeakerMatcher {
    * @returns {Object} Speaker mapping (speakerLabel -> participant info)
    */
   async matchSpeakers(transcript, participantEmails, options = {}) {
-    const {
-      includeOrganizer = true,
-      useWordCount = true,
-      useTimingHeuristics = true
-    } = options;
+    const { includeOrganizer = true, useWordCount = true, useTimingHeuristics = true } = options;
 
     if (!transcript || transcript.length === 0) {
       console.log('[SpeakerMatcher] Empty transcript - no speakers to match');
@@ -32,17 +28,26 @@ class SpeakerMatcher {
       return {};
     }
 
-    console.log(`[SpeakerMatcher] Matching ${this.getSpeakerCount(transcript)} speakers to ${participantEmails.length} participants`);
+    console.log(
+      `[SpeakerMatcher] Matching ${this.getSpeakerCount(transcript)} speakers to ${participantEmails.length} participants`
+    );
 
     // Step 1: Get contact information for all participants
     const contacts = await this.googleContacts.findContactsByEmails(participantEmails);
-    console.log(`[SpeakerMatcher] Found ${contacts.size} contacts out of ${participantEmails.length} participants`);
+    console.log(
+      `[SpeakerMatcher] Found ${contacts.size} contacts out of ${participantEmails.length} participants`
+    );
 
     // Step 2: Analyze speakers in transcript
     const speakerStats = this.analyzeSpeakers(transcript);
 
     // Step 3: Match speakers to participants using heuristics
-    const speakerMapping = this.createSpeakerMapping(speakerStats, participantEmails, contacts, options);
+    const speakerMapping = this.createSpeakerMapping(
+      speakerStats,
+      participantEmails,
+      contacts,
+      options
+    );
 
     console.log('[SpeakerMatcher] Speaker matching complete:', speakerMapping);
     return speakerMapping;
@@ -82,7 +87,7 @@ class SpeakerMatcher {
           utteranceCount: 0,
           firstAppearance: utterance.start || 0,
           lastAppearance: utterance.end || 0,
-          totalDuration: 0
+          totalDuration: 0,
         });
       }
 
@@ -115,8 +120,7 @@ class SpeakerMatcher {
     const mapping = {};
 
     // Convert speaker stats to array and sort by word count (most talkative first)
-    const speakers = Array.from(speakerStats.values())
-      .sort((a, b) => b.wordCount - a.wordCount);
+    const speakers = Array.from(speakerStats.values()).sort((a, b) => b.wordCount - a.wordCount);
 
     // Create participant list with contact info
     const participants = participantEmails.map(email => {
@@ -126,7 +130,7 @@ class SpeakerMatcher {
         name: contact?.name || this.extractNameFromEmail(email),
         givenName: contact?.givenName || '',
         familyName: contact?.familyName || '',
-        contact: contact
+        contact: contact,
       };
     });
 
@@ -137,7 +141,7 @@ class SpeakerMatcher {
           email: participants[i].email,
           name: participants[i].name,
           confidence: 'medium',
-          method: 'count-match'
+          method: 'count-match',
         };
       }
       return mapping;
@@ -150,7 +154,7 @@ class SpeakerMatcher {
         email: participants[0].email,
         name: participants[0].name,
         confidence: 'low',
-        method: 'first-speaker'
+        method: 'first-speaker',
       };
     }
 
@@ -162,7 +166,7 @@ class SpeakerMatcher {
           email: participants[0].email,
           name: participants[0].name,
           confidence: 'low',
-          method: 'most-talkative'
+          method: 'most-talkative',
         };
       }
     }
@@ -179,7 +183,7 @@ class SpeakerMatcher {
         email: unmappedParticipants[i].email,
         name: unmappedParticipants[i].name,
         confidence: 'low',
-        method: 'sequential'
+        method: 'sequential',
       };
     }
 
@@ -190,7 +194,7 @@ class SpeakerMatcher {
           email: null,
           name: `Unknown Speaker (${speaker.label})`,
           confidence: 'none',
-          method: 'unmatched'
+          method: 'unmatched',
         };
       }
     }
@@ -237,7 +241,7 @@ class SpeakerMatcher {
           speaker: utterance.speaker, // Keep original label
           speakerName: speakerInfo.name, // Add identified name
           speakerEmail: speakerInfo.email,
-          speakerConfidence: speakerInfo.confidence
+          speakerConfidence: speakerInfo.confidence,
         };
       }
       return utterance;
@@ -253,16 +257,19 @@ class SpeakerMatcher {
   formatTranscript(transcript, useNames = true) {
     if (!transcript || transcript.length === 0) return '';
 
-    return transcript.map(utterance => {
-      const speaker = useNames && utterance.speakerName
-        ? utterance.speakerName
-        : utterance.speaker || 'Unknown';
+    return transcript
+      .map(utterance => {
+        const speaker =
+          useNames && utterance.speakerName
+            ? utterance.speakerName
+            : utterance.speaker || 'Unknown';
 
-      const timestamp = this.formatTimestamp(utterance.start);
-      const text = utterance.text || '';
+        const timestamp = this.formatTimestamp(utterance.start);
+        const text = utterance.text || '';
 
-      return `[${timestamp}] ${speaker}: ${text}`;
-    }).join('\n\n');
+        return `[${timestamp}] ${speaker}: ${text}`;
+      })
+      .join('\n\n');
   }
 
   /**
@@ -284,13 +291,15 @@ class SpeakerMatcher {
    * @returns {Array} Array of speaker summaries
    */
   getSpeakerSummary(speakerStats) {
-    return Array.from(speakerStats.values()).map(stats => ({
-      label: stats.label,
-      wordCount: stats.wordCount,
-      utteranceCount: stats.utteranceCount,
-      duration: Math.round(stats.totalDuration),
-      participationRate: 0 // Will be calculated if total duration is known
-    })).sort((a, b) => b.wordCount - a.wordCount);
+    return Array.from(speakerStats.values())
+      .map(stats => ({
+        label: stats.label,
+        wordCount: stats.wordCount,
+        utteranceCount: stats.utteranceCount,
+        duration: Math.round(stats.totalDuration),
+        participationRate: 0, // Will be calculated if total duration is known
+      }))
+      .sort((a, b) => b.wordCount - a.wordCount);
   }
 }
 

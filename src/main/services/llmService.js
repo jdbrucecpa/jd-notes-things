@@ -59,14 +59,23 @@ class OpenAIAdapter extends LLMAdapter {
   }
 
   async generateCompletion(options) {
-    const { systemPrompt, userPrompt, cacheableContext, maxTokens = 1000, temperature = 0.7 } = options;
+    const {
+      systemPrompt,
+      userPrompt,
+      cacheableContext,
+      maxTokens = 1000,
+      temperature = 0.7,
+    } = options;
 
     // Build messages array - use separate messages for caching
     const messages = [{ role: 'system', content: systemPrompt }];
 
     if (cacheableContext) {
       // Cacheable content (e.g., transcript) goes first
-      messages.push({ role: 'user', content: `Here is the meeting transcript:\n\n${cacheableContext}` });
+      messages.push({
+        role: 'user',
+        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
+      });
       // Dynamic instructions go second (will use cached transcript)
       messages.push({ role: 'user', content: userPrompt });
     } else {
@@ -78,7 +87,7 @@ class OpenAIAdapter extends LLMAdapter {
       model: this.model,
       messages: messages,
       temperature,
-      max_tokens: maxTokens
+      max_tokens: maxTokens,
     });
 
     // Log token usage and cache statistics
@@ -92,8 +101,12 @@ class OpenAIAdapter extends LLMAdapter {
         const cacheHitRate = total > 0 ? ((cached / total) * 100).toFixed(1) : 0;
 
         if (cached > 0) {
-          console.log(`[OpenAI] 🎯 CACHE HIT: ${cached}/${total} tokens cached (${cacheHitRate}% hit rate)`);
-          console.log(`[OpenAI] 💰 Cache savings: ~$${((cached * 0.225) / 1000000).toFixed(4)} (90% discount)`);
+          console.log(
+            `[OpenAI] 🎯 CACHE HIT: ${cached}/${total} tokens cached (${cacheHitRate}% hit rate)`
+          );
+          console.log(
+            `[OpenAI] 💰 Cache savings: ~$${((cached * 0.225) / 1000000).toFixed(4)} (90% discount)`
+          );
         } else {
           console.log('[OpenAI] ❌ No cache hit - first call or cache expired');
         }
@@ -102,7 +115,7 @@ class OpenAIAdapter extends LLMAdapter {
 
     return {
       content: completion.choices[0].message.content,
-      model: completion.model
+      model: completion.model,
     };
   }
 
@@ -113,11 +126,11 @@ class OpenAIAdapter extends LLMAdapter {
       model: this.model,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
+        { role: 'user', content: userPrompt },
       ],
       temperature,
       max_tokens: maxTokens,
-      stream: true
+      stream: true,
     });
 
     let fullText = '';
@@ -150,7 +163,7 @@ class AzureOpenAIAdapter extends LLMAdapter {
       apiKey: config.apiKey,
       endpoint: config.endpoint,
       apiVersion: config.apiVersion || '2025-01-01-preview',
-      deployment: config.deployment
+      deployment: config.deployment,
     });
     this.deployment = config.deployment;
   }
@@ -172,7 +185,10 @@ class AzureOpenAIAdapter extends LLMAdapter {
 
     if (cacheableContext) {
       // Cacheable content (e.g., transcript) goes first
-      messages.push({ role: 'user', content: `Here is the meeting transcript:\n\n${cacheableContext}` });
+      messages.push({
+        role: 'user',
+        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
+      });
       // Dynamic instructions go second (will use cached transcript)
       messages.push({ role: 'user', content: userPrompt });
       console.log('[Azure] Using prompt caching structure (2 user messages)');
@@ -184,7 +200,7 @@ class AzureOpenAIAdapter extends LLMAdapter {
     const completion = await this.client.chat.completions.create({
       model: this.deployment,
       messages: messages,
-      max_completion_tokens: maxTokens  // Reasoning models use max_completion_tokens
+      max_completion_tokens: maxTokens, // Reasoning models use max_completion_tokens
     });
 
     // Log token usage and cache statistics
@@ -198,8 +214,12 @@ class AzureOpenAIAdapter extends LLMAdapter {
         const cacheHitRate = total > 0 ? ((cached / total) * 100).toFixed(1) : 0;
 
         if (cached > 0) {
-          console.log(`[Azure] 🎯 CACHE HIT: ${cached}/${total} tokens cached (${cacheHitRate}% hit rate)`);
-          console.log(`[Azure] 💰 Cache savings: ~$${((cached * 0.225) / 1000000).toFixed(4)} (90% discount)`);
+          console.log(
+            `[Azure] 🎯 CACHE HIT: ${cached}/${total} tokens cached (${cacheHitRate}% hit rate)`
+          );
+          console.log(
+            `[Azure] 💰 Cache savings: ~$${((cached * 0.225) / 1000000).toFixed(4)} (90% discount)`
+          );
         } else {
           console.log('[Azure] ❌ No cache hit - first call or cache expired');
         }
@@ -218,18 +238,26 @@ class AzureOpenAIAdapter extends LLMAdapter {
     // Warn if we hit token limit with empty/truncated content
     if (finishReason === 'length') {
       if (!resultContent || resultContent.length === 0) {
-        console.error('[Azure] ERROR: Hit token limit during reasoning phase - no content generated!');
-        console.error('[Azure] This usually means max_completion_tokens is too low for the reasoning model.');
+        console.error(
+          '[Azure] ERROR: Hit token limit during reasoning phase - no content generated!'
+        );
+        console.error(
+          '[Azure] This usually means max_completion_tokens is too low for the reasoning model.'
+        );
         console.error('[Azure] Consider increasing maxTokens parameter.');
-        throw new Error('Reasoning model exhausted token budget before generating content. Increase maxTokens.');
+        throw new Error(
+          'Reasoning model exhausted token budget before generating content. Increase maxTokens.'
+        );
       } else {
-        console.warn('[Azure] WARNING: Response truncated due to token limit (finish_reason: length)');
+        console.warn(
+          '[Azure] WARNING: Response truncated due to token limit (finish_reason: length)'
+        );
       }
     }
 
     return {
       content: resultContent,
-      model: resultModel
+      model: resultModel,
     };
   }
 
@@ -241,10 +269,10 @@ class AzureOpenAIAdapter extends LLMAdapter {
       model: this.deployment,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt }
+        { role: 'user', content: userPrompt },
       ],
-      max_completion_tokens: maxTokens,  // Reasoning models use max_completion_tokens
-      stream: true
+      max_completion_tokens: maxTokens, // Reasoning models use max_completion_tokens
+      stream: true,
     });
 
     let fullText = '';
@@ -278,7 +306,13 @@ class AnthropicAdapter extends LLMAdapter {
   }
 
   async generateCompletion(options) {
-    const { systemPrompt, userPrompt, cacheableContext, maxTokens = 1000, temperature = 0.7 } = options;
+    const {
+      systemPrompt,
+      userPrompt,
+      cacheableContext,
+      maxTokens = 1000,
+      temperature = 0.7,
+    } = options;
 
     let messages;
     let systemConfig;
@@ -288,25 +322,21 @@ class AnthropicAdapter extends LLMAdapter {
       // Mark the cacheable content (transcript) with cache_control
       systemConfig = [
         {
-          type: "text",
-          text: systemPrompt
+          type: 'text',
+          text: systemPrompt,
         },
         {
-          type: "text",
+          type: 'text',
           text: `Here is the meeting transcript:\n\n${cacheableContext}`,
-          cache_control: { type: "ephemeral" }  // Mark for caching
-        }
+          cache_control: { type: 'ephemeral' }, // Mark for caching
+        },
       ];
 
-      messages = [
-        { role: 'user', content: userPrompt }
-      ];
+      messages = [{ role: 'user', content: userPrompt }];
     } else {
       // Standard message format
       systemConfig = systemPrompt;
-      messages = [
-        { role: 'user', content: userPrompt }
-      ];
+      messages = [{ role: 'user', content: userPrompt }];
     }
 
     const message = await this.client.messages.create({
@@ -314,7 +344,7 @@ class AnthropicAdapter extends LLMAdapter {
       system: systemConfig,
       messages: messages,
       max_tokens: maxTokens,
-      temperature
+      temperature,
     });
 
     // Log token usage and cache statistics
@@ -329,10 +359,16 @@ class AnthropicAdapter extends LLMAdapter {
 
       if (cacheRead > 0) {
         const cacheHitRate = totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : 0;
-        console.log(`[Anthropic] 🎯 CACHE HIT: ${cacheRead}/${totalInput} tokens from cache (${cacheHitRate}% hit rate)`);
-        console.log(`[Anthropic] 💰 Cache savings: ~$${((cacheRead * 0.225) / 1000000).toFixed(4)} (90% discount)`);
+        console.log(
+          `[Anthropic] 🎯 CACHE HIT: ${cacheRead}/${totalInput} tokens from cache (${cacheHitRate}% hit rate)`
+        );
+        console.log(
+          `[Anthropic] 💰 Cache savings: ~$${((cacheRead * 0.225) / 1000000).toFixed(4)} (90% discount)`
+        );
       } else if (cacheCreated > 0) {
-        console.log(`[Anthropic] 📝 Cache created: ${cacheCreated} tokens (next calls will hit cache)`);
+        console.log(
+          `[Anthropic] 📝 Cache created: ${cacheCreated} tokens (next calls will hit cache)`
+        );
       } else {
         console.log('[Anthropic] ❌ No cache activity - standard processing');
       }
@@ -340,7 +376,7 @@ class AnthropicAdapter extends LLMAdapter {
 
     return {
       content: message.content[0].text,
-      model: message.model
+      model: message.model,
     };
   }
 
@@ -350,17 +386,15 @@ class AnthropicAdapter extends LLMAdapter {
     const stream = this.client.messages.stream({
       model: this.model,
       system: systemPrompt,
-      messages: [
-        { role: 'user', content: userPrompt }
-      ],
+      messages: [{ role: 'user', content: userPrompt }],
       max_tokens: maxTokens,
-      temperature
+      temperature,
     });
 
     return new Promise((resolve, reject) => {
       let fullText = '';
 
-      stream.on('text', (text) => {
+      stream.on('text', text => {
         fullText += text;
         if (onChunk) {
           onChunk(fullText);
@@ -371,7 +405,7 @@ class AnthropicAdapter extends LLMAdapter {
         resolve(fullText);
       });
 
-      stream.on('error', (error) => {
+      stream.on('error', error => {
         reject(error);
       });
     });
@@ -406,25 +440,37 @@ class LLMService {
         if (!this.config.openai?.apiKey) {
           throw new Error('OpenAI API key is required');
         }
-        console.log(`[LLM Service] Initializing OpenAI adapter with model: ${this.config.openai.model || 'gpt-4o-mini'}`);
+        console.log(
+          `[LLM Service] Initializing OpenAI adapter with model: ${this.config.openai.model || 'gpt-4o-mini'}`
+        );
         return new OpenAIAdapter(this.config.openai.apiKey, this.config.openai.model);
 
       case 'azure':
-        if (!this.config.azure?.apiKey || !this.config.azure?.endpoint || !this.config.azure?.deployment) {
+        if (
+          !this.config.azure?.apiKey ||
+          !this.config.azure?.endpoint ||
+          !this.config.azure?.deployment
+        ) {
           throw new Error('Azure OpenAI requires apiKey, endpoint, and deployment');
         }
-        console.log(`[LLM Service] Initializing Azure OpenAI adapter with deployment: ${this.config.azure.deployment}`);
+        console.log(
+          `[LLM Service] Initializing Azure OpenAI adapter with deployment: ${this.config.azure.deployment}`
+        );
         return new AzureOpenAIAdapter(this.config.azure);
 
       case 'anthropic':
         if (!this.config.anthropic?.apiKey) {
           throw new Error('Anthropic API key is required');
         }
-        console.log(`[LLM Service] Initializing Anthropic adapter with model: ${this.config.anthropic.model || 'claude-haiku-4-5-20251001'}`);
+        console.log(
+          `[LLM Service] Initializing Anthropic adapter with model: ${this.config.anthropic.model || 'claude-haiku-4-5-20251001'}`
+        );
         return new AnthropicAdapter(this.config.anthropic.apiKey, this.config.anthropic.model);
 
       default:
-        throw new Error(`Unknown provider: ${this.config.provider}. Must be 'openai', 'azure', or 'anthropic'`);
+        throw new Error(
+          `Unknown provider: ${this.config.provider}. Must be 'openai', 'azure', or 'anthropic'`
+        );
     }
   }
 
@@ -434,10 +480,15 @@ class LLMService {
   async generateCompletion(options) {
     try {
       const result = await this.adapter.generateCompletion(options);
-      console.log(`[LLM Service] Generated completion using ${this.adapter.getProviderName()} (${result.model})`);
+      console.log(
+        `[LLM Service] Generated completion using ${this.adapter.getProviderName()} (${result.model})`
+      );
       return result;
     } catch (error) {
-      console.error(`[LLM Service] Error generating completion with ${this.adapter.getProviderName()}:`, error);
+      console.error(
+        `[LLM Service] Error generating completion with ${this.adapter.getProviderName()}:`,
+        error
+      );
       throw error;
     }
   }
@@ -481,7 +532,11 @@ function createLLMServiceFromEnv() {
   // Determine which provider to use based on env vars
   // Priority: Azure > Anthropic > OpenAI
   let provider;
-  if (process.env.AZURE_OPENAI_API_KEY && process.env.AZURE_OPENAI_ENDPOINT && process.env.AZURE_OPENAI_DEPLOYMENT) {
+  if (
+    process.env.AZURE_OPENAI_API_KEY &&
+    process.env.AZURE_OPENAI_ENDPOINT &&
+    process.env.AZURE_OPENAI_DEPLOYMENT
+  ) {
     provider = 'azure';
   } else if (process.env.ANTHROPIC_API_KEY) {
     provider = 'anthropic';
@@ -495,18 +550,18 @@ function createLLMServiceFromEnv() {
     provider,
     openai: {
       apiKey: process.env.OPENAI_API_KEY,
-      model: 'gpt-4o-mini' // Can be overridden
+      model: 'gpt-4o-mini', // Can be overridden
     },
     azure: {
       apiKey: process.env.AZURE_OPENAI_API_KEY,
       endpoint: process.env.AZURE_OPENAI_ENDPOINT,
       deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
-      apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview'
+      apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview',
     },
     anthropic: {
       apiKey: process.env.ANTHROPIC_API_KEY,
-      model: 'claude-haiku-4-5-20251001' // Fast and cost-effective
-    }
+      model: 'claude-haiku-4-5-20251001', // Fast and cost-effective
+    },
   };
 
   return new LLMService(config);
@@ -517,5 +572,5 @@ module.exports = {
   OpenAIAdapter,
   AzureOpenAIAdapter,
   AnthropicAdapter,
-  createLLMServiceFromEnv
+  createLLMServiceFromEnv,
 };

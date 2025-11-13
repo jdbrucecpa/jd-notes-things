@@ -31,7 +31,10 @@ class TemplateManager {
     try {
       // Ensure directory exists
       if (!fs.existsSync(this.templatesPath)) {
-        console.log('[TemplateManager] Templates directory does not exist, creating:', this.templatesPath);
+        console.log(
+          '[TemplateManager] Templates directory does not exist, creating:',
+          this.templatesPath
+        );
         fs.mkdirSync(this.templatesPath, { recursive: true });
         return 0;
       }
@@ -142,7 +145,7 @@ class TemplateManager {
       templateEstimates.push({
         templateId,
         templateName: template.name,
-        ...estimate
+        ...estimate,
       });
     }
 
@@ -151,7 +154,7 @@ class TemplateManager {
       totalOutputTokens,
       totalTokens: totalInputTokens + totalOutputTokens,
       totalCost,
-      templateEstimates
+      templateEstimates,
     };
   }
 }

@@ -24,7 +24,7 @@ class GoogleAuth {
     // Combined scopes for both Calendar and Contacts
     this.scopes = [
       'https://www.googleapis.com/auth/calendar.readonly',
-      'https://www.googleapis.com/auth/contacts.readonly'
+      'https://www.googleapis.com/auth/contacts.readonly',
     ];
   }
 
@@ -44,15 +44,13 @@ class GoogleAuth {
     const redirectUri = 'http://localhost:3000/oauth2callback';
 
     if (!clientId || !clientSecret) {
-      console.error('[GoogleAuth] Missing GOOGLE_CALENDAR_CLIENT_ID or GOOGLE_CALENDAR_CLIENT_SECRET in .env');
+      console.error(
+        '[GoogleAuth] Missing GOOGLE_CALENDAR_CLIENT_ID or GOOGLE_CALENDAR_CLIENT_SECRET in .env'
+      );
       return false;
     }
 
-    this.oauth2Client = new google.auth.OAuth2(
-      clientId,
-      clientSecret,
-      redirectUri
-    );
+    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
     this.initialized = true;
 
@@ -146,7 +144,7 @@ class GoogleAuth {
     return this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: this.scopes,
-      prompt: 'consent' // Force consent screen to ensure refresh token
+      prompt: 'consent', // Force consent screen to ensure refresh token
     });
   }
 

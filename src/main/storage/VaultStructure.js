@@ -35,9 +35,7 @@ class VaultStructure {
    * @returns {boolean} True if directory exists or was created
    */
   ensureDirectory(dirPath) {
-    const absolutePath = path.isAbsolute(dirPath)
-      ? dirPath
-      : this.getAbsolutePath(dirPath);
+    const absolutePath = path.isAbsolute(dirPath) ? dirPath : this.getAbsolutePath(dirPath);
 
     try {
       if (!fs.existsSync(absolutePath)) {
@@ -68,7 +66,7 @@ class VaultStructure {
       meetingFolder: meetingPath,
       transcriptPath: path.join(meetingPath, 'full-notes.md'),
       audioPath: path.join(meetingPath, 'recording.wav'),
-      indexPath: path.join(meetingPath, 'index.md')
+      indexPath: path.join(meetingPath, 'index.md'),
     };
 
     console.log(`[VaultStructure] Created meeting folders at: ${meetingPath}`);
@@ -153,16 +151,17 @@ class VaultStructure {
     const dateStr = new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
-      day: 'numeric'
+      day: 'numeric',
     });
 
     const participantList = participants
-      .map(p => `  - name: "${p.name || 'Unknown'}"\n    email: "${p.email || ''}"\n    organization: "${p.organization || ''}"`)
+      .map(
+        p =>
+          `  - name: "${p.name || 'Unknown'}"\n    email: "${p.email || ''}"\n    organization: "${p.organization || ''}"`
+      )
       .join('\n');
 
-    const attendeeNames = participants
-      .map(p => p.name || p.email)
-      .join(', ');
+    const attendeeNames = participants.map(p => p.name || p.email).join(', ');
 
     return `---
 title: "${title}"
@@ -244,7 +243,7 @@ Comprehensive meeting notes covering all discussion topics.
       'internal/meetings',
       '_unfiled',
       'config',
-      'config/templates'
+      'config/templates',
     ];
 
     for (const folder of defaultFolders) {
@@ -323,9 +322,9 @@ Comprehensive meeting notes covering all discussion topics.
       return entries
         .filter(entry => entry.isDirectory())
         .map(entry => entry.name)
-        .filter(name => /^\d{4}-\d{2}-\d{2}-/.test(name))  // Filter for date-prefixed folders
+        .filter(name => /^\d{4}-\d{2}-\d{2}-/.test(name)) // Filter for date-prefixed folders
         .sort()
-        .reverse();  // Most recent first
+        .reverse(); // Most recent first
     } catch (error) {
       console.error(`[VaultStructure] Error listing meetings:`, error.message);
       return [];

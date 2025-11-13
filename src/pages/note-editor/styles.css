@@ -46,7 +46,8 @@ body {
   -webkit-app-region: drag;
 }
 
-.header-left, .header-right {
+.header-left,
+.header-right {
   display: flex;
   align-items: center;
 }
@@ -154,14 +155,16 @@ body {
   margin-top: 10px;
 }
 
-.note-date, .note-author {
+.note-date,
+.note-author {
   display: flex;
   align-items: center;
   gap: 5px;
 }
 
 /* Editor */
-.CodeMirror, .editor-preview {
+.CodeMirror,
+.editor-preview {
   font-size: 16px;
   line-height: 1.6;
 }
@@ -201,7 +204,8 @@ body {
   font-weight: 500;
 }
 
-.share-options, .share-export {
+.share-options,
+.share-export {
   display: flex;
   gap: 10px;
   margin-bottom: 15px;
@@ -273,7 +277,8 @@ body {
 }
 
 /* SimpleMDE customizations */
-.CodeMirror-fullscreen, .editor-preview-side {
+.CodeMirror-fullscreen,
+.editor-preview-side {
   z-index: 999;
 }
 
@@ -282,34 +287,40 @@ body {
 }
 
 /* Custom markdown rendering */
-.editor-preview h1, .editor-preview-side h1 {
+.editor-preview h1,
+.editor-preview-side h1 {
   font-size: 22px;
   color: #333;
   margin: 25px 0 15px 0;
 }
 
-.editor-preview h2, .editor-preview-side h2 {
+.editor-preview h2,
+.editor-preview-side h2 {
   font-size: 18px;
   color: #444;
   margin: 20px 0 10px 0;
 }
 
-.editor-preview ul, .editor-preview-side ul {
+.editor-preview ul,
+.editor-preview-side ul {
   padding-left: 20px;
   margin: 10px 0;
 }
 
-.editor-preview a, .editor-preview-side a {
+.editor-preview a,
+.editor-preview-side a {
   color: #0077ff;
   text-decoration: none;
 }
 
-.editor-preview a:hover, .editor-preview-side a:hover {
+.editor-preview a:hover,
+.editor-preview-side a:hover {
   text-decoration: underline;
 }
 
 /* Make code look nice */
-.editor-preview code, .editor-preview-side code {
+.editor-preview code,
+.editor-preview-side code {
   background-color: #f4f4f4;
   padding: 2px 4px;
   border-radius: 3px;

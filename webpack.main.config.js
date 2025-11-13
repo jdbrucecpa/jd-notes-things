@@ -10,7 +10,7 @@ module.exports = {
   },
   externals: {
     '@recallai/desktop-sdk': 'commonjs @recallai/desktop-sdk',
-    'ngrok': 'commonjs ngrok',
-    'svix': 'commonjs svix'
-  }
+    ngrok: 'commonjs ngrok',
+    svix: 'commonjs svix',
+  },
 };

@@ -88,7 +88,7 @@ class GoogleCalendar {
         timeMax: timeMax.toISOString(),
         singleEvents: true,
         orderBy: 'startTime',
-        maxResults: 50
+        maxResults: 50,
       });
 
       const events = response.data.items || [];
@@ -128,9 +128,9 @@ class GoogleCalendar {
     const hasMeetingLink = this._detectPlatform(event) !== 'unknown';
 
     // Accepted or tentative (not declined)
-    const isAccepted = !event.attendees || event.attendees.some(
-      attendee => attendee.self && attendee.responseStatus !== 'declined'
-    );
+    const isAccepted =
+      !event.attendees ||
+      event.attendees.some(attendee => attendee.self && attendee.responseStatus !== 'declined');
 
     return (hasAttendees || hasMeetingLink) && isAccepted;
   }
@@ -153,13 +153,15 @@ class GoogleCalendar {
       meetingLink: meetingLink,
       participants: this._extractParticipants(event),
       location: event.location || '',
-      organizer: event.organizer ? {
-        name: event.organizer.displayName || event.organizer.email,
-        email: event.organizer.email
-      } : null,
+      organizer: event.organizer
+        ? {
+            name: event.organizer.displayName || event.organizer.email,
+            email: event.organizer.email,
+          }
+        : null,
       status: event.status || 'confirmed',
       // Metadata for routing
-      participantEmails: (event.attendees || []).map(a => a.email).filter(Boolean)
+      participantEmails: (event.attendees || []).map(a => a.email).filter(Boolean),
     };
   }
 
@@ -202,11 +204,11 @@ class GoogleCalendar {
 
     // Regex patterns for common meeting platforms
     const patterns = {
-      'zoom': /https?:\/\/[\w-]*\.?zoom\.us\/[^\s<]*/i,
-      'teams': /https?:\/\/teams\.(microsoft|live)\.com\/[^\s<]*/i,
+      zoom: /https?:\/\/[\w-]*\.?zoom\.us\/[^\s<]*/i,
+      teams: /https?:\/\/teams\.(microsoft|live)\.com\/[^\s<]*/i,
       'google-meet': /https?:\/\/meet\.google\.com\/[^\s<]*/i,
-      'webex': /https?:\/\/[\w-]*\.?webex\.com\/[^\s<]*/i,
-      'whereby': /https?:\/\/whereby\.com\/[^\s<]*/i
+      webex: /https?:\/\/[\w-]*\.?webex\.com\/[^\s<]*/i,
+      whereby: /https?:\/\/whereby\.com\/[^\s<]*/i,
     };
 
     if (patterns[platform]) {
@@ -238,7 +240,7 @@ class GoogleCalendar {
         email: attendee.email,
         responseStatus: attendee.responseStatus || 'needsAction',
         optional: attendee.optional || false,
-        organizer: attendee.organizer || false
+        organizer: attendee.organizer || false,
       }));
   }
 
@@ -256,7 +258,8 @@ class GoogleCalendar {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('auth:expired', {
             service: 'Google',
-            message: 'Your Google authentication has expired. Please sign in again to continue using Calendar and Contacts features.'
+            message:
+              'Your Google authentication has expired. Please sign in again to continue using Calendar and Contacts features.',
           });
           console.log('[GoogleCalendar] Sent auth:expired notification to renderer');
         }

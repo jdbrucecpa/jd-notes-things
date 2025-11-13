@@ -202,10 +202,10 @@ class EmailMatcher {
     }
 
     const results = {
-      clients: {},      // { slug: [emails] }
-      industry: {},     // { slug: [emails] }
-      internal: [],     // [emails]
-      unfiled: []       // [emails]
+      clients: {}, // { slug: [emails] }
+      industry: {}, // { slug: [emails] }
+      internal: [], // [emails]
+      unfiled: [], // [emails]
     };
 
     for (const email of emails) {

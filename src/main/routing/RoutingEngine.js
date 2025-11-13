@@ -39,8 +39,8 @@ class RoutingEngine {
       orgCount,
       multiOrg: orgCount > 1,
       settings: {
-        duplicate_multi_org: settings.duplicate_multi_org
-      }
+        duplicate_multi_org: settings.duplicate_multi_org,
+      },
     };
 
     // Determine routing based on multi-org settings
@@ -148,7 +148,7 @@ class RoutingEngine {
       folderName,
       fullPath,
       dateStr,
-      titleSlug
+      titleSlug,
     };
   }
 
@@ -171,10 +171,10 @@ class RoutingEngine {
     return text
       .toLowerCase()
       .trim()
-      .replace(/[^\w\s-]/g, '')  // Remove non-word chars (except spaces and hyphens)
-      .replace(/[\s_-]+/g, '-')  // Replace spaces, underscores, and multiple hyphens with single hyphen
-      .replace(/^-+|-+$/g, '')   // Remove leading/trailing hyphens
-      .substring(0, 50);         // Limit length
+      .replace(/[^\w\s-]/g, '') // Remove non-word chars (except spaces and hyphens)
+      .replace(/[\s_-]+/g, '-') // Replace spaces, underscores, and multiple hyphens with single hyphen
+      .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
+      .substring(0, 50); // Limit length
   }
 
   /**
@@ -187,7 +187,7 @@ class RoutingEngine {
     const testMeeting = {
       participantEmails: emails,
       meetingTitle: 'Test Meeting',
-      meetingDate: new Date()
+      meetingDate: new Date(),
     };
 
     const decision = this.route(testMeeting);
@@ -197,7 +197,9 @@ class RoutingEngine {
     console.log(`  Organizations Matched: ${decision.orgCount}`);
     console.log(`  Routes Generated: ${decision.routes.length}`);
     decision.routes.forEach((route, index) => {
-      console.log(`  Route ${index + 1}: ${route.type}${route.slug ? ` (${route.slug})` : ''} -> ${route.fullPath}`);
+      console.log(
+        `  Route ${index + 1}: ${route.type}${route.slug ? ` (${route.slug})` : ''} -> ${route.fullPath}`
+      );
     });
 
     return decision;
@@ -216,14 +218,14 @@ class RoutingEngine {
         type: route.type,
         slug: route.slug,
         path: route.fullPath,
-        displayName: this._getDisplayName(route.type, route.slug)
+        displayName: this._getDisplayName(route.type, route.slug),
       })),
       participantBreakdown: {
         clients: Object.keys(decision.matchResults.clients),
         industry: Object.keys(decision.matchResults.industry),
         internal: decision.matchResults.internal.length,
-        unfiled: decision.matchResults.unfiled.length
-      }
+        unfiled: decision.matchResults.unfiled.length,
+      },
     };
 
     return summary;
@@ -235,13 +237,15 @@ class RoutingEngine {
    */
   _getDisplayName(type, slug) {
     if (type === 'client') {
-      return slug.split('-').map(word =>
-        word.charAt(0).toUpperCase() + word.slice(1)
-      ).join(' ');
+      return slug
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
     } else if (type === 'industry') {
-      return slug.split('-').map(word =>
-        word.charAt(0).toUpperCase() + word.slice(1)
-      ).join(' ');
+      return slug
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
     } else if (type === 'internal') {
       return 'Internal Team';
     } else {

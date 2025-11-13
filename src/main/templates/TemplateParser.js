@@ -98,17 +98,20 @@ class TemplateParser {
     while ((match = sectionRegex.exec(content)) !== null) {
       sections.push({
         title: match[1].trim(),
-        prompt: match[2].trim()
+        prompt: match[2].trim(),
       });
     }
 
-    return this.validateTemplate({
-      name: metadata.name,
-      description: metadata.description,
-      type: metadata.type,
-      cost_estimate: parseFloat(metadata.cost_estimate),
-      sections: sections
-    }, filePath);
+    return this.validateTemplate(
+      {
+        name: metadata.name,
+        description: metadata.description,
+        type: metadata.type,
+        cost_estimate: parseFloat(metadata.cost_estimate),
+        sections: sections,
+      },
+      filePath
+    );
   }
 
   /**
@@ -143,7 +146,7 @@ class TemplateParser {
       type: data.type || 'general',
       cost_estimate: data.cost_estimate || 0.01,
       sections: data.sections,
-      format: path.extname(filePath)
+      format: path.extname(filePath),
     };
   }
 
@@ -169,8 +172,8 @@ class TemplateParser {
 
     // Cost estimation (using gpt-4o-mini pricing)
     // Input: $0.150 per 1M tokens, Output: $0.600 per 1M tokens
-    const inputCost = (inputTokens / 1000000) * 0.150;
-    const outputCost = (outputTokens / 1000000) * 0.600;
+    const inputCost = (inputTokens / 1000000) * 0.15;
+    const outputCost = (outputTokens / 1000000) * 0.6;
     const totalCost = inputCost + outputCost;
 
     return {
@@ -179,7 +182,7 @@ class TemplateParser {
       totalTokens,
       inputCost,
       outputCost,
-      totalCost
+      totalCost,
     };
   }
 }

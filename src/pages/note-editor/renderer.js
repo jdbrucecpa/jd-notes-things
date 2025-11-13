@@ -3,27 +3,41 @@ import './styles.css';
 
 // Initialize the markdown editor when the DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-  // Initialize SimpleMDE Markdown Editor
+  // TODO: SimpleMDE Markdown Editor integration
+  // If this feature is needed, install simplemde: npm install simplemde
+  // and uncomment the code below:
+  /*
   const editor = new SimpleMDE({
     element: document.getElementById('editor'),
     spellChecker: false,
     autofocus: true,
     status: false,
     toolbar: [
-      'bold', 'italic', 'heading', '|', 
-      'quote', 'unordered-list', 'ordered-list', '|',
-      'link', 'image', '|',
-      'preview', 'side-by-side', 'fullscreen',
+      'bold',
+      'italic',
+      'heading',
+      '|',
+      'quote',
+      'unordered-list',
+      'ordered-list',
+      '|',
+      'link',
+      'image',
+      '|',
+      'preview',
+      'side-by-side',
+      'fullscreen',
     ],
     placeholder: 'Write your notes here...',
     initialValue: document.getElementById('editor').textContent.trim(),
   });
+  */
 
   // Handle sidebar toggle
   const toggleSidebarBtn = document.getElementById('toggleSidebar');
   const sidebar = document.getElementById('sidebar');
   const editorContent = document.querySelector('.editor-content');
-  
+
   toggleSidebarBtn.addEventListener('click', () => {
     sidebar.classList.toggle('hidden');
     editorContent.classList.toggle('full-width');
@@ -38,7 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Chat input handling
   const chatInput = document.getElementById('chatInput');
   const sendButton = document.getElementById('sendButton');
-  
+
   // When send button is clicked
   sendButton.addEventListener('click', () => {
     const message = chatInput.value.trim();
@@ -49,9 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
       chatInput.value = '';
     }
   });
-  
+
   // Send message on Enter key
-  chatInput.addEventListener('keypress', (e) => {
+  chatInput.addEventListener('keypress', e => {
     if (e.key === 'Enter') {
       sendButton.click();
     }

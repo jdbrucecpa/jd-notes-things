@@ -59,7 +59,7 @@ class TranscriptParser {
         entries.push({
           speaker: speakerMatch[1].trim(),
           text: speakerMatch[2].trim(),
-          timestamp: null
+          timestamp: null,
         });
         rawText += `${speakerMatch[1].trim()}: ${speakerMatch[2].trim()}\n`;
       } else if (timestampMatch) {
@@ -67,7 +67,7 @@ class TranscriptParser {
         entries.push({
           speaker: 'Unknown',
           text: timestampMatch[2].trim(),
-          timestamp: this.parseTimestamp(timestampMatch[1])
+          timestamp: this.parseTimestamp(timestampMatch[1]),
         });
         rawText += `${timestampMatch[2].trim()}\n`;
       } else {
@@ -75,7 +75,7 @@ class TranscriptParser {
         entries.push({
           speaker: 'Unknown',
           text: line.trim(),
-          timestamp: null
+          timestamp: null,
         });
         rawText += `${line.trim()}\n`;
       }
@@ -87,7 +87,7 @@ class TranscriptParser {
       entries,
       rawText: rawText.trim(),
       hasSpeakers: entries.some(e => e.speaker !== 'Unknown'),
-      hasTimestamps: entries.some(e => e.timestamp !== null)
+      hasTimestamps: entries.some(e => e.timestamp !== null),
     };
   }
 
@@ -98,7 +98,7 @@ class TranscriptParser {
   parseMarkdown(content, filePath) {
     const lines = content.split('\n');
     const entries = [];
-    let rawText = '';
+    const rawText = '';
     let metadata = {};
 
     // Extract YAML frontmatter if present
@@ -124,9 +124,9 @@ class TranscriptParser {
     let rawText = '';
 
     // Patterns for markdown transcripts
-    const speakerHeaderPattern = /^##\s+(.+)/;  // ## Speaker Name
-    const speakerInlinePattern = /^\*\*([^*]+)\*\*:\s*(.+)/;  // **Speaker**: text
-    const timestampPattern = /^(\d{1,2}:\d{2}(?::\d{2})?)\s+-\s+(.+)/;  // 00:15:30 - text
+    const speakerHeaderPattern = /^##\s+(.+)/; // ## Speaker Name
+    const speakerInlinePattern = /^\*\*([^*]+)\*\*:\s*(.+)/; // **Speaker**: text
+    const timestampPattern = /^(\d{1,2}:\d{2}(?::\d{2})?)\s+-\s+(.+)/; // 00:15:30 - text
 
     let currentSpeaker = 'Unknown';
 
@@ -149,14 +149,14 @@ class TranscriptParser {
         entries.push({
           speaker: speakerMatch[1].trim(),
           text: speakerMatch[2].trim(),
-          timestamp: null
+          timestamp: null,
         });
         rawText += `${speakerMatch[1].trim()}: ${speakerMatch[2].trim()}\n`;
       } else if (timestampMatch) {
         entries.push({
           speaker: currentSpeaker,
           text: timestampMatch[2].trim(),
-          timestamp: this.parseTimestamp(timestampMatch[1])
+          timestamp: this.parseTimestamp(timestampMatch[1]),
         });
         rawText += `${timestampMatch[2].trim()}\n`;
       } else if (line.trim() && !line.startsWith('<!--')) {
@@ -164,7 +164,7 @@ class TranscriptParser {
         entries.push({
           speaker: currentSpeaker,
           text: line.trim(),
-          timestamp: null
+          timestamp: null,
         });
         rawText += `${line.trim()}\n`;
       }
@@ -177,7 +177,7 @@ class TranscriptParser {
       rawText: rawText.trim(),
       metadata,
       hasSpeakers: entries.some(e => e.speaker !== 'Unknown'),
-      hasTimestamps: entries.some(e => e.timestamp !== null)
+      hasTimestamps: entries.some(e => e.timestamp !== null),
     };
   }
 
@@ -215,14 +215,16 @@ class TranscriptParser {
       }
 
       // Check for timestamp line (e.g., "00:00:00.000 --> 00:00:05.000")
-      const timestampMatch = line.match(/^(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})/);
+      const timestampMatch = line.match(
+        /^(\d{2}:\d{2}:\d{2}\.\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2}\.\d{3})/
+      );
 
       if (timestampMatch) {
         const startTime = timestampMatch[1];
         i++;
 
         // Collect all text lines until we hit a blank line or another timestamp
-        let textLines = [];
+        const textLines = [];
         while (i < lines.length && lines[i].trim() && !lines[i].match(/-->/)) {
           textLines.push(lines[i].trim());
           i++;
@@ -237,14 +239,14 @@ class TranscriptParser {
           entries.push({
             speaker: speakerMatch[1].trim(),
             text: speakerMatch[2].trim(),
-            timestamp: this.parseTimestamp(startTime)
+            timestamp: this.parseTimestamp(startTime),
           });
           rawText += `${speakerMatch[2].trim()}\n`;
         } else {
           entries.push({
             speaker: 'Unknown',
             text: fullText,
-            timestamp: this.parseTimestamp(startTime)
+            timestamp: this.parseTimestamp(startTime),
           });
           rawText += `${fullText}\n`;
         }
@@ -259,7 +261,7 @@ class TranscriptParser {
       entries,
       rawText: rawText.trim(),
       hasSpeakers: entries.some(e => e.speaker !== 'Unknown'),
-      hasTimestamps: true
+      hasTimestamps: true,
     };
   }
 
@@ -297,14 +299,16 @@ class TranscriptParser {
 
         // Next line should be timestamp
         const timestampLine = lines[i];
-        const timestampMatch = timestampLine?.match(/^(\d{2}:\d{2}:\d{2},\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2},\d{3})/);
+        const timestampMatch = timestampLine?.match(
+          /^(\d{2}:\d{2}:\d{2},\d{3})\s+-->\s+(\d{2}:\d{2}:\d{2},\d{3})/
+        );
 
         if (timestampMatch) {
           const startTime = timestampMatch[1].replace(',', '.');
           i++;
 
           // Collect all text lines until we hit a blank line
-          let textLines = [];
+          const textLines = [];
           while (i < lines.length && lines[i].trim()) {
             textLines.push(lines[i].trim());
             i++;
@@ -319,14 +323,14 @@ class TranscriptParser {
             entries.push({
               speaker: speakerMatch[1].trim(),
               text: speakerMatch[2].trim(),
-              timestamp: this.parseTimestamp(startTime)
+              timestamp: this.parseTimestamp(startTime),
             });
             rawText += `${speakerMatch[2].trim()}\n`;
           } else {
             entries.push({
               speaker: 'Unknown',
               text: fullText,
-              timestamp: this.parseTimestamp(startTime)
+              timestamp: this.parseTimestamp(startTime),
             });
             rawText += `${fullText}\n`;
           }
@@ -344,7 +348,7 @@ class TranscriptParser {
       entries,
       rawText: rawText.trim(),
       hasSpeakers: entries.some(e => e.speaker !== 'Unknown'),
-      hasTimestamps: true
+      hasTimestamps: true,
     };
   }
 
@@ -356,7 +360,9 @@ class TranscriptParser {
     if (!timeStr) return null;
 
     const parts = timeStr.split(':');
-    let hours = 0, minutes = 0, seconds = 0;
+    let hours = 0,
+      minutes = 0,
+      seconds = 0;
 
     if (parts.length === 3) {
       // HH:MM:SS or HH:MM:SS.mmm
@@ -420,7 +426,7 @@ class TranscriptParser {
     return parsedData.entries.map(entry => ({
       speaker: entry.speaker || 'Unknown',
       text: entry.text || '',
-      timestamp: entry.timestamp
+      timestamp: entry.timestamp,
     }));
   }
 }

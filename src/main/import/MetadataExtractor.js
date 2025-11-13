@@ -45,10 +45,10 @@ class MetadataExtractor {
       source: 'import',
       importedFrom: path.basename(filePath),
       confidence: {
-        date: dateFromFilename ? 'high' : (dateFromContent ? 'medium' : 'low'),
-        title: titleFromFilename ? 'high' : (titleFromContent ? 'medium' : 'low'),
-        participants: participants.length > 0 ? 'high' : 'low'
-      }
+        date: dateFromFilename ? 'high' : dateFromContent ? 'medium' : 'low',
+        title: titleFromFilename ? 'high' : titleFromContent ? 'medium' : 'low',
+        participants: participants.length > 0 ? 'high' : 'low',
+      },
     };
   }
 
@@ -143,7 +143,9 @@ class MetadataExtractor {
     const firstLines = parsedData.rawText.split('\n').slice(0, 10).join('\n');
 
     // Match patterns like "January 15, 2025" or "15 Jan 2025"
-    const longDateMatch = firstLines.match(/(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/i);
+    const longDateMatch = firstLines.match(
+      /(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}/i
+    );
     if (longDateMatch) {
       const date = new Date(longDateMatch[0]);
       if (!isNaN(date.getTime())) {
@@ -152,7 +154,9 @@ class MetadataExtractor {
     }
 
     // Match "Meeting on YYYY-MM-DD" or similar
-    const dateContextMatch = firstLines.match(/(?:on|date:|meeting:)\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})/i);
+    const dateContextMatch = firstLines.match(
+      /(?:on|date:|meeting:)\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})/i
+    );
     if (dateContextMatch) {
       const date = new Date(dateContextMatch[1]);
       if (!isNaN(date.getTime())) {
@@ -232,6 +236,29 @@ class MetadataExtractor {
       }
     }
 
+    // Fallback: If no participants found, search raw text for speaker patterns
+    if (participants.size === 0 && parsedData.rawText) {
+      const lines = parsedData.rawText.split('\n');
+      const speakerPattern = /^([A-Z][a-zA-Z\s]{1,30}):\s*$/; // Match "Name:" on its own line
+      const speakerPattern2 = /^([A-Z][a-zA-Z\s]{1,30}):\s*["″]/; // Match "Name: "quote
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const match = trimmed.match(speakerPattern) || trimmed.match(speakerPattern2);
+
+        if (match) {
+          const speaker = match[1].trim();
+          // Filter out common false positives
+          if (
+            speaker.length > 1 &&
+            !['Unknown', 'Speaker', 'Transcript', 'Meeting', 'Note', 'Summary'].includes(speaker)
+          ) {
+            participants.add(speaker);
+          }
+        }
+      }
+    }
+
     return Array.from(participants);
   }
 
@@ -297,9 +324,7 @@ class MetadataExtractor {
       return null;
     }
 
-    const timestamps = parsedData.entries
-      .map(e => e.timestamp)
-      .filter(t => t !== null);
+    const timestamps = parsedData.entries.map(e => e.timestamp).filter(t => t !== null);
 
     if (timestamps.length === 0) {
       return null;

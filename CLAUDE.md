@@ -24,6 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Electron Process Model
 
 **Main Process** (`src/main/`):
+
 - Recording Manager - Handles Recall.ai SDK, local audio capture
 - Transcription Service - Multi-provider (AssemblyAI, Deepgram, Recall.ai) with runtime switching via UI dropdown
 - Webhook Server - Express server on port 13373 for Recall.ai callbacks
@@ -37,6 +38,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - File Manager - Obsidian vault structure, encryption (DPAPI)
 
 **Renderer Process** (`src/renderer/`):
+
 - Main Window - Calendar view, upcoming meetings
 - Recording Widget - Always-on-top overlay during recording
 - Settings Panel - Configuration UI
@@ -67,6 +69,7 @@ vault/
 Each meeting generates **two markdown files**:
 
 **Primary File (Summary):**
+
 - Filename: `YYYY-MM-DD-meeting-slug.md`
 - Complete metadata in YAML frontmatter (participants, tags, topics, platform, duration)
 - AI-generated executive summary with decisions and action items
@@ -74,6 +77,7 @@ Each meeting generates **two markdown files**:
 - **Purpose**: Quick reference, LLM queries (cheap), CRM linking, Obsidian search
 
 **Secondary File (Transcript):**
+
 - Filename: `YYYY-MM-DD-meeting-slug-transcript.md`
 - Full timestamped conversation with speaker labels
 - Link back to summary
@@ -99,28 +103,29 @@ The LLM service scans this folder, presents available templates in UI, and gener
 
 ## Development Phases
 
-**Currently**: Pre-Phase 8 - Essential UI & Code Quality
+**Currently**: Phase 8 - Import Prior Transcripts (Testing in Production)
 
 The project follows a 12-phase plan (see `SPECIFICATION.md`):
+
 1. ✅ Core recording & transcription (MVP)
 2. ✅ Routing system
 3. ✅ Calendar integration & auto-recording
-4. ✅ LLM integration & summaries
+4. ✅ LLM integration & summaries + prompt caching (85-90% cost savings)
 5. ✅ Obsidian export & file generation
 6. ✅ Speaker recognition & contact matching
 7. ✅ Platform-specific recording (Zoom/Teams/Meet)
-8. 🚧 Pre-Phase 8: Vault override UI + logging + linting (CURRENT - 5-8 hours)
-9. 🔜 Import prior transcripts (NEXT)
-10. Encryption & security
-11. Advanced UI & settings (speaker correction, participant input, etc.)
-12. Real-time transcription (optional)
-13. HubSpot CRM integration
+8. ✅ Import prior transcripts (bulk import, folder scanning, background processing)
+9. 🔜 Encryption & security (NEXT)
+10. Advanced UI & settings (speaker correction, participant input, etc.)
+11. Real-time transcription (optional)
+12. HubSpot CRM integration
 
 Each phase delivers independently useful functionality.
 
 ## Key Integration Points
 
 ### Recall.ai SDK
+
 - Reference implementation: https://github.com/recallai/muesli-public
 - Handles system audio capture and app-specific recording
 - Windows compatibility confirmed via muesli example
@@ -128,12 +133,14 @@ Each phase delivers independently useful functionality.
 ### Google Integration (Calendar + Contacts)
 
 **Unified Authentication:**
+
 - Single OAuth 2.0 flow for both Calendar and Contacts APIs
 - Combined scopes: `calendar.readonly` + `contacts.readonly`
 - Single token file (`google-token.json`) with automatic refresh
 - Shared authentication module (`GoogleAuth.js`) for centralized token management
 
 **Google Calendar:**
+
 - Read-only calendar access
 - Detects meetings with Zoom/Teams/Meet links
 - Extracts participant emails and meeting metadata
@@ -141,12 +148,14 @@ Each phase delivers independently useful functionality.
 - Manual refresh + on-app-launch sync
 
 **Google Contacts:**
+
 - Contact caching with 24-hour expiry
 - Fast email-based lookups for speaker matching
 - Batch contact fetching on authentication
 - Automatic re-authentication when cache expires
 
 ### Speaker Identification
+
 1. Transcription service provides speaker diarization (Speaker 1, Speaker 2)
 2. Match speakers to calendar participants via Google Contacts lookup
 3. Label transcript with actual names instead of "Speaker N"
@@ -154,6 +163,7 @@ Each phase delivers independently useful functionality.
 5. Future: Voice fingerprinting for historical matching
 
 ### HubSpot Sync
+
 - Match email domain → HubSpot Company (prioritize Companies over Contacts)
 - Create Note/Activity with meeting summary
 - Associate with Company + all matched Contacts
@@ -208,19 +218,22 @@ src/
 - **Recall.ai Docs**: https://docs.recall.ai/docs/getting-started
 - **Recall.ai Example**: https://github.com/recallai/muesli-public
 
-## Current Project State (Nov 10, 2025)
+## Current Project State (Nov 12, 2025)
 
 ### Completed Phases
+
 - ✅ **Phase 1**: Core Recording & Transcription (Recall.ai SDK with async webhook-based transcription)
 - ✅ **Phase 2**: Routing System (Email domain matching, vault structure)
 - ✅ **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
-- ✅ **Phase 4**: LLM Integration (Multi-provider with runtime switching)
+- ✅ **Phase 4**: LLM Integration (Multi-provider with runtime switching + Prompt Caching)
 - ✅ **Phase 5**: Obsidian Export (Auto-export, publish buttons, link tracking - manual override UI deferred)
 - ✅ **Phase 6**: Speaker Recognition & Contact Matching (LRU cache, auth notifications)
 - ✅ **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet detection, inherited from Muesli)
 - ✅ **Pre-Phase 7 Bug Fixes**: All 5 critical bugs resolved
+- ✅ **Phase 8**: Import Prior Transcripts (bulk import, folder scanning, template selection)
 
 ### Architectural Migration (Nov 10-12, 2025)
+
 - ✅ Migrated from AssemblyAI real-time streaming to Recall.ai async transcription API (Nov 10)
 - ✅ Implemented webhook-based workflow with Svix signature verification (Nov 10)
 - ✅ Integrated ngrok for automatic webhook tunnel establishment (Nov 10)
@@ -234,8 +247,15 @@ src/
   - UI dropdown for runtime provider switching with localStorage persistence
   - Unified `TranscriptionService` module (`src/main/services/transcriptionService.js`)
   - Cost savings: 49-57% cheaper than Recall.ai full stack
+- ✅ **Implemented prompt caching across all LLM providers** (Nov 12)
+  - 85-90% cost reduction on template generation
+  - Azure OpenAI, OpenAI, and Anthropic Claude all support caching
+  - Token budgets optimized: 50,000 for auto-summary, 15,000 for template sections
+  - Cache verification logging with performance metrics
+  - Total cost per meeting: ~$0.70 (well under $1 budget target)
 
 ### Recent Bug Fixes (Nov 10, 2025)
+
 - ✅ Fixed Zod schema validation (added missing optional fields with `.passthrough()`)
 - ✅ Fixed fileOperationManager deadlock (read waiting for write, write calling read)
 - ✅ Fixed misleading "Generating summary..." toast (now says "Transcript saved")
@@ -247,7 +267,9 @@ src/
 - ✅ Added audio recording download URL to transcript metadata (for manual review)
 
 ### Current Status
+
 **Working Features:**
+
 - Manual and automatic meeting recording (Recall.ai SDK - local recording)
 - **Flexible transcription provider system:**
   - **AssemblyAI** - $0.37/hr, 3-step API, 57% cheaper (Working ✅)
@@ -260,18 +282,31 @@ src/
 - Automatic ngrok tunnel establishment for webhooks
 - Calendar event detection and display
 - Contact matching for speaker identification
-- AI summary generation with templates
+- **AI summary generation with templates + prompt caching:**
+  - Multi-provider LLM support (Azure OpenAI, OpenAI, Anthropic Claude)
+  - 85-90% cost reduction on template generation
+  - 99%+ cache hit rate on 2nd+ sections
+  - Token budgets: 50,000 for auto-summary, 15,000 per template section
+  - Total cost per meeting: ~$0.70 (including transcription)
+- **Import prior transcripts:**
+  - Bulk import with folder scanning
+  - Background processing with progress notifications
+  - Granular template selection
+  - LLM-based title suggestions for generic titles
+  - File overwrite protection
 - Obsidian vault export with routing
 - Two-file meeting architecture (summary + transcript)
 - Svix webhook signature verification for security
 
 **Platform Detection (Nov 8, 2025):**
+
 - ✅ Zoom meeting detection working (tested with solo meeting)
 - ✅ Platform metadata saved in meeting objects
 - ✅ Calendar integration detects platform from meeting links
 - ✅ UI displays platform-specific colors and icons
 
 **Phase 5 Status (Nov 10, 2025):**
+
 - ✅ Auto-export after template generation (main.js:1905-1916)
 - ✅ Manual Publish/Republish buttons with confirmation (renderer.js:2785-2839)
 - ✅ Obsidian link tracking (`meeting.obsidianLink` field - validation.js:45, main.js:1077-1086)
@@ -280,33 +315,38 @@ src/
 - ✅ UI status indicator - green badge on meeting cards (renderer.js:350-358)
 
 **Feature Requests Added to Phase 11:**
+
 - Separate LLM model configuration for auto-summary vs template-based summaries
 - Auto-summary template file (editable like other templates, instead of hardcoded prompt)
 
 ### Next Steps
 
-**Pre-Phase 8 (CURRENT - 5-8 hours):**
-Essential UI and code quality before HubSpot integration:
+**Phase 9 (NEXT):** Security hardening
 
-**Tasks:**
-1. Manual Vault Link Override UI - Edit obsidianLink field in meeting editor (2-3h)
-2. Proper Logging Framework - Install electron-log for structured logging (2-3h)
-3. ESLint & Prettier - Code linting and formatting (1-2h)
+- XSS vulnerability mitigation (DOMPurify)
+- Path traversal validation
+- IPC handler input validation (Zod schemas)
+- OAuth CSRF protection
+- API key migration to Windows Credential Manager
+- Memory leak prevention
+- Token file permission validation
+- Comprehensive security audit
 
 **Then:**
-4. **Phase 8**: Import Prior Transcripts (bulk import existing meeting notes)
-5. **Phase 9**: Security hardening (XSS, CSRF, IPC validation, credential manager, DPAPI encryption)
-6. **Phase 10**: Advanced UI & Settings
-   - Manual Speaker ID Correction UI
-   - Manual Participant Input During Recording
-   - Separate LLM model config for auto-summary vs template summaries
-   - Auto-summary template file (editable like other templates)
-   - Additional deferred code quality improvements (TypeScript, component extraction, etc.)
-7. **Phase 11**: Real-time Transcription (optional - streaming transcript during meetings)
-8. **Phase 12**: HubSpot Integration (CRM sync)
-9. **Production Testing**: End-to-end system validation with real meetings
+
+- **Phase 10**: Advanced UI & Settings
+  - Manual Speaker ID Correction UI
+  - Manual Participant Input During Recording
+  - Manual Vault Link Override UI
+  - Separate LLM model config for auto-summary vs template summaries
+  - Auto-summary template file (editable like other templates)
+  - Additional deferred code quality improvements (TypeScript, component extraction, etc.)
+- **Phase 11**: Real-time Transcription (optional - streaming transcript during meetings)
+- **Phase 12**: HubSpot Integration (CRM sync)
+- **Production Testing**: End-to-end system validation with real meetings
 
 ### Running the App
+
 - Development: `npm start` (launches Electron with hot reload)
 - Build: `npm run package` (creates distributable)
 - **Note**: Requires Windows for Recall.ai Desktop SDK

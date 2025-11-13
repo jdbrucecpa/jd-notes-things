@@ -4,28 +4,28 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: {
-      unpackDir: "{node_modules/@recallai,node_modules/ngrok}"
+      unpackDir: '{node_modules/@recallai,node_modules/ngrok}',
     },
     osxSign: {
       continueOnError: false,
-      optionsForFile: (_) => {
+      optionsForFile: _ => {
         // Here, we keep it simple and return a single entitlements.plist file.
         // You can use this callback to map different sets of entitlements
         // to specific files in your packaged app.
         return {
-          entitlements: './Entitlements.plist'
+          entitlements: './Entitlements.plist',
         };
-      }
+      },
     },
     icon: './muesli',
     extendInfo: {
-      NSUserNotificationAlertStyle: "alert",
-    }
+      NSUserNotificationAlertStyle: 'alert',
+    },
   },
   rebuildConfig: {},
   makers: [
     {
-      name: '@electron-forge/maker-dmg'
+      name: '@electron-forge/maker-dmg',
     },
     // {
     //   name: '@electron-forge/maker-squirrel',
@@ -52,7 +52,8 @@ module.exports = {
     {
       name: '@electron-forge/plugin-webpack',
       config: {
-        devContentSecurityPolicy: "default-src * 'unsafe-inline' 'unsafe-eval' data: blob: filesystem: mediastream: file:;",
+        devContentSecurityPolicy:
+          "default-src * 'unsafe-inline' 'unsafe-eval' data: blob: filesystem: mediastream: file:;",
         mainConfig: './webpack.main.config.js',
         renderer: {
           config: './webpack.renderer.config.js',
@@ -70,11 +71,11 @@ module.exports = {
       },
     },
     {
-      name: "@timfish/forge-externals-plugin",
+      name: '@timfish/forge-externals-plugin',
       config: {
-        externals: ["@recallai/desktop-sdk"],
-        includeDeps: true
-      }
+        externals: ['@recallai/desktop-sdk'],
+        includeDeps: true,
+      },
     },
     // Fuses are used to enable/disable various Electron functionality
     // at package time, before code signing the application

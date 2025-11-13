@@ -109,8 +109,10 @@ class ConfigLoader {
     // Set defaults for optional settings
     this.config.settings.duplicate_multi_org = this.config.settings.duplicate_multi_org || 'all';
     this.config.settings.domain_priority = this.config.settings.domain_priority || 'most_attendees';
-    this.config.settings.enable_email_overrides = this.config.settings.enable_email_overrides !== false;
-    this.config.settings.case_sensitive_emails = this.config.settings.case_sensitive_emails || false;
+    this.config.settings.enable_email_overrides =
+      this.config.settings.enable_email_overrides !== false;
+    this.config.settings.case_sensitive_emails =
+      this.config.settings.case_sensitive_emails || false;
 
     // Ensure email_overrides exists
     if (!this.config.email_overrides) {
@@ -202,7 +204,7 @@ class ConfigLoader {
       return;
     }
 
-    this.watcher = fs.watch(this.configPath, (eventType) => {
+    this.watcher = fs.watch(this.configPath, eventType => {
       if (eventType === 'change') {
         console.log('[ConfigLoader] Config file changed, reloading...');
         try {

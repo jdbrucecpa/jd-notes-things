@@ -30,7 +30,9 @@ body {
   flex-direction: column;
   min-height: 100vh;
   width: 100%;
-  transition: width 0.3s ease, margin-right 0.3s ease;
+  transition:
+    width 0.3s ease,
+    margin-right 0.3s ease;
   flex: 1;
 }
 
@@ -52,11 +54,13 @@ body {
   z-index: 100;
 }
 
-#drag-region, #debug-drag-region {
+#drag-region,
+#debug-drag-region {
   -webkit-app-region: drag;
 }
 
-.header-left, .header-right {
+.header-left,
+.header-right {
   display: flex;
   align-items: center;
 }
@@ -122,7 +126,8 @@ body {
   display: none;
 }
 
-.new-note-btn, .join-meeting-btn {
+.new-note-btn,
+.join-meeting-btn {
   background-color: var(--card-bg);
   border: 1px solid var(--border-color);
   margin-right: 10px;
@@ -167,7 +172,7 @@ body {
 }
 
 .llm-dropdown:focus {
-  border-color: #0077FF;
+  border-color: #0077ff;
   box-shadow: 0 0 0 2px rgba(0, 119, 255, 0.1);
 }
 
@@ -197,7 +202,7 @@ body {
 }
 
 .transcription-dropdown:focus {
-  border-color: #0077FF;
+  border-color: #0077ff;
   box-shadow: 0 0 0 2px rgba(0, 119, 255, 0.1);
 }
 
@@ -217,8 +222,8 @@ body {
 }
 
 .google-btn.connected {
-  color: #4285F4;
-  border-color: #4285F4;
+  color: #4285f4;
+  border-color: #4285f4;
 }
 
 .google-status {
@@ -233,7 +238,7 @@ body {
 }
 
 .google-btn.connected .google-status {
-  background-color: #4285F4;
+  background-color: #4285f4;
 }
 
 /* Import Button */
@@ -433,7 +438,9 @@ body {
   padding: 40px;
   background-color: var(--card-bg);
   width: calc(100% - var(--sidebar-width));
-  transition: width 0.3s ease, padding 0.3s ease;
+  transition:
+    width 0.3s ease,
+    padding 0.3s ease;
 }
 
 .editor-content.full-width {
@@ -494,7 +501,8 @@ body {
   margin-top: 10px;
 }
 
-.note-date, .note-author {
+.note-date,
+.note-author {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -515,7 +523,7 @@ body {
   gap: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: #6947BD;
+  color: #6947bd;
   margin-bottom: 8px;
   cursor: default;
 }
@@ -530,11 +538,13 @@ body {
   border: 1px solid rgba(0, 0, 0, 0.15);
   border-radius: 4px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .obsidian-link-input:focus {
-  border-color: #6947BD;
+  border-color: #6947bd;
   box-shadow: 0 0 0 3px rgba(105, 71, 189, 0.1);
 }
 
@@ -557,7 +567,9 @@ body {
   height: calc(100vh - 250px);
   resize: none;
   outline: none;
-  transition: font-size 0.3s ease, padding 0.3s ease;
+  transition:
+    font-size 0.3s ease,
+    padding 0.3s ease;
 }
 
 /* Adjust editor content when debug panel is open */
@@ -595,7 +607,8 @@ body {
   font-weight: 500;
 }
 
-.share-options, .share-export {
+.share-options,
+.share-export {
   display: flex;
   gap: 10px;
   margin-bottom: 15px;
@@ -670,7 +683,9 @@ body {
   min-width: 36px;
   height: 36px;
   cursor: pointer;
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
   color: #666;
   padding: 0 15px;
   font-size: 13px;
@@ -718,7 +733,7 @@ body {
 
 .upload-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #6947BD, #8B5CF6);
+  background: linear-gradient(90deg, #6947bd, #8b5cf6);
   border-radius: 3px;
   transition: width 0.3s ease;
 }
@@ -735,8 +750,8 @@ body {
 }
 
 .generate-btn {
-  color: #00957B;
-  background: #E3F3F1;
+  color: #00957b;
+  background: #e3f3f1;
   font-weight: 500;
   font-size: 13px;
   display: flex;
@@ -745,8 +760,8 @@ body {
 }
 
 .obsidian-btn {
-  color: #7C3AED;
-  background: #F3E8FF;
+  color: #7c3aed;
+  background: #f3e8ff;
   font-weight: 500;
   font-size: 13px;
   display: flex;
@@ -756,16 +771,16 @@ body {
 }
 
 .obsidian-btn:hover {
-  background: #E9D5FF;
+  background: #e9d5ff;
 }
 
 .obsidian-btn.published {
   color: #059669;
-  background: #D1FAE5;
+  background: #d1fae5;
 }
 
 .obsidian-btn.published:hover {
-  background: #A7F3D0;
+  background: #a7f3d0;
 }
 
 /* Obsidian sync badge on meeting cards */
@@ -815,7 +830,7 @@ body {
   left: 50%;
   transform: translateX(-50%);
   padding: 10px 20px;
-  background-color: rgba(0,0,0,0.7);
+  background-color: rgba(0, 0, 0, 0.7);
   color: white;
   border-radius: 20px;
   font-size: 14px;
@@ -837,7 +852,9 @@ body {
   z-index: 999; /* Ensure it's above everything */
   display: flex;
   flex-direction: column;
-  transition: transform 0.3s ease, width 0.3s ease;
+  transition:
+    transform 0.3s ease,
+    width 0.3s ease;
   box-shadow: -2px 0 5px rgba(0, 0, 0, 0.2);
   overflow-x: hidden;
 }
@@ -890,7 +907,7 @@ body {
   border: none;
   border-radius: 4px 0 0 4px;
   cursor: pointer;
-  z-index: 1000;  /* Above everything */
+  z-index: 1000; /* Above everything */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -920,7 +937,7 @@ body {
 
 .debug-panel-toggle.has-new-content:before {
   content: 'New Data';
-  color: #4CAF50;
+  color: #4caf50;
   font-weight: 600;
 }
 
@@ -948,7 +965,9 @@ body {
   border-radius: 8px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
   z-index: 1001;
-  transition: opacity 0.5s, transform 0.5s;
+  transition:
+    opacity 0.5s,
+    transform 0.5s;
   animation: slide-in 0.3s ease-out;
 }
 
@@ -959,7 +978,7 @@ body {
 
 .debug-notification-speaker {
   font-weight: bold;
-  color: #0077FF;
+  color: #0077ff;
 }
 
 .debug-notification-text {
@@ -968,16 +987,16 @@ body {
 
 /* Specific notification styles */
 .debug-notification.transcript-notification {
-  border-left: 3px solid #0077FF;
+  border-left: 3px solid #0077ff;
 }
 
 .debug-notification.participant-notification {
-  border-left: 3px solid #4CAF50;
+  border-left: 3px solid #4caf50;
 }
 
 .debug-notification-title {
   font-weight: bold;
-  color: #4CAF50;
+  color: #4caf50;
 }
 
 .debug-notification-name {
@@ -1091,12 +1110,12 @@ body {
 
 .transcript-entry.newest-entry {
   background-color: #2d3b4a;
-  border-left: 3px solid #0077FF;
+  border-left: 3px solid #0077ff;
 }
 
 .transcript-speaker {
   font-weight: bold;
-  color: #0077FF;
+  color: #0077ff;
   margin-bottom: 4px;
 }
 
@@ -1145,7 +1164,7 @@ body {
 
 .participant-status {
   font-size: 12px;
-  color: #4CAF50;
+  color: #4caf50;
   padding: 2px 6px;
   background-color: rgba(76, 175, 80, 0.1);
   border-radius: 10px;
@@ -1208,15 +1227,15 @@ body {
 }
 
 .sdk-log-entry.api-call {
-  border-left-color: #0077FF;
+  border-left-color: #0077ff;
 }
 
 .sdk-log-entry.event {
-  border-left-color: #4CAF50;
+  border-left-color: #4caf50;
 }
 
 .sdk-log-entry.error {
-  border-left-color: #FF3B30;
+  border-left-color: #ff3b30;
   background-color: rgba(255, 59, 48, 0.1);
 }
 
@@ -1228,17 +1247,17 @@ body {
 
 .sdk-log-entry .method {
   font-weight: bold;
-  color: #0077FF;
+  color: #0077ff;
 }
 
 .sdk-log-entry .event-type {
   font-weight: bold;
-  color: #4CAF50;
+  color: #4caf50;
 }
 
 .sdk-log-entry .error-type {
   font-weight: bold;
-  color: #FF3B30;
+  color: #ff3b30;
 }
 
 .sdk-log-entry .params {
@@ -1701,7 +1720,7 @@ body {
   color: var(--text-primary);
 }
 
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   cursor: pointer;
   width: 16px;
   height: 16px;
@@ -1733,7 +1752,7 @@ body {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4285F4 0%, #34A853 100%);
+  background: linear-gradient(90deg, #4285f4 0%, #34a853 100%);
   transition: width 0.3s ease;
   width: 0%;
 }
@@ -1759,9 +1778,17 @@ body {
 }
 
 @keyframes dots {
-  0%, 20% { content: '.'; }
-  40% { content: '..'; }
-  60%, 100% { content: '...'; }
+  0%,
+  20% {
+    content: '.';
+  }
+  40% {
+    content: '..';
+  }
+  60%,
+  100% {
+    content: '...';
+  }
 }
 
 /* ==========================================

@@ -13,7 +13,16 @@ const MetadataExtractor = require('./MetadataExtractor');
 const path = require('path');
 
 class ImportManager {
-  constructor({ routingEngine, llmService, vaultStructure, fileOperationManager, templateManager, exportFunction, summaryFunction, autoSummaryFunction }) {
+  constructor({
+    routingEngine,
+    llmService,
+    vaultStructure,
+    fileOperationManager,
+    templateManager,
+    exportFunction,
+    summaryFunction,
+    autoSummaryFunction,
+  }) {
     this.parser = new TranscriptParser();
     this.extractor = new MetadataExtractor();
     this.routingEngine = routingEngine;
@@ -37,7 +46,7 @@ class ImportManager {
       generateAutoSummary = false,
       templateIds = null,
       autoExport = false,
-      onProgress = null
+      onProgress = null,
     } = options;
 
     try {
@@ -61,13 +70,21 @@ class ImportManager {
 
       // Step 5: Generate auto-summary (optional)
       if (generateAutoSummary && meeting.transcript && meeting.transcript.length > 0) {
-        if (onProgress) onProgress({ step: 'generating-auto-summary', file: path.basename(filePath) });
+        if (onProgress)
+          onProgress({ step: 'generating-auto-summary', file: path.basename(filePath) });
         await this.generateSummary(meeting);
       }
 
       // Step 6: Generate template-based summaries (optional)
-      if (templateIds && templateIds.length > 0 && this.templateManager && meeting.transcript && meeting.transcript.length > 0) {
-        if (onProgress) onProgress({ step: 'generating-template-summaries', file: path.basename(filePath) });
+      if (
+        templateIds &&
+        templateIds.length > 0 &&
+        this.templateManager &&
+        meeting.transcript &&
+        meeting.transcript.length > 0
+      ) {
+        if (onProgress)
+          onProgress({ step: 'generating-template-summaries', file: path.basename(filePath) });
         await this.generateTemplateSummaries(meeting, templateIds);
       }
 
@@ -84,14 +101,14 @@ class ImportManager {
         success: true,
         meeting,
         metadata,
-        validationErrors
+        validationErrors,
       };
     } catch (error) {
       console.error(`Error importing ${filePath}:`, error);
       return {
         success: false,
         error: error.message,
-        file: filePath
+        file: filePath,
       };
     }
   }
@@ -108,7 +125,7 @@ class ImportManager {
       successful: 0,
       failed: 0,
       meetings: [],
-      errors: []
+      errors: [],
     };
 
     for (let i = 0; i < filePaths.length; i++) {
@@ -120,7 +137,7 @@ class ImportManager {
           step: 'batch-progress',
           current: i + 1,
           total: filePaths.length,
-          file: path.basename(filePath)
+          file: path.basename(filePath),
         });
       }
 
@@ -133,7 +150,7 @@ class ImportManager {
         results.failed++;
         results.errors.push({
           file: filePath,
-          error: result.error
+          error: result.error,
         });
       }
     }
@@ -163,7 +180,7 @@ class ImportManager {
       date: metadata.date.toISOString(),
       participants: metadata.participants.map(name => ({
         name,
-        email: null // Will be populated if found in content
+        email: null, // Will be populated if found in content
       })),
       participantEmails,
       transcript,
@@ -177,8 +194,8 @@ class ImportManager {
         originalFormat: parsedData.format,
         hasSpeakers: parsedData.hasSpeakers,
         hasTimestamps: parsedData.hasTimestamps,
-        confidence: metadata.confidence
-      }
+        confidence: metadata.confidence,
+      },
     };
 
     // Match emails to participants if available
@@ -291,7 +308,11 @@ class ImportManager {
       // Use shared function (no streaming for imports)
       const summaryContent = await this.autoSummaryFunction(meeting, null);
 
-      console.log('[Import] Summary content received:', typeof summaryContent, summaryContent ? `${summaryContent.length} chars` : 'empty/null');
+      console.log(
+        '[Import] Summary content received:',
+        typeof summaryContent,
+        summaryContent ? `${summaryContent.length} chars` : 'empty/null'
+      );
 
       if (!summaryContent || summaryContent.length === 0) {
         console.warn('[Import] No summary content returned');

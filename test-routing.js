@@ -10,9 +10,7 @@ const VaultStructure = require('./src/main/storage/VaultStructure');
 
 // Get vault path from environment
 const vaultPath = process.env.VAULT_PATH || './vault';
-const absoluteVaultPath = path.isAbsolute(vaultPath)
-  ? vaultPath
-  : path.join(__dirname, vaultPath);
+const absoluteVaultPath = path.isAbsolute(vaultPath) ? vaultPath : path.join(__dirname, vaultPath);
 
 console.log('='.repeat(80));
 console.log('JD NOTES THINGS - ROUTING SYSTEM TEST');
@@ -36,9 +34,9 @@ const testMeetings = [
     data: {
       participantEmails: ['john@almanpartners.com', 'you@jdknowsthings.com'],
       meetingTitle: 'Quarterly Review',
-      meetingDate: new Date('2025-11-06')
+      meetingDate: new Date('2025-11-06'),
     },
-    expectedRoute: 'clients/alman-partners/meetings'
+    expectedRoute: 'clients/alman-partners/meetings',
   },
   {
     name: 'Multi-Org Meeting',
@@ -46,40 +44,40 @@ const testMeetings = [
       participantEmails: [
         'john@almanpartners.com',
         'jane@capitalpartners.com',
-        'you@jdknowsthings.com'
+        'you@jdknowsthings.com',
       ],
       meetingTitle: 'Multi Party Discussion',
-      meetingDate: new Date('2025-11-06')
+      meetingDate: new Date('2025-11-06'),
     },
-    expectedRoute: 'multiple locations (depends on settings)'
+    expectedRoute: 'multiple locations (depends on settings)',
   },
   {
     name: 'Internal Team Meeting',
     data: {
       participantEmails: ['you@jdknowsthings.com', 'team@jdknowsthings.com'],
       meetingTitle: 'Team Standup',
-      meetingDate: new Date('2025-11-06')
+      meetingDate: new Date('2025-11-06'),
     },
-    expectedRoute: 'internal/meetings'
+    expectedRoute: 'internal/meetings',
   },
   {
     name: 'Unfiled Meeting',
     data: {
       participantEmails: ['unknown@randomemail.com', 'stranger@somewhere.com'],
       meetingTitle: 'Mystery Meeting',
-      meetingDate: new Date('2025-11-06')
+      meetingDate: new Date('2025-11-06'),
     },
-    expectedRoute: '_unfiled'
+    expectedRoute: '_unfiled',
   },
   {
     name: 'Industry Contact Meeting',
     data: {
       participantEmails: ['contact@herbers.com', 'you@jdknowsthings.com'],
       meetingTitle: 'Industry Discussion',
-      meetingDate: new Date('2025-11-06')
+      meetingDate: new Date('2025-11-06'),
     },
-    expectedRoute: 'industry/herbers/meetings'
-  }
+    expectedRoute: 'industry/herbers/meetings',
+  },
 ];
 
 // Run tests
@@ -137,22 +135,26 @@ Happy to be here. Let's get started.
         participants: test.data.participantEmails.map(email => ({
           email,
           name: email.split('@')[0],
-          organization: email.split('@')[1]
+          organization: email.split('@')[1],
         })),
         platform: 'test',
         meetingType: test.name.toLowerCase().replace(/\s+/g, '-'),
         duration: '15 minutes',
-        meetingPath: paths.meetingFolder
+        meetingPath: paths.meetingFolder,
       };
 
       vault.saveIndex(paths.meetingFolder, indexData);
 
       console.log(`  ✓ Created files at: ${paths.meetingFolder}`);
       results.push({ test: test.name, route: route.fullPath, success: true });
-
     } catch (error) {
       console.log(`  ✗ Error: ${error.message}`);
-      results.push({ test: test.name, route: route.fullPath, success: false, error: error.message });
+      results.push({
+        test: test.name,
+        route: route.fullPath,
+        success: false,
+        error: error.message,
+      });
     }
   });
 
@@ -175,17 +177,21 @@ console.log('');
 
 if (successful > 0) {
   console.log('Successfully Created:');
-  results.filter(r => r.success).forEach(r => {
-    console.log(`  ✓ ${r.test} -> ${r.route}`);
-  });
+  results
+    .filter(r => r.success)
+    .forEach(r => {
+      console.log(`  ✓ ${r.test} -> ${r.route}`);
+    });
   console.log('');
 }
 
 if (failed > 0) {
   console.log('Failed:');
-  results.filter(r => !r.success).forEach(r => {
-    console.log(`  ✗ ${r.test} -> ${r.error}`);
-  });
+  results
+    .filter(r => !r.success)
+    .forEach(r => {
+      console.log(`  ✗ ${r.test} -> ${r.error}`);
+    });
   console.log('');
 }
 
