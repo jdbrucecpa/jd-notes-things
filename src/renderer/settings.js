@@ -1,7 +1,9 @@
 /**
- * Settings Management Module (Phase 10.1 + 10.2)
+ * Settings Management Module (Phase 10.1 + 10.2 + 10.3)
  * Handles application settings, theme switching, and persistence
- * Phase 10.2: Added security panel with API key management and encryption
+ * Phase 10.1: Settings infrastructure and theme foundation
+ * Phase 10.2: Security panel with API key management
+ * Phase 10.3: AI model configuration (separate providers for auto vs template summaries)
  */
 
 import { initializeSecurityPanel } from './securitySettings.js';
@@ -12,6 +14,8 @@ const DEFAULT_SETTINGS = {
   autoStartRecording: false,
   debugMode: false,
   vaultPath: '',
+  autoSummaryProvider: 'azure-gpt-5-mini', // AI model for auto-summaries
+  templateSummaryProvider: 'azure-gpt-5-mini', // AI model for template summaries
 };
 
 // Settings storage key
@@ -148,6 +152,8 @@ export function initializeSettingsUI() {
   const autoStartToggle = document.getElementById('autoStartToggle');
   const debugModeToggle = document.getElementById('debugModeToggle');
   const vaultPathInput = document.getElementById('vaultPathInput');
+  const autoSummaryProviderSelect = document.getElementById('autoSummaryProviderSelect');
+  const templateSummaryProviderSelect = document.getElementById('templateSummaryProviderSelect');
   const exportSettingsBtn = document.getElementById('exportSettingsBtn');
   const importSettingsBtn = document.getElementById('importSettingsBtn');
   const importSettingsFile = document.getElementById('importSettingsFile');
@@ -230,6 +236,22 @@ export function initializeSettingsUI() {
     });
   }
 
+  // Auto Summary Provider selection
+  if (autoSummaryProviderSelect) {
+    autoSummaryProviderSelect.addEventListener('change', (e) => {
+      updateSetting('autoSummaryProvider', e.target.value);
+      showToast(`Auto-summary provider changed to ${e.target.options[e.target.selectedIndex].text}`);
+    });
+  }
+
+  // Template Summary Provider selection
+  if (templateSummaryProviderSelect) {
+    templateSummaryProviderSelect.addEventListener('change', (e) => {
+      updateSetting('templateSummaryProvider', e.target.value);
+      showToast(`Template summary provider changed to ${e.target.options[e.target.selectedIndex].text}`);
+    });
+  }
+
   // Export settings
   if (exportSettingsBtn) {
     exportSettingsBtn.addEventListener('click', () => {
@@ -306,6 +328,15 @@ export function initializeSettingsUI() {
       } else {
         debugModeToggle.classList.remove('active');
       }
+    }
+
+    // Update AI provider selections
+    if (autoSummaryProviderSelect) {
+      autoSummaryProviderSelect.value = currentSettings.autoSummaryProvider || 'azure-gpt-5-mini';
+    }
+
+    if (templateSummaryProviderSelect) {
+      templateSummaryProviderSelect.value = currentSettings.templateSummaryProvider || 'azure-gpt-5-mini';
     }
 
     // Update vault path (this will be populated from main process)

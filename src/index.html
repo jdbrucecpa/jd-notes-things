@@ -54,13 +54,6 @@
               <path d="M3 18H21V16H3V18ZM3 13H21V11H3V13ZM3 6V8H21V6H3Z" fill="#666666"/>
             </svg>
           </button>
-          <div class="llm-provider-selector">
-            <select class="llm-dropdown" id="llmProviderSelect" title="LLM Provider">
-              <option value="azure">Azure OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-              <option value="openai">OpenAI</option>
-            </select>
-          </div>
           <div class="transcription-provider-selector">
             <select class="transcription-dropdown" id="transcriptionProviderSelect" title="Transcription Provider">
               <option value="recallai">Recall.ai</option>
@@ -574,6 +567,42 @@ Chat with meeting transcript: </textarea>
                   <div class="toggle-switch" id="autoStartToggle">
                     <div class="toggle-switch-thumb"></div>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI Model Configuration Section -->
+            <div class="settings-section">
+              <h3 class="settings-section-title">AI Model Configuration</h3>
+              <div class="settings-item-description" style="margin-bottom: 16px;">
+                Choose which AI provider to use for different summary types. Auto-summaries are generated immediately after recording ends, while template summaries are more detailed and customizable.
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Auto Summary Provider</div>
+                  <div class="settings-item-description">AI model for quick summaries after recording (faster, cheaper)</div>
+                </div>
+                <div class="settings-item-control">
+                  <select class="settings-select" id="autoSummaryProviderSelect">
+                    <option value="azure-gpt-5-mini">Azure OpenAI (gpt-5-mini)</option>
+                    <option value="claude-haiku-4-5">Anthropic Claude (Haiku 4.5)</option>
+                    <option value="openai-gpt-4o-mini">OpenAI (gpt-4o-mini)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Template Summary Provider</div>
+                  <div class="settings-item-description">AI model for detailed template-based summaries (higher quality)</div>
+                </div>
+                <div class="settings-item-control">
+                  <select class="settings-select" id="templateSummaryProviderSelect">
+                    <option value="azure-gpt-5-mini">Azure OpenAI (gpt-5-mini)</option>
+                    <option value="claude-haiku-4-5">Anthropic Claude (Haiku 4.5)</option>
+                    <option value="openai-gpt-4o-mini">OpenAI (gpt-4o-mini)</option>
+                  </select>
                 </div>
               </div>
             </div>

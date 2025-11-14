@@ -12,7 +12,7 @@
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
 **Phase:** Phase 10 - Advanced UI & Settings
-**Status:** Phase 10.1 complete (Settings Management) - Ready for Phase 10.2
+**Status:** Phase 10.2 complete (API Key Management) - Ready for Phase 10.3
 
 **Completed Phases:**
 
@@ -33,8 +33,8 @@
   - ✅ Token file permission validation (Windows icacls)
   - ✅ Memory leak prevention (auth window event listener cleanup)
   - ✅ Comprehensive security audit (15/15 tests passing, 0 critical vulnerabilities)
-  - 📋 Deferred to Phase 10: API key migration, DPAPI encryption, encryption UI
-- ✅ Phase 10.1: Settings Management (getAppVersion, getVaultPath IPC handlers)
+- ✅ Phase 10.1: Settings Infrastructure & Theme Foundation (Settings panel with tabs, persistence, theme support)
+- ✅ Phase 10.2: Security & Credentials (API Key Management with Windows Credential Manager migration)
 
 **Recent Architectural Changes (Nov 10-12, 2025):**
 
@@ -1819,133 +1819,265 @@ Entire meeting history organized and searchable using new system. Background pro
 
 **Goal:** Polish user experience and configurability
 
-#### Deliverables
+**Execution Strategy:** Optimized subphase order to minimize dependencies and maximize user value delivery
 
-1. Comprehensive settings panel
-2. Template editor with syntax highlighting
-3. Routing configuration editor
-4. Routing test tool
-5. Audio quality settings
-6. Notification preferences
-7. Theme support (light/dark)
-8. Keyboard shortcuts
-9. System tray menu
-10. Logs and diagnostics viewer
-11. ✅ **LLM Provider Selection** - UI dropdown for switching between OpenAI, Anthropic, Azure OpenAI (Nov 8, 2025)
-12. ⏳ **LLM Model Configuration** - Separate model selection for auto-summary vs template-based summaries
-13. ⏳ **Auto-Summary Template** - Editable template file for automatic post-recording summary (instead of hardcoded prompt)
-14. ⏳ **API Key Management UI** (Phase 9 Deferred) - Settings panel for managing API keys
-    - Migrate from `.env` to Windows Credential Manager using `keytar`
-    - UI for inputting/updating API keys (OpenAI, Anthropic, Azure, etc.)
-    - Secure storage wrapper: `src/main/security/credentialStore.js`
-    - Migration wizard for existing `.env` keys on first run
-15. ⏳ **Encryption Settings UI** (Phase 9 Deferred) - Enable/disable file encryption
-    - Toggle for Windows DPAPI encryption in settings
-    - "Encrypt existing files" and "Decrypt all files" actions
-    - Status indicators showing which files are encrypted
-    - Warning dialogs for encryption state changes
-16. ⏳ **Windows DPAPI Integration** (Phase 9 Deferred) - Backend file encryption
-    - Use Electron's built-in `safeStorage` API (wraps Windows DPAPI)
-    - Encryption service: `src/main/security/encryptionService.js`
-    - Transparent encryption/decryption on file read/write
-    - `.encrypted` suffix for encrypted files in vault
-    - Optional feature (off by default)
+---
 
-#### Success Criteria
+#### Phase 10.1: Settings Infrastructure & Theme Foundation 🏗️
+
+**Status:** ✅ COMPLETE (January 13, 2025)
+
+**Goal:** Foundation for all other features
+
+**Deliverables:**
+- ✅ Comprehensive settings panel with tab/section navigation
+- ✅ Settings persistence (localStorage)
+- ✅ Theme support (light/dark mode) - UI controls implemented
+- ✅ Settings import/export for backup
+- ✅ IPC handlers: `settings:getAppVersion`, `settings:getVaultPath`
+
+**Estimated Effort:** Medium | **Priority:** Critical (foundation)
+
+**Files Created:**
+- `src/renderer/settings.js` (340 lines)
+
+**Files Modified:**
+- `src/index.html` - Added settings modal with sidebar navigation
+- `src/index.css` - Added 400+ lines of settings UI styles
+- `src/main.js` - Added settings IPC handlers
+- `src/preload.js` - Exposed settings APIs
+
+---
+
+#### Phase 10.2: Security & Credentials 🔒
+
+**Status:** ✅ COMPLETE (January 13, 2025)
+
+**Goal:** Complete Phase 9 security story
+
+**Deliverables:**
+- ✅ API Key Management UI with Security tab in settings
+- ✅ Migration from `.env` to Windows Credential Manager (using `keytar`)
+- ✅ Migration wizard for existing API keys (one-click migration)
+- ✅ Edit/Test/Delete functionality for all 14 API key types
+- ✅ Inline editing with password input fields
+- ✅ Key validation with provider-specific format checking
+- ✅ Backwards compatibility (automatic fallback to `.env`)
+- ✅ Secure storage using Windows Credential Manager
+- ❌ ~~Windows DPAPI file encryption~~ - **REMOVED**: Obsidian requires plain text markdown files
+- ❌ ~~Encryption Settings UI~~ - **REMOVED**: Incompatible with Obsidian integration
+
+**Estimated Effort:** Large | **Priority:** High (production security)
+
+**Files Created:**
+- `src/main/services/keyManagementService.js` (298 lines) - Windows Credential Manager integration
+- `src/main/services/encryptionService.js` (450 lines) - DPAPI service (unused, kept for future non-vault files)
+- `src/renderer/securitySettings.js` (334 lines) - Security panel UI logic
+
+**Files Modified:**
+- `src/main.js` - Added key management IPC handlers + `getAPIKey()` helper
+- `src/preload.js` - Added key management APIs
+- `src/index.html` - Added Security tab and API keys table
+- `src/index.css` - Added 250+ lines of security panel styles
+- `webpack.main.config.js` - Added `keytar` to externals
+
+**Implementation Notes:**
+- File encryption removed due to Obsidian compatibility requirements
+- `encryptionService.js` kept but not actively used (potential future use for audio files)
+- All API keys stored securely in Windows Credential Manager
+- Migration wizard shows when keys exist in `.env` but not Credential Manager
+
+---
+
+#### Phase 10.3: LLM & Template Configuration 🤖
+
+**Status:** ⏳ NOT STARTED
+
+**Goal:** Power-user control over AI + builds Monaco editor infrastructure
+
+**Deliverables:**
+- ⏳ Separate LLM model config for auto-summary vs template summaries
+- ⏳ Auto-summary template file (user-editable, replaces hardcoded prompt)
+- ⏳ Template editor with syntax highlighting (Monaco Editor)
+- ⏳ Template management (create, duplicate, delete, reorder)
+- ⏳ Live template preview (test on existing transcript)
+- ⏳ Template metadata editor (name, description, tags)
+
+**Estimated Effort:** Large | **Priority:** Medium (customization)
+
+**Technical Approach:**
+- Integrate Monaco Editor for syntax highlighting (YAML/Markdown)
+- Create `config/templates/auto-summary.yaml` for default summary prompt
+- Add template management UI in settings
+- Separate LLM dropdown for "Auto Summary Model" vs "Template Model"
+
+---
+
+#### Phase 10.4: Advanced Configuration Editors ⚙️
+
+**Status:** ⏳ NOT STARTED
+
+**Goal:** Visual editors for configuration files (reuses Monaco editor from 10.3)
+
+**Deliverables:**
+- ⏳ Routing Configuration Editor (visual editor for `routing.yaml`)
+- ⏳ Organization/contact management UI
+- ⏳ Validation and error highlighting (live linting)
+- ⏳ Config backup before edits
+- ⏳ Routing test tool (preview where a meeting would be saved)
+
+**Estimated Effort:** Large | **Priority:** Medium (nice-to-have)
+
+**Dependencies:** Requires Monaco Editor from Phase 10.3
+
+---
+
+#### Phase 10.5: Meeting Metadata Management ✏️
+
+**Status:** ⏳ NOT STARTED
+
+**Goal:** Fix individual meeting data quality issues
+
+**Deliverables:**
+- ⏳ Manual Speaker ID Correction UI (inline editing in transcript view)
+- ⏳ Manual Participant Input During Recording (add participants mid-meeting)
+- ⏳ Manual Vault Link Override UI (wire up existing backend in `main.js`)
+- ⏳ Participant autocomplete from Google Contacts
+- ⏳ Undo/redo for metadata edits
+
+**Estimated Effort:** Medium | **Priority:** High (data quality)
+
+**Technical Notes:**
+- Backend for vault link override already exists in `main.js:976-978`
+- Needs UI input field in meeting detail view
+- Speaker correction requires transcript re-rendering
+
+---
+
+#### Phase 10.6: Bulk Meeting Operations 📦
+
+**Status:** ⏳ NOT STARTED
+
+**Goal:** Batch operations for power users (builds on 10.5 + uses 10.3 templates)
+
+**Deliverables:**
+- ⏳ Bulk re-export (update vault files if routing/structure changed)
+- ⏳ Batch template generation (apply new templates to old meetings)
+- ⏳ Bulk speaker corrections (fix recurring misidentifications)
+- ⏳ Batch routing updates (move meetings to new organizations)
+- ⏳ Multi-select UI with progress tracking
+- ⏳ Dry-run preview before applying changes
+- ⏳ Undo/rollback for bulk operations
+
+**Estimated Effort:** Large | **Priority:** Medium (power-user feature)
+
+**Dependencies:** Requires 10.3 (templates) and 10.5 (speaker correction)
+
+---
+
+#### Phase 10.7: Desktop App Polish ✨
+
+**Status:** ⏳ NOT STARTED
+
+**Goal:** Professional desktop experience
+
+**Deliverables:**
+- ⏳ System tray menu (quick record, open vault, quit)
+- ⏳ Global keyboard shortcuts (start/stop recording)
+- ⏳ Recording quality settings (audio bitrate, format)
+- ⏳ Notification preferences (control toasts, sounds)
+- ⏳ Multi-monitor support (widget placement persistence)
+- ⏳ Logs and diagnostics viewer
+
+**Estimated Effort:** Medium | **Priority:** Low (polish)
+
+---
+
+#### Phase 10.8: Code Quality & Validation 🧹
+
+**Status:** ⏳ ONGOING (Can happen in parallel with other phases)
+
+**Goal:** Maintainability and robustness improvements
+
+**Deliverables:**
+- ⏳ Complete IPC validation rollout (34/36 handlers remaining)
+- ⏳ Component extraction and refactoring
+- ⏳ Performance profiling
+- ⏳ TypeScript migration (optional, discuss separately)
+
+**Estimated Effort:** Medium | **Priority:** Ongoing
+
+**Code Quality Improvements (Moved from "Phase 11"):**
+
+**19. Global State Management Refactoring**
+- **Issue**: `main.js` uses module-level variables for state (40+ globals)
+- **Current**: `let detectedMeeting, googleAuth, googleCalendar, templateManager...`
+- **Fix**: Create `AppState` class to encapsulate state
+- **Priority**: Medium - improves maintainability
+- **Estimated effort**: 6-8 hours
+
+**20. Configuration Centralization**
+- **Issue**: Hardcoded values scattered throughout codebase
+- **Examples**: `60000` (meeting check interval), `200` (tokens per section)
+- **Fix**: Create `config/constants.js` with named constants
+- **Priority**: Medium - improves maintainability
+- **Estimated effort**: 3-4 hours
+
+**21. Routing Configuration Validation**
+- **Issue**: `ConfigLoader.js` validates structure but not data validity
+- **Fix**: Use Zod schemas to validate email formats, domain formats, vault paths
+- **Priority**: Medium - prevents configuration errors
+- **Estimated effort**: 2-3 hours
+
+**22. Code Duplication Cleanup**
+- Refactor repeated patterns (video file checking, upload tokens, error handling)
+- Extract common code into utility functions/modules
+- **Priority**: Low - fix when convenient
+- **Estimated effort**: 4-6 hours total, done opportunistically
+
+**23. Async File Operations Migration**
+- **Issue**: `VaultStructure.js` and `ConfigLoader.js` use sync operations
+- **Fix**: Migrate to async versions: `fs.promises.writeFile()`, etc.
+- **Priority**: Low - mostly small files in this app
+- **Estimated effort**: 2-3 hours
+
+**24. Environment Configuration**
+- Implement dev/staging/production environment separation
+- Create environment-specific configuration files
+- **Priority**: Implement when deployment/distribution needs arise
+- **Estimated effort**: 3-4 hours
+
+---
+
+#### Phase 10 Execution Order Summary
+
+**Optimized dependency chain:**
+
+10.1 ✅ → 10.2 ✅ → 10.3 → 10.4 → 10.5 → 10.6 → 10.7 (+ 10.8 ongoing)
+
+**Rationale:**
+- 10.1 provides settings infrastructure for all other features
+- 10.2 completes security story (high priority)
+- 10.3 builds Monaco editor infrastructure needed for 10.4
+- 10.5 provides individual metadata fixes needed for 10.6 bulk operations
+- 10.7 is polish and can be done anytime
+- 10.8 is ongoing refactoring in parallel
+
+#### Overall Success Criteria
 
 - All settings accessible and functional
-- In-app routing config editor works
-- User can customize behavior without editing files
+- In-app editors work for templates and routing config
+- User can customize behavior without editing files directly
 - Keyboard shortcuts work consistently
 - System tray provides quick access
 - User can select different LLM models for auto vs template summaries
 - Auto-summary prompt editable via template file
 - API keys stored securely in Windows Credential Manager
-- File encryption toggle works without data loss
-- Encrypted files transparent to user (automatic decrypt on read)
+- Bulk operations have dry-run previews and rollback capability
 
 #### User Value
 
-Fully customizable to personal workflow preferences with enterprise-grade security options.
-
-#### Code Quality Improvements (Phase 11)
-
-**19. Global State Management Refactoring**
-
-- **Issue**: `main.js` uses module-level variables for state (40+ globals)
-- **Current**: `let detectedMeeting, googleAuth, googleCalendar, templateManager...`
-- **Fix**: Create `AppState` class to encapsulate state:
-  ```javascript
-  class AppState {
-    constructor() {
-      this.detectedMeeting = null;
-      this.services = {};
-    }
-    async initialize() {
-      /* centralized init */
-    }
-  }
-  ```
-- **Benefits**: Easier testing, clearer state ownership, better encapsulation
-- **Priority**: Medium - improves maintainability
-- **Estimated effort**: 6-8 hours
-
-**20. Configuration Centralization**
-
-- **Issue**: Hardcoded values scattered throughout codebase
-- **Examples**:
-  - `60000` (meeting check interval)
-  - `200` (tokens per section)
-  - `0.150` (LLM pricing)
-- **Fix**: Create `config/constants.js` with named constants:
-  ```javascript
-  module.exports = {
-    INTERVALS: { MEETING_CHECK_MS: 60 * 1000 },
-    LLM_PRICING: { 'gpt-4o-mini': { input: 0.15 / 1_000_000 } },
-  };
-  ```
-- **Priority**: Medium - improves maintainability
-- **Estimated effort**: 3-4 hours
-
-**21. Routing Configuration Validation**
-
-- **Issue**: `ConfigLoader.js` validates structure but not data validity
-- **Fix**: Use Zod schemas to validate:
-  - Email formats (`z.string().email()`)
-  - Domain formats (`z.string().regex(/^[a-z0-9.-]+$/i)`)
-  - Valid vault paths
-  - No duplicate entries
-- **Priority**: Medium - prevents configuration errors
-- **Estimated effort**: 2-3 hours
-
-**22. Code Duplication Cleanup**
-
-- Refactor repeated patterns identified during development:
-  - Video file checking logic
-  - Upload token creation
-  - Error handling patterns
-- Extract common code into utility functions/modules
-- Approach: Refactor opportunistically when touching duplicated code
-- **Priority**: Low - fix when convenient
-- **Estimated effort**: 4-6 hours total, done opportunistically
-
-**23. Async File Operations Migration**
-
-- **Issue**: `VaultStructure.js` and `ConfigLoader.js` use sync operations
-- **Current**: `fs.writeFileSync()`, `fs.readFileSync()` block event loop
-- **Fix**: Migrate to async versions: `fs.promises.writeFile()`, etc.
-- **Impact**: Large files won't freeze UI
-- **Priority**: Low - mostly small files in this app
-- **Estimated effort**: 2-3 hours
-
-**24. Environment Configuration**
-
-- Implement dev/staging/production environment separation
-- Create environment-specific configuration files
-- Support for different API endpoints per environment
-- Enable easier testing with different configurations
-- **Priority**: Implement when deployment/distribution needs arise
-- **Estimated effort**: 3-4 hours
+Fully customizable to personal workflow preferences with enterprise-grade security, power-user bulk operations, and professional desktop app polish.
 
 ---
 

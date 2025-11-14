@@ -88,9 +88,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectImportFiles: () => ipcRenderer.invoke('import:selectFiles'),
   selectImportFolder: () => ipcRenderer.invoke('import:selectFolder'),
   onImportProgress: callback => ipcRenderer.on('import:progress', (_, data) => callback(data)),
-  // Settings (Phase 10.1)
+  // Settings (Phase 10.1 + 10.3)
   getAppVersion: () => ipcRenderer.invoke('settings:getAppVersion'),
   getVaultPath: () => ipcRenderer.invoke('settings:getVaultPath'),
+  getProviderPreferences: () => ipcRenderer.invoke('settings:getProviderPreferences'),
   // Key Management (Phase 10.2)
   keysListAll: () => ipcRenderer.invoke('keys:list'),
   keysGet: keyName => ipcRenderer.invoke('keys:get', keyName),

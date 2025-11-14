@@ -13,5 +13,9 @@ module.exports = {
     ngrok: 'commonjs ngrok',
     svix: 'commonjs svix',
     keytar: 'commonjs keytar',
+    googleapis: 'commonjs googleapis',
+    'google-auth-library': 'commonjs google-auth-library',
+    gaxios: 'commonjs gaxios',
+    'gcp-metadata': 'commonjs gcp-metadata',
   },
 };

@@ -1702,158 +1702,180 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
     throw new Error('Template manager or LLM service not available');
   }
 
-  // Use all templates if none specified
-  if (!templateIds) {
-    const allTemplates = templateManager.getAllTemplates();
-    templateIds = allTemplates.map(t => t.id);
+  // Get provider preferences and switch to template summary provider (Phase 10.3)
+  const preferences = await getProviderPreferences();
+  const desiredProvider = mapProviderValue(preferences.templateSummaryProvider);
+  const originalProvider = llmService.config.provider; // Use config.provider (lowercase key) not getProviderName() (display name)
+
+  if (desiredProvider !== originalProvider) {
+    console.log(
+      `[TemplateSummary] Switching LLM provider from ${originalProvider} to ${desiredProvider} (template summary preference: ${preferences.templateSummaryProvider})`
+    );
+    llmService.switchProvider(desiredProvider);
   }
 
-  // Convert transcript to text format
-  let transcriptText = '';
-  if (Array.isArray(meeting.transcript)) {
-    transcriptText = meeting.transcript
-      .map(segment => {
+  try {
+    // Use all templates if none specified
+    if (!templateIds) {
+      const allTemplates = templateManager.getAllTemplates();
+      templateIds = allTemplates.map(t => t.id);
+    }
+
+    // Convert transcript to text format
+    let transcriptText = '';
+    if (Array.isArray(meeting.transcript)) {
+      transcriptText = meeting.transcript
+        .map(segment => {
         if (typeof segment === 'object') {
           return `${segment.speaker || 'Speaker'}: ${segment.text}`;
         }
         return String(segment);
       })
       .join('\n');
-  } else if (typeof meeting.transcript === 'string') {
-    transcriptText = meeting.transcript;
-  } else {
-    transcriptText = String(meeting.transcript);
-  }
-
-  console.log(`[TemplateSummary] Transcript length: ${transcriptText.length} characters`);
-
-  // Collect section metadata only - NO FUNCTIONS to avoid memory issues
-  const sectionTasks = [];
-
-  for (const templateId of templateIds) {
-    const template = templateManager.getTemplate(templateId);
-    if (!template) {
-      console.warn('[TemplateSummary] Template not found:', templateId);
-      continue;
+    } else if (typeof meeting.transcript === 'string') {
+      transcriptText = meeting.transcript;
+    } else {
+      transcriptText = String(meeting.transcript);
     }
 
-    console.log('[TemplateSummary] Generating summary with template:', template.name);
+    console.log(`[TemplateSummary] Transcript length: ${transcriptText.length} characters`);
 
-    for (const section of template.sections) {
-      console.log(`[TemplateSummary] Queuing section: ${section.title}`);
+    // Collect section metadata only - NO FUNCTIONS to avoid memory issues
+    const sectionTasks = [];
 
-      // Store ONLY data - no functions (functions capture context and cause OOM)
-      sectionTasks.push({
-        templateId: template.id,
-        templateName: template.name,
-        sectionTitle: section.title,
-        sectionPrompt: section.prompt,
-        name: `${template.name} - ${section.title}`,
-      });
+    for (const templateId of templateIds) {
+      const template = templateManager.getTemplate(templateId);
+      if (!template) {
+        console.warn('[TemplateSummary] Template not found:', templateId);
+        continue;
+      }
+
+      console.log('[TemplateSummary] Generating summary with template:', template.name);
+
+      for (const section of template.sections) {
+        console.log(`[TemplateSummary] Queuing section: ${section.title}`);
+
+        // Store ONLY data - no functions (functions capture context and cause OOM)
+        sectionTasks.push({
+          templateId: template.id,
+          templateName: template.name,
+          sectionTitle: section.title,
+          sectionPrompt: section.prompt,
+          name: `${template.name} - ${section.title}`,
+        });
+      }
     }
-  }
 
-  // Estimate tokens per request (rough estimate: 1 token ≈ 4 chars)
-  const estimatedTokensPerRequest = Math.ceil(transcriptText.length / 4) + 200; // +200 for prompts
+    // Estimate tokens per request (rough estimate: 1 token ≈ 4 chars)
+    const estimatedTokensPerRequest = Math.ceil(transcriptText.length / 4) + 200; // +200 for prompts
 
-  // Azure limit: 200k tokens/min. Use 70% to be safe
-  const tokenBudgetPerMinute = 140000;
+    // Azure limit: 200k tokens/min. Use 70% to be safe
+    const tokenBudgetPerMinute = 140000;
 
-  // Calculate safe concurrency based on token budget
-  const safeConcurrency = Math.max(1, Math.floor(tokenBudgetPerMinute / estimatedTokensPerRequest));
-  const actualConcurrency = Math.min(3, safeConcurrency); // Cap at 3 for safety
+    // Calculate safe concurrency based on token budget
+    const safeConcurrency = Math.max(1, Math.floor(tokenBudgetPerMinute / estimatedTokensPerRequest));
+    const actualConcurrency = Math.min(3, safeConcurrency); // Cap at 3 for safety
 
-  console.log(`[TemplateSummary] Transcript: ~${estimatedTokensPerRequest} tokens/request`);
-  console.log(
-    `[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`
-  );
-  const startTime = Date.now();
+    console.log(`[TemplateSummary] Transcript: ~${estimatedTokensPerRequest} tokens/request`);
+    console.log(
+      `[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`
+    );
+    const startTime = Date.now();
 
-  // Process completely sequentially - NO concurrency, NO closures
-  // This is slower but avoids OOM with large transcripts
-  const sectionResults = new Array(sectionTasks.length);
+    // Process completely sequentially - NO concurrency, NO closures
+    // This is slower but avoids OOM with large transcripts
+    const sectionResults = new Array(sectionTasks.length);
 
-  for (let i = 0; i < sectionTasks.length; i++) {
-    const task = sectionTasks[i];
-    let retries = 0;
-    const maxRetries = 3;
+    for (let i = 0; i < sectionTasks.length; i++) {
+      const task = sectionTasks[i];
+      let retries = 0;
+      const maxRetries = 3;
 
-    console.log(`[TemplateSummary] Processing ${i + 1}/${sectionTasks.length}: ${task.name}`);
+      console.log(`[TemplateSummary] Processing ${i + 1}/${sectionTasks.length}: ${task.name}`);
 
-    while (retries <= maxRetries) {
-      try {
-        const result = await executeTemplateSectionTask(llmService, task, transcriptText);
-        sectionResults[i] = result;
-        break; // Success, move to next task
-      } catch (error) {
-        if (error.status === 429 && retries < maxRetries) {
-          const retryAfter = error.headers?.get?.('retry-after') || 60;
-          const delayMs = (parseInt(retryAfter) + 1) * 1000;
-          console.log(
-            `[RateLimit] Hit rate limit. Retry ${retries + 1}/${maxRetries} after ${delayMs}ms`
-          );
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          retries++;
-        } else {
-          console.error(`[RateLimit] Failed after ${retries} retries:`, error.message);
-          sectionResults[i] = { success: false, content: '*Error generating this section*' };
-          break; // Give up, move to next task
+      while (retries <= maxRetries) {
+        try {
+          const result = await executeTemplateSectionTask(llmService, task, transcriptText);
+          sectionResults[i] = result;
+          break; // Success, move to next task
+        } catch (error) {
+          if (error.status === 429 && retries < maxRetries) {
+            const retryAfter = error.headers?.get?.('retry-after') || 60;
+            const delayMs = (parseInt(retryAfter) + 1) * 1000;
+            console.log(
+              `[RateLimit] Hit rate limit. Retry ${retries + 1}/${maxRetries} after ${delayMs}ms`
+            );
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+            retries++;
+          } else {
+            console.error(`[RateLimit] Failed after ${retries} retries:`, error.message);
+            sectionResults[i] = { success: false, content: '*Error generating this section*' };
+            break; // Give up, move to next task
+          }
         }
       }
     }
-  }
 
-  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-  console.log(`[TemplateSummary] All API calls completed in ${duration}s`);
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`[TemplateSummary] All API calls completed in ${duration}s`);
 
-  // Group results by template and reconstruct summaries
-  const summaries = [];
-  const templateMap = new Map();
+    // Group results by template and reconstruct summaries
+    const summaries = [];
+    const templateMap = new Map();
 
-  // Initialize template summaries
-  for (const templateId of templateIds) {
-    const template = templateManager.getTemplate(templateId);
-    if (!template) continue;
+    // Initialize template summaries
+    for (const templateId of templateIds) {
+      const template = templateManager.getTemplate(templateId);
+      if (!template) continue;
 
-    templateMap.set(template.id, {
-      templateId: template.id,
-      templateName: template.name,
-      sections: [],
-    });
-  }
-
-  // Add section results to their templates
-  sectionTasks.forEach((task, index) => {
-    const result = sectionResults[index];
-    const templateData = templateMap.get(task.templateId);
-
-    if (templateData) {
-      templateData.sections.push({
-        title: task.sectionTitle,
-        content: result.content,
+      templateMap.set(template.id, {
+        templateId: template.id,
+        templateName: template.name,
+        sections: [],
       });
     }
-  });
 
-  // Build final markdown for each template
-  for (const [templateId, templateData] of templateMap) {
-    let summaryMarkdown = `# ${meeting.title}\n\n`;
-    summaryMarkdown += `Generated using template: **${templateData.templateName}**\n\n`;
-    summaryMarkdown += `---\n\n`;
+    // Add section results to their templates
+    sectionTasks.forEach((task, index) => {
+      const result = sectionResults[index];
+      const templateData = templateMap.get(task.templateId);
 
-    for (const section of templateData.sections) {
-      summaryMarkdown += `## ${section.title}\n\n${section.content}\n\n`;
+      if (templateData) {
+        templateData.sections.push({
+          title: task.sectionTitle,
+          content: result.content,
+        });
+      }
+    });
+
+    // Build final markdown for each template
+    for (const [templateId, templateData] of templateMap) {
+      let summaryMarkdown = `# ${meeting.title}\n\n`;
+      summaryMarkdown += `Generated using template: **${templateData.templateName}**\n\n`;
+      summaryMarkdown += `---\n\n`;
+
+      for (const section of templateData.sections) {
+        summaryMarkdown += `## ${section.title}\n\n${section.content}\n\n`;
+      }
+
+      summaries.push({
+        templateId: templateData.templateId,
+        templateName: templateData.templateName,
+        content: summaryMarkdown,
+      });
     }
 
-    summaries.push({
-      templateId: templateData.templateId,
-      templateName: templateData.templateName,
-      content: summaryMarkdown,
-    });
+    console.log(`[TemplateSummary] Generated ${summaries.length} template-based summaries`);
+    return summaries;
+  } finally {
+    // Restore original provider if it was changed (Phase 10.3)
+    if (desiredProvider !== originalProvider) {
+      console.log(
+        `[TemplateSummary] Restoring LLM provider from ${desiredProvider} back to ${originalProvider}`
+      );
+      llmService.switchProvider(originalProvider);
+    }
   }
-
-  console.log(`[TemplateSummary] Generated ${summaries.length} template-based summaries`);
-  return summaries;
 }
 
 // ============================================================================
@@ -2783,6 +2805,28 @@ ipcMain.handle('settings:getAppVersion', async () => {
 // Get vault path
 ipcMain.handle('settings:getVaultPath', async () => {
   return vaultStructure?.vaultBasePath || null;
+});
+
+// Get AI provider preferences (Phase 10.3)
+ipcMain.handle('settings:getProviderPreferences', async (event) => {
+  // Get settings from renderer's localStorage via webContents
+  const preferences = await event.sender.executeJavaScript(`
+    (function() {
+      try {
+        const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
+        return {
+          autoSummaryProvider: settings.autoSummaryProvider || 'azure-gpt-5-mini',
+          templateSummaryProvider: settings.templateSummaryProvider || 'azure-gpt-5-mini'
+        };
+      } catch (e) {
+        return {
+          autoSummaryProvider: 'azure-gpt-5-mini',
+          templateSummaryProvider: 'azure-gpt-5-mini'
+        };
+      }
+    })()
+  `);
+  return preferences;
 });
 
 // ===================================================================
@@ -4720,6 +4764,61 @@ async function processTranscriptData(evt) {
 // ============================================================================
 
 /**
+ * Map provider preference value to simple provider name
+ * @param {string} providerValue - Value from settings (e.g., 'azure-gpt-5-mini', 'claude-haiku-4-5', 'openai-gpt-4o-mini')
+ * @returns {string} Provider name for llmService.switchProvider() (e.g., 'azure', 'anthropic', 'openai')
+ */
+function mapProviderValue(providerValue) {
+  if (providerValue.startsWith('azure-')) return 'azure';
+  if (providerValue.startsWith('claude-')) return 'anthropic';
+  if (providerValue.startsWith('openai-')) return 'openai';
+
+  // Fallback to azure if unknown
+  console.warn(`[LLM] Unknown provider value: ${providerValue}, falling back to azure`);
+  return 'azure';
+}
+
+/**
+ * Get provider preferences from renderer's localStorage
+ * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string}>}
+ */
+async function getProviderPreferences() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    console.warn('[LLM] Main window not available, using default providers');
+    return {
+      autoSummaryProvider: 'azure-gpt-5-mini',
+      templateSummaryProvider: 'azure-gpt-5-mini',
+    };
+  }
+
+  try {
+    const preferences = await mainWindow.webContents.executeJavaScript(`
+      (function() {
+        try {
+          const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
+          return {
+            autoSummaryProvider: settings.autoSummaryProvider || 'azure-gpt-5-mini',
+            templateSummaryProvider: settings.templateSummaryProvider || 'azure-gpt-5-mini'
+          };
+        } catch (e) {
+          return {
+            autoSummaryProvider: 'azure-gpt-5-mini',
+            templateSummaryProvider: 'azure-gpt-5-mini'
+          };
+        }
+      })()
+    `);
+    return preferences;
+  } catch (error) {
+    console.error('[LLM] Error reading provider preferences:', error);
+    return {
+      autoSummaryProvider: 'azure-gpt-5-mini',
+      templateSummaryProvider: 'azure-gpt-5-mini',
+    };
+  }
+}
+
+/**
  * Generate auto-summary, extract title, save everything, notify renderer
  * Works for ALL transcription providers (AssemblyAI, Deepgram, Recall.ai)
  *
@@ -4731,6 +4830,18 @@ async function processTranscriptData(evt) {
  */
 async function generateAndSaveAutoSummary(meetingId, logPrefix = '[Auto-Summary]') {
   console.log(`${logPrefix} Starting AI summary generation...`);
+
+  // Get provider preferences and switch to auto-summary provider (Phase 10.3)
+  const preferences = await getProviderPreferences();
+  const desiredProvider = mapProviderValue(preferences.autoSummaryProvider);
+  const originalProvider = llmService.config.provider; // Use config.provider (lowercase key) not getProviderName() (display name)
+
+  if (desiredProvider !== originalProvider) {
+    console.log(
+      `${logPrefix} Switching LLM provider from ${originalProvider} to ${desiredProvider} (auto-summary preference: ${preferences.autoSummaryProvider})`
+    );
+    llmService.switchProvider(desiredProvider);
+  }
 
   try {
     // Load fresh meeting data
@@ -4770,6 +4881,14 @@ async function generateAndSaveAutoSummary(meetingId, logPrefix = '[Auto-Summary]
     console.error(`${logPrefix} ✗ Error generating summary:`, error);
     // Don't throw - let caller decide how to handle
     return { success: false, error: error.message };
+  } finally {
+    // Restore original provider if it was changed (Phase 10.3)
+    if (desiredProvider !== originalProvider) {
+      console.log(
+        `${logPrefix} Restoring LLM provider from ${desiredProvider} back to ${originalProvider}`
+      );
+      llmService.switchProvider(originalProvider);
+    }
   }
 }
 
@@ -4790,6 +4909,7 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       'imported',
       'untitled',
       'new meeting',
+      'new note',
       'call',
       'zoom',
       'teams',
