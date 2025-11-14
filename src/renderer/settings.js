@@ -7,6 +7,7 @@
  */
 
 import { initializeSecurityPanel } from './securitySettings.js';
+import { updateEditorTheme } from './templates.js';
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -133,9 +134,10 @@ export function initializeSettingsUI() {
   applyTheme(settings.theme);
 
   // Get DOM elements
-  const settingsModal = document.getElementById('settingsModal');
+  const settingsView = document.getElementById('settingsView');
+  const mainView = document.getElementById('mainView');
   const settingsBtn = document.getElementById('settingsBtn');
-  const closeSettingsBtn = document.getElementById('closeSettingsModal');
+  const closeSettingsBtn = document.getElementById('closeSettings');
 
   // Tab elements
   const settingsTabs = document.querySelectorAll('.settings-tab');
@@ -143,6 +145,7 @@ export function initializeSettingsUI() {
     general: document.getElementById('generalPanel'),
     appearance: document.getElementById('appearancePanel'),
     security: document.getElementById('securityPanel'),
+    templates: document.getElementById('templatesPanel'),
     advanced: document.getElementById('advancedPanel'),
     about: document.getElementById('aboutPanel'),
   };
@@ -163,10 +166,11 @@ export function initializeSettingsUI() {
   const nodeVersion = document.getElementById('nodeVersion');
   const chromeVersion = document.getElementById('chromeVersion');
 
-  // Open settings modal
+  // Open settings (full-page view)
   if (settingsBtn) {
     settingsBtn.addEventListener('click', async () => {
-      settingsModal.style.display = 'flex';
+      mainView.style.display = 'none';
+      settingsView.style.display = 'block';
       loadSettingsIntoUI();
 
       // Initialize security panel (Phase 10.2)
@@ -178,19 +182,13 @@ export function initializeSettingsUI() {
     });
   }
 
-  // Close settings modal
+  // Close settings (return to main view)
   if (closeSettingsBtn) {
     closeSettingsBtn.addEventListener('click', () => {
-      settingsModal.style.display = 'none';
+      settingsView.style.display = 'none';
+      mainView.style.display = 'block';
     });
   }
-
-  // Close modal when clicking outside
-  settingsModal.addEventListener('click', (e) => {
-    if (e.target === settingsModal) {
-      settingsModal.style.display = 'none';
-    }
-  });
 
   // Tab switching
   settingsTabs.forEach(tab => {
@@ -202,9 +200,17 @@ export function initializeSettingsUI() {
       tab.classList.add('active');
 
       // Show corresponding panel
-      Object.values(settingsPanels).forEach(panel => panel.style.display = 'none');
+      Object.values(settingsPanels).forEach(panel => {
+        if (panel) panel.style.display = 'none';
+      });
       if (settingsPanels[tabName]) {
         settingsPanels[tabName].style.display = 'block';
+
+        // Load templates when templates panel is shown
+        if (tabName === 'templates' && window.loadTemplates) {
+          console.log('[Settings] Templates tab clicked, calling loadTemplates()');
+          window.loadTemplates();
+        }
       }
     });
   });
@@ -217,6 +223,9 @@ export function initializeSettingsUI() {
 
       updateSetting('theme', newTheme);
       applyTheme(newTheme);
+
+      // Update Monaco editor theme
+      updateEditorTheme(isActive);
     });
   }
 

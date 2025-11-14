@@ -1,11 +1,13 @@
 /**
  * TemplateParser - Parse meeting summary templates from various formats
  * Phase 4: Enhanced AI Summaries
+ * Phase 10.3: Added plain text template support
  *
  * Supports:
  * - YAML templates (.yaml, .yml)
  * - Markdown templates (.md)
  * - JSON templates (.json)
+ * - Plain text templates (.txt)
  */
 
 const fs = require('fs');
@@ -33,6 +35,9 @@ class TemplateParser {
 
         case '.json':
           return this.parseJSON(fileContent, filePath);
+
+        case '.txt':
+          return this.parseTextFile(fileContent, filePath);
 
         default:
           throw new Error(`Unsupported template format: ${ext}`);
@@ -109,6 +114,32 @@ class TemplateParser {
         type: metadata.type,
         cost_estimate: parseFloat(metadata.cost_estimate),
         sections: sections,
+      },
+      filePath
+    );
+  }
+
+  /**
+   * Parse plain text file (Phase 10.3)
+   * Treats the entire file as a single prompt section
+   * @private
+   */
+  static parseTextFile(content, filePath) {
+    const filename = path.basename(filePath, '.txt');
+
+    // Simple text template - entire content is the prompt
+    return this.validateTemplate(
+      {
+        name: filename.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        description: `Plain text template: ${filename}`,
+        type: 'general',
+        cost_estimate: 0.50,
+        sections: [
+          {
+            title: 'Content',
+            prompt: content.trim(),
+          },
+        ],
       },
       filePath
     );

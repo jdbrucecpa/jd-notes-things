@@ -9,6 +9,7 @@
 import './index.css';
 import { sanitizeHtml, escapeHtml, markdownToSafeHtml, safeSetInnerHTML } from './renderer/security.js';
 import { initializeSettingsUI } from './renderer/settings.js';
+import { initializeTemplateEditor } from './renderer/templates.js';
 
 // Create empty meetings data structure to be filled from the file
 const meetingsData = {
@@ -259,6 +260,9 @@ function showToast(message, type = 'info') {
     setTimeout(() => toast.remove(), 300);
   }, 4000);
 }
+
+// Make showToast available globally for other modules
+window.showToast = showToast;
 
 // ========================================
 // Display AI Generated Summaries
@@ -1726,6 +1730,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize Settings UI (Phase 10.1)
   initializeSettingsUI();
+
+  // Initialize Template Editor (Phase 10.3)
+  initializeTemplateEditor();
 
   // Initialize Google integration (Calendar + Contacts)
   await initializeGoogle();

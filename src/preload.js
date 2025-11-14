@@ -62,6 +62,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Template system (Phase 4)
   templatesGetAll: () => ipcRenderer.invoke('templates:getAll'),
   templatesGetById: templateId => ipcRenderer.invoke('templates:getById', templateId),
+  templatesGetContent: templateId => ipcRenderer.invoke('templates:getContent', templateId),
   templatesEstimateCost: (templateIds, transcript) =>
     ipcRenderer.invoke('templates:estimateCost', { templateIds, transcript }),
   templatesGenerateSummaries: (meetingId, templateIds) =>

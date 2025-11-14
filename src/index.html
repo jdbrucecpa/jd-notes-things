@@ -28,6 +28,7 @@
   </head>
   <body>
     <div class="app-container">
+      <div id="mainView" style="display: block;">
       <header class="header" id="drag-region">
         <div class="header-left">
           <button class="btn back-btn" id="backButton" style="display: none;">
@@ -488,13 +489,13 @@ Chat with meeting transcript: </textarea>
         </div>
       </div>
     </div>
+    </div><!-- end mainView -->
 
-    <!-- Settings Modal (Phase 10.1) -->
-    <div class="modal-overlay" id="settingsModal" style="display: none;">
-      <div class="modal-content settings-modal">
+    <!-- Settings Full-Page View (Phase 10.2) -->
+    <div id="settingsView" class="settings-full-page" style="display: none;">
         <div class="modal-header">
           <h2>Settings</h2>
-          <button class="modal-close" id="closeSettingsModal">
+          <button class="modal-close" id="closeSettings">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
             </svg>
@@ -521,6 +522,12 @@ Chat with meeting transcript: </textarea>
                 <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" fill="currentColor"/>
               </svg>
               <span>Security</span>
+            </div>
+            <div class="settings-tab" data-tab="templates">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/>
+              </svg>
+              <span>Templates</span>
             </div>
             <div class="settings-tab" data-tab="advanced">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -684,6 +691,56 @@ Chat with meeting transcript: </textarea>
 
           </div>
 
+          <div class="settings-panel" id="templatesPanel" style="display: none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Template Editor</h3>
+              <p style="color: #666; margin-bottom: 20px;">
+                Create and edit summary templates that define how meeting transcripts are summarized.
+              </p>
+
+              <div class="template-editor-container">
+                <!-- Template List Sidebar -->
+                <div class="template-list-sidebar">
+                  <div class="template-list-header">
+                    <h4>Templates</h4>
+                  </div>
+
+                  <div class="template-list-scroll" id="templateEditorList">
+                    <p style="text-align: center; color: var(--text-secondary); padding: 20px;">Loading...</p>
+                  </div>
+
+                  <div class="template-list-actions">
+                    <button id="newTemplateBtn">+ New</button>
+                    <button id="deleteTemplateBtn" disabled>Delete</button>
+                  </div>
+                </div>
+
+                <!-- Editor/Preview Main Area -->
+                <div class="template-editor-main">
+                  <div class="template-editor-toolbar">
+                    <input type="text" id="templateNameInput" placeholder="Select a template..." readonly />
+                    <button id="saveTemplateBtn" disabled>Save Template</button>
+                  </div>
+
+                  <div class="template-editor-tabs">
+                    <div class="template-editor-tab active" id="editorTabBtn">Editor</div>
+                    <div class="template-editor-tab" id="previewTabBtn">Preview</div>
+                  </div>
+
+                  <div class="template-editor-content">
+                    <div id="editorTabContent" style="display: block; width: 100%; height: 100%;">
+                      <div id="monacoEditorContainer"></div>
+                    </div>
+
+                    <div id="previewTabContent" style="display: none;">
+                      <p style="text-align: center; color: var(--text-secondary); margin-top: 60px;">Select a template to preview</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="settings-panel" id="advancedPanel" style="display: none;">
             <div class="settings-section">
               <h3 class="settings-section-title">Data Management</h3>
@@ -760,7 +817,6 @@ Chat with meeting transcript: </textarea>
             </div>
           </div>
         </div>
-      </div>
     </div>
   </body>
 </html>

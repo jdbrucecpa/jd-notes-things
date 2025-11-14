@@ -2414,6 +2414,26 @@ ipcMain.handle('templates:getById', async (event, templateId) => {
   }
 });
 
+// Get template raw file content for editing (Phase 10.3)
+ipcMain.handle('templates:getContent', async (event, templateId) => {
+  try {
+    console.log('[Template IPC] Getting template content:', templateId);
+    const template = templateManager.getTemplate(templateId);
+    if (!template) {
+      return { success: false, error: 'Template not found' };
+    }
+
+    // Read raw file content
+    const filePath = template.filePath || path.join(templateManager.templatesPath, `${templateId}${template.format}`);
+    const content = fs.readFileSync(filePath, 'utf8');
+
+    return { success: true, content };
+  } catch (error) {
+    console.error('[Template IPC] Failed to get template content:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Estimate cost for templates
 ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript }) => {
   try {
@@ -4892,6 +4912,76 @@ async function generateAndSaveAutoSummary(meetingId, logPrefix = '[Auto-Summary]
   }
 }
 
+/**
+ * Load auto-summary system prompt from template file or use hardcoded fallback
+ * Phase 10.3: Auto-Summary Template File
+ * @param {boolean} needsTitleSuggestion - Whether to include title suggestion section
+ * @returns {string} System prompt for auto-summary generation
+ */
+function loadAutoSummaryPrompt(needsTitleSuggestion) {
+  try {
+    // Try to load template file from config/templates
+    const templatePath = path.join(
+      templateManager ? templateManager.templatesPath : path.join(__dirname, '..', 'config', 'templates'),
+      'auto-summary-prompt.txt'
+    );
+
+    if (fs.existsSync(templatePath)) {
+      const templateContent = fs.readFileSync(templatePath, 'utf8');
+
+      // Process template: handle {{#if needsTitleSuggestion}} conditional
+      let processedTemplate = templateContent;
+
+      if (needsTitleSuggestion) {
+        // Include the title suggestion section
+        processedTemplate = processedTemplate.replace(
+          /\{\{#if needsTitleSuggestion\}\}\n([\s\S]*?)\n\{\{\/if\}\}\n/,
+          '$1\n\n'
+        );
+      } else {
+        // Remove the title suggestion section
+        processedTemplate = processedTemplate.replace(
+          /\{\{#if needsTitleSuggestion\}\}\n[\s\S]*?\n\{\{\/if\}\}\n/,
+          ''
+        );
+      }
+
+      console.log('[AutoSummary] Loaded prompt from template file:', templatePath);
+      return processedTemplate;
+    }
+  } catch (error) {
+    console.warn('[AutoSummary] Failed to load template file, using hardcoded fallback:', error.message);
+  }
+
+  // Fallback to hardcoded prompt (original behavior)
+  let systemMessage =
+    'You are an AI assistant that summarizes meeting transcripts. ' +
+    'You MUST format your response using the following structure:\n\n';
+
+  if (needsTitleSuggestion) {
+    systemMessage +=
+      '# Suggested Title\n' +
+      '[A concise, descriptive meeting title (5-8 words max) based on the main topic discussed]\n\n';
+  }
+
+  systemMessage +=
+    '# Participants\n' +
+    '- [List all participants mentioned in the transcript]\n\n' +
+    '# Summary\n' +
+    '- [Key discussion point 1]\n' +
+    '- [Key discussion point 2]\n' +
+    '- [Key decisions made]\n' +
+    '- [Include any important deadlines or dates mentioned]\n\n' +
+    '# Action Items\n' +
+    '- [Action item 1] - [Responsible person if mentioned]\n' +
+    '- [Action item 2] - [Responsible person if mentioned]\n' +
+    '- [Add any other action items discussed]\n\n' +
+    'Stick strictly to this format with these exact section headers. Keep each bullet point concise but informative.';
+
+  console.log('[AutoSummary] Using hardcoded fallback prompt');
+  return systemMessage;
+}
+
 // Function to generate AI summary from transcript with streaming support
 async function generateMeetingSummary(meeting, progressCallback = null) {
   try {
@@ -4949,30 +5039,8 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
         meeting.participants.map(p => `- ${p.name}${p.isHost ? ' (Host)' : ''}`).join('\n');
     }
 
-    // Define a system prompt to guide the AI's response with a specific format
-    let systemMessage =
-      'You are an AI assistant that summarizes meeting transcripts. ' +
-      'You MUST format your response using the following structure:\n\n';
-
-    if (needsTitleSuggestion) {
-      systemMessage +=
-        '# Suggested Title\n' +
-        '[A concise, descriptive meeting title (5-8 words max) based on the main topic discussed]\n\n';
-    }
-
-    systemMessage +=
-      '# Participants\n' +
-      '- [List all participants mentioned in the transcript]\n\n' +
-      '# Summary\n' +
-      '- [Key discussion point 1]\n' +
-      '- [Key discussion point 2]\n' +
-      '- [Key decisions made]\n' +
-      '- [Include any important deadlines or dates mentioned]\n\n' +
-      '# Action Items\n' +
-      '- [Action item 1] - [Responsible person if mentioned]\n' +
-      '- [Action item 2] - [Responsible person if mentioned]\n' +
-      '- [Add any other action items discussed]\n\n' +
-      'Stick strictly to this format with these exact section headers. Keep each bullet point concise but informative.';
+    // Load system prompt from template file or use hardcoded fallback (Phase 10.3)
+    let systemMessage = loadAutoSummaryPrompt(needsTitleSuggestion);
 
     // Prepare the user prompt
     const userPrompt = `Summarize the following meeting transcript with the EXACT format specified in your instructions:

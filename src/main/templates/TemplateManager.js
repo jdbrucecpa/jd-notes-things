@@ -48,7 +48,7 @@ class TemplateManager {
         const ext = path.extname(file).toLowerCase();
 
         // Only process template files
-        if (['.yaml', '.yml', '.json', '.md'].includes(ext)) {
+        if (['.yaml', '.yml', '.json', '.md', '.txt'].includes(ext)) {
           try {
             const template = TemplateParser.parseFile(filePath);
             this.templates.set(template.id, template);
