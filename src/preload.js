@@ -91,4 +91,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Settings (Phase 10.1)
   getAppVersion: () => ipcRenderer.invoke('settings:getAppVersion'),
   getVaultPath: () => ipcRenderer.invoke('settings:getVaultPath'),
+  // Key Management (Phase 10.2)
+  keysListAll: () => ipcRenderer.invoke('keys:list'),
+  keysGet: keyName => ipcRenderer.invoke('keys:get', keyName),
+  keysSet: (keyName, value) => ipcRenderer.invoke('keys:set', keyName, value),
+  keysDelete: keyName => ipcRenderer.invoke('keys:delete', keyName),
+  keysMigrate: () => ipcRenderer.invoke('keys:migrate'),
+  keysTest: keyName => ipcRenderer.invoke('keys:test', keyName),
 });

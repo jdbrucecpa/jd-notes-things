@@ -103,7 +103,7 @@ The LLM service scans this folder, presents available templates in UI, and gener
 
 ## Development Phases
 
-**Currently**: Phase 9 Complete - Ready for Phase 10
+**Currently**: Phase 10.1 Complete - Ready for Phase 10.2
 
 The project follows a 12-phase plan (see `SPECIFICATION.md`):
 
@@ -123,7 +123,9 @@ The project follows a 12-phase plan (see `SPECIFICATION.md`):
    - ✅ Memory leak prevention
    - ✅ Security audit: 15/15 tests passing, 0 critical vulnerabilities
    - 📋 File encryption & API key management deferred to Phase 10
-10. 🔜 **Advanced UI & settings** (NEXT - speaker correction, participant input, API key management, encryption UI)
+10. 🔧 **Advanced UI & settings** (IN PROGRESS)
+   - ✅ Phase 10.1: Settings Management (getAppVersion, getVaultPath IPC handlers)
+   - 🔜 Phase 10.2: API key management UI, encryption settings, speaker correction
 11. Real-time transcription (optional)
 12. HubSpot CRM integration
 
@@ -277,6 +279,34 @@ src/
 - ✅ Enhanced MetadataExtractor with fallback speaker detection from transcript content (Nov 12)
 - ✅ Fixed auto-summary token limit for OpenAI gpt-4o-mini (15,000 tokens, not 50,000) (Nov 12)
 
+### Post-Phase 9 Refinements (Jan 13, 2025)
+
+- ✅ **Code refactoring** - Eliminated ~70 lines of duplicate auto-summary code
+  - Created shared `generateAndSaveAutoSummary()` function (main.js:4541-4620)
+  - Removed duplication from AssemblyAI/Deepgram/Recall.ai transcription paths
+  - Single source of truth for auto-summary workflow (DRY principle)
+- ✅ **Recording icon bug fix** - Fixed `updateRecordingButtonState is not defined` error
+  - Changed to correct function name: `updateRecordingButtonUI(false, null)`
+  - File: src/renderer.js:2019
+- ✅ **Title update bug fix** - Meeting title not appearing in UI (auto-save race condition)
+  - Root cause: Auto-save reading stale DOM title and overwriting new title from AI
+  - Solution: Update `document.getElementById('noteTitle').textContent` in `onSummaryGenerated` event
+  - File: src/renderer.js:1982
+  - Technical detail: Three-way state synchronization (DOM ↔ in-memory object ↔ file)
+- ✅ **Immediate UI feedback** - Recording button now clears instantly when meeting ends
+  - Moved cleanup and notification to `recording-ended` event (before 3-second transcription delay)
+  - Eliminated 30-45 second perceived delay from user experience
+  - Transcription and summary continue in background
+  - File: src/main.js:974-980
+
+### Phase 10.1: Settings Management (Jan 13, 2025)
+
+- ✅ **Settings module IPC handlers** implemented
+  - `settings:getAppVersion` - Returns application version from package.json
+  - `settings:getVaultPath` - Returns configured Obsidian vault path from environment
+  - File: src/preload.js:92-94
+  - Foundation for comprehensive settings UI in Phase 10.2
+
 ### Security Hardening & Audit (Phase 9 - Nov 13, 2025 + Jan 13, 2025)
 
 **Core Hardening (Nov 13, 2025):**
@@ -381,7 +411,13 @@ Core security hardening and comprehensive audit complete. Application is **produ
 - ✅ Strong security posture (LOW risk rating)
 - ✅ Protection against: XSS, path traversal, OAuth CSRF, token theft
 
-**Phase 10 (NEXT): Advanced UI & Settings**
+**Phase 10.1: COMPLETE ✅** (Jan 13, 2025)
+
+Settings management foundation implemented:
+- ✅ IPC handlers for app version and vault path
+- ✅ Foundation for comprehensive settings UI
+
+**Phase 10.2 (NEXT): Advanced UI & Settings**
 
 User experience enhancements and security feature completion:
 

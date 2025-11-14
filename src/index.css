@@ -2040,7 +2040,8 @@ body {
 .settings-content {
   display: flex;
   height: 500px;
-  overflow: hidden;
+  overflow-x: auto; /* Allow horizontal scrolling for wide tables */
+  overflow-y: hidden;
 }
 
 .settings-sidebar {
@@ -2083,6 +2084,7 @@ body {
   flex: 1;
   padding: 24px;
   overflow-y: auto;
+  overflow-x: auto; /* Allow horizontal scrolling for wide content like tables */
 }
 
 .settings-section {
@@ -2287,4 +2289,387 @@ body {
 .settings-action-btn svg {
   width: 16px;
   height: 16px;
+}
+
+/* =================================================================
+   Security Panel Styles (Phase 10.2)
+   ================================================================= */
+
+/* Migration Notice */
+.migration-notice {
+  background: linear-gradient(135deg, #fff3cd 0%, #fff8e1 100%);
+  border: 2px solid #ffc107;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.migration-notice-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.migration-notice-content {
+  flex: 1;
+}
+
+.migration-notice-content strong {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #856404;
+  margin-bottom: 8px;
+}
+
+.migration-notice-content p {
+  color: #856404;
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* API Keys Table */
+.api-keys-container {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+
+.api-keys-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed; /* Fixed layout for better control */
+}
+
+.api-keys-table th:nth-child(1),
+.api-keys-table td:nth-child(1) {
+  width: 28%; /* Service name */
+}
+
+.api-keys-table th:nth-child(2),
+.api-keys-table td:nth-child(2) {
+  width: 28%; /* Key value */
+}
+
+.api-keys-table th:nth-child(3),
+.api-keys-table td:nth-child(3) {
+  width: 14%; /* Status */
+}
+
+.api-keys-table th:nth-child(4),
+.api-keys-table td:nth-child(4) {
+  width: 30%; /* Actions - more space for buttons */
+}
+
+.api-keys-table thead {
+  background: var(--sidebar-bg);
+  border-bottom: 2px solid var(--border-color);
+}
+
+.api-keys-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.api-keys-table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.2s ease;
+}
+
+.api-keys-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.api-keys-table tbody tr:hover {
+  background: var(--card-hover);
+}
+
+.api-keys-table td {
+  padding: 12px;
+  font-size: 14px;
+}
+
+.api-key-service {
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-value {
+  font-family: 'Courier New', monospace;
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-key-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.api-key-status.stored {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4caf50;
+}
+
+.api-key-status.missing {
+  background: rgba(156, 39, 176, 0.1);
+  color: #9c27b0;
+}
+
+.api-key-status-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.api-key-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.api-key-action-btn {
+  padding: 6px 10px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.api-key-action-btn:hover {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.api-key-action-btn.danger:hover {
+  background: #f44336;
+  border-color: #f44336;
+  color: white;
+}
+
+/* Edit Key Modal/Inline Form */
+.api-key-edit-row {
+  background: var(--sidebar-bg);
+}
+
+.api-key-edit-form {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  align-items: center;
+}
+
+.api-key-edit-input {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.api-key-edit-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.api-key-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.api-key-edit-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.api-key-edit-btn.save {
+  background: var(--primary-color);
+  color: white;
+}
+
+.api-key-edit-btn.save:hover {
+  background: var(--primary-hover);
+}
+
+.api-key-edit-btn.cancel {
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.api-key-edit-btn.cancel:hover {
+  background: var(--card-hover);
+}
+
+/* Encryption Status Card */
+.encryption-status-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  margin-bottom: 24px;
+  color: white;
+}
+
+.encryption-status-card.unavailable {
+  background: linear-gradient(135deg, #757575 0%, #616161 100%);
+}
+
+.encryption-status-icon {
+  font-size: 36px;
+  flex-shrink: 0;
+}
+
+.encryption-status-info {
+  flex: 1;
+}
+
+.encryption-status-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.encryption-status-subtitle {
+  font-size: 14px;
+  opacity: 0.9;
+}
+
+/* Encryption Statistics */
+.encryption-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.encryption-stat-item {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  text-align: center;
+}
+
+.encryption-stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 8px;
+}
+
+.encryption-stat-label {
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+/* Encryption Progress */
+.encryption-progress {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 24px;
+}
+
+.encryption-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.encryption-progress-info span:first-child {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.encryption-progress-info span:last-child {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-family: 'Courier New', monospace;
+}
+
+.progress-bar {
+  height: 8px;
+  background: var(--sidebar-bg);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-hover));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.encryption-progress-file {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: 'Courier New', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Spinner for loading state */
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

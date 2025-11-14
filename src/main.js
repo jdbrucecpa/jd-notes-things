@@ -16,6 +16,8 @@ const RoutingEngine = require('./main/routing/RoutingEngine');
 const ImportManager = require('./main/import/ImportManager');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
+const keyManagementService = require('./main/services/keyManagementService');
+// const encryptionService = require('./main/services/encryptionService'); // Not needed - Obsidian requires plain text
 const expressApp = require('./server');
 const ngrokManager = require('./main/services/ngrokManager');
 const log = require('electron-log');
@@ -60,6 +62,48 @@ const logger = {
   recording: log.scope('Recording'),
   webhook: log.scope('Webhook'),
 };
+
+// ===================================================================
+// API Key Helper (Phase 10.2)
+// ===================================================================
+// Helper function to get API keys with automatic fallback:
+// 1. Try Windows Credential Manager (via keyManagementService)
+// 2. Fall back to process.env if not found
+// This allows gradual migration from .env to secure storage
+async function getAPIKey(keyName) {
+  try {
+    // Try credential manager first
+    const value = await keyManagementService.getKey(keyName);
+    if (value) {
+      logger.main.debug(`[APIKey] Retrieved ${keyName} from Credential Manager`);
+      return value;
+    }
+
+    // Fall back to process.env
+    const envValue = process.env[keyName];
+    if (envValue) {
+      logger.main.debug(`[APIKey] Retrieved ${keyName} from process.env (consider migrating)`);
+      return envValue;
+    }
+
+    logger.main.warn(`[APIKey] ${keyName} not found in Credential Manager or process.env`);
+    return null;
+  } catch (error) {
+    logger.main.error(`[APIKey] Failed to get ${keyName}:`, error);
+    // Fall back to process.env on error
+    return process.env[keyName] || null;
+  }
+}
+
+// Synchronous version for backwards compatibility (uses process.env only)
+// New code should use the async version above
+function getAPIKeySync(keyName) {
+  return process.env[keyName] || null;
+}
+
+// Export for use in other modules
+global.getAPIKey = getAPIKey;
+global.getAPIKeySync = getAPIKeySync;
 
 // Initialize LLM service with auto-detection of available provider
 // Priority: Azure OpenAI > Anthropic > OpenAI
@@ -337,6 +381,10 @@ app.whenReady().then(async () => {
 
   // Initialize the Recall.ai SDK
   initSDK();
+
+  // Note: EncryptionService initialization removed (Phase 10.2)
+  // Vault file encryption not needed - Obsidian requires plain text files
+  // Service kept for potential future use (audio files, temp files, etc.)
 
   // Initialize Unified Google Authentication (Calendar + Contacts)
   console.log('[GoogleAuth] Initializing unified Google authentication...');
@@ -2739,6 +2787,116 @@ ipcMain.handle('settings:getVaultPath', async () => {
 
 // ===================================================================
 // End Settings IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Key Management IPC Handlers (Phase 10.2)
+// ===================================================================
+
+// List all API keys (returns obfuscated values)
+ipcMain.handle('keys:list', async () => {
+  try {
+    const keys = await keyManagementService.listKeys();
+
+    // Get obfuscated values for keys that exist
+    const keysWithValues = await Promise.all(
+      keys.map(async (key) => {
+        if (key.hasValue) {
+          const value = await keyManagementService.getKey(key.key);
+          return {
+            ...key,
+            obfuscatedValue: keyManagementService.obfuscateKey(value),
+          };
+        }
+        return { ...key, obfuscatedValue: null };
+      })
+    );
+
+    return { success: true, data: keysWithValues };
+  } catch (error) {
+    log.error('[IPC] keys:list failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get a specific API key
+ipcMain.handle('keys:get', async (event, keyName) => {
+  try {
+    const value = await keyManagementService.getKey(keyName);
+    return { success: true, data: value };
+  } catch (error) {
+    log.error(`[IPC] keys:get failed for ${keyName}:`, error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Set an API key
+ipcMain.handle('keys:set', async (event, keyName, value) => {
+  try {
+    // Validate key format
+    const validation = keyManagementService.validateKey(keyName, value);
+    if (!validation.valid) {
+      return { success: false, error: validation.message };
+    }
+
+    await keyManagementService.setKey(keyName, value);
+    return { success: true };
+  } catch (error) {
+    log.error(`[IPC] keys:set failed for ${keyName}:`, error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Delete an API key
+ipcMain.handle('keys:delete', async (event, keyName) => {
+  try {
+    const deleted = await keyManagementService.deleteKey(keyName);
+    return { success: true, data: deleted };
+  } catch (error) {
+    log.error(`[IPC] keys:delete failed for ${keyName}:`, error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Migrate keys from .env to Credential Manager
+ipcMain.handle('keys:migrate', async () => {
+  try {
+    const envVars = process.env;
+    const results = await keyManagementService.migrateFromEnv(envVars);
+    return { success: true, data: results };
+  } catch (error) {
+    log.error('[IPC] keys:migrate failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Test an API key by making a test request
+ipcMain.handle('keys:test', async (event, keyName) => {
+  try {
+    // This is a placeholder - actual implementation would test the key with the service
+    // For now, we just validate format
+    const value = await keyManagementService.getKey(keyName);
+    if (!value) {
+      return { success: false, error: 'Key not found' };
+    }
+
+    const validation = keyManagementService.validateKey(keyName, value);
+    return { success: validation.valid, message: validation.message };
+  } catch (error) {
+    log.error(`[IPC] keys:test failed for ${keyName}:`, error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// End Key Management IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Encryption IPC Handlers (Phase 10.2) - REMOVED
+// ===================================================================
+// Vault file encryption removed per user request - Obsidian needs plain text files
+// EncryptionService kept for potential future use (audio files, temp files, etc.)
 // ===================================================================
 
 // Handle open-external IPC (for opening URLs in default browser)

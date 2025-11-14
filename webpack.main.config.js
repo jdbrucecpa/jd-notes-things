@@ -12,5 +12,6 @@ module.exports = {
     '@recallai/desktop-sdk': 'commonjs @recallai/desktop-sdk',
     ngrok: 'commonjs ngrok',
     svix: 'commonjs svix',
+    keytar: 'commonjs keytar',
   },
 };

@@ -1,7 +1,10 @@
 /**
- * Settings Management Module (Phase 10.1)
+ * Settings Management Module (Phase 10.1 + 10.2)
  * Handles application settings, theme switching, and persistence
+ * Phase 10.2: Added security panel with API key management and encryption
  */
+
+import { initializeSecurityPanel } from './securitySettings.js';
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -135,6 +138,7 @@ export function initializeSettingsUI() {
   const settingsPanels = {
     general: document.getElementById('generalPanel'),
     appearance: document.getElementById('appearancePanel'),
+    security: document.getElementById('securityPanel'),
     advanced: document.getElementById('advancedPanel'),
     about: document.getElementById('aboutPanel'),
   };
@@ -155,9 +159,16 @@ export function initializeSettingsUI() {
 
   // Open settings modal
   if (settingsBtn) {
-    settingsBtn.addEventListener('click', () => {
+    settingsBtn.addEventListener('click', async () => {
       settingsModal.style.display = 'flex';
       loadSettingsIntoUI();
+
+      // Initialize security panel (Phase 10.2)
+      try {
+        await initializeSecurityPanel();
+      } catch (error) {
+        console.error('[Settings] Failed to initialize security panel:', error);
+      }
     });
   }
 

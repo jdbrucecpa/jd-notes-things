@@ -530,6 +530,12 @@ Chat with meeting transcript: </textarea>
               </svg>
               <span>Appearance</span>
             </div>
+            <div class="settings-tab" data-tab="security">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" fill="currentColor"/>
+              </svg>
+              <span>Security</span>
+            </div>
             <div class="settings-tab" data-tab="advanced">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" fill="currentColor"/>
@@ -589,6 +595,49 @@ Chat with meeting transcript: </textarea>
                 </div>
               </div>
             </div>
+          </div>
+
+          <div class="settings-panel" id="securityPanel" style="display: none;">
+            <!-- API Key Management Section -->
+            <div class="settings-section">
+              <h3 class="settings-section-title">API Key Management</h3>
+              <div class="settings-item-description" style="margin-bottom: 16px;">
+                Securely store API keys in Windows Credential Manager. Keys are encrypted and protected by your Windows account.
+              </div>
+
+              <!-- Migration Notice -->
+              <div class="migration-notice" id="migrationNotice" style="display: none;">
+                <div class="migration-notice-icon">⚠️</div>
+                <div class="migration-notice-content">
+                  <strong>Migration Required</strong>
+                  <p>We detected API keys in your .env file. Click "Migrate Keys" to move them to secure storage.</p>
+                  <button class="btn-primary" id="migrateKeysBtn">Migrate Keys from .env</button>
+                </div>
+              </div>
+
+              <!-- API Keys Table -->
+              <div class="api-keys-container">
+                <table class="api-keys-table">
+                  <thead>
+                    <tr>
+                      <th>Service</th>
+                      <th>Key</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="apiKeysTableBody">
+                    <tr>
+                      <td colspan="4" style="text-align: center; padding: 32px;">
+                        <div class="spinner"></div>
+                        <p style="margin-top: 12px; color: var(--text-secondary);">Loading keys...</p>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
 
           <div class="settings-panel" id="advancedPanel" style="display: none;">
