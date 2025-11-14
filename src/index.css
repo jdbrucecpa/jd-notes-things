@@ -341,7 +341,7 @@ body {
 }
 
 .meeting-card:hover {
-  background-color: #f5f5f5;
+  background-color: var(--card-hover);
 }
 
 .meeting-icon {
@@ -378,12 +378,8 @@ body {
   margin-left: auto;
   display: flex;
   align-items: center;
-  opacity: 0; /* Hidden by default */
+  opacity: 1; /* Always visible - better UX */
   transition: opacity 0.2s ease;
-}
-
-.meeting-card:hover .meeting-actions {
-  opacity: 1; /* Show on hover */
 }
 
 .delete-meeting-btn {

@@ -1973,16 +1973,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.electronAPI.onSummaryGenerated(meetingId => {
     console.log('Summary generated for meeting:', meetingId);
 
-    // If this note is currently being edited, refresh the content
-    if (currentEditingMeetingId === meetingId) {
-      loadMeetingsDataFromFile().then(() => {
-        const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === meetingId);
-        if (meeting) {
-          // Update the editor with the new content containing the summary
-          document.getElementById('simple-editor').value = meeting.content;
-        }
-      });
-    }
+    // Always reload meeting data to update the meeting list (title may have changed!)
+    loadMeetingsDataFromFile().then(() => {
+      const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === meetingId);
+
+      // If this note is currently being edited, also refresh the editor content AND title
+      if (currentEditingMeetingId === meetingId && meeting) {
+        console.log(`Updating editor for meeting ${meetingId} - New title: ${meeting.title}`);
+
+        // Update the editor content with the new summary
+        document.getElementById('simple-editor').value = meeting.content;
+
+        // IMPORTANT: Update the title in the DOM to prevent auto-save from overwriting with old title
+        document.getElementById('noteTitle').textContent = meeting.title;
+      }
+    });
   });
 
   // Listen for streaming summary updates
@@ -2004,6 +2009,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         editorElement.scrollTop = editorElement.scrollHeight;
       });
     }
+  });
+
+  // Listen for recording ended events (cleanup after AssemblyAI/Deepgram transcription)
+  window.electronAPI.onRecordingEnded(data => {
+    const { windowId, meetingId } = data;
+    console.log(`Recording ended for meeting: ${meetingId}, windowId: ${windowId}`);
+
+    // Clear the current recording ID if it matches
+    if (window.currentRecordingId === windowId) {
+      console.log('Clearing currentRecordingId in renderer');
+
+      // Update the recording button state (false = inactive, null = no recording)
+      updateRecordingButtonUI(false, null);
+    }
+
+    // Reload meetings data to update UI (this will show the updated title)
+    loadMeetingsDataFromFile();
   });
 
   // Add event listeners for buttons

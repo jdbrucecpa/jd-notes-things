@@ -575,6 +575,11 @@ const activeRecordings = {
   getAll: function () {
     return { ...this.recordings };
   },
+
+  // Check if a recording exists for a given windowId/recordingId
+  hasActiveRecording: function (recordingId) {
+    return !!this.recordings[recordingId];
+  },
 };
 
 // File operation manager to prevent race conditions on both reads and writes
@@ -853,26 +858,72 @@ function initSDK() {
     const windowId = evt.window?.id;
 
     // Automatically stop recording when meeting ends
+    // NOTE: WindowId might have changed during recording, so check both the event windowId
+    // AND all active recordings to ensure we catch everything
+    let recordingToStop = null;
+
     if (windowId && activeRecordings.hasActiveRecording(windowId)) {
-      console.log(`Meeting ended - automatically stopping recording for window: ${windowId}`);
+      // Direct match - use the event's windowId
+      recordingToStop = windowId;
+      console.log(`Meeting ended - found recording with matching windowId: ${windowId}`);
+    } else {
+      // No direct match - windowId may have changed during recording
+      // Check if there's ANY active recording (there should only be one at a time)
+      const allRecordings = activeRecordings.getAll();
+      const recordingIds = Object.keys(allRecordings);
 
-      // Stop the recording
-      RecallAiSdk.stopRecording({ windowId: windowId });
-      activeRecordings.updateState(windowId, 'stopping');
-
-      // Notify renderer
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('recording-state-change', {
-          windowId: windowId,
-          state: 'stopping',
-        });
+      if (recordingIds.length > 0) {
+        recordingToStop = recordingIds[0];
+        console.log(
+          `Meeting ended - windowId mismatch! Event: ${windowId}, Active: ${recordingToStop}`
+        );
+        console.log(`Using active recording windowId to stop: ${recordingToStop}`);
       }
+    }
+
+    if (recordingToStop) {
+      console.log(`Stopping recording for window: ${recordingToStop}`);
+
+      try {
+        // Stop the recording
+        RecallAiSdk.stopRecording({ windowId: recordingToStop });
+        activeRecordings.updateState(recordingToStop, 'stopping');
+        console.log(`✓ Stop recording command sent successfully`);
+
+        // Notify renderer
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('recording-state-change', {
+            windowId: recordingToStop,
+            state: 'stopping',
+          });
+        }
+      } catch (error) {
+        // SDK may throw errors if the meeting is already closed, but recording will still stop
+        // This is expected behavior, not a critical error
+        console.warn(
+          `Warning: SDK reported error when stopping recording (recording may have already stopped):`,
+          error.message
+        );
+
+        // Still update our internal state
+        activeRecordings.updateState(recordingToStop, 'stopping');
+      }
+    } else {
+      console.log(`No active recording found to stop (windowId: ${windowId})`);
     }
 
     // Clean up the global tracking when a meeting ends
     if (windowId && global.activeMeetingIds && global.activeMeetingIds[windowId]) {
       console.log(`Cleaning up meeting tracking for: ${windowId}`);
       delete global.activeMeetingIds[windowId];
+    }
+
+    // Also clean up any other windowIds in activeMeetingIds (in case of mismatch)
+    if (global.activeMeetingIds) {
+      Object.keys(global.activeMeetingIds).forEach(id => {
+        console.log(`Also cleaning up meeting tracking for: ${id}`);
+        delete global.activeMeetingIds[id];
+      });
     }
 
     detectedMeeting = null;
@@ -899,15 +950,19 @@ function initSDK() {
       await updateNoteWithRecordingInfo(windowId);
       console.log('Recording processing complete - preparing for transcription');
 
-      // Get the transcription provider from the meeting
+      // Get the meeting ID and transcription provider
       let transcriptionProvider = 'recallai'; // Default
+      let meetingId = null;
       try {
         const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
         const meetingsData = JSON.parse(fileData);
         const meeting = meetingsData.pastMeetings.find(m => m.recordingId === windowId);
-        if (meeting && meeting.transcriptionProvider) {
-          transcriptionProvider = meeting.transcriptionProvider;
-          console.log(`[Transcription] Using provider: ${transcriptionProvider}`);
+        if (meeting) {
+          meetingId = meeting.id;
+          if (meeting.transcriptionProvider) {
+            transcriptionProvider = meeting.transcriptionProvider;
+            console.log(`[Transcription] Using provider: ${transcriptionProvider}`);
+          }
         }
       } catch (error) {
         console.error(
@@ -916,7 +971,20 @@ function initSDK() {
         );
       }
 
-      // Wait for file to be fully written
+      // Immediately notify renderer that recording has ended (update UI right away)
+      if (mainWindow && !mainWindow.isDestroyed() && meetingId) {
+        console.log('[Recording] Notifying renderer that recording ended - updating UI immediately');
+        mainWindow.webContents.send('recording-ended', {
+          windowId: windowId,
+          meetingId: meetingId,
+        });
+      }
+
+      // Clean up active recording state immediately
+      activeRecordings.removeRecording(windowId);
+      console.log(`[Recording] Cleaned up active recording: ${windowId}`);
+
+      // Wait for file to be fully written before starting transcription
       setTimeout(async () => {
         console.log('[Transcription] Starting transcription after 3 second delay...');
         console.log('[Transcription] Window ID:', windowId);
@@ -1005,6 +1073,15 @@ function initSDK() {
                 );
                 console.log('[Transcription] ✓ Renderer notified');
               }
+
+              // Generate auto-summary for AssemblyAI/Deepgram transcriptions
+              const updatedMeeting = meetingsData.pastMeetings[meetingIndex];
+              if (updatedMeeting) {
+                await generateAndSaveAutoSummary(updatedMeeting.id, '[Auto-Summary]');
+              }
+
+              // Note: Recording cleanup and UI notification already happened immediately after recording ended
+              // (see recording-ended event handler above)
             } else {
               console.error('[Transcription] ✗ Meeting not found with recordingId:', windowId);
             }
@@ -2995,14 +3072,26 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
     // Update our active recordings tracker
     activeRecordings.updateState(validatedId, 'stopping');
 
-    RecallAiSdk.stopRecording({
-      windowId: validatedId,
-    });
+    try {
+      RecallAiSdk.stopRecording({
+        windowId: validatedId,
+      });
 
-    // The recording-ended event will be triggered automatically,
-    // which will handle uploading and generating the summary
+      // The recording-ended event will be triggered automatically,
+      // which will handle uploading and generating the summary
 
-    return { success: true };
+      return { success: true };
+    } catch (sdkError) {
+      // If recording doesn't exist in SDK, it may have already been stopped
+      // This can happen when using AssemblyAI/Deepgram where recording ends automatically
+      console.warn(`SDK stopRecording failed: ${sdkError.message} - recording may have already ended`);
+
+      // Clean up our tracking
+      activeRecordings.removeRecording(validatedId);
+
+      // Return success since the recording is already stopped
+      return { success: true, warning: 'Recording was already stopped' };
+    }
   } catch (error) {
     if (error instanceof z.ZodError) {
       console.error('Invalid recording ID format:', error.message);
@@ -3511,9 +3600,44 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
     }
 
     // Start recording with upload token
+    // IMPORTANT: Re-check detectedMeeting right before recording, as the window may have changed
+    if (!detectedMeeting || !detectedMeeting.window) {
+      console.error('[Recording Start] ✗ No active meeting detected at recording time!');
+      throw new Error('Meeting window disappeared before recording could start');
+    }
+
+    // Use the CURRENT windowId (may have changed since meeting creation)
+    const currentWindowId = detectedMeeting.window.id;
     console.log(
-      `[Recording Start] Starting recording for meeting ${id}, windowId: ${detectedMeeting.window.id}`
+      `[Recording Start] Starting recording for meeting ${id}, windowId: ${currentWindowId}`
     );
+
+    // If the windowId changed, update the meeting object and activeRecordings
+    if (currentWindowId !== newMeeting.recordingId) {
+      console.log(
+        `[Recording Start] ⚠ Window ID changed! Old: ${newMeeting.recordingId}, New: ${currentWindowId}`
+      );
+
+      // Update the meeting's recordingId in the file
+      await fileOperationManager.scheduleOperation(async data => {
+        const meetingIndex = data.pastMeetings.findIndex(m => m.id === id);
+        if (meetingIndex !== -1) {
+          data.pastMeetings[meetingIndex].recordingId = currentWindowId;
+          console.log(`[Recording Start] ✓ Updated recordingId to ${currentWindowId}`);
+        }
+        return data;
+      });
+
+      // Update activeRecordings with new windowId
+      activeRecordings.removeRecording(newMeeting.recordingId);
+      activeRecordings.addRecording(currentWindowId, id, platformName);
+
+      // Update global tracking
+      if (global.activeMeetingIds) {
+        delete global.activeMeetingIds[newMeeting.recordingId];
+        global.activeMeetingIds[currentWindowId] = { noteId: id, platformName };
+      }
+    }
 
     try {
       // Get upload token
@@ -3524,12 +3648,18 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
 
         // Log the startRecording API call (no token fallback)
         sdkLogger.logApiCall('startRecording', {
-          windowId: detectedMeeting.window.id,
+          windowId: currentWindowId,
         });
 
-        RecallAiSdk.startRecording({
-          windowId: detectedMeeting.window.id,
-        });
+        try {
+          RecallAiSdk.startRecording({
+            windowId: currentWindowId,
+          });
+          console.log('[Recording Start] ✓ Recording started successfully (no token)');
+        } catch (sdkError) {
+          console.error('[Recording Start] ✗ SDK failed to start recording:', sdkError);
+          throw new Error(`Failed to start recording: ${sdkError.message}`);
+        }
       } else {
         console.log(
           'Starting recording with upload token:',
@@ -3563,33 +3693,46 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
 
         // Log the startRecording API call with upload token
         sdkLogger.logApiCall('startRecording', {
-          windowId: detectedMeeting.window.id,
+          windowId: currentWindowId,
           uploadToken: `${uploadData.upload_token.substring(0, 8)}...`, // Log truncated token for security
         });
 
         console.log(
-          `[Recording Start] ✓ Calling RecallAiSdk.startRecording with windowId: ${detectedMeeting.window.id}`
+          `[Recording Start] ✓ Calling RecallAiSdk.startRecording with windowId: ${currentWindowId}`
         );
-        RecallAiSdk.startRecording({
-          windowId: detectedMeeting.window.id,
-          uploadToken: uploadData.upload_token,
-        });
-        console.log(`[Recording Start] ✓ RecallAiSdk.startRecording called successfully`);
+
+        try {
+          RecallAiSdk.startRecording({
+            windowId: currentWindowId,
+            uploadToken: uploadData.upload_token,
+          });
+          console.log(`[Recording Start] ✓ Recording started successfully with upload token`);
+        } catch (sdkError) {
+          console.error('[Recording Start] ✗ SDK failed to start recording:', sdkError);
+          throw new Error(`Failed to start recording: ${sdkError.message}`);
+        }
       }
     } catch (error) {
       console.error('Error starting recording with upload token:', error);
 
       // Fallback to recording without token
+      console.log('[Recording Start] Attempting fallback recording without token...');
 
       // Log the startRecording API call (error fallback)
       sdkLogger.logApiCall('startRecording', {
-        windowId: detectedMeeting.window.id,
+        windowId: currentWindowId,
         error: 'Fallback after error',
       });
 
-      RecallAiSdk.startRecording({
-        windowId: detectedMeeting.window.id,
-      });
+      try {
+        RecallAiSdk.startRecording({
+          windowId: currentWindowId,
+        });
+        console.log('[Recording Start] ✓ Fallback recording started successfully');
+      } catch (sdkError) {
+        console.error('[Recording Start] ✗ Fallback recording also failed:', sdkError);
+        // Don't throw here - meeting note already created, just log the error
+      }
     }
 
     return id;
@@ -4264,42 +4407,12 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
       mainWindow.webContents.send('transcript-updated', meetingId);
     }
 
-    // Generate AI summary
+    // Generate AI summary using shared function (eliminates 35 lines of duplication)
     console.log(`[Recall.ai] Starting AI summary generation`);
-    const updatedMeetingsData = await fileOperationManager.readMeetingsData();
-    const updatedMeeting = updatedMeetingsData.pastMeetings.find(m => m.id === meetingId);
-
-    if (updatedMeeting && updatedMeeting.transcript && updatedMeeting.transcript.length > 0) {
-      const meetingTitle = updatedMeeting.title || 'Meeting Notes';
-
-      const streamProgress = currentText => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('summary-update', {
-            meetingId: meetingId,
-            content: `# ${meetingTitle}\n\n${currentText}`,
-          });
-        }
-      };
-
-      try {
-        const summary = await generateMeetingSummary(updatedMeeting, streamProgress);
-
-        await fileOperationManager.scheduleOperation(async data => {
-          const idx = data.pastMeetings.findIndex(m => m.id === meetingId);
-          if (idx !== -1) {
-            data.pastMeetings[idx].content = `# ${meetingTitle}\n\n${summary}`;
-            data.pastMeetings[idx].summaryGenerated = true;
-            console.log(`[Recall.ai] AI summary generated successfully`);
-          }
-          return data;
-        });
-
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('summary-generated', meetingId);
-        }
-      } catch (summaryError) {
-        console.error('[Recall.ai] Failed to generate AI summary:', summaryError);
-      }
+    try {
+      await generateAndSaveAutoSummary(meetingId, '[Recall.ai]');
+    } catch (summaryError) {
+      console.error('[Recall.ai] Failed to generate AI summary:', summaryError);
     }
 
     console.log(`[Recall.ai] Async transcription workflow complete`);
@@ -4441,6 +4554,64 @@ async function processTranscriptData(evt) {
     console.log(`Processed transcript data for meeting: ${noteId}`);
   } catch (error) {
     console.error('Error processing transcript data:', error);
+  }
+}
+
+// ============================================================================
+// Shared Auto-Summary Function (Phase 10 Refactoring)
+// ============================================================================
+
+/**
+ * Generate auto-summary, extract title, save everything, notify renderer
+ * Works for ALL transcription providers (AssemblyAI, Deepgram, Recall.ai)
+ *
+ * This eliminates 40+ lines of duplication between transcription paths
+ *
+ * @param {string} meetingId - Meeting ID to generate summary for
+ * @param {string} logPrefix - Prefix for console logs (e.g., '[Auto-Summary]', '[Recall.ai]')
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+async function generateAndSaveAutoSummary(meetingId, logPrefix = '[Auto-Summary]') {
+  console.log(`${logPrefix} Starting AI summary generation...`);
+
+  try {
+    // Load fresh meeting data
+    const meetingsData = await fileOperationManager.readMeetingsData();
+    const meeting = meetingsData.pastMeetings.find(m => m.id === meetingId);
+
+    if (!meeting || !meeting.transcript || meeting.transcript.length === 0) {
+      console.warn(`${logPrefix} Skipping - no transcript available`);
+      return { success: false, error: 'No transcript' };
+    }
+
+    // Generate summary (may update meeting.title if generic)
+    // Note: Don't stream progress during auto-summary to avoid race condition with title updates
+    const summary = await generateMeetingSummary(meeting, null);
+
+    // Save summary, title, and flag to file
+    await fileOperationManager.scheduleOperation(async data => {
+      const idx = data.pastMeetings.findIndex(m => m.id === meetingId);
+      if (idx !== -1) {
+        data.pastMeetings[idx].content = `# ${meeting.title}\n\n${summary}`;
+        data.pastMeetings[idx].title = meeting.title; // May have been updated by generateMeetingSummary
+        data.pastMeetings[idx].summaryGenerated = true;
+        console.log(`${logPrefix} ✓ Summary and title saved`);
+        console.log(`${logPrefix} ✓ Title: "${data.pastMeetings[idx].title}"`);
+      }
+      return data;
+    });
+
+    // Notify renderer to refresh UI
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('summary-generated', meetingId);
+    }
+
+    console.log(`${logPrefix} ✓ AI summary generation complete`);
+    return { success: true };
+  } catch (error) {
+    console.error(`${logPrefix} ✗ Error generating summary:`, error);
+    // Don't throw - let caller decide how to handle
+    return { success: false, error: error.message };
   }
 }
 
