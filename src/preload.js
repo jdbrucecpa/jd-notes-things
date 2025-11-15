@@ -86,6 +86,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   obsidianGetStatus: () => ipcRenderer.invoke('obsidian:getStatus'),
   // Google Contacts & Speaker Matching (Phase 6)
   contactsFetchContacts: forceRefresh => ipcRenderer.invoke('contacts:fetchContacts', forceRefresh),
+  contactsSearchContacts: query => ipcRenderer.invoke('contacts:searchContacts', query),
   speakersMatchSpeakers: (transcript, participantEmails, options) =>
     ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),
   speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) =>

@@ -4195,3 +4195,193 @@ body {
     width: 100%;
   }
 }
+
+/* ============================================================================
+   Speaker Correction UI (Phase 10.5)
+   ============================================================================ */
+
+/* Editable speaker names */
+.editable-speaker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.editable-speaker:hover {
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--primary-color);
+}
+
+.editable-speaker .edit-icon {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.editable-speaker:hover .edit-icon {
+  opacity: 0.6;
+}
+
+.editable-speaker.editing {
+  background: rgba(0, 122, 255, 0.15);
+  color: var(--primary-color);
+}
+
+/* Speaker editor dropdown */
+.speaker-editor-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  min-width: 350px;
+  max-width: 400px;
+  z-index: 1000;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.speaker-editor-header {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.speaker-search-input {
+  flex: 1;
+  padding: 10px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.speaker-search-input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.close-speaker-editor {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.close-speaker-editor:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
+}
+
+.speaker-search-results {
+  max-height: 250px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
+}
+
+.search-hint {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.search-hint.error {
+  color: #dc3545;
+}
+
+.contact-result-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.contact-result-item:last-child {
+  border-bottom: none;
+}
+
+.contact-result-item:hover {
+  background: rgba(0, 122, 255, 0.05);
+}
+
+.contact-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.contact-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.contact-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.contact-email {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.speaker-editor-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 13px;
+  border-radius: 6px;
+}

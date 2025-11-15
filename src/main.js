@@ -2282,6 +2282,41 @@ ipcMain.handle('contacts:fetchContacts', async (event, forceRefresh = false) => 
   }
 });
 
+// Search contacts by query string (name or email)
+ipcMain.handle('contacts:searchContacts', async (event, query) => {
+  try {
+    console.log('[Contacts IPC] Searching contacts for:', query);
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
+    }
+
+    if (!query || query.trim().length === 0) {
+      return { success: true, contacts: [] };
+    }
+
+    // Fetch all contacts (uses cache if available)
+    const allContacts = await googleContacts.fetchAllContacts(false);
+    const normalizedQuery = query.toLowerCase().trim();
+
+    // Filter contacts by name or email matching query
+    const matchingContacts = allContacts.filter(contact => {
+      const nameMatch = contact.name && contact.name.toLowerCase().includes(normalizedQuery);
+      const emailMatch =
+        contact.emails && contact.emails.some(email => email.toLowerCase().includes(normalizedQuery));
+      return nameMatch || emailMatch;
+    });
+
+    console.log(`[Contacts IPC] Found ${matchingContacts.length} contacts matching "${query}"`);
+    return {
+      success: true,
+      contacts: matchingContacts.slice(0, 50), // Limit to 50 results
+    };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to search contacts:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Match speakers to participants
 ipcMain.handle(
   'speakers:matchSpeakers',

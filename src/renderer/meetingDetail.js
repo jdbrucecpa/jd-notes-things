@@ -25,6 +25,9 @@ export function initializeMeetingDetail(meetingId, meeting, onBack, onUpdate) {
   currentMeeting = meeting;
   currentMeetingId = meetingId;
 
+  // Store update callback for speaker editing
+  window._meetingDetailUpdateCallback = onUpdate;
+
   // Set up event listeners
   setupEventListeners(onBack, onUpdate);
 
@@ -300,13 +303,27 @@ function populateTranscript(meeting) {
     // Format timestamp
     const timestamp = formatTimestamp(utterance.start);
 
+    const speakerName = utterance.speaker || 'Unknown Speaker';
+    const speakerId = `speaker-${index}`;
+
     utteranceDiv.innerHTML = `
       <div class="speaker-label">
-        <span class="speaker-name">${escapeHtml(utterance.speaker || 'Unknown Speaker')}</span>
+        <span class="speaker-name editable-speaker" id="${speakerId}" data-index="${index}" title="Click to edit speaker">
+          ${escapeHtml(speakerName)}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="edit-icon">
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/>
+          </svg>
+        </span>
         <span class="timestamp">${escapeHtml(timestamp)}</span>
       </div>
       <div class="utterance-text">${escapeHtml(utterance.text)}</div>
     `;
+
+    // Add click handler for speaker editing
+    const speakerNameEl = utteranceDiv.querySelector('.editable-speaker');
+    speakerNameEl.addEventListener('click', () => {
+      showSpeakerEditor(index, speakerName, speakerNameEl);
+    });
 
     transcriptContent.appendChild(utteranceDiv);
   });
@@ -788,6 +805,236 @@ async function regenerateSummary(onUpdate) {
     btn.disabled = false;
     btn.textContent = originalText;
   }
+}
+
+/**
+ * Show speaker editor with contact search
+ */
+async function showSpeakerEditor(utteranceIndex, currentSpeaker, speakerElement) {
+  // Close any existing editor
+  closeSpeakerEditor();
+
+  console.log(`[MeetingDetail] Opening speaker editor for utterance ${utteranceIndex}`);
+
+  // Create editor UI
+  const editorDiv = document.createElement('div');
+  editorDiv.className = 'speaker-editor-dropdown';
+  editorDiv.id = 'speakerEditorDropdown';
+
+  editorDiv.innerHTML = `
+    <div class="speaker-editor-header">
+      <input
+        type="text"
+        class="speaker-search-input"
+        id="speakerSearchInput"
+        placeholder="Search contacts or type name..."
+        value="${escapeHtml(currentSpeaker)}"
+      />
+      <button class="icon-btn close-speaker-editor" id="closeSpeakerEditor" title="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+    <div class="speaker-search-results" id="speakerSearchResults">
+      <div class="search-hint">Start typing to search contacts...</div>
+    </div>
+    <div class="speaker-editor-actions">
+      <button class="btn-secondary btn-small" id="cancelSpeakerEdit">Cancel</button>
+      <button class="btn-primary btn-small" id="saveSpeakerEdit">Save</button>
+    </div>
+  `;
+
+  // Position dropdown below the speaker element
+  speakerElement.appendChild(editorDiv);
+  speakerElement.classList.add('editing');
+
+  // Store the current editing context
+  window._speakerEditContext = {
+    utteranceIndex,
+    currentSpeaker,
+    speakerElement,
+  };
+
+  // Focus the search input
+  const searchInput = document.getElementById('speakerSearchInput');
+  searchInput.focus();
+  searchInput.select();
+
+  // Set up event listeners
+  setupSpeakerEditorListeners();
+}
+
+/**
+ * Set up event listeners for speaker editor
+ */
+function setupSpeakerEditorListeners() {
+  const searchInput = document.getElementById('speakerSearchInput');
+  const saveBtn = document.getElementById('saveSpeakerEdit');
+  const cancelBtn = document.getElementById('cancelSpeakerEdit');
+  const closeBtn = document.getElementById('closeSpeakerEditor');
+  const resultsDiv = document.getElementById('speakerSearchResults');
+
+  let searchTimeout = null;
+
+  // Search as user types
+  searchInput.addEventListener('input', e => {
+    const query = e.target.value.trim();
+
+    // Debounce search
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    if (query.length < 2) {
+      resultsDiv.innerHTML = '<div class="search-hint">Type at least 2 characters to search...</div>';
+      return;
+    }
+
+    resultsDiv.innerHTML = '<div class="search-hint">Searching...</div>';
+
+    searchTimeout = setTimeout(async () => {
+      try {
+        const result = await window.electronAPI.contactsSearchContacts(query);
+
+        if (result.success && result.contacts.length > 0) {
+          renderContactResults(result.contacts, resultsDiv, searchInput);
+        } else {
+          resultsDiv.innerHTML = '<div class="search-hint">No contacts found. You can still type a custom name.</div>';
+        }
+      } catch (error) {
+        console.error('[MeetingDetail] Contact search error:', error);
+        resultsDiv.innerHTML = '<div class="search-hint error">Search failed. You can still type a custom name.</div>';
+      }
+    }, 300);
+  });
+
+  // Save button
+  saveBtn.addEventListener('click', () => {
+    saveSpeakerEdit(searchInput.value.trim());
+  });
+
+  // Cancel/close buttons
+  cancelBtn.addEventListener('click', closeSpeakerEditor);
+  closeBtn.addEventListener('click', closeSpeakerEditor);
+
+  // Save on Enter
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveSpeakerEdit(searchInput.value.trim());
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeSpeakerEditor();
+    }
+  });
+
+  // Close on click outside
+  document.addEventListener('click', handleClickOutside);
+}
+
+/**
+ * Render contact search results
+ */
+function renderContactResults(contacts, resultsDiv, searchInput) {
+  resultsDiv.innerHTML = '';
+
+  contacts.forEach(contact => {
+    const contactDiv = document.createElement('div');
+    contactDiv.className = 'contact-result-item';
+
+    const initials = getInitials(contact.name || '?');
+    const email = contact.emails && contact.emails.length > 0 ? contact.emails[0] : '';
+
+    contactDiv.innerHTML = `
+      <div class="contact-avatar">${escapeHtml(initials)}</div>
+      <div class="contact-info">
+        <div class="contact-name">${escapeHtml(contact.name || 'Unknown')}</div>
+        ${email ? `<div class="contact-email">${escapeHtml(email)}</div>` : ''}
+      </div>
+    `;
+
+    contactDiv.addEventListener('click', () => {
+      searchInput.value = contact.name || email;
+      saveSpeakerEdit(contact.name || email);
+    });
+
+    resultsDiv.appendChild(contactDiv);
+  });
+}
+
+/**
+ * Handle click outside speaker editor
+ */
+function handleClickOutside(e) {
+  const editorDropdown = document.getElementById('speakerEditorDropdown');
+  if (!editorDropdown) return;
+
+  const context = window._speakerEditContext;
+  if (!context) return;
+
+  // Check if click is outside both the editor and the speaker element
+  if (!editorDropdown.contains(e.target) && !context.speakerElement.contains(e.target)) {
+    closeSpeakerEditor();
+  }
+}
+
+/**
+ * Save speaker edit
+ */
+async function saveSpeakerEdit(newSpeakerName) {
+  const context = window._speakerEditContext;
+  if (!context || !currentMeeting) return;
+
+  if (!newSpeakerName || newSpeakerName === context.currentSpeaker) {
+    closeSpeakerEditor();
+    return;
+  }
+
+  console.log(`[MeetingDetail] Updating speaker at index ${context.utteranceIndex} to: ${newSpeakerName}`);
+
+  // Update the transcript in memory
+  if (currentMeeting.transcript && currentMeeting.transcript[context.utteranceIndex]) {
+    currentMeeting.transcript[context.utteranceIndex].speaker = newSpeakerName;
+
+    // Update the UI
+    const speakerNameSpan = context.speakerElement.querySelector('.speaker-name') || context.speakerElement;
+    const editIcon = speakerNameSpan.querySelector('.edit-icon');
+    speakerNameSpan.textContent = newSpeakerName;
+    if (editIcon) {
+      speakerNameSpan.appendChild(editIcon);
+    }
+
+    // Trigger update callback to save changes
+    if (window._meetingDetailUpdateCallback) {
+      window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
+    }
+
+    console.log('[MeetingDetail] Speaker updated successfully');
+  }
+
+  closeSpeakerEditor();
+}
+
+/**
+ * Close speaker editor
+ */
+function closeSpeakerEditor() {
+  const editorDropdown = document.getElementById('speakerEditorDropdown');
+  if (editorDropdown) {
+    editorDropdown.remove();
+  }
+
+  // Remove editing class from speaker element
+  if (window._speakerEditContext && window._speakerEditContext.speakerElement) {
+    window._speakerEditContext.speakerElement.classList.remove('editing');
+  }
+
+  // Remove click outside listener
+  document.removeEventListener('click', handleClickOutside);
+
+  // Clear context
+  window._speakerEditContext = null;
 }
 
 /**
