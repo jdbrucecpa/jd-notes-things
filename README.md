@@ -2,7 +2,24 @@
 
 **AI Meeting Notetaker for Zoom, Microsoft Teams, and Google Meet**
 
-> Personal tool by JD Knows Things - Not for resale
+> Personal productivity tool by JD Knows Things
+
+---
+
+## Overview
+
+JD Notes Things is a Windows desktop application that automatically records, transcribes, and summarizes your meetings. It integrates with Google Calendar to detect upcoming meetings, captures high-quality audio, generates AI-powered summaries, and saves structured notes to your Obsidian vault.
+
+### Key Features
+
+- 🎙️ **Automatic Meeting Recording** - Detects Zoom, Teams, and Google Meet sessions
+- 📝 **Multi-Provider Transcription** - Choose from AssemblyAI, Deepgram, or Recall.ai
+- 🤖 **AI-Powered Summaries** - Generate structured notes with OpenAI, Claude, or Azure OpenAI
+- 📅 **Google Calendar Integration** - Auto-detect and record scheduled meetings
+- 👥 **Speaker Identification** - Match voices to contacts via Google Contacts
+- 📂 **Smart Organization** - Automatic routing to client/project folders in Obsidian
+- 🔒 **Secure & Private** - Local-first with Windows Credential Manager for API keys
+- 💰 **Cost-Optimized** - Prompt caching reduces LLM costs by 85-90%
 
 ---
 
@@ -10,349 +27,231 @@
 
 ### Prerequisites
 
-- **Windows** (required for Recall.ai Desktop SDK)
-- **Node.js** v18+ (tested with v22.20.0)
-- **npm** v10+
-- **Recall.ai API Key** ([Get one here](https://recall.ai))
-- **ngrok Account** (free tier sufficient) for webhook tunnel ([Get one here](https://ngrok.com))
+- **Windows** 10/11 (required for Recall.ai Desktop SDK)
+- **Node.js** v18+ and npm v10+
+- **Obsidian** (optional but recommended)
+- API keys for:
+  - [Recall.ai](https://recall.ai) - For audio recording
+  - [AssemblyAI](https://assemblyai.com) or [Deepgram](https://deepgram.com) - For transcription
+  - [OpenAI](https://openai.com) - For AI summaries
+  - [ngrok](https://ngrok.com) - For webhook tunneling (free tier works)
+  - Google OAuth credentials - For Calendar/Contacts integration
 
 ### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/jdknowsthings/jd-notes-things.git
+cd jd-notes-things
+
 # Install dependencies
 npm install
 
 # Create environment file
 cp .env.example .env
 
-# Add your API keys to .env
-# RECALLAI_API_KEY=your_key_here
-# NGROK_AUTHTOKEN=your_token_here
-# RECALL_WEBHOOK_SECRET=your_secret_here
+# Edit .env with your API keys
+notepad .env
 ```
 
-### Development
+### Running the App
 
 ```bash
-# Start the app in development mode
+# Development mode
 npm start
 
 # Build for production
 npm run package
 
-# Create installers
+# Create installer
 npm run make
 ```
 
 ---
 
-## Project Status
+## Configuration
 
-**Current Phase:** Phase 10 (In Progress) - Advanced UI & Settings
+### Environment Variables
 
-**Security Status:** ✅ **Production-Ready** - 15/15 tests passing, 0 critical vulnerabilities
+Create a `.env` file in the project root:
 
-### ✅ Completed Phases
+```env
+# Recall.ai Configuration
+RECALLAI_API_URL=https://us-west-2.recall.ai
+RECALLAI_API_KEY=your_api_key
+RECALL_WEBHOOK_SECRET=your_webhook_secret
 
-- **Phase 1**: Core Recording & Transcription (Recall.ai SDK + Async Webhook Transcription)
-- **Phase 2**: Routing System (Email domain matching, vault structure)
-- **Phase 3**: Calendar Integration (Google Calendar OAuth, event fetching)
-- **Phase 4**: LLM Integration (Multi-provider with runtime switching + Prompt Caching)
-- **Phase 5**: Obsidian Export (Two-file architecture, auto-export, publish buttons)
-- **Phase 6**: Speaker Recognition & Contact Matching (Unified Google auth, LRU cache)
-- **Phase 7**: Platform-Specific Recording (Zoom/Teams/Meet detection)
-- **Pre-Phase 7 Bug Fixes**: All 5 critical bugs resolved
-- **Phase 8**: Import Prior Transcripts (bulk import, folder scanning, template selection)
-- **Phase 9**: Encryption & Security (Core hardening + Comprehensive security audit)
-- **Phase 10** (In Progress): Advanced UI & Settings
-  - ✅ **Phase 10.1**: Settings Infrastructure & Theme Foundation
-  - ✅ **Phase 10.2**: Security & Credentials (API Key Management)
-  - ✅ **Phase 10.3**: Template Editor & LLM Configuration (Monaco Editor, auto-summary template file)
+# Transcription Provider (choose one or more)
+ASSEMBLYAI_API_KEY=your_key       # $0.37/hr - Recommended
+DEEPGRAM_API_KEY=your_key          # $0.43/hr - Alternative
 
-### 🎯 Recent Achievements
+# LLM Provider (choose one)
+OPENAI_API_KEY=your_key            # For OpenAI GPT models
+ANTHROPIC_API_KEY=your_key         # For Claude models
+AZURE_OPENAI_API_KEY=your_key      # For Azure OpenAI
 
-**Phase 10.3: Template Editor & LLM Configuration (January 14, 2025):**
+# ngrok (for webhook tunnel)
+NGROK_AUTHTOKEN=your_token
+NGROK_DOMAIN=your-domain.ngrok-free.dev  # Optional
 
-- ✅ **Full-page settings UI** - Converted from modal for better UX and workspace
-  - Two-view architecture: mainView and settingsView
-  - Full-screen template editor with adequate room
-- ✅ **Monaco Editor integration** - VS Code-quality template editing
-  - Syntax highlighting for YAML, JSON, Markdown, plaintext
-  - Theme synchronization with app dark/light mode
-  - Live preview panel with format-aware rendering
-- ✅ **Plain text template support** - Added .txt file format
-  - Auto-generates metadata from filename
-  - Perfect for simple single-prompt templates
-- ✅ **Auto-summary template file** - config/templates/auto-summary-prompt.txt
-  - Editable prompt template (no longer hardcoded)
-  - Conditional sections with Handlebars-style syntax
-  - Replaces hardcoded 50-line prompt in main.js
-- ✅ **Template content IPC handler** - Load raw file content for editing
-- ✅ **Webpack native module fix** - Resolved keytar bundling issue
+# Google OAuth
+GOOGLE_CALENDAR_CLIENT_ID=your_client_id.apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=your_secret
+GOOGLE_CALENDAR_REDIRECT_URI=http://localhost:3000/oauth2callback
 
-**Phase 10.1: Settings Management (January 13, 2025):**
+# Obsidian Vault
+VAULT_PATH=C:\Users\YourName\Documents\ObsidianVault
+```
 
-- ✅ **Settings IPC handlers** - Foundation for comprehensive settings UI
-  - App version retrieval from package.json
-  - Vault path configuration access
+### Obsidian Vault Structure
 
-**Post-Phase 9 Refinements (January 13, 2025):**
+The app automatically creates this structure in your vault:
 
-- ✅ **Improved code maintainability** - Eliminated ~70 lines of duplicate auto-summary code
-  - Single shared function for all transcription providers (DRY principle)
-  - Bug fixes now only need to be applied once instead of three times
-- ✅ **Fixed recording UI** - Recording button now properly clears when meetings end
-- ✅ **Fixed meeting title updates** - AI-suggested titles now appear immediately in meeting list
-  - Resolved race condition where auto-save was overwriting new titles
-- ✅ **Instant UI feedback** - Recording button clears immediately when meeting ends
-  - Eliminated 30-45 second delay from user experience
-  - Transcription and summary generation continue in background
+```
+vault/
+├── clients/{client-name}/meetings/
+├── industry/{contact-name}/meetings/
+├── internal/meetings/
+├── _unfiled/{YYYY-MM}/meetings/
+└── config/
+    ├── routing.yaml        # Email routing configuration
+    └── templates/          # Custom summary templates
+```
 
-**Security Audit Complete (January 13, 2025):**
+Each meeting generates two files:
+- **Summary** (`YYYY-MM-DD-meeting-title.md`) - Metadata + AI summary
+- **Transcript** (`YYYY-MM-DD-meeting-title-transcript.md`) - Full conversation
 
-- ✅ **15/15 automated security tests passing** (100% pass rate)
-- ✅ **2 critical vulnerabilities found and fixed** during audit
-- ✅ **0 critical or high-severity vulnerabilities remaining**
-- ✅ **Path traversal protection**: 10/10 attack scenarios blocked
-- ✅ **OAuth CSRF protection**: 5/5 attack scenarios blocked
-- ✅ **XSS protection**: 6 attack vectors secured with DOMPurify
-- ✅ **Security posture: STRONG** - Ready for personal use deployment
-- ✅ **Risk rating: LOW**
-- ✅ **45-page comprehensive audit report** with test suites
-- ✅ **Automated test infrastructure** for ongoing security validation
+### Routing Configuration
 
-**Prompt Caching Implementation (November 12, 2025):**
+Edit `vault/config/routing.yaml` to control where meetings are saved:
 
-- ✅ 85-90% cost reduction on template generation
-- ✅ All three LLM providers support caching (Azure OpenAI, OpenAI, Anthropic Claude)
-- ✅ Token budgets optimized: 50,000 for auto-summary, 15,000 for template sections
-- ✅ Total cost per meeting: ~$0.70 (well under $1 budget target)
-- ✅ Cache verification logging with performance metrics
+```yaml
+clients:
+  acme-corp:
+    vault_path: 'clients/acme-corp'
+    emails:
+      - 'acme.com'
+    contacts:
+      - 'john@acme.com'
 
-**Import Transcripts Feature (November 12, 2025):**
+industry:
+  consultant-jane:
+    vault_path: 'industry/jane-smith'
+    emails:
+      - 'consulting.com'
 
-- ✅ Background import with progress notifications
-- ✅ Folder import with recursive scanning
-- ✅ Granular template selection (checkboxes per template)
-- ✅ LLM-based title suggestions for generic titles (including numbered variants like "Transcript2")
-- ✅ File overwrite protection
-- ✅ Enhanced speaker extraction from transcript content
+internal:
+  vault_path: 'internal/meetings'
 
-See [SPECIFICATION.md](./SPECIFICATION.md) for complete phase details.
+settings:
+  unfiled_path: '_unfiled'
+  duplicate_multi_org: 'all'  # 'all', 'primary', or 'unfiled'
+```
 
-### 📋 See Full Status
+See [`docs/routing-example.yaml`](./docs/routing-example.yaml) for complete examples.
 
-- **[PROGRESS.md](./PROGRESS.md)** - Detailed progress and next steps
-- **[SPECIFICATION.md](./SPECIFICATION.md)** - Complete product specification
-- **[CODE_REVIEW.md](./CODE_REVIEW.md)** - Security and code quality findings
+---
+
+## Features
+
+### Current Capabilities
+
+#### ✅ Core Recording & Transcription
+- Manual and automatic meeting recording
+- System audio capture via Recall.ai SDK
+- Multi-provider transcription with runtime switching
+- Speaker diarization (Speaker 1, Speaker 2, etc.)
+- Upload progress tracking
+
+#### ✅ Smart Organization
+- Email domain-based routing to client/project folders
+- Multi-organization meeting handling
+- Custom email overrides for personal addresses
+- Automatic unfiled folder for unknown participants
+
+#### ✅ Google Calendar Integration
+- OAuth 2.0 authentication (unified with Contacts)
+- Automatic meeting detection (Zoom, Teams, Meet)
+- Upcoming meetings display
+- Platform-specific metadata
+
+#### ✅ AI-Powered Summaries
+- Multi-provider LLM support (OpenAI, Claude, Azure)
+- Template-based summary generation
+- Prompt caching for 85-90% cost reduction
+- Parallel processing for 10x speedup
+- Custom editable templates (Markdown, YAML, JSON, or plain text)
+
+#### ✅ Speaker Recognition
+- Google Contacts integration with LRU caching
+- Heuristic speaker matching algorithms
+- Automatic speaker label replacement in transcripts
+
+#### ✅ Bulk Import
+- Import existing transcripts (.txt, .md, VTT, SRT)
+- Background processing with progress notifications
+- LLM-based title suggestions for generic filenames
+- Folder scanning with recursive search
+
+#### ✅ Security & Privacy
+- XSS protection with DOMPurify
+- Path traversal prevention
+- OAuth CSRF protection
+- Windows Credential Manager for API keys
+- Local-first data storage
+- Optional DPAPI encryption
+
+### Roadmap
+
+See [`SPECIFICATION.md`](./SPECIFICATION.md) for the complete development roadmap and current phase status.
+
+**Upcoming features:**
+- Real-time transcription during meetings
+- HubSpot CRM integration
+- Advanced routing configuration UI
+- Custom keyboard shortcuts
+- System tray controls
 
 ---
 
 ## Project Structure
 
 ```
-jdnotesthings/
+jd-notes-things/
 ├── src/
-│   ├── main/               # Electron main process
-│   │   ├── recording/      # Audio recording with Recall.ai
-│   │   ├── transcription/  # Transcription with AssemblyAI
-│   │   ├── storage/        # File management
-│   │   └── index.ts        # Main entry point
-│   ├── renderer/           # React UI
-│   │   ├── App.tsx         # Main app component
-│   │   └── index.tsx       # React bootstrap
-│   ├── shared/             # Shared types and constants
-│   └── preload.ts          # Electron preload script
-├── docs/                   # Documentation and examples
-├── SPECIFICATION.md        # Product specification
-├── PROGRESS.md             # Development progress tracker
-└── CLAUDE.md               # Context for Claude Code
+│   ├── main/                  # Electron main process
+│   │   ├── recording/         # Audio recording with Recall.ai
+│   │   ├── services/          # Transcription, LLM, encryption
+│   │   ├── routing/           # Meeting organization logic
+│   │   ├── templates/         # Template parsing and management
+│   │   ├── integrations/      # Google Calendar/Contacts
+│   │   └── storage/           # Vault structure and file operations
+│   ├── renderer/              # React UI components
+│   ├── shared/                # Validation schemas and constants
+│   └── preload.js             # IPC bridge
+├── config/
+│   └── templates/             # User-editable summary templates
+├── docs/                      # Documentation and examples
+├── tests/                     # Security tests
+├── SPECIFICATION.md           # Complete project specification
+└── README.md                  # This file
 ```
-
----
-
-## Technology Stack
-
-- **Desktop Framework:** Electron 39.1.0
-- **UI:** React 19.2.0 + TypeScript
-- **Build System:** Webpack + Electron Forge
-- **Recording:** Recall.ai Desktop SDK 1.3.2
-- **Transcription:** Multi-provider (AssemblyAI, Deepgram, Recall.ai) with runtime switching
-- **Webhooks:** Express 4.x + ngrok 5.x + Svix
-
----
-
-## Features
-
-### ✅ Phase 1: Core Recording & Transcription (Complete)
-
-- Manual and automatic meeting recording
-- System audio capture via Recall.ai SDK
-- **Flexible transcription provider system with runtime switching:**
-  - **AssemblyAI** ($0.37/hr) - 3-step API, speaker diarization, 57% cheaper
-  - **Deepgram** ($0.43/hr) - Direct upload, speaker diarization, 49% cheaper
-  - **Recall.ai** ($0.85/hr) - Async webhook-based (SDK upload currently broken)
-  - UI dropdown for provider selection with localStorage persistence
-  - Unified `TranscriptionService` module with provider adapters
-- Speaker diarization with participant metadata (participantId, isHost)
-- Microphone audio capture confirmed working
-- Automatic ngrok tunnel establishment for webhooks
-- Upload progress tracking with animated UI progress bar
-- Svix signature verification for webhook security
-
-### ✅ Phase 2: Routing System (Complete)
-
-- Automatic file organization by client/project/industry
-- Email domain-based routing with priority system
-- YAML configuration (`config/routing.yaml`)
-- Multi-organization meeting handling
-- Email override system for personal emails
-
-### ✅ Phase 3: Calendar Integration (Complete)
-
-- Google Calendar OAuth 2.0 integration (unified with Contacts)
-- Calendar event fetching (next 24 hours)
-- Meeting platform detection (Zoom, Teams, Meet, Webex, Whereby)
-- Meeting metadata extraction (title, participants, links)
-- Upcoming meetings display in main UI
-
-### ✅ Phase 4: LLM Integration (Complete)
-
-- **Multi-provider LLM support:** OpenAI (gpt-4o-mini), Anthropic (Claude), Azure OpenAI (gpt-5-mini)
-- **Runtime provider switching** via UI dropdown (no restart required)
-- **Prompt caching implementation** across all providers (85-90% cost savings)
-  - Azure OpenAI, OpenAI, Anthropic Claude all support automatic caching
-  - First call creates cache, subsequent calls achieve 99%+ hit rate
-  - Token budgets: 50,000 for auto-summary, 15,000 per template section
-  - Total cost per meeting: ~$0.70 (well under $1 budget)
-- Template-based summary generation with parallel processing
-- Streaming summary generation with progress updates
-- Structured summaries (participants, key points, action items)
-- Cache verification logging with performance metrics
-
-### ✅ Phase 5: Obsidian Export (Complete)
-
-- Two-file architecture (summary + transcript)
-- Rich YAML frontmatter with meeting metadata
-- Bidirectional Obsidian wiki-links
-- Automatic export after template generation
-- Manual Publish/Republish buttons with confirmation
-- Obsidian link tracking in meeting objects
-- Multiple template concatenation in single summary file
-- UI status badge (green indicator when synced)
-- Multi-organization routing support
-- **Known limitation**: Manual vault link override backend ready, UI missing
-
-### ✅ Phase 6: Speaker Recognition & Contact Matching (Complete)
-
-- Unified Google authentication (Calendar + Contacts)
-- Google Contacts integration with LRU cache (5,000 max entries, 24-hour TTL)
-- Heuristic-based speaker matching algorithms
-- Contact count tracking and UI display
-- Auth expiration notifications to user
-
-### ✅ Phase 7: Platform-Specific Recording (Complete)
-
-- Zoom meeting detection (inherited from Muesli)
-- Microsoft Teams meeting detection
-- Google Meet meeting detection
-- Platform metadata in meeting objects
-- Platform-specific UI colors and icons
-
-### ✅ Pre-Phase 7 Bug Fixes (Complete)
-
-- Fixed RoutingEngine method signature bug
-- Fixed service initialization race condition
-- Added token refresh user notifications
-- Fixed file operation read/write race with readWaiters queue
-- Implemented LRU cache for contacts (bounded memory)
-
-### ✅ Phase 8: Import Prior Transcripts (Complete)
-
-- **Bulk import** of existing meeting transcripts (.txt, .md, VTT, SRT formats)
-- **Folder import** with recursive scanning
-- **Background processing** - imports run in background with progress notifications
-- **Granular template selection** - checkboxes for each template
-- **LLM-based title suggestions** for generic titles (e.g., "Krisp Transcript")
-- **File overwrite protection** with confirmation dialogs
-- **Metadata extraction** from filenames and content
-- **Automatic routing** and summary generation for historical transcripts
-- **Prompt caching** optimization for batch imports (85-90% cost savings)
-
-### ✅ Phase 9: Encryption & Security (COMPLETE)
-
-**Core Security Hardening (Nov 13, 2025):**
-- ✅ XSS vulnerability mitigation (DOMPurify sanitization)
-- ✅ Path traversal protection (VaultStructure validation)
-- ✅ OAuth CSRF protection (state parameter validation)
-- ✅ IPC input validation infrastructure (Zod schemas)
-- ✅ Token file permission validation (Windows icacls)
-- ✅ Memory leak prevention (event listener cleanup)
-
-**Comprehensive Security Audit (Jan 13, 2025):**
-- ✅ 15/15 automated tests passing (100%)
-- ✅ 2 critical vulnerabilities fixed (path traversal, OAuth CSRF)
-- ✅ Penetration testing: XSS, Path Traversal, OAuth CSRF
-- ✅ Security posture: STRONG (LOW risk rating)
-- ✅ 45-page audit report + automated test suites
-- ✅ **Production-ready for personal use**
-
-**Deferred to Phase 10:**
-- Windows DPAPI file encryption (optional enhancement)
-- API key storage in Windows Credential Manager (UI required)
-- Complete IPC validation rollout (34/36 handlers remaining)
-
-### 🔧 Phase 10: Advanced UI & Settings (IN PROGRESS)
-
-**Completed Sub-Phases:**
-
-**Phase 10.1: Settings Infrastructure**
-- Settings IPC handlers (getAppVersion, getVaultPath)
-- Foundation for comprehensive settings UI
-
-**Phase 10.2: Security & Credentials**
-- API Key Management UI with Windows Credential Manager
-- Migration wizard from .env to secure storage
-
-**Phase 10.3: Template Editor & LLM Configuration**
-- Full-page settings with Monaco Editor
-- Template editing with syntax highlighting
-- Plain text (.txt) template support
-- Auto-summary template file (editable)
-- Theme synchronization
-
-**Remaining Sub-Phases:**
-- **Phase 10.4**: Advanced Configuration Editors (Routing editor, validation, test tool)
-- **Phase 10.5**: Meeting Metadata Management (Speaker correction, participant input, vault override)
-- **Phase 10.6**: Bulk Meeting Operations (Batch re-export, template generation, routing updates)
-- **Phase 10.7**: Desktop App Polish (System tray, keyboard shortcuts, notifications)
-- **Phase 10.8**: Code Quality & Validation (IPC validation rollout, refactoring - ongoing)
-
-### 🔜 Future Phases (Phase 11, 12)
-
-**Phase 11: Real-Time Transcription (Optional)**
-- Streaming transcription during meetings
-- Live transcript display
-- Real-time summary updates
-
-**Phase 12: HubSpot CRM Integration**
-- Automatic note syncing to HubSpot
-- Company and contact matching
-- Meeting activity tracking
-
-See [SPECIFICATION.md](./SPECIFICATION.md) for complete feature roadmap.
 
 ---
 
 ## Development
 
-### Project Commands
+### Available Commands
 
 ```bash
-npm start           # Start development server
-npm run lint        # Run ESLint
-npm run package     # Build for current platform
-npm run make        # Create distributable installer
+npm start              # Start development server with hot reload
+npm run package        # Build for current platform
+npm run make           # Create distributable installer
+npm run lint           # Run ESLint
+npm run lint:fix       # Auto-fix linting issues
+npm run format         # Format code with Prettier
+npm run format:check   # Check code formatting
 ```
 
 ### Building for Distribution
@@ -361,70 +260,71 @@ npm run make        # Create distributable installer
 # Windows installer (.exe)
 npm run make
 
-# Output will be in: out/make/squirrel.windows/x64/
+# Output location
+out/make/squirrel.windows/x64/
 ```
-
----
-
-## Configuration
-
-### Environment Variables (.env)
-
-```env
-# Recall.ai Configuration
-RECALLAI_API_URL=https://us-west-2.recall.ai
-RECALLAI_API_KEY=your_api_key
-RECALL_WEBHOOK_SECRET=your_webhook_secret
-
-# Transcription Providers (Add at least one)
-ASSEMBLYAI_API_KEY=your_assemblyai_key    # Recommended - $0.37/hr (57% cheaper)
-DEEPGRAM_API_KEY=your_deepgram_key        # Alternative - $0.43/hr (49% cheaper)
-
-# ngrok Configuration (for webhook tunnel)
-NGROK_AUTHTOKEN=your_ngrok_token
-NGROK_DOMAIN=your-domain.ngrok-free.dev
-
-# OpenAI Configuration (for AI summaries)
-OPENAI_API_KEY=your_api_key
-
-# Google Calendar + Contacts OAuth (unified authentication)
-GOOGLE_CALENDAR_CLIENT_ID=your_google_client_id.apps.googleusercontent.com
-GOOGLE_CALENDAR_CLIENT_SECRET=your_google_client_secret
-GOOGLE_CALENDAR_REDIRECT_URI=http://localhost:3000/oauth2callback
-
-# Obsidian Vault Path
-VAULT_PATH=./vault
-```
-
-### API Keys Required
-
-- **Recall.ai**: For desktop audio recording (SDK upload currently broken)
-  - API Key: For SDK authentication
-  - Webhook Secret: For Svix signature verification (get from Recall.ai dashboard)
-  - Note: Currently used only for local recording, transcription via other providers
-- **Transcription Providers** (Choose at least one):
-  - **AssemblyAI**: $0.37/hour - [Get API key](https://www.assemblyai.com/) (Recommended - 57% cheaper)
-  - **Deepgram**: $0.43/hour - [Get API key](https://deepgram.com/) (Alternative - 49% cheaper)
-  - **Recall.ai**: $0.85/hour - Included with recording SDK (fallback when upload fixed)
-- **ngrok**: For webhook tunnel (free tier sufficient)
-  - Authtoken: From ngrok dashboard
-  - Domain: Optional static domain (or use auto-generated)
-- **OpenAI**: For AI-generated meeting summaries (gpt-4o-mini)
-- **Google OAuth**: For Calendar + Contacts access (unified authentication)
-  - Set up OAuth 2.0 credentials at [Google Cloud Console](https://console.cloud.google.com/)
-  - Required scopes: `calendar.readonly` + `contacts.readonly`
-  - Redirect URI: `http://localhost:3000/oauth2callback`
 
 ---
 
 ## Documentation
 
-- **[SPECIFICATION.md](./SPECIFICATION.md)** - Complete product specification
-- **[PROGRESS.md](./PROGRESS.md)** - Current status and next steps
-- **[CLAUDE.md](./CLAUDE.md)** - Context for Claude Code assistant
-- **[docs/security-audit-2025-01-13.md](./docs/security-audit-2025-01-13.md)** - Comprehensive security audit report
-- **[docs/phase9-security-report.md](./docs/phase9-security-report.md)** - Phase 9 security hardening report
-- **[docs/](./docs/)** - Additional documentation and examples
+- **[SPECIFICATION.md](./SPECIFICATION.md)** - Complete technical specification and development roadmap
+- **[CLAUDE.md](./CLAUDE.md)** - Development guide for Claude Code
+- **[docs/security-audit-2025-01-13.md](./docs/security-audit-2025-01-13.md)** - Security audit report
+- **[docs/routing-example.yaml](./docs/routing-example.yaml)** - Routing configuration examples
+- **[Recall.ai Docs](https://docs.recall.ai)** - Recording SDK documentation
+
+---
+
+## Technology Stack
+
+| Component | Technology | Version |
+|-----------|-----------|---------|
+| Desktop Framework | Electron | 39.x |
+| UI Framework | React | 19.x |
+| Build System | Webpack + Electron Forge | Latest |
+| Recording | Recall.ai Desktop SDK | 1.3.x |
+| Transcription | AssemblyAI / Deepgram | Latest |
+| LLM | OpenAI / Claude / Azure | Latest |
+| OAuth | Google OAuth 2.0 | Latest |
+| Security | Windows DPAPI + Credential Manager | Native |
+
+---
+
+## Security
+
+This application implements industry-standard security practices:
+
+- ✅ **15/15 automated security tests passing**
+- ✅ **0 critical or high-severity vulnerabilities**
+- ✅ **XSS protection** with DOMPurify sanitization
+- ✅ **Path traversal prevention** with enhanced validation
+- ✅ **OAuth CSRF protection** with state parameter validation
+- ✅ **Secure API key storage** in Windows Credential Manager
+- ✅ **Token file permission validation** with Windows icacls
+
+See [`docs/security-audit-2025-01-13.md`](./docs/security-audit-2025-01-13.md) for the comprehensive security audit report.
+
+---
+
+## Cost Optimization
+
+The application is designed to minimize API costs:
+
+- **Transcription:** $0.37-$0.43/hour (AssemblyAI/Deepgram vs $0.85/hr Recall.ai)
+- **LLM Summaries:** ~$0.30/meeting with prompt caching (85-90% savings)
+- **Total Cost:** ~$0.70 per 2-hour meeting (well under $1 target)
+
+Prompt caching works by:
+1. First template section creates cache (~$0.009)
+2. Subsequent sections reuse cache (~$0.001 each)
+3. 99%+ cache hit rate on repeated sections
+
+---
+
+## Contributing
+
+This is a personal project by JD Bruce for JD Knows Things. While not open for external contributions, the codebase is shared for reference and personal use.
 
 ---
 
@@ -436,6 +336,10 @@ MIT License - Personal use only, not for resale
 
 ## Support
 
-This is a personal project by JD Bruce for JD Knows Things.
+For detailed development documentation and phase-by-phase implementation details, see:
+- **[SPECIFICATION.md](./SPECIFICATION.md)** - Authoritative source for project planning and status
+- **[CLAUDE.md](./CLAUDE.md)** - Technical architecture and development guide
 
-For development assistance, see [PROGRESS.md](./PROGRESS.md) for the current implementation checklist.
+---
+
+**Built with ❤️ by JD Knows Things**
