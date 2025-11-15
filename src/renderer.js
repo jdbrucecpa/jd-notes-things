@@ -11,6 +11,7 @@ import { sanitizeHtml, escapeHtml, markdownToSafeHtml, safeSetInnerHTML } from '
 import { initializeSettingsUI } from './renderer/settings.js';
 import { initializeTemplateEditor } from './renderer/templates.js';
 import { initializeRoutingEditor } from './renderer/routing.js';
+import { initializeMeetingDetail, clearMeetingDetail, updateMeetingDetail } from './renderer/meetingDetail.js';
 
 // Create empty meetings data structure to be filled from the file
 const meetingsData = {
@@ -366,31 +367,53 @@ function createMeetingCard(meeting) {
     `;
   }
 
-  // Add Obsidian sync badge if meeting has been exported
-  const syncBadge = meeting.obsidianLink
-    ? `
-    <div class="obsidian-sync-badge" title="Synced to Obsidian">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="white"/>
-        <path d="M2 17L12 22L22 17M2 12L12 17L22 12" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
-  `
-    : '';
+  // Format date and time
+  const dateObj = new Date(meeting.date);
+  const dateOptions = { month: 'short', day: 'numeric' };
+  const timeOptions = { hour: 'numeric', minute: '2-digit', hour12: true };
+  const dateStr = dateObj.toLocaleDateString('en-US', dateOptions);
+  const timeStr = dateObj.toLocaleTimeString('en-US', timeOptions);
 
-  // Sanitize meeting title and subtitle to prevent XSS
-  const subtitleHtml = meeting.hasDemo
-    ? `<div class="meeting-time"><a class="meeting-demo-link">${escapeHtml(meeting.subtitle)}</a></div>`
-    : `<div class="meeting-time">${escapeHtml(meeting.subtitle)}</div>`;
+  // Duration
+  let durationStr = '';
+  if (meeting.duration) {
+    const minutes = Math.round(meeting.duration / 60);
+    durationStr = `${minutes} min`;
+  }
+
+  // Participant names
+  let participantsStr = 'No participants';
+  if (meeting.participants && meeting.participants.length > 0) {
+    const names = meeting.participants.map(p => p.name || 'Unknown').slice(0, 3);
+    participantsStr = names.join(', ');
+    if (meeting.participants.length > 3) {
+      participantsStr += ` +${meeting.participants.length - 3}`;
+    }
+  }
+
+  // Obsidian sync status
+  const isSynced = !!(meeting.obsidianLink || meeting.vaultPath);
+  const syncStatus = isSynced ? 'Synced' : 'Not synced';
+  const syncClass = isSynced ? 'synced' : 'not-synced';
+
+  // Build metadata line: Date + Time Duration | Participants | Sync Status
+  const metadataHtml = `
+    <div class="meeting-metadata">
+      <span class="meeting-meta-date">${escapeHtml(dateStr)} ${escapeHtml(timeStr)}${durationStr ? ` (${escapeHtml(durationStr)})` : ''}</span>
+      <span class="meeting-meta-separator">•</span>
+      <span class="meeting-meta-participants">${escapeHtml(participantsStr)}</span>
+      <span class="meeting-meta-separator">•</span>
+      <span class="meeting-meta-sync ${syncClass}">${syncStatus}</span>
+    </div>
+  `;
 
   card.innerHTML = sanitizeHtml(`
     <div class="meeting-icon-container">
       ${iconHtml}
-      ${syncBadge}
     </div>
     <div class="meeting-content">
       <div class="meeting-title">${escapeHtml(meeting.title)}</div>
-      ${subtitleHtml}
+      ${metadataHtml}
     </div>
     <div class="meeting-actions">
       <button class="delete-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Delete note">
@@ -619,12 +642,23 @@ function showHomeView() {
   document.getElementById('newNoteBtn').style.display = 'block';
   document.getElementById('toggleSidebar').style.display = 'none';
 
-  // Show Record Meeting button and set its state based on meeting detection
+  // Hide the entire floating controls section on home page
+  const floatingControls = document.querySelector('.floating-controls');
+  if (floatingControls) {
+    floatingControls.style.display = 'none';
+  }
+
+  // Show Record Zoom Meeting button and set its state based on meeting detection
   const joinMeetingBtn = document.getElementById('joinMeetingBtn');
   if (joinMeetingBtn) {
     // Always show the button
-    joinMeetingBtn.style.display = 'block';
-    joinMeetingBtn.innerHTML = 'Record Meeting';
+    joinMeetingBtn.style.display = 'flex';
+    joinMeetingBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+      </svg>
+      Record Zoom Meeting
+    `;
 
     // Enable/disable based on meeting detection
     if (window.meetingDetected) {
@@ -689,116 +723,55 @@ function showEditorView(meetingId) {
   currentEditingMeetingId = meetingId;
   console.log(`Now editing meeting: ${meetingId} - ${meeting.title}`);
 
-  // Set the meeting title
-  document.getElementById('noteTitle').textContent = meeting.title;
-
-  // Set the date display
-  const dateObj = new Date(meeting.date);
-  document.getElementById('noteDate').textContent = formatDate(dateObj);
-
-  // Get the editor element
-  const editorElement = document.getElementById('simple-editor');
-
-  // Important: Reset the editor content completely
-  if (editorElement) {
-    editorElement.value = '';
+  // Show floating controls section for meeting detail view
+  const floatingControls = document.querySelector('.floating-controls');
+  if (floatingControls) {
+    floatingControls.style.display = 'flex';
   }
 
-  // Add a small delay to ensure the DOM has updated before setting content
-  setTimeout(() => {
-    if (meeting.content) {
-      editorElement.value = meeting.content;
-      console.log(
-        `Loaded content for meeting: ${meetingId}, length: ${meeting.content.length} characters`
-      );
-    } else {
-      // If content is missing, create template
-      const now = new Date();
-      const template = `# Meeting Title\n• ${meeting.title}\n\n# Meeting Date and Time\n• ${now.toLocaleString()}\n\n# Participants\n• \n\n# Description\n• \n\nChat with meeting transcript: `;
-      editorElement.value = template;
+  // Show Export to Obsidian button in floating controls
+  const exportToObsidianBtn = document.getElementById('exportToObsidianBtn');
+  if (exportToObsidianBtn) {
+    exportToObsidianBtn.style.display = 'flex';
+  }
 
-      // Save this template to the meeting
-      meeting.content = template;
+  // Initialize the new meeting detail view
+  initializeMeetingDetail(
+    meetingId,
+    meeting,
+    // onBack callback
+    () => {
+      showHomeView();
+      clearMeetingDetail();
+    },
+    // onUpdate callback
+    (updatedMeetingId, updatedMeeting) => {
+      // Update the meeting in the local arrays
+      const upcomingIndex = upcomingMeetings.findIndex(m => m.id === updatedMeetingId);
+      if (upcomingIndex !== -1) {
+        upcomingMeetings[upcomingIndex] = updatedMeeting;
+      }
+
+      const pastIndex = pastMeetings.findIndex(m => m.id === updatedMeetingId);
+      if (pastIndex !== -1) {
+        pastMeetings[pastIndex] = updatedMeeting;
+      }
+
+      // Update in meetingsData
+      const upcomingDataIndex = meetingsData.upcomingMeetings.findIndex(m => m.id === updatedMeetingId);
+      if (upcomingDataIndex !== -1) {
+        meetingsData.upcomingMeetings[upcomingDataIndex] = updatedMeeting;
+      }
+
+      const pastDataIndex = meetingsData.pastMeetings.findIndex(m => m.id === updatedMeetingId);
+      if (pastDataIndex !== -1) {
+        meetingsData.pastMeetings[pastDataIndex] = updatedMeeting;
+      }
+
+      // Save the updated data
       saveMeetingsData();
-      console.log(`Created new template for meeting: ${meetingId}`);
     }
-
-    // Set up Obsidian Link input field
-    const obsidianLinkInput = document.getElementById('obsidianLinkInput');
-    if (obsidianLinkInput) {
-      // Populate with existing value if available
-      obsidianLinkInput.value = meeting.obsidianLink || '';
-
-      // Set up auto-save for obsidianLink field
-      setupObsidianLinkAutoSave();
-    }
-
-    // Set up auto-save handler for this specific note
-    setupAutoSaveHandler();
-
-    // Add event listener to the title
-    setupTitleEditing();
-
-    // Check if this note has an active recording and update the record button
-    checkActiveRecordingState();
-
-    // Display summaries if they exist
-    if (meeting.summaries && meeting.summaries.length > 0) {
-      displaySummaries(meeting.summaries);
-    } else {
-      displaySummaries([]); // Hide summaries section if none exist
-    }
-
-    // Update debug panel with any available data if it's open
-    const debugPanel = document.getElementById('debugPanel');
-    if (debugPanel && !debugPanel.classList.contains('hidden')) {
-      // Update transcript if available
-      if (meeting.transcript && meeting.transcript.length > 0) {
-        updateDebugTranscript(meeting.transcript);
-      } else {
-        // Clear transcript area if no transcript
-        const transcriptContent = document.getElementById('transcriptContent');
-        if (transcriptContent) {
-          transcriptContent.innerHTML = `
-            <div class="placeholder-content">
-              <p>No transcript available yet</p>
-            </div>
-          `;
-        }
-      }
-
-      // Update participants if available
-      if (meeting.participants && meeting.participants.length > 0) {
-        updateDebugParticipants(meeting.participants);
-      } else {
-        // Clear participants area if no participants
-        const participantsContent = document.getElementById('participantsContent');
-        if (participantsContent) {
-          participantsContent.innerHTML = `
-            <div class="placeholder-content">
-              <p>No participants detected yet</p>
-            </div>
-          `;
-        }
-      }
-
-      // Reset video preview when changing notes
-      const videoContent = document.getElementById('videoContent');
-      if (videoContent) {
-        videoContent.innerHTML = `
-          <div class="placeholder-content video-placeholder">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="#999"/>
-            </svg>
-            <p>Video preview will appear here</p>
-          </div>
-        `;
-      }
-    }
-
-    // Update Obsidian button state
-    updateObsidianButton(meeting);
-  }, 50);
+  );
 }
 
 // Setup the title editing and save function
@@ -2380,53 +2353,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Set up the initial auto-save handler
+  // Set up the initial auto-save handler (legacy - not used in new meeting detail view)
   setupAutoSaveHandler();
 
-  // Toggle sidebar button with initial state
+  // Toggle sidebar button with initial state (legacy Muesli template code)
   const toggleSidebarBtn = document.getElementById('toggleSidebar');
   const sidebar = document.getElementById('sidebar');
   const editorContent = document.querySelector('.editor-content');
   const chatInputContainer = document.querySelector('.chat-input-container');
 
-  // Start with sidebar hidden
-  sidebar.classList.add('hidden');
-  editorContent.classList.add('full-width');
-  chatInputContainer.style.display = 'none';
+  // Only set up old sidebar UI if elements exist (they don't in new design)
+  if (sidebar && editorContent && chatInputContainer && toggleSidebarBtn) {
+    // Start with sidebar hidden
+    sidebar.classList.add('hidden');
+    editorContent.classList.add('full-width');
+    chatInputContainer.style.display = 'none';
 
-  toggleSidebarBtn.addEventListener('click', () => {
-    sidebar.classList.toggle('hidden');
-    editorContent.classList.toggle('full-width');
+    toggleSidebarBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('hidden');
+      editorContent.classList.toggle('full-width');
 
-    // Show/hide chat input with sidebar
-    if (sidebar.classList.contains('hidden')) {
-      chatInputContainer.style.display = 'none';
-    } else {
-      chatInputContainer.style.display = 'block';
-    }
-  });
+      // Show/hide chat input with sidebar
+      if (sidebar.classList.contains('hidden')) {
+        chatInputContainer.style.display = 'none';
+      } else {
+        chatInputContainer.style.display = 'block';
+      }
+    });
+  }
 
-  // Chat input handling
+  // Chat input handling (legacy)
   const chatInput = document.getElementById('chatInput');
   const sendButton = document.getElementById('sendButton');
 
-  // When send button is clicked
-  sendButton.addEventListener('click', () => {
-    const message = chatInput.value.trim();
-    if (message) {
-      console.log('Sending message:', message);
-      // Here you would handle the AI chat functionality
-      // For now, just clear the input
-      chatInput.value = '';
-    }
-  });
+  // Only set up chat handlers if elements exist (they don't in new design)
+  if (chatInput && sendButton) {
+    // When send button is clicked
+    sendButton.addEventListener('click', () => {
+      const message = chatInput.value.trim();
+      if (message) {
+        console.log('Sending message:', message);
+        // Here you would handle the AI chat functionality
+        // For now, just clear the input
+        chatInput.value = '';
+      }
+    });
 
-  // Send message on Enter key
-  chatInput.addEventListener('keypress', e => {
-    if (e.key === 'Enter') {
-      sendButton.click();
-    }
-  });
+    // Send message on Enter key
+    chatInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') {
+        sendButton.click();
+      }
+    });
+  }
 
   // Handle share buttons
   const shareButtons = document.querySelectorAll('.share-btn');

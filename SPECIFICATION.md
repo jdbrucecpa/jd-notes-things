@@ -12,7 +12,7 @@
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
 **Phase:** Phase 10 - Advanced UI & Settings
-**Status:** Phase 10.4 complete (Routing Configuration Editor) - Continuing Phase 10
+**Status:** Phase 10.4 COMPLETE (Routing Configuration Editor with full CRUD operations) - Ready for Phase 10.5
 
 **Development Philosophy:** Unless otherwise instructed, progress through phases in sequential order. We follow our initial plan to maintain consistency and ensure dependencies are properly met.
 
@@ -115,13 +115,24 @@
 - ✅ YAML validation with error reporting
 - ✅ Automatic backup before saving (routing.backup.yaml)
 - ✅ Routing test tool - Preview where meetings would be saved based on participant emails
-- ✅ IPC handlers for routing operations:
+- ✅ **Add Organization** - Modal dialog with form validation, supports Clients and Industry types
+- ✅ **Delete Organization** - Confirmation modal with safety checks (prevents deleting Internal)
+- ✅ **Refresh Button** - Reload configuration from disk without leaving tab
+- ✅ **Undo Button** - Restore from backup with confirmation modal
+- ✅ IPC handlers for routing operations (7 total):
   - `routing:getConfig` - Load routing configuration and parse YAML
   - `routing:saveConfig` - Save with validation and backup
   - `routing:validateConfig` - Validate configuration structure
   - `routing:testEmails` - Test routing logic with mock emails
+  - `routing:addOrganization` - Add new client or industry organization
+  - `routing:deleteOrganization` - Delete organization with safety checks
+  - `routing:restoreBackup` - Restore from backup file
 - ✅ Integration with existing RoutingEngine for live testing
-- Files: src/renderer/routing.js, src/index.html (routing panel), src/index.css (routing styles), src/main.js:2528-2689
+- ✅ Bug fixes:
+  - Fixed routing config path to match RoutingEngine (dev vs production)
+  - Fixed type mapping (clients plural vs client singular)
+  - Prevent deleting empty sections (keeps structure for RoutingEngine)
+- Files: src/renderer/routing.js (700+ lines), src/index.html (routing panel + modals), src/index.css (routing + modal styles, 450+ lines), src/main.js:2528-2865 (330+ lines), src/preload.js (7 routing APIs)
 - ✅ Template content IPC handler (templates:getContent)
 - ✅ Webpack native module fix for keytar bundling
 
@@ -1996,15 +2007,31 @@ Entire meeting history organized and searchable using new system. Background pro
 - Routing test tab allows entering comma-separated emails to preview vault path
 - Integration with existing RoutingEngine for live testing
 - Full theme support (light/dark mode)
+- **Add Organization Dialog:**
+  - Type selection (Client or Industry)
+  - Organization ID validation (lowercase-with-hyphens format)
+  - Vault path (required)
+  - Email domains and specific contacts (optional)
+  - Duplicate check and YAML regeneration
+- **Delete Organization Dialog:**
+  - Confirmation modal with warnings
+  - Prevents deleting Internal organization
+  - Preserves empty sections for RoutingEngine compatibility
+- **Toolbar Actions:**
+  - Refresh: Reload from disk
+  - Undo: Restore from backup with confirmation
+  - Validate: YAML structure validation
+  - Test: Switch to routing test tab
+  - Save: Write to disk with backup
 
 **Files Modified:**
-- `src/renderer/routing.js` - New routing editor module (500+ lines)
-- `src/index.html` - Added routing panel HTML structure
-- `src/index.css` - Added 300+ lines of routing editor styles
+- `src/renderer/routing.js` - New routing editor module (700+ lines with full CRUD operations)
+- `src/index.html` - Added routing panel HTML structure with toolbar buttons
+- `src/index.css` - Added 450+ lines (routing editor + modal dialog styles)
 - `src/renderer/settings.js` - Added routing panel to settings tabs
 - `src/renderer.js` - Initialize routing editor
-- `src/preload.js` - Added 4 routing IPC handlers
-- `src/main.js` - Added routing IPC handlers with validation and backup (160 lines)
+- `src/preload.js` - Added 7 routing IPC handlers
+- `src/main.js` - Added routing IPC handlers with validation and backup (330+ lines, 7 handlers)
 
 ---
 
