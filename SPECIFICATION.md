@@ -4,7 +4,7 @@
 **Organization:** JD Knows Things
 **Purpose:** Personal AI Meeting Notetaker for Zoom, Microsoft Teams, Google Meet, and Manual Recording
 **Version:** 1.0
-**Last Updated:** January 13, 2025
+**Last Updated:** January 14, 2025
 
 ---
 
@@ -12,7 +12,7 @@
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
 **Phase:** Phase 10 - Advanced UI & Settings
-**Status:** Phase 10.5 COMPLETE - Ready for Phase 10.6 (Search & Participant Management)
+**Status:** Phase 10.6 COMPLETE - Ready for Phase 10.6 Bug Fixing & Phase 10.7
 
 **Development Philosophy:** Unless otherwise instructed, progress through phases in sequential order. We follow our initial plan to maintain consistency and ensure dependencies are properly met.
 
@@ -47,15 +47,33 @@
     - ✅ Speaker correction UI with inline editing and contact search
     - ✅ Improved record button styling (gradient backgrounds, icons)
     - ✅ Removed unused user avatar icon from nav bar
-  - 🔜 Phase 10.6: Search & Participant Management (PLANNED)
-    - 📋 Meeting search functionality (search by title, participant, date)
-    - 📋 Advanced participant management in metadata tab
-      - Add contacts as participants with search dropdown
-      - Remove participants
-      - Auto-add participants when speaker is assigned via speaker correction
-      - Auto-replace duplicate participants (match by name)
-    - 📋 Bulk operations (multi-select meetings, batch export, etc.)
-  - 🔜 Phase 10.7+: Additional UI enhancements (TBD)
+  - ✅ Phase 10.6: Search & Participant Management (COMPLETE)
+    - ✅ Meeting search functionality (search by title, participant, date)
+      - Debounced search input (300ms) for performance
+      - Real-time filtering of meetings list
+      - Search by title, participant names/emails, and date ranges
+      - Empty state with "Clear Search" button
+      - Search results counter
+    - ✅ Advanced participant management in metadata tab
+      - ✅ Contact search modal with Google Contacts integration
+      - ✅ Search contacts by name or email with live results
+      - ✅ Add contacts as participants with search dropdown
+      - ✅ Remove participants
+      - ✅ Auto-add participants when speaker is assigned via speaker correction
+      - ✅ Auto-replace duplicate participants (match by email)
+      - ✅ Toast notifications for user actions
+    - ✅ Bulk operations (multi-select meetings, batch export)
+      - ✅ Multi-select UI with checkboxes on meeting cards
+      - ✅ "Select" button in Notes section header to toggle selection mode
+      - ✅ Bulk actions toolbar with selection count
+      - ✅ Select All / Deselect All buttons
+      - ✅ Click anywhere on card to select (when in selection mode)
+      - ✅ Export to Obsidian batch operation
+      - ✅ Meeting cards cannot be opened in selection mode
+      - ✅ Programmatic checkbox creation to bypass DOMPurify sanitization
+    - 🔧 Phase 10.6 Bug Fixing (IN PROGRESS)
+      - Critical bugs to resolve before Phase 10.7
+  - 🔜 Phase 10.7: Desktop App Polish (TBD)
 
 **Recent Architectural Changes (Nov 10-12, 2025):**
 
@@ -187,6 +205,47 @@
   - Hover effects with lift animation
   - Better disabled states
 - Files: src/renderer/meetingDetail.js (1060+ lines), src/index.css (4387+ lines), src/index.html (meeting detail structure), src/renderer.js (integration), src/preload.js (contact search API)
+
+**Phase 10.6: Search & Participant Management + Bulk Operations (Jan 14, 2025):**
+
+- ✅ **Meeting Search Functionality** - Real-time search across meetings
+  - Debounced search input (300ms) for performance optimization
+  - Search by title, participant names/emails, and date ranges
+  - Real-time filtering of meetings list
+  - Empty state with "Clear Search" button
+  - Search results counter showing filtered count
+  - File: src/renderer.js (search functions ~100 lines)
+- ✅ **Advanced Participant Management** - Metadata tab enhancements
+  - Contact search modal with Google Contacts integration
+  - Search contacts by name or email with live results
+  - Add contacts as participants using search dropdown
+  - Remove participants with confirmation
+  - Auto-add participants when speaker is assigned via speaker correction
+  - Auto-replace duplicate participants (match by email)
+  - Toast notifications for user feedback
+  - File: src/renderer/meetingDetail.js (participant management functions)
+- ✅ **Bulk Operations** - Multi-select meetings with batch actions
+  - Multi-select UI with checkboxes on meeting cards
+  - "Select" button in Notes section header to toggle selection mode
+  - Bulk actions toolbar showing selection count
+  - Select All / Deselect All buttons
+  - Click anywhere on meeting card to select (when in selection mode)
+  - Export to Obsidian batch operation
+  - Meeting cards cannot be opened while in selection mode
+  - Programmatic checkbox creation to bypass DOMPurify sanitization (security + functionality)
+  - Files: src/renderer.js (bulk selection state ~200 lines), src/index.html (toolbar), src/index.css (checkbox and toolbar styles)
+- ✅ **Critical Bug Fixes** - Data persistence and UI issues resolved
+  - Fixed legacy editor interference causing console errors (renderer.js:2620-2650)
+  - Fixed async save chain race conditions (meetingDetail.js:1211-1228, renderer.js:966-1004)
+  - **CRITICAL**: Fixed data merge bug in main.js where old file data overwrote renderer edits (main.js:1909-1930)
+  - Fixed bulk operations UI not rendering section header (renderer.js:1362-1380)
+  - Fixed DOMPurify stripping checkboxes by creating elements programmatically (renderer.js:635-658)
+  - Fixed meeting opening when clicking card in selection mode (renderer.js:2636-2639)
+  - All changes now persist correctly after app restart
+- 🔧 **Known Issues** - To be addressed in Phase 10.6 Bug Fixing
+  - User reported "There are still some bugs" requiring final bug fixing pass
+  - Specific bugs to be identified and resolved before Phase 10.7
+- Files: src/renderer.js (2900+ lines), src/renderer/meetingDetail.js (1200+ lines), src/main.js (save merge logic), src/index.html (bulk actions toolbar), src/index.css (bulk operations styles)
 
 The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
 

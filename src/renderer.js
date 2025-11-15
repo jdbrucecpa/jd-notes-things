@@ -33,6 +33,186 @@ let pastMeetingsByDate = {};
 window.isRecording = false;
 window.currentRecordingId = null;
 
+// Search/filter state
+const searchState = {
+  query: '',
+  filters: {
+    dateFrom: null,
+    dateTo: null,
+  },
+};
+
+// Bulk selection state
+const bulkSelectionState = {
+  enabled: false,
+  selectedMeetings: new Set(),
+};
+
+// Function to toggle bulk selection mode
+function toggleBulkSelectionMode() {
+  console.log('[Bulk] Toggling selection mode. Current:', bulkSelectionState.enabled);
+  bulkSelectionState.enabled = !bulkSelectionState.enabled;
+  console.log('[Bulk] New mode:', bulkSelectionState.enabled);
+
+  // Show/hide checkboxes on all meeting cards
+  const checkboxes = document.querySelectorAll('.meeting-select-checkbox');
+  console.log('[Bulk] Found checkboxes:', checkboxes.length);
+  checkboxes.forEach(checkbox => {
+    checkbox.style.display = bulkSelectionState.enabled ? 'flex' : 'none';
+    console.log('[Bulk] Checkbox display set to:', checkbox.style.display);
+  });
+
+  // Update toolbar visibility
+  updateBulkActionsToolbar();
+
+  // Update toggle button text (preserve the icon)
+  const toggleBtn = document.getElementById('toggleBulkSelectBtn');
+  if (toggleBtn) {
+    const buttonText = bulkSelectionState.enabled ? 'Cancel' : 'Select';
+    toggleBtn.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>
+      </svg>
+      ${buttonText}
+    `;
+  }
+
+  // If disabling, clear selections
+  if (!bulkSelectionState.enabled) {
+    deselectAllMeetings();
+  }
+}
+
+// Function to update bulk actions toolbar
+function updateBulkActionsToolbar() {
+  const toolbar = document.getElementById('bulkActionsToolbar');
+  const countSpan = document.getElementById('bulkSelectionCount');
+  const exportBtn = document.getElementById('batchExportBtn');
+
+  if (!toolbar || !countSpan) return;
+
+  const count = bulkSelectionState.selectedMeetings.size;
+
+  // Show/hide toolbar based on selection mode and count
+  if (bulkSelectionState.enabled && count > 0) {
+    toolbar.style.display = 'flex';
+    countSpan.textContent = `${count} selected`;
+    if (exportBtn) {
+      exportBtn.disabled = false;
+    }
+  } else if (bulkSelectionState.enabled) {
+    toolbar.style.display = 'flex';
+    countSpan.textContent = '0 selected';
+    if (exportBtn) {
+      exportBtn.disabled = true;
+    }
+  } else {
+    toolbar.style.display = 'none';
+  }
+}
+
+// Function to select all meetings
+function selectAllMeetings() {
+  const allMeetings = [...upcomingMeetings, ...pastMeetings];
+  const checkboxes = document.querySelectorAll('.meeting-checkbox');
+
+  checkboxes.forEach(checkbox => {
+    const meetingId = checkbox.dataset.meetingId;
+    if (meetingId) {
+      checkbox.checked = true;
+      bulkSelectionState.selectedMeetings.add(meetingId);
+      const card = checkbox.closest('.meeting-card');
+      if (card) {
+        card.classList.add('selected');
+      }
+    }
+  });
+
+  updateBulkActionsToolbar();
+}
+
+// Function to deselect all meetings
+function deselectAllMeetings() {
+  const checkboxes = document.querySelectorAll('.meeting-checkbox');
+
+  checkboxes.forEach(checkbox => {
+    checkbox.checked = false;
+    const card = checkbox.closest('.meeting-card');
+    if (card) {
+      card.classList.remove('selected');
+    }
+  });
+
+  bulkSelectionState.selectedMeetings.clear();
+  updateBulkActionsToolbar();
+}
+
+// Function to batch export selected meetings to Obsidian
+async function batchExportToObsidian() {
+  const selectedIds = Array.from(bulkSelectionState.selectedMeetings);
+
+  if (selectedIds.length === 0) {
+    console.warn('No meetings selected for export');
+    return;
+  }
+
+  console.log(`Exporting ${selectedIds.length} meetings to Obsidian...`);
+
+  // Get all meetings
+  const allMeetings = [...upcomingMeetings, ...pastMeetings];
+
+  // Filter selected meetings
+  const meetingsToExport = allMeetings.filter(m => selectedIds.includes(m.id));
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  // Export each meeting
+  for (const meeting of meetingsToExport) {
+    try {
+      console.log(`Exporting meeting: ${meeting.title} (${meeting.id})`);
+
+      const result = await window.electronAPI.exportMeetingToObsidian({
+        id: meeting.id,
+        title: meeting.title,
+        date: meeting.date,
+        participants: meeting.participants || [],
+        transcript: meeting.transcript || [],
+        duration: meeting.duration,
+      });
+
+      if (result.success) {
+        successCount++;
+        console.log(`Successfully exported: ${meeting.title}`);
+
+        // Update meeting with Obsidian link
+        meeting.obsidianLink = result.obsidianLink;
+        meeting.vaultPath = result.vaultPath;
+      } else {
+        errorCount++;
+        console.error(`Failed to export ${meeting.title}:`, result.error);
+      }
+    } catch (error) {
+      errorCount++;
+      console.error(`Error exporting ${meeting.title}:`, error);
+    }
+  }
+
+  console.log(`Batch export complete: ${successCount} succeeded, ${errorCount} failed`);
+
+  // Save updated meetings data
+  await saveMeetingsData();
+
+  // Refresh UI
+  renderMeetings();
+
+  // Show success message
+  alert(`Exported ${successCount} of ${selectedIds.length} meetings to Obsidian`);
+
+  // Clear selection and exit bulk mode
+  toggleBulkSelectionMode();
+}
+
 // Function to check if there's an active recording for the current note
 async function checkActiveRecordingState() {
   if (!currentEditingMeetingId) return;
@@ -114,6 +294,17 @@ async function saveMeetingsData() {
   // Save to the actual file using IPC
   try {
     console.log('Saving meetings data to file...');
+    console.log('[Save] Data being saved:', {
+      upcomingCount: meetingsData.upcomingMeetings?.length || 0,
+      pastCount: meetingsData.pastMeetings?.length || 0,
+      firstPastMeeting: meetingsData.pastMeetings?.[0] ? {
+        id: meetingsData.pastMeetings[0].id,
+        title: meetingsData.pastMeetings[0].title,
+        participantCount: meetingsData.pastMeetings[0].participants?.length || 0,
+        transcriptLength: meetingsData.pastMeetings[0].transcript?.length || 0,
+        firstSpeakers: meetingsData.pastMeetings[0].transcript?.slice(0, 3).map(t => t.speaker) || []
+      } : null
+    });
     const result = await window.electronAPI.saveMeetingsData(meetingsData);
     if (result.success) {
       console.log('Meetings data saved successfully to file');
@@ -266,6 +457,22 @@ function showToast(message, type = 'info') {
 // Make showToast available globally for other modules
 window.showToast = showToast;
 
+// Clear search function (called from empty state button)
+window.clearSearch = function () {
+  searchState.query = '';
+  searchState.filters.dateFrom = null;
+  searchState.filters.dateTo = null;
+
+  // Clear search input
+  const searchInput = document.querySelector('.search-input');
+  if (searchInput) {
+    searchInput.value = '';
+  }
+
+  // Re-render meetings
+  renderMeetings();
+};
+
 // ========================================
 // Display AI Generated Summaries
 // ========================================
@@ -407,6 +614,7 @@ function createMeetingCard(meeting) {
     </div>
   `;
 
+  // Set card HTML (without checkbox - we'll add it programmatically)
   card.innerHTML = sanitizeHtml(`
     <div class="meeting-icon-container">
       ${iconHtml}
@@ -423,6 +631,48 @@ function createMeetingCard(meeting) {
       </button>
     </div>
   `);
+
+  // Create checkbox programmatically (after sanitization) to avoid DOMPurify stripping it
+  const checkboxContainer = document.createElement('div');
+  checkboxContainer.className = 'meeting-select-checkbox';
+  checkboxContainer.style.display = 'none';
+
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.className = 'meeting-checkbox';
+  checkbox.dataset.meetingId = meeting.id;
+
+  checkbox.addEventListener('change', (e) => {
+    e.stopPropagation(); // Prevent card click event
+    if (e.target.checked) {
+      bulkSelectionState.selectedMeetings.add(meeting.id);
+      card.classList.add('selected');
+    } else {
+      bulkSelectionState.selectedMeetings.delete(meeting.id);
+      card.classList.remove('selected');
+    }
+    updateBulkActionsToolbar();
+  });
+
+  checkboxContainer.appendChild(checkbox);
+  card.insertBefore(checkboxContainer, card.firstChild);
+
+  // Add click handler to card for toggling selection in bulk mode
+  card.addEventListener('click', (e) => {
+    // Only toggle if in bulk selection mode
+    if (bulkSelectionState.enabled) {
+      // Don't toggle if clicking the checkbox itself or delete button
+      if (e.target.closest('.meeting-checkbox') || e.target.closest('.delete-meeting-btn')) {
+        return;
+      }
+
+      // Toggle the checkbox
+      checkbox.checked = !checkbox.checked;
+
+      // Trigger the change event to update selection state
+      checkbox.dispatchEvent(new Event('change'));
+    }
+  });
 
   return card;
 }
@@ -722,6 +972,13 @@ function showEditorView(meetingId) {
   // Set the current editing meeting ID
   currentEditingMeetingId = meetingId;
   console.log(`Now editing meeting: ${meetingId} - ${meeting.title}`);
+  console.log('[Renderer] Meeting data being passed to detail view:', {
+    participantCount: meeting.participants?.length || 0,
+    participants: meeting.participants,
+    transcriptLength: meeting.transcript?.length || 0,
+    firstSpeaker: meeting.transcript?.[0]?.speaker || 'N/A',
+    allSpeakers: meeting.transcript?.map(t => t.speaker) || []
+  });
 
   // Show floating controls section for meeting detail view
   const floatingControls = document.querySelector('.floating-controls');
@@ -745,31 +1002,44 @@ function showEditorView(meetingId) {
       clearMeetingDetail();
     },
     // onUpdate callback
-    (updatedMeetingId, updatedMeeting) => {
+    async (updatedMeetingId, updatedMeeting) => {
+      console.log('[Renderer] Meeting update callback received:', {
+        meetingId: updatedMeetingId,
+        participantCount: updatedMeeting.participants?.length || 0,
+        hasTranscript: !!updatedMeeting.transcript,
+        speakers: updatedMeeting.transcript?.map(t => t.speaker).slice(0, 3) || []
+      });
+
       // Update the meeting in the local arrays
       const upcomingIndex = upcomingMeetings.findIndex(m => m.id === updatedMeetingId);
       if (upcomingIndex !== -1) {
         upcomingMeetings[upcomingIndex] = updatedMeeting;
+        console.log('[Renderer] Updated in upcomingMeetings');
       }
 
       const pastIndex = pastMeetings.findIndex(m => m.id === updatedMeetingId);
       if (pastIndex !== -1) {
         pastMeetings[pastIndex] = updatedMeeting;
+        console.log('[Renderer] Updated in pastMeetings');
       }
 
       // Update in meetingsData
       const upcomingDataIndex = meetingsData.upcomingMeetings.findIndex(m => m.id === updatedMeetingId);
       if (upcomingDataIndex !== -1) {
         meetingsData.upcomingMeetings[upcomingDataIndex] = updatedMeeting;
+        console.log('[Renderer] Updated in meetingsData.upcomingMeetings');
       }
 
       const pastDataIndex = meetingsData.pastMeetings.findIndex(m => m.id === updatedMeetingId);
       if (pastDataIndex !== -1) {
         meetingsData.pastMeetings[pastDataIndex] = updatedMeeting;
+        console.log('[Renderer] Updated in meetingsData.pastMeetings');
       }
 
       // Save the updated data
-      saveMeetingsData();
+      console.log('[Renderer] Calling saveMeetingsData...');
+      await saveMeetingsData();
+      console.log('[Renderer] saveMeetingsData completed');
     }
   );
 }
@@ -1020,6 +1290,68 @@ async function createNewMeeting() {
 }
 
 // Function to render meetings to the page
+/**
+ * Filter meetings based on search query and filters
+ * @param {Array} meetings - Array of meeting objects to filter
+ * @returns {Array} - Filtered array of meetings
+ */
+function filterMeetings(meetings) {
+  if (!searchState.query && !searchState.filters.dateFrom && !searchState.filters.dateTo) {
+    return meetings; // No filters active, return all meetings
+  }
+
+  return meetings.filter(meeting => {
+    // Search query filter (title, participants)
+    if (searchState.query) {
+      const query = searchState.query.toLowerCase();
+      const titleMatch = meeting.title?.toLowerCase().includes(query);
+
+      // Check participant names and emails
+      let participantMatch = false;
+      if (meeting.participants && Array.isArray(meeting.participants)) {
+        participantMatch = meeting.participants.some(p => {
+          const nameMatch = p.name?.toLowerCase().includes(query);
+          const emailMatch = p.email?.toLowerCase().includes(query);
+          return nameMatch || emailMatch;
+        });
+      }
+
+      // Also check participantEmails array (fallback)
+      if (!participantMatch && meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+        participantMatch = meeting.participantEmails.some(email =>
+          email?.toLowerCase().includes(query)
+        );
+      }
+
+      if (!titleMatch && !participantMatch) {
+        return false; // No match found
+      }
+    }
+
+    // Date range filter
+    if (searchState.filters.dateFrom || searchState.filters.dateTo) {
+      const meetingDate = new Date(meeting.date);
+
+      if (searchState.filters.dateFrom) {
+        const fromDate = new Date(searchState.filters.dateFrom);
+        if (meetingDate < fromDate) {
+          return false;
+        }
+      }
+
+      if (searchState.filters.dateTo) {
+        const toDate = new Date(searchState.filters.dateTo);
+        toDate.setHours(23, 59, 59, 999); // Include the entire day
+        if (meetingDate > toDate) {
+          return false;
+        }
+      }
+    }
+
+    return true; // Passed all filters
+  });
+}
+
 function renderMeetings() {
   // Clear previous content
   const mainContent = document.querySelector('.main-content .content-container');
@@ -1055,10 +1387,24 @@ function renderMeetings() {
   const notesSection = document.createElement('section');
   notesSection.className = 'meetings-section';
   notesSection.innerHTML = `
-    <h2 class="section-title">Notes</h2>
+    <div class="section-header">
+      <h2 class="section-title">Notes</h2>
+      <button class="btn btn-secondary" id="toggleBulkSelectBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>
+        </svg>
+        Select
+      </button>
+    </div>
     <div class="meetings-list" id="notes-list"></div>
   `;
   mainContent.appendChild(notesSection);
+
+  // Re-attach the bulk select button event listener since it's dynamically created
+  const toggleBulkSelectBtn = notesSection.querySelector('#toggleBulkSelectBtn');
+  if (toggleBulkSelectBtn) {
+    toggleBulkSelectBtn.addEventListener('click', toggleBulkSelectionMode);
+  }
 
   // Get the notes container
   const notesContainer = notesSection.querySelector('#notes-list');
@@ -1071,12 +1417,38 @@ function renderMeetings() {
     return new Date(b.date) - new Date(a.date);
   });
 
-  // Filter out calendar entries and add only document type meetings to the container
-  allMeetings
-    .filter(meeting => meeting.type !== 'calendar') // Skip calendar entries
-    .forEach(meeting => {
-      notesContainer.appendChild(createMeetingCard(meeting));
-    });
+  // Filter out calendar entries and apply search/filter
+  const filteredMeetings = filterMeetings(
+    allMeetings.filter(meeting => meeting.type !== 'calendar') // Skip calendar entries
+  );
+
+  // Show search results count if search is active
+  if (searchState.query || searchState.filters.dateFrom || searchState.filters.dateTo) {
+    const searchInfo = document.createElement('div');
+    searchInfo.className = 'search-info';
+    searchInfo.textContent = `Found ${filteredMeetings.length} meeting${filteredMeetings.length !== 1 ? 's' : ''}`;
+    notesContainer.parentElement.insertBefore(searchInfo, notesContainer);
+  }
+
+  // Add filtered meetings to the container
+  filteredMeetings.forEach(meeting => {
+    notesContainer.appendChild(createMeetingCard(meeting));
+  });
+
+  // Show empty state if no meetings found
+  if (filteredMeetings.length === 0) {
+    const emptyState = document.createElement('div');
+    emptyState.className = 'empty-state';
+    if (searchState.query || searchState.filters.dateFrom || searchState.filters.dateTo) {
+      emptyState.innerHTML = `
+        <p>No meetings found matching your search criteria.</p>
+        <button class="btn" onclick="clearSearch()">Clear Search</button>
+      `;
+    } else {
+      emptyState.innerHTML = '<p>No meetings yet. Click "Record In-Person Meeting" to get started.</p>';
+    }
+    notesContainer.appendChild(emptyState);
+  }
 }
 
 // Load meetings data from file
@@ -1089,11 +1461,13 @@ async function loadMeetingsDataFromFile() {
     if (result.success) {
       console.log(`Got data with ${result.data.pastMeetings?.length || 0} past meetings`);
       if (result.data.pastMeetings && result.data.pastMeetings.length > 0) {
-        console.log(
-          'Most recent meeting:',
-          result.data.pastMeetings[0].id,
-          result.data.pastMeetings[0].title
-        );
+        console.log('[Load] First past meeting loaded:', {
+          id: result.data.pastMeetings[0].id,
+          title: result.data.pastMeetings[0].title,
+          participantCount: result.data.pastMeetings[0].participants?.length || 0,
+          transcriptLength: result.data.pastMeetings[0].transcript?.length || 0,
+          firstSpeakers: result.data.pastMeetings[0].transcript?.slice(0, 3).map(t => t.speaker) || []
+        });
       }
 
       // Initialize arrays if they don't exist in the loaded data
@@ -2118,9 +2492,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  document.querySelector('.search-input').addEventListener('input', e => {
-    console.log('Search query:', e.target.value);
-    // TODO: Implement search functionality
+  // Search input handler - debounced for performance
+  const searchInput = document.querySelector('.search-input');
+  const debouncedSearch = debounce(query => {
+    console.log('Search query:', query);
+    searchState.query = query.trim();
+    renderMeetings();
+  }, 300);
+
+  searchInput.addEventListener('input', e => {
+    debouncedSearch(e.target.value);
+  });
+
+  // Clear search on Escape key
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      searchInput.value = '';
+      searchState.query = '';
+      renderMeetings();
+    }
   });
 
   // Add click event delegation for meeting cards and their actions
@@ -2260,6 +2650,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Find the meeting card that was clicked (for opening)
     const card = e.target.closest('.meeting-card');
     if (card) {
+      // Don't open editor if in bulk selection mode
+      if (bulkSelectionState.enabled) {
+        return;
+      }
+
       // Don't open editor for calendar meeting cards (they don't have saved notes yet)
       // Only the Join/Record buttons should work for calendar meetings
       if (card.classList.contains('calendar-meeting')) {
@@ -2281,12 +2676,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     backButton.addEventListener('click', async () => {
       console.log('>>> Back button clicked! <<<');
       try {
-        // Save content before going back to home
-        await saveCurrentNote();
-        console.log('Note saved, returning to home view');
+        // Only save with legacy editor if it exists (not in meeting detail view)
+        // Meeting detail view handles its own saves through the onUpdate callback
+        const simpleEditor = document.getElementById('simple-editor');
+        if (simpleEditor) {
+          await saveCurrentNote();
+          console.log('Note saved, returning to home view');
+        } else {
+          console.log('In meeting detail view, skipping legacy save (handled by onUpdate callback)');
+        }
 
         // Clear current editing state
         currentEditingMeetingId = null;
+
+        // Clear meeting detail view if active
+        clearMeetingDetail();
 
         // Show home view
         showHomeView();
@@ -2312,6 +2716,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   const googleBtn = document.getElementById('googleBtn');
   if (googleBtn) {
     googleBtn.addEventListener('click', handleGoogleButtonClick);
+  }
+
+  // Bulk selection event listeners
+  const toggleBulkSelectBtn = document.getElementById('toggleBulkSelectBtn');
+  if (toggleBulkSelectBtn) {
+    toggleBulkSelectBtn.addEventListener('click', toggleBulkSelectionMode);
+  }
+
+  const selectAllBtn = document.getElementById('selectAllBtn');
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener('click', selectAllMeetings);
+  }
+
+  const deselectAllBtn = document.getElementById('deselectAllBtn');
+  if (deselectAllBtn) {
+    deselectAllBtn.addEventListener('click', deselectAllMeetings);
+  }
+
+  const batchExportBtn = document.getElementById('batchExportBtn');
+  if (batchExportBtn) {
+    batchExportBtn.addEventListener('click', batchExportToObsidian);
+  }
+
+  const cancelBulkSelectionBtn = document.getElementById('cancelBulkSelectionBtn');
+  if (cancelBulkSelectionBtn) {
+    cancelBulkSelectionBtn.addEventListener('click', toggleBulkSelectionMode);
   }
 
   // Transcription Provider Selection

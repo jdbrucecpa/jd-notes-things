@@ -1909,12 +1909,10 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
           if (currentMeeting) {
             // Merge: keep main-process-managed fields from current, UI fields from renderer
             return {
-              ...rendererMeeting, // Start with renderer data (has UI updates like title, content)
-              // Preserve main-process-managed fields
+              ...rendererMeeting, // Start with renderer data (has UI updates like title, content, transcript, participants)
+              // Preserve ONLY main-process-managed fields (not transcript/participants which are edited in renderer)
               recordingId: currentMeeting.recordingId || rendererMeeting.recordingId,
               uploadToken: currentMeeting.uploadToken || rendererMeeting.uploadToken,
-              transcript: currentMeeting.transcript || rendererMeeting.transcript,
-              participants: currentMeeting.participants || rendererMeeting.participants,
               recordingComplete:
                 currentMeeting.recordingComplete || rendererMeeting.recordingComplete,
               recordingEndTime: currentMeeting.recordingEndTime || rendererMeeting.recordingEndTime,

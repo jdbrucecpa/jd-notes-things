@@ -4,6 +4,7 @@
  */
 
 import { sanitizeHtml, escapeHtml, markdownToSafeHtml } from './security.js';
+import { contactsService } from './services/contactsService.js';
 
 // Current meeting being viewed
 let currentMeeting = null;
@@ -21,6 +22,12 @@ let currentTab = 'summary';
  */
 export function initializeMeetingDetail(meetingId, meeting, onBack, onUpdate) {
   console.log(`[MeetingDetail] Initializing for meeting: ${meetingId}`);
+  console.log('[MeetingDetail] Received meeting data:', {
+    participantCount: meeting.participants?.length || 0,
+    participants: meeting.participants,
+    transcriptLength: meeting.transcript?.length || 0,
+    firstSpeaker: meeting.transcript?.[0]?.speaker || 'N/A'
+  });
 
   currentMeeting = meeting;
   currentMeetingId = meetingId;
@@ -658,31 +665,183 @@ function saveVaultPath(onUpdate) {
 /**
  * Add a new participant
  */
-function addParticipant(onUpdate) {
+/**
+ * Add a participant with contact search
+ */
+async function addParticipant(onUpdate) {
   if (!currentMeeting.participants) {
     currentMeeting.participants = [];
   }
 
-  currentMeeting.participants.push({
-    name: '',
-    email: ''
+  // Show contact search modal
+  showContactSearchModal((selectedContact) => {
+    // Check for duplicates by email
+    const isDuplicate = currentMeeting.participants.some(p =>
+      p.email && selectedContact.email &&
+      p.email.toLowerCase() === selectedContact.email.toLowerCase()
+    );
+
+    if (isDuplicate) {
+      // Auto-replace duplicate participant
+      const index = currentMeeting.participants.findIndex(p =>
+        p.email && selectedContact.email &&
+        p.email.toLowerCase() === selectedContact.email.toLowerCase()
+      );
+
+      currentMeeting.participants[index] = {
+        name: selectedContact.name,
+        email: selectedContact.email
+      };
+
+      window.showToast(`Updated existing participant: ${selectedContact.name}`, 'info');
+    } else {
+      // Add new participant
+      currentMeeting.participants.push({
+        name: selectedContact.name,
+        email: selectedContact.email
+      });
+
+      window.showToast(`Added participant: ${selectedContact.name}`, 'success');
+    }
+
+    // Re-populate the editors
+    populateParticipantsEditor(currentMeeting);
+    populateParticipants(currentMeeting);
+
+    // Update participant count
+    const countEl = document.getElementById('meetingDetailParticipantCount');
+    if (countEl) {
+      const count = currentMeeting.participants.length;
+      countEl.textContent = `${count} participant${count !== 1 ? 's' : ''}`;
+    }
+
+    // Notify update
+    if (onUpdate) {
+      onUpdate(currentMeetingId, currentMeeting);
+    }
+  });
+}
+
+/**
+ * Show contact search modal for adding participants
+ */
+function showContactSearchModal(onSelect) {
+  // Create modal overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'contact-search-modal-overlay';
+
+  // Create modal
+  const modal = document.createElement('div');
+  modal.className = 'contact-search-modal';
+
+  modal.innerHTML = `
+    <div class="contact-search-modal-header">
+      <h3>Add Participant</h3>
+      <button class="close-modal-btn" title="Close">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/>
+        </svg>
+      </button>
+    </div>
+    <div class="contact-search-modal-body">
+      <div class="contact-search-input-container">
+        <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M15.5 14H14.71L14.43 13.73C15.41 12.59 16 11.11 16 9.5C16 5.91 13.09 3 9.5 3C5.91 3 3 5.91 3 9.5C3 13.09 5.91 16 9.5 16C11.11 16 12.59 15.41 13.73 14.43L14 14.71V15.5L19 20.49L20.49 19L15.5 14ZM9.5 14C7.01 14 5 11.99 5 9.5C5 7.01 7.01 5 9.5 5C11.99 5 14 7.01 14 9.5C14 11.99 11.99 14 9.5 14Z" fill="#666666"/>
+        </svg>
+        <input type="text" class="contact-search-input" placeholder="Search contacts by name or email..." autofocus />
+      </div>
+      <div class="contact-search-results" id="contactSearchResults">
+        <div class="search-hint">Start typing to search contacts</div>
+      </div>
+    </div>
+  `;
+
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  const searchInput = modal.querySelector('.contact-search-input');
+  const resultsContainer = modal.querySelector('.contact-search-results');
+  const closeBtn = modal.querySelector('.close-modal-btn');
+
+  // Close modal function
+  const closeModal = () => {
+    overlay.remove();
+  };
+
+  // Close on overlay click
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      closeModal();
+    }
   });
 
-  // Re-populate the editors
-  populateParticipantsEditor(currentMeeting);
-  populateParticipants(currentMeeting);
+  // Close button
+  closeBtn.addEventListener('click', closeModal);
 
-  // Update participant count
-  const countEl = document.getElementById('meetingDetailParticipantCount');
-  if (countEl) {
-    const count = currentMeeting.participants.length;
-    countEl.textContent = `${count} participant${count !== 1 ? 's' : ''}`;
-  }
+  // Escape key to close
+  const handleEscape = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      document.removeEventListener('keydown', handleEscape);
+    }
+  };
+  document.addEventListener('keydown', handleEscape);
 
-  // Notify update
-  if (onUpdate) {
-    onUpdate(currentMeetingId, currentMeeting);
-  }
+  // Search contacts as user types
+  let searchTimeout;
+  searchInput.addEventListener('input', async (e) => {
+    clearTimeout(searchTimeout);
+    const query = e.target.value.trim();
+
+    if (!query) {
+      resultsContainer.innerHTML = '<div class="search-hint">Start typing to search contacts</div>';
+      return;
+    }
+
+    // Show loading state
+    resultsContainer.innerHTML = '<div class="search-hint">Searching...</div>';
+
+    searchTimeout = setTimeout(async () => {
+      try {
+        const contacts = await contactsService.search(query);
+
+        if (contacts.length === 0) {
+          resultsContainer.innerHTML = '<div class="search-hint">No contacts found</div>';
+          return;
+        }
+
+        // Render contact results
+        resultsContainer.innerHTML = '';
+        contacts.forEach(contact => {
+          const contactItem = document.createElement('div');
+          contactItem.className = 'contact-search-result-item';
+
+          const initials = contact.initials || contact.name.charAt(0).toUpperCase();
+
+          contactItem.innerHTML = `
+            <div class="contact-avatar">${escapeHtml(initials)}</div>
+            <div class="contact-info">
+              <div class="contact-name">${escapeHtml(contact.name)}</div>
+              <div class="contact-email">${escapeHtml(contact.email)}</div>
+            </div>
+          `;
+
+          contactItem.addEventListener('click', () => {
+            onSelect(contact);
+            closeModal();
+          });
+
+          resultsContainer.appendChild(contactItem);
+        });
+      } catch (error) {
+        console.error('Error searching contacts:', error);
+        resultsContainer.innerHTML = '<div class="search-hint error">Error searching contacts</div>';
+      }
+    }, 300); // Debounce search
+  });
+
+  // Focus search input
+  searchInput.focus();
 }
 
 /**
@@ -910,8 +1069,8 @@ function setupSpeakerEditorListeners() {
   });
 
   // Save button
-  saveBtn.addEventListener('click', () => {
-    saveSpeakerEdit(searchInput.value.trim());
+  saveBtn.addEventListener('click', async () => {
+    await saveSpeakerEdit(searchInput.value.trim());
   });
 
   // Cancel/close buttons
@@ -919,10 +1078,10 @@ function setupSpeakerEditorListeners() {
   closeBtn.addEventListener('click', closeSpeakerEditor);
 
   // Save on Enter
-  searchInput.addEventListener('keydown', e => {
+  searchInput.addEventListener('keydown', async (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      saveSpeakerEdit(searchInput.value.trim());
+      await saveSpeakerEdit(searchInput.value.trim());
     } else if (e.key === 'Escape') {
       e.preventDefault();
       closeSpeakerEditor();
@@ -954,9 +1113,9 @@ function renderContactResults(contacts, resultsDiv, searchInput) {
       </div>
     `;
 
-    contactDiv.addEventListener('click', () => {
+    contactDiv.addEventListener('click', async () => {
       searchInput.value = contact.name || email;
-      saveSpeakerEdit(contact.name || email);
+      await saveSpeakerEdit(contact.name || email, contact); // Pass contact object for auto-add
     });
 
     resultsDiv.appendChild(contactDiv);
@@ -981,8 +1140,10 @@ function handleClickOutside(e) {
 
 /**
  * Save speaker edit
+ * @param {string} newSpeakerName - The new speaker name
+ * @param {object} contact - Optional contact object from Google Contacts (for auto-add participant)
  */
-async function saveSpeakerEdit(newSpeakerName) {
+async function saveSpeakerEdit(newSpeakerName, contact = null) {
   const context = window._speakerEditContext;
   if (!context || !currentMeeting) return;
 
@@ -1005,9 +1166,59 @@ async function saveSpeakerEdit(newSpeakerName) {
       speakerNameSpan.appendChild(editIcon);
     }
 
+    // Auto-add participant if contact was selected (Phase 10.6)
+    if (contact) {
+      // Extract email - contact might have 'email' (string) or 'emails' (array)
+      const contactEmail = contact.email || (contact.emails && contact.emails.length > 0 ? contact.emails[0] : null);
+
+      if (contactEmail) {
+        if (!currentMeeting.participants) {
+          currentMeeting.participants = [];
+        }
+
+        // Check if participant already exists
+        const existingParticipant = currentMeeting.participants.find(p =>
+          p.email && contactEmail &&
+          p.email.toLowerCase() === contactEmail.toLowerCase()
+        );
+
+        if (!existingParticipant) {
+          // Add new participant
+          currentMeeting.participants.push({
+            name: contact.name,
+            email: contactEmail
+          });
+
+          // Re-populate the editors to show new participant
+          populateParticipantsEditor(currentMeeting);
+          populateParticipants(currentMeeting);
+
+          // Update participant count
+          const countEl = document.getElementById('meetingDetailParticipantCount');
+          if (countEl) {
+            const count = currentMeeting.participants.length;
+            countEl.textContent = `${count} participant${count !== 1 ? 's' : ''}`;
+          }
+
+          console.log(`[MeetingDetail] Auto-added participant: ${contact.name} (${contactEmail})`);
+          window.showToast(`Added participant: ${contact.name}`, 'success');
+        } else {
+          console.log(`[MeetingDetail] Participant already exists: ${contact.name}`);
+        }
+      }
+    }
+
     // Trigger update callback to save changes
     if (window._meetingDetailUpdateCallback) {
-      window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
+      console.log('[MeetingDetail] Calling update callback with:', {
+        meetingId: currentMeetingId,
+        participantCount: currentMeeting.participants?.length || 0,
+        transcriptUpdated: true
+      });
+      await window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
+      console.log('[MeetingDetail] Update callback completed');
+    } else {
+      console.warn('[MeetingDetail] Update callback not found!');
     }
 
     console.log('[MeetingDetail] Speaker updated successfully');
