@@ -68,6 +68,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   templatesGenerateSummaries: (meetingId, templateIds) =>
     ipcRenderer.invoke('templates:generateSummaries', { meetingId, templateIds }),
   templatesReload: () => ipcRenderer.invoke('templates:reload'),
+  // Routing Configuration (Phase 10.4)
+  routingGetConfig: () => ipcRenderer.invoke('routing:getConfig'),
+  routingSaveConfig: content => ipcRenderer.invoke('routing:saveConfig', content),
+  routingValidateConfig: content => ipcRenderer.invoke('routing:validateConfig', content),
+  routingTestEmails: emails => ipcRenderer.invoke('routing:testEmails', emails),
+  routingAddOrganization: (type, id, vaultPath, emails, contacts) =>
+    ipcRenderer.invoke('routing:addOrganization', { type, id, vaultPath, emails, contacts }),
+  routingDeleteOrganization: (type, id) =>
+    ipcRenderer.invoke('routing:deleteOrganization', { type, id }),
+  routingRestoreBackup: () => ipcRenderer.invoke('routing:restoreBackup'),
   // LLM Provider Management
   getLLMProvider: () => ipcRenderer.invoke('llm:getProvider'),
   switchLLMProvider: provider => ipcRenderer.invoke('llm:switchProvider', provider),

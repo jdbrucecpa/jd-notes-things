@@ -8,6 +8,7 @@
 
 import { initializeSecurityPanel } from './securitySettings.js';
 import { updateEditorTheme } from './templates.js';
+import { updateRoutingEditorTheme } from './routing.js';
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -145,6 +146,7 @@ export function initializeSettingsUI() {
     general: document.getElementById('generalPanel'),
     appearance: document.getElementById('appearancePanel'),
     security: document.getElementById('securityPanel'),
+    routing: document.getElementById('routingPanel'),
     templates: document.getElementById('templatesPanel'),
     advanced: document.getElementById('advancedPanel'),
     about: document.getElementById('aboutPanel'),
@@ -211,6 +213,12 @@ export function initializeSettingsUI() {
           console.log('[Settings] Templates tab clicked, calling loadTemplates()');
           window.loadTemplates();
         }
+
+        // Load routing when routing panel is shown
+        if (tabName === 'routing' && window.loadRouting) {
+          console.log('[Settings] Routing tab clicked, calling loadRouting()');
+          window.loadRouting();
+        }
       }
     });
   });
@@ -224,8 +232,9 @@ export function initializeSettingsUI() {
       updateSetting('theme', newTheme);
       applyTheme(newTheme);
 
-      // Update Monaco editor theme
+      // Update Monaco editor themes
       updateEditorTheme(isActive);
+      updateRoutingEditorTheme(isActive);
     });
   }
 

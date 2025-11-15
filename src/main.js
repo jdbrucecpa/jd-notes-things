@@ -17,6 +17,7 @@ const ImportManager = require('./main/import/ImportManager');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
+const yaml = require('js-yaml');
 // const encryptionService = require('./main/services/encryptionService'); // Not needed - Obsidian requires plain text
 const expressApp = require('./server');
 const ngrokManager = require('./main/services/ngrokManager');
@@ -2522,6 +2523,345 @@ ipcMain.handle('templates:reload', async () => {
 
 // ===================================================================
 // End Template System IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Routing Configuration IPC Handlers (Phase 10.4)
+// ===================================================================
+
+// Helper function to get routing config path (same logic as RoutingEngine initialization)
+function getRoutingConfigPath() {
+  if (process.env.NODE_ENV === 'development') {
+    const projectRoot = path.join(__dirname, '..', '..');
+    return path.join(projectRoot, 'config', 'routing.yaml');
+  } else {
+    return path.join(app.getPath('userData'), 'config', 'routing.yaml');
+  }
+}
+
+// Get routing configuration
+ipcMain.handle('routing:getConfig', async () => {
+  try {
+    console.log('[Routing IPC] Getting routing configuration');
+
+    const routingPath = getRoutingConfigPath();
+    console.log('[Routing IPC] Using config path:', routingPath);
+
+    if (!fs.existsSync(routingPath)) {
+      throw new Error('Routing configuration file not found at: ' + routingPath);
+    }
+
+    const content = fs.readFileSync(routingPath, 'utf8');
+    const config = yaml.load(content);
+
+    return {
+      success: true,
+      config,
+      content,
+      path: routingPath,
+    };
+  } catch (error) {
+    console.error('[Routing IPC] Failed to get routing configuration:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Save routing configuration
+ipcMain.handle('routing:saveConfig', async (event, content) => {
+  try {
+    console.log('[Routing IPC] Saving routing configuration');
+
+    const routingPath = getRoutingConfigPath();
+    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+
+    // Create backup before saving
+    if (fs.existsSync(routingPath)) {
+      fs.copyFileSync(routingPath, backupPath);
+      console.log('[Routing IPC] Created backup at:', backupPath);
+    }
+
+    // Validate YAML before saving
+    try {
+      yaml.load(content);
+    } catch (yamlError) {
+      throw new Error(`Invalid YAML: ${yamlError.message}`);
+    }
+
+    // Save the new configuration
+    fs.writeFileSync(routingPath, content, 'utf8');
+    console.log('[Routing IPC] Routing configuration saved successfully');
+
+    // Reload routing engine
+    if (routingEngine) {
+      routingEngine.reloadConfig();
+      console.log('[Routing IPC] Routing engine reloaded');
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Routing IPC] Failed to save routing configuration:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Validate routing configuration
+ipcMain.handle('routing:validateConfig', async (event, content) => {
+  try {
+    console.log('[Routing IPC] Validating routing configuration');
+
+    // Parse YAML
+    const config = yaml.load(content);
+    const errors = [];
+
+    // Validate structure
+    if (!config) {
+      errors.push('Configuration is empty');
+      return { success: true, valid: false, errors };
+    }
+
+    // Check for required sections
+    if (!config.clients && !config.industry && !config.internal) {
+      errors.push('At least one routing section (clients, industry, or internal) is required');
+    }
+
+    // Validate clients
+    if (config.clients) {
+      Object.keys(config.clients).forEach(key => {
+        const client = config.clients[key];
+        if (!client.vault_path) {
+          errors.push(`Client "${key}" is missing vault_path`);
+        }
+      });
+    }
+
+    // Validate industry
+    if (config.industry) {
+      Object.keys(config.industry).forEach(key => {
+        const ind = config.industry[key];
+        if (!ind.vault_path) {
+          errors.push(`Industry contact "${key}" is missing vault_path`);
+        }
+      });
+    }
+
+    // Validate internal
+    if (config.internal && !config.internal.vault_path) {
+      errors.push('Internal section is missing vault_path');
+    }
+
+    return {
+      success: true,
+      valid: errors.length === 0,
+      errors,
+    };
+  } catch (error) {
+    console.error('[Routing IPC] Validation failed:', error);
+    return {
+      success: true,
+      valid: false,
+      errors: [error.message],
+    };
+  }
+});
+
+// Test routing with given emails
+ipcMain.handle('routing:testEmails', async (event, emails) => {
+  try {
+    console.log('[Routing IPC] Testing routing with emails:', emails);
+
+    if (!routingEngine) {
+      throw new Error('Routing engine not initialized');
+    }
+
+    // Create a mock meeting object with participants
+    const mockMeeting = {
+      participants: emails.map(email => ({ email })),
+    };
+
+    // Use routing engine to determine vault path
+    const result = routingEngine.determineMeetingPath(mockMeeting);
+
+    return {
+      success: true,
+      vaultPath: result.vaultPath,
+      reason: result.reason,
+      matchedOrganizations: result.matchedOrgs || [],
+      matchedEmails: emails.filter(email => {
+        return routingEngine.findMatchingOrganization(email) !== null;
+      }),
+    };
+  } catch (error) {
+    console.error('[Routing IPC] Routing test failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Add new organization to routing config
+ipcMain.handle('routing:addOrganization', async (event, { type, id, vaultPath, emails, contacts }) => {
+  try {
+    console.log('[Routing IPC] Adding new organization:', type, id);
+
+    const routingPath = getRoutingConfigPath();
+
+    if (!fs.existsSync(routingPath)) {
+      throw new Error('Routing configuration file not found');
+    }
+
+    const content = fs.readFileSync(routingPath, 'utf8');
+    const config = yaml.load(content);
+
+    // Validate inputs
+    if (!type || !id || !vaultPath) {
+      throw new Error('Type, ID, and vault path are required');
+    }
+
+    if (!['clients', 'industry'].includes(type)) {
+      throw new Error('Type must be "clients" or "industry"');
+    }
+
+    // Check if organization already exists
+    if (config[type] && config[type][id]) {
+      throw new Error(`Organization "${id}" already exists in ${type}`);
+    }
+
+    // Initialize section if it doesn't exist
+    if (!config[type]) {
+      config[type] = {};
+    }
+
+    // Add the new organization
+    config[type][id] = {
+      vault_path: vaultPath,
+      emails: emails || [],
+      contacts: contacts || [],
+    };
+
+    // Create backup before saving
+    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+    if (fs.existsSync(routingPath)) {
+      fs.copyFileSync(routingPath, backupPath);
+      console.log('[Routing IPC] Created backup at:', backupPath);
+    }
+
+    // Convert back to YAML and save
+    const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
+    fs.writeFileSync(routingPath, newContent, 'utf8');
+    console.log('[Routing IPC] Organization added successfully');
+
+    // Reload routing engine
+    if (routingEngine) {
+      routingEngine.reloadConfig();
+      console.log('[Routing IPC] Routing engine reloaded');
+    }
+
+    return { success: true, content: newContent };
+  } catch (error) {
+    console.error('[Routing IPC] Failed to add organization:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Delete organization from routing config
+ipcMain.handle('routing:deleteOrganization', async (event, { type, id }) => {
+  try {
+    console.log('[Routing IPC] Deleting organization:', type, id);
+
+    const routingPath = getRoutingConfigPath();
+
+    if (!fs.existsSync(routingPath)) {
+      throw new Error('Routing configuration file not found');
+    }
+
+    const content = fs.readFileSync(routingPath, 'utf8');
+    const config = yaml.load(content);
+
+    // Validate inputs
+    if (!type || !id) {
+      throw new Error('Type and ID are required');
+    }
+
+    // Check if organization exists
+    if (!config[type] || !config[type][id]) {
+      throw new Error(`Organization "${id}" not found in ${type}`);
+    }
+
+    // Prevent deleting internal (it's special)
+    if (type === 'internal') {
+      throw new Error('Cannot delete internal organization');
+    }
+
+    // Create backup before deleting
+    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+    if (fs.existsSync(routingPath)) {
+      fs.copyFileSync(routingPath, backupPath);
+      console.log('[Routing IPC] Created backup at:', backupPath);
+    }
+
+    // Delete the organization
+    delete config[type][id];
+
+    // Keep the section even if empty (don't delete it)
+    // This ensures the routing engine doesn't fail on reload
+
+    // Convert back to YAML and save
+    const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
+    fs.writeFileSync(routingPath, newContent, 'utf8');
+    console.log('[Routing IPC] Organization deleted successfully');
+
+    // Reload routing engine
+    if (routingEngine) {
+      routingEngine.reloadConfig();
+      console.log('[Routing IPC] Routing engine reloaded');
+    }
+
+    return { success: true, content: newContent };
+  } catch (error) {
+    console.error('[Routing IPC] Failed to delete organization:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Restore routing configuration from backup
+ipcMain.handle('routing:restoreBackup', async () => {
+  try {
+    console.log('[Routing IPC] Restoring routing configuration from backup');
+
+    const routingPath = getRoutingConfigPath();
+    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+
+    if (!fs.existsSync(backupPath)) {
+      throw new Error('Backup file not found. No backup available to restore.');
+    }
+
+    // Read the backup file
+    const backupContent = fs.readFileSync(backupPath, 'utf8');
+
+    // Validate the backup is valid YAML
+    try {
+      yaml.load(backupContent);
+    } catch (yamlError) {
+      throw new Error(`Backup file is corrupted: ${yamlError.message}`);
+    }
+
+    // Restore the backup by copying it to the main config
+    fs.copyFileSync(backupPath, routingPath);
+    console.log('[Routing IPC] Routing configuration restored from backup');
+
+    // Reload routing engine
+    if (routingEngine) {
+      routingEngine.reloadConfig();
+      console.log('[Routing IPC] Routing engine reloaded');
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Routing IPC] Failed to restore from backup:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// End Routing Configuration IPC Handlers
 // ===================================================================
 
 // ===================================================================

@@ -10,6 +10,7 @@ import './index.css';
 import { sanitizeHtml, escapeHtml, markdownToSafeHtml, safeSetInnerHTML } from './renderer/security.js';
 import { initializeSettingsUI } from './renderer/settings.js';
 import { initializeTemplateEditor } from './renderer/templates.js';
+import { initializeRoutingEditor } from './renderer/routing.js';
 
 // Create empty meetings data structure to be filled from the file
 const meetingsData = {
@@ -1733,6 +1734,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize Template Editor (Phase 10.3)
   initializeTemplateEditor();
+
+  // Initialize Routing Editor (Phase 10.4)
+  initializeRoutingEditor();
 
   // Initialize Google integration (Calendar + Contacts)
   await initializeGoogle();
