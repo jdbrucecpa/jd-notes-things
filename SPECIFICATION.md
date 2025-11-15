@@ -12,7 +12,7 @@
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
 **Phase:** Phase 10 - Advanced UI & Settings
-**Status:** Phase 10.2 complete (API Key Management) - Ready for Phase 10.3
+**Status:** Phase 10.3 complete (Template Editor & LLM Configuration) - Continuing Phase 10
 
 **Completed Phases:**
 
@@ -33,8 +33,11 @@
   - ✅ Token file permission validation (Windows icacls)
   - ✅ Memory leak prevention (auth window event listener cleanup)
   - ✅ Comprehensive security audit (15/15 tests passing, 0 critical vulnerabilities)
-- ✅ Phase 10.1: Settings Infrastructure & Theme Foundation (Settings panel with tabs, persistence, theme support)
-- ✅ Phase 10.2: Security & Credentials (API Key Management with Windows Credential Manager migration)
+- 🔧 Phase 10: Advanced UI & Settings (IN PROGRESS)
+  - ✅ Phase 10.1: Settings Infrastructure & Theme Foundation
+  - ✅ Phase 10.2: Security & Credentials (API Key Management with Windows Credential Manager)
+  - ✅ Phase 10.3: Template Editor & LLM Configuration (Monaco Editor, full-page settings, .txt template support)
+  - 🔜 Phase 10.4+: Additional UI enhancements (encryption settings, speaker correction, routing editor, etc.)
 
 **Recent Architectural Changes (Nov 10-12, 2025):**
 
@@ -93,6 +96,16 @@
   - `settings:getAppVersion` - Returns application version from package.json
   - `settings:getVaultPath` - Returns configured Obsidian vault path
   - File: src/preload.js:92-94
+
+**Phase 10.3: Template Editor & LLM Configuration (Jan 14, 2025):**
+
+- ✅ Full-page settings UI (converted from modal for better UX)
+- ✅ Monaco Editor integration with syntax highlighting (YAML, JSON, Markdown, plaintext)
+- ✅ Template editor with three-column layout and live preview
+- ✅ Plain text template support (.txt files)
+- ✅ Auto-summary template file (config/templates/auto-summary-prompt.txt)
+- ✅ Template content IPC handler (templates:getContent)
+- ✅ Webpack native module fix for keytar bundling
 
 The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
 
@@ -1891,25 +1904,51 @@ Entire meeting history organized and searchable using new system. Background pro
 
 #### Phase 10.3: LLM & Template Configuration 🤖
 
-**Status:** ⏳ NOT STARTED
+**Status:** ✅ COMPLETE (January 14, 2025)
 
 **Goal:** Power-user control over AI + builds Monaco editor infrastructure
 
 **Deliverables:**
-- ⏳ Separate LLM model config for auto-summary vs template summaries
-- ⏳ Auto-summary template file (user-editable, replaces hardcoded prompt)
-- ⏳ Template editor with syntax highlighting (Monaco Editor)
-- ⏳ Template management (create, duplicate, delete, reorder)
-- ⏳ Live template preview (test on existing transcript)
-- ⏳ Template metadata editor (name, description, tags)
+- ❌ Separate LLM model config for auto-summary vs template summaries (deferred)
+- ✅ Auto-summary template file (user-editable, replaces hardcoded prompt)
+- ✅ Template editor with syntax highlighting (Monaco Editor)
+- ✅ Template management UI (create, duplicate, delete buttons - save functionality pending)
+- ✅ Live template preview (basic preview panel with format-aware rendering)
+- ❌ Template metadata editor (name, description, tags) (deferred)
 
 **Estimated Effort:** Large | **Priority:** Medium (customization)
 
-**Technical Approach:**
-- Integrate Monaco Editor for syntax highlighting (YAML/Markdown)
-- Create `config/templates/auto-summary.yaml` for default summary prompt
-- Add template management UI in settings
-- Separate LLM dropdown for "Auto Summary Model" vs "Template Model"
+**Implementation Details:**
+- ✅ Monaco Editor integrated with Webpack (MonacoWebpackPlugin)
+- ✅ Created `config/templates/auto-summary-prompt.txt` for editable summary prompt
+- ✅ Full-page settings view (converted from modal for adequate workspace)
+- ✅ Two-view architecture: mainView and settingsView
+- ✅ Theme synchronization with app dark/light mode
+- ✅ Plain text template support (.txt files) added to TemplateParser
+- ✅ Template content IPC handler (`templates:getContent`)
+- ✅ Syntax highlighting for YAML, JSON, Markdown, plaintext
+- ✅ Live preview panel with format-aware rendering
+- 🟡 Template save functionality stubbed (IPC handler needed)
+- 🟡 Create/delete template functionality stubbed (UI exists, backend needed)
+
+**Files Created:**
+- `config/templates/auto-summary-prompt.txt` (editable auto-summary prompt)
+
+**Files Modified:**
+- `webpack.renderer.config.js` - Added MonacoWebpackPlugin
+- `webpack.rules.js` - Fixed keytar native module bundling
+- `src/index.html` - Full-page settings restructure
+- `src/index.css` - 215 lines of template editor styles
+- `src/renderer/templates.js` - Complete rewrite with Monaco integration
+- `src/renderer/settings.js` - Full-page navigation logic
+- `src/main.js` - Added `templates:getContent` IPC handler, `loadAutoSummaryPrompt()` function
+- `src/preload.js` - Exposed `templatesGetContent` API
+- `src/main/templates/TemplateManager.js` - Added .txt file support
+- `src/main/templates/TemplateParser.js` - Added `parseTextFile()` method
+
+**Known Issues:**
+- Duplicate ID bug fixed (changed `templateList` → `templateEditorList`)
+- Save/create/delete templates currently show "coming soon" toasts
 
 ---
 
@@ -2053,7 +2092,9 @@ Entire meeting history organized and searchable using new system. Background pro
 
 **Optimized dependency chain:**
 
-10.1 ✅ → 10.2 ✅ → 10.3 → 10.4 → 10.5 → 10.6 → 10.7 (+ 10.8 ongoing)
+10.1 ✅ → 10.2 ✅ → 10.3 ✅ → 10.4 → 10.5 → 10.6 → 10.7 (+ 10.8 ongoing)
+
+**Current Status:** Phase 10.3 complete, ready for Phase 10.4
 
 **Rationale:**
 - 10.1 provides settings infrastructure for all other features

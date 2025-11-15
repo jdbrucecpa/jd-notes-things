@@ -48,7 +48,7 @@ npm run make
 
 ## Project Status
 
-**Current Phase:** Phase 10.1 Complete - Settings Management ✅
+**Current Phase:** Phase 10 (In Progress) - Advanced UI & Settings
 
 **Security Status:** ✅ **Production-Ready** - 15/15 tests passing, 0 critical vulnerabilities
 
@@ -64,16 +64,37 @@ npm run make
 - **Pre-Phase 7 Bug Fixes**: All 5 critical bugs resolved
 - **Phase 8**: Import Prior Transcripts (bulk import, folder scanning, template selection)
 - **Phase 9**: Encryption & Security (Core hardening + Comprehensive security audit)
-- **Phase 10.1**: Settings Management (IPC handlers for app version and vault path)
+- **Phase 10** (In Progress): Advanced UI & Settings
+  - ✅ **Phase 10.1**: Settings Infrastructure & Theme Foundation
+  - ✅ **Phase 10.2**: Security & Credentials (API Key Management)
+  - ✅ **Phase 10.3**: Template Editor & LLM Configuration (Monaco Editor, auto-summary template file)
 
 ### 🎯 Recent Achievements
+
+**Phase 10.3: Template Editor & LLM Configuration (January 14, 2025):**
+
+- ✅ **Full-page settings UI** - Converted from modal for better UX and workspace
+  - Two-view architecture: mainView and settingsView
+  - Full-screen template editor with adequate room
+- ✅ **Monaco Editor integration** - VS Code-quality template editing
+  - Syntax highlighting for YAML, JSON, Markdown, plaintext
+  - Theme synchronization with app dark/light mode
+  - Live preview panel with format-aware rendering
+- ✅ **Plain text template support** - Added .txt file format
+  - Auto-generates metadata from filename
+  - Perfect for simple single-prompt templates
+- ✅ **Auto-summary template file** - config/templates/auto-summary-prompt.txt
+  - Editable prompt template (no longer hardcoded)
+  - Conditional sections with Handlebars-style syntax
+  - Replaces hardcoded 50-line prompt in main.js
+- ✅ **Template content IPC handler** - Load raw file content for editing
+- ✅ **Webpack native module fix** - Resolved keytar bundling issue
 
 **Phase 10.1: Settings Management (January 13, 2025):**
 
 - ✅ **Settings IPC handlers** - Foundation for comprehensive settings UI
   - App version retrieval from package.json
   - Vault path configuration access
-  - Ready for Phase 10.2 UI implementation
 
 **Post-Phase 9 Refinements (January 13, 2025):**
 
@@ -281,28 +302,43 @@ jdnotesthings/
 - API key storage in Windows Credential Manager (UI required)
 - Complete IPC validation rollout (34/36 handlers remaining)
 
-### ✅ Phase 10.1: Settings Management (Complete)
+### 🔧 Phase 10: Advanced UI & Settings (IN PROGRESS)
 
+**Completed Sub-Phases:**
+
+**Phase 10.1: Settings Infrastructure**
 - Settings IPC handlers (getAppVersion, getVaultPath)
 - Foundation for comprehensive settings UI
 
-### 🔜 Next Phase (Phase 10.2)
+**Phase 10.2: Security & Credentials**
+- API Key Management UI with Windows Credential Manager
+- Migration wizard from .env to secure storage
 
-**Phase 10.2: Advanced UI & Settings**
-- API Key Management UI (Windows Credential Manager migration)
-- Encryption Settings UI (Windows DPAPI toggle)
-- Manual Speaker ID Correction
-- Manual Participant Input During Recording
-- Manual Vault Link Override UI
-- Separate LLM model configuration
+**Phase 10.3: Template Editor & LLM Configuration**
+- Full-page settings with Monaco Editor
+- Template editing with syntax highlighting
+- Plain text (.txt) template support
 - Auto-summary template file (editable)
-- Comprehensive settings panel
-- Theme support, keyboard shortcuts, system tray
+- Theme synchronization
 
-### Future Phases
+**Remaining Sub-Phases:**
+- **Phase 10.4**: Advanced Configuration Editors (Routing editor, validation, test tool)
+- **Phase 10.5**: Meeting Metadata Management (Speaker correction, participant input, vault override)
+- **Phase 10.6**: Bulk Meeting Operations (Batch re-export, template generation, routing updates)
+- **Phase 10.7**: Desktop App Polish (System tray, keyboard shortcuts, notifications)
+- **Phase 10.8**: Code Quality & Validation (IPC validation rollout, refactoring - ongoing)
 
-- Phase 11: Real-time Transcription (optional)
-- Phase 12: HubSpot CRM Integration
+### 🔜 Future Phases (Phase 11, 12)
+
+**Phase 11: Real-Time Transcription (Optional)**
+- Streaming transcription during meetings
+- Live transcript display
+- Real-time summary updates
+
+**Phase 12: HubSpot CRM Integration**
+- Automatic note syncing to HubSpot
+- Company and contact matching
+- Meeting activity tracking
 
 See [SPECIFICATION.md](./SPECIFICATION.md) for complete feature roadmap.
 
