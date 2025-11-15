@@ -12,7 +12,7 @@
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
 **Phase:** Phase 10 - Advanced UI & Settings
-**Status:** Phase 10.4 COMPLETE (Routing Configuration Editor with full CRUD operations) - Ready for Phase 10.5
+**Status:** Phase 10.5 COMPLETE - Ready for Phase 10.6 (Search & Participant Management)
 
 **Development Philosophy:** Unless otherwise instructed, progress through phases in sequential order. We follow our initial plan to maintain consistency and ensure dependencies are properly met.
 
@@ -40,7 +40,22 @@
   - ✅ Phase 10.2: Security & Credentials (API Key Management with Windows Credential Manager)
   - ✅ Phase 10.3: Template Editor & LLM Configuration (Monaco Editor, full-page settings, .txt template support)
   - ✅ Phase 10.4: Routing Configuration Editor (Visual YAML editor, validation, backup, routing test tool)
-  - 🔜 Phase 10.5+: Additional UI enhancements (speaker correction, bulk operations, etc.)
+  - ✅ Phase 10.5: Meeting Detail View Redesign + Speaker Correction (COMPLETE)
+    - ✅ Modern meeting detail view with tabbed interface (Summary, Transcript, Templates, Metadata)
+    - ✅ ContactsService shared component with search and caching
+    - ✅ Contact search IPC handlers with Google Contacts integration
+    - ✅ Speaker correction UI with inline editing and contact search
+    - ✅ Improved record button styling (gradient backgrounds, icons)
+    - ✅ Removed unused user avatar icon from nav bar
+  - 🔜 Phase 10.6: Search & Participant Management (PLANNED)
+    - 📋 Meeting search functionality (search by title, participant, date)
+    - 📋 Advanced participant management in metadata tab
+      - Add contacts as participants with search dropdown
+      - Remove participants
+      - Auto-add participants when speaker is assigned via speaker correction
+      - Auto-replace duplicate participants (match by name)
+    - 📋 Bulk operations (multi-select meetings, batch export, etc.)
+  - 🔜 Phase 10.7+: Additional UI enhancements (TBD)
 
 **Recent Architectural Changes (Nov 10-12, 2025):**
 
@@ -135,6 +150,43 @@
 - Files: src/renderer/routing.js (700+ lines), src/index.html (routing panel + modals), src/index.css (routing + modal styles, 450+ lines), src/main.js:2528-2865 (330+ lines), src/preload.js (7 routing APIs)
 - ✅ Template content IPC handler (templates:getContent)
 - ✅ Webpack native module fix for keytar bundling
+
+**Phase 10.5: Meeting Detail View Redesign + Speaker Correction (Jan 14, 2025):**
+
+- ✅ **Modern Meeting Detail View** - Complete redesign of meeting page
+  - Card-based layout with clean, professional styling
+  - Tabbed interface: Summary, Transcript, Templates, Metadata
+  - Meeting info card with date/time/duration, participants, sync status
+  - Participants card with avatars and initials
+  - Action buttons for export and regenerate
+- ✅ **ContactsService** - Shared component for Google Contacts integration
+  - Search with client-side caching (5-minute TTL)
+  - Debounced search (300ms) to prevent excessive API calls
+  - Contact formatting with initials generation
+  - Singleton pattern for app-wide use
+  - File: src/renderer/services/contactsService.js (170 lines)
+- ✅ **Contact Search IPC Handlers**
+  - `contacts:searchContacts` - Search contacts by name or email (returns up to 50 results)
+  - Integration with GoogleContacts LRU cache for performance
+  - File: src/main.js:2285-2318
+  - Preload API: src/preload.js:89
+- ✅ **Speaker Correction UI** - Inline editing with contact search
+  - Clickable speaker names with edit icon on hover
+  - Inline dropdown editor with search input
+  - Live contact search from Google Contacts
+  - Contact results with avatars, names, and emails
+  - Save/Cancel buttons with keyboard shortcuts (Enter/Escape)
+  - Click outside to close
+  - Immediate save to meeting data
+  - File: src/renderer/meetingDetail.js (speaker editor functions)
+  - Styling: src/index.css:4199-4387 (190+ lines)
+- ✅ **UI Polish**
+  - Improved record button styling with gradients and icons
+  - "Record In-Person Meeting" - Dark gradient with microphone icon
+  - "Record Zoom Meeting" - Slate blue gradient with video camera icon
+  - Hover effects with lift animation
+  - Better disabled states
+- Files: src/renderer/meetingDetail.js (1060+ lines), src/index.css (4387+ lines), src/index.html (meeting detail structure), src/renderer.js (integration), src/preload.js (contact search API)
 
 The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
 
