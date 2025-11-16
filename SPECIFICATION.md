@@ -12,7 +12,7 @@
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
 **Phase:** Phase 10 - Advanced UI & Settings
-**Status:** Phase 10.6 COMPLETE - Ready for Phase 10.6 Bug Fixing & Phase 10.7
+**Status:** Phase 10.6 COMPLETE (including Bug Fixing) - Ready for Phase 10.7
 
 **Development Philosophy:** Unless otherwise instructed, progress through phases in sequential order. We follow our initial plan to maintain consistency and ensure dependencies are properly met.
 
@@ -71,8 +71,19 @@
       - ✅ Export to Obsidian batch operation
       - ✅ Meeting cards cannot be opened in selection mode
       - ✅ Programmatic checkbox creation to bypass DOMPurify sanitization
-    - 🔧 Phase 10.6 Bug Fixing (IN PROGRESS)
-      - Critical bugs to resolve before Phase 10.7
+    - ✅ Phase 10.6 Bug Fixing (COMPLETE)
+      - Bug #1: Auto-summary template appearing in template selection modal (fixed: renderer.js:3132)
+      - Bug #2: Bulk delete functionality (implemented with disabled individual delete buttons)
+      - Bug #3: Multi-select export IPC function name mismatch (fixed: renderer.js:175)
+      - Bug #4: Multi-select button placement and aesthetics redesign (new outlined style)
+      - Bug #5: Summary generation null innerHTML errors (replaced displaySummaries() with updateMeetingDetail())
+      - Bug #6: Multi-select toolbar sticky positioning (fixed: index.css:374-376)
+      - Bug #7: LLM provider not respected during regenerate (fixed: main.js:3438-3568)
+      - Bug #8: Handlebars template syntax in output (fixed: main.js:5338-5353)
+      - Bug #9: Crash when navigating away during regeneration (added null checks and early exits)
+      - Bug #10: Button text showing "Select" instead of "Multi-Select" (fixed dynamic HTML generation)
+      - Bug #11: Generic meeting title not replaced during regenerate (fixed: main.js:5475-5491, 5512-5528)
+      - Bug #12: Meeting title not updating immediately in UI (fixed: renderer.js:2229, 2361, 3306)
   - 🔜 Phase 10.7: Desktop App Polish (TBD)
 
 **Recent Architectural Changes (Nov 10-12, 2025):**
@@ -242,9 +253,10 @@
   - Fixed DOMPurify stripping checkboxes by creating elements programmatically (renderer.js:635-658)
   - Fixed meeting opening when clicking card in selection mode (renderer.js:2636-2639)
   - All changes now persist correctly after app restart
-- 🔧 **Known Issues** - To be addressed in Phase 10.6 Bug Fixing
-  - User reported "There are still some bugs" requiring final bug fixing pass
-  - Specific bugs to be identified and resolved before Phase 10.7
+- ✅ **Phase 10.6 Bug Fixing Complete** (January 16, 2025)
+  - 12 bugs identified and resolved (auto-summary template filtering, bulk operations, IPC fixes, UI updates, title replacement, LLM provider switching)
+  - All critical bugs resolved before Phase 10.7
+  - Application ready for Phase 10.7 (Desktop App Polish)
 - Files: src/renderer.js (2900+ lines), src/renderer/meetingDetail.js (1200+ lines), src/main.js (save merge logic), src/index.html (bulk actions toolbar), src/index.css (bulk operations styles)
 
 The application is built on the [Muesli](https://github.com/recallai/muesli-public) codebase, which provides a proven foundation for:
