@@ -3492,7 +3492,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       const templateCheckboxesContainer = document.getElementById('templateCheckboxes');
       templateCheckboxesContainer.innerHTML = ''; // Clear existing
 
-      templates.forEach(template => {
+      // Filter out auto-summary-prompt (it's not a section template)
+      const sectionTemplates = templates.filter(t => t.id !== 'auto-summary-prompt');
+
+      sectionTemplates.forEach(template => {
         const label = document.createElement('label');
         label.className = 'checkbox-label';
         label.innerHTML = `

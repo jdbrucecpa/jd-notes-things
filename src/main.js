@@ -2296,19 +2296,9 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
     throw new Error('Template manager or LLM service not available');
   }
 
-  // Get provider preferences and switch to template summary provider (Phase 10.3)
-  const preferences = await getProviderPreferences();
-  const desiredProvider = mapProviderValue(preferences.templateSummaryProvider);
-  const originalProvider = llmService.config.provider; // Use config.provider (lowercase key) not getProviderName() (display name)
-
-  if (desiredProvider !== originalProvider) {
-    console.log(
-      `[TemplateSummary] Switching LLM provider from ${originalProvider} to ${desiredProvider} (template summary preference: ${preferences.templateSummaryProvider})`
-    );
-    llmService.switchProvider(desiredProvider);
-  }
-
-  try {
+  return await withProviderSwitch(
+    'template',
+    async () => {
     // Use all templates if none specified
     if (!templateIds) {
       const allTemplates = templateManager.getAllTemplates();
@@ -2461,15 +2451,9 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
 
     console.log(`[TemplateSummary] Generated ${summaries.length} template-based summaries`);
     return summaries;
-  } finally {
-    // Restore original provider if it was changed (Phase 10.3)
-    if (desiredProvider !== originalProvider) {
-      console.log(
-        `[TemplateSummary] Restoring LLM provider from ${desiredProvider} back to ${originalProvider}`
-      );
-      llmService.switchProvider(originalProvider);
-    }
-  }
+    },
+    '[TemplateSummary]'
+  );
 }
 
 // ============================================================================
@@ -3628,35 +3612,74 @@ ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
     };
   }
 
-  try {
-    const result = await importManager.importBatch(filePaths, {
-      ...options,
-      onProgress: progress => {
-        event.sender.send('import:progress', progress);
+  // Only switch provider if we're actually generating summaries
+  if (options.generateAutoSummary) {
+    return await withProviderSwitch(
+      'auto',
+      async () => {
+        const result = await importManager.importBatch(filePaths, {
+          ...options,
+          onProgress: progress => {
+            event.sender.send('import:progress', progress);
+          },
+        });
+
+        // Add all successful meetings to meetings.json
+        if (result.meetings.length > 0) {
+          const data = await fileOperationManager.readMeetingsData();
+          result.meetings.forEach(meeting => {
+            data.pastMeetings.unshift(meeting);
+          });
+          await fileOperationManager.writeData(data);
+        }
+
+        return result;
       },
+      '[Import]'
+    ).catch(error => {
+      console.error('[Import] Batch import failed:', error);
+      return {
+        success: false,
+        error: error.message,
+        total: filePaths.length,
+        successful: 0,
+        failed: filePaths.length,
+        meetings: [],
+        errors: [],
+      };
     });
-
-    // Add all successful meetings to meetings.json
-    if (result.meetings.length > 0) {
-      const data = await fileOperationManager.readMeetingsData();
-      result.meetings.forEach(meeting => {
-        data.pastMeetings.unshift(meeting);
+  } else {
+    // No provider switching needed if not generating summaries
+    try {
+      const result = await importManager.importBatch(filePaths, {
+        ...options,
+        onProgress: progress => {
+          event.sender.send('import:progress', progress);
+        },
       });
-      await fileOperationManager.writeData(data);
-    }
 
-    return result;
-  } catch (error) {
-    console.error('[Import] Batch import failed:', error);
-    return {
-      success: false,
-      error: error.message,
-      total: filePaths.length,
-      successful: 0,
-      failed: filePaths.length,
-      meetings: [],
-      errors: [],
-    };
+      // Add all successful meetings to meetings.json
+      if (result.meetings.length > 0) {
+        const data = await fileOperationManager.readMeetingsData();
+        result.meetings.forEach(meeting => {
+          data.pastMeetings.unshift(meeting);
+        });
+        await fileOperationManager.writeData(data);
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[Import] Batch import failed:', error);
+      return {
+        success: false,
+        error: error.message,
+        total: filePaths.length,
+        successful: 0,
+        failed: filePaths.length,
+        meetings: [],
+        errors: [],
+      };
+    }
   }
 });
 
@@ -4143,135 +4166,106 @@ ipcMain.handle('deleteMeeting', async (event, meetingId) => {
 
 // Handle generating AI summary for a meeting (non-streaming)
 ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
-  // Get provider preferences and switch to auto-summary provider
-  const preferences = await getProviderPreferences();
-  const desiredProvider = mapProviderValue(preferences.autoSummaryProvider);
-  const originalProvider = llmService.config.provider;
+  console.log(`Manual summary generation requested for meeting: ${meetingId}`);
 
-  try {
-    console.log(`Manual summary generation requested for meeting: ${meetingId}`);
+  return await withProviderSwitch(
+    'auto',
+    async () => {
+      // Read current data
+      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
+      const meetingsData = JSON.parse(fileData);
 
-    if (desiredProvider !== originalProvider) {
-      console.log(
-        `[RegenerateSummary] Switching LLM provider from ${originalProvider} to ${desiredProvider} (auto-summary preference: ${preferences.autoSummaryProvider})`
+      // Find the meeting
+      const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
+        meeting => meeting.id === meetingId
       );
-      llmService.switchProvider(desiredProvider);
-    }
 
-    // Read current data
-    const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-    const meetingsData = JSON.parse(fileData);
-
-    // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
-      meeting => meeting.id === meetingId
-    );
-
-    if (pastMeetingIndex === -1) {
-      // Restore original provider before returning
-      if (desiredProvider !== originalProvider) {
-        llmService.switchProvider(originalProvider);
+      if (pastMeetingIndex === -1) {
+        return { success: false, error: 'Meeting not found' };
       }
-      return { success: false, error: 'Meeting not found' };
-    }
 
-    const meeting = meetingsData.pastMeetings[pastMeetingIndex];
+      const meeting = meetingsData.pastMeetings[pastMeetingIndex];
 
-    // Check if there's a transcript to summarize
-    if (!meeting.transcript || meeting.transcript.length === 0) {
-      // Restore original provider before returning
-      if (desiredProvider !== originalProvider) {
-        llmService.switchProvider(originalProvider);
+      // Check if there's a transcript to summarize
+      if (!meeting.transcript || meeting.transcript.length === 0) {
+        return {
+          success: false,
+          error: 'No transcript available for this meeting',
+        };
       }
-      return {
-        success: false,
-        error: 'No transcript available for this meeting',
-      };
-    }
 
-    // Log summary generation to console instead of showing a notification
-    console.log('Generating AI summary for meeting: ' + meetingId);
+      // Log summary generation to console instead of showing a notification
+      console.log('Generating AI summary for meeting: ' + meetingId);
 
-    // Generate the summary
-    const summary = await generateMeetingSummary(meeting);
+      // Generate the summary
+      const summary = await generateMeetingSummary(meeting);
 
-    // Get meeting title for use in the new content
-    const meetingTitle = meeting.title || 'Meeting Notes';
+      // Get meeting title for use in the new content
+      const meetingTitle = meeting.title || 'Meeting Notes';
 
-    // Get recording ID
-    const recordingId = meeting.recordingId;
+      // Get recording ID
+      const recordingId = meeting.recordingId;
 
-    // Check for different possible video file patterns
-    const possibleFilePaths = recordingId
-      ? [
-          path.join(RECORDING_PATH, `${recordingId}.mp4`),
-          path.join(RECORDING_PATH, `macos-desktop-${recordingId}.mp4`),
-          path.join(RECORDING_PATH, `macos-desktop${recordingId}.mp4`),
-          path.join(RECORDING_PATH, `desktop-${recordingId}.mp4`),
-        ]
-      : [];
+      // Check for different possible video file patterns
+      const possibleFilePaths = recordingId
+        ? [
+            path.join(RECORDING_PATH, `${recordingId}.mp4`),
+            path.join(RECORDING_PATH, `macos-desktop-${recordingId}.mp4`),
+            path.join(RECORDING_PATH, `macos-desktop${recordingId}.mp4`),
+            path.join(RECORDING_PATH, `desktop-${recordingId}.mp4`),
+          ]
+        : [];
 
-    // Find the first video file that exists
-    let videoExists = false;
-    let videoFilePath = null;
+      // Find the first video file that exists
+      let videoExists = false;
+      let videoFilePath = null;
 
-    try {
-      for (const filePath of possibleFilePaths) {
-        if (fs.existsSync(filePath)) {
-          videoExists = true;
-          videoFilePath = filePath;
-          console.log(`Found video file at: ${videoFilePath}`);
-          break;
+      try {
+        for (const filePath of possibleFilePaths) {
+          if (fs.existsSync(filePath)) {
+            videoExists = true;
+            videoFilePath = filePath;
+            console.log(`Found video file at: ${videoFilePath}`);
+            break;
+          }
         }
+      } catch (err) {
+        console.error('Error checking for video files:', err);
       }
-    } catch (err) {
-      console.error('Error checking for video files:', err);
-    }
 
-    // Create content with the AI-generated summary
-    meeting.content = `# ${meetingTitle}\n\n${summary}`;
+      // Create content with the AI-generated summary
+      meeting.content = `# ${meetingTitle}\n\n${summary}`;
 
-    // If video exists, store the path separately but don't add it to the content
-    if (videoExists) {
-      meeting.videoPath = videoFilePath; // Store the path for future reference
-      console.log(`Stored video path in meeting object: ${videoFilePath}`);
-    } else {
-      console.log('Video file not found or no recording ID');
-    }
+      // If video exists, store the path separately but don't add it to the content
+      if (videoExists) {
+        meeting.videoPath = videoFilePath; // Store the path for future reference
+        console.log(`Stored video path in meeting object: ${videoFilePath}`);
+      } else {
+        console.log('Video file not found or no recording ID');
+      }
 
-    meeting.hasSummary = true;
+      meeting.hasSummary = true;
 
-    // Save the updated data with summary
-    await fileOperationManager.writeData(meetingsData);
+      // Save the updated data with summary
+      await fileOperationManager.writeData(meetingsData);
 
-    console.log('Updated meeting note with AI summary');
+      console.log('Updated meeting note with AI summary');
 
-    // Notify the renderer to refresh the note if it's open
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('summary-generated', meetingId);
-    }
+      // Notify the renderer to refresh the note if it's open
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('summary-generated', meetingId);
+      }
 
-    // Restore original provider after successful generation
-    if (desiredProvider !== originalProvider) {
-      console.log(`[RegenerateSummary] Restoring LLM provider to ${originalProvider}`);
-      llmService.switchProvider(originalProvider);
-    }
-
-    return {
-      success: true,
-      summary,
-    };
-  } catch (error) {
+      return {
+        success: true,
+        summary,
+      };
+    },
+    '[RegenerateSummary]'
+  ).catch(error => {
     console.error('Error generating meeting summary:', error);
-
-    // Restore original provider on error
-    if (desiredProvider !== originalProvider) {
-      console.log(`[RegenerateSummary] Restoring LLM provider to ${originalProvider} (after error)`);
-      llmService.switchProvider(originalProvider);
-    }
-
     return { success: false, error: error.message };
-  }
+  });
 });
 
 // Handle starting a manual desktop recording
@@ -5916,6 +5910,42 @@ function mapProviderValue(providerValue) {
 }
 
 /**
+ * Execute an async operation with automatic LLM provider switching
+ * Switches to the user's preferred provider for the operation type, executes the callback,
+ * then restores the original provider (even if callback throws)
+ *
+ * @param {'auto' | 'template'} providerType - Which provider preference to use ('auto' for autoSummaryProvider, 'template' for templateSummaryProvider)
+ * @param {Function} callback - Async function to execute with the switched provider
+ * @param {string} logContext - Context string for logging (e.g., '[Import]', '[RegenerateSummary]')
+ * @returns {Promise<any>} Result of the callback function
+ */
+async function withProviderSwitch(providerType, callback, logContext = '[LLM]') {
+  const preferences = await getProviderPreferences();
+  const preferenceKey =
+    providerType === 'auto' ? 'autoSummaryProvider' : 'templateSummaryProvider';
+  const desiredProvider = mapProviderValue(preferences[preferenceKey]);
+  const originalProvider = llmService.config.provider;
+
+  if (desiredProvider !== originalProvider) {
+    console.log(
+      `${logContext} Switching LLM provider from ${originalProvider} to ${desiredProvider} (${providerType} preference: ${preferences[preferenceKey]})`
+    );
+    llmService.switchProvider(desiredProvider);
+  }
+
+  try {
+    return await callback();
+  } finally {
+    if (desiredProvider !== originalProvider) {
+      console.log(
+        `${logContext} Restoring LLM provider from ${desiredProvider} back to ${originalProvider}`
+      );
+      llmService.switchProvider(originalProvider);
+    }
+  }
+}
+
+/**
  * Get provider preferences from renderer's localStorage
  * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string}>}
  */
@@ -5968,65 +5998,49 @@ async function getProviderPreferences() {
 async function generateAndSaveAutoSummary(meetingId, logPrefix = '[Auto-Summary]') {
   console.log(`${logPrefix} Starting AI summary generation...`);
 
-  // Get provider preferences and switch to auto-summary provider (Phase 10.3)
-  const preferences = await getProviderPreferences();
-  const desiredProvider = mapProviderValue(preferences.autoSummaryProvider);
-  const originalProvider = llmService.config.provider; // Use config.provider (lowercase key) not getProviderName() (display name)
+  return await withProviderSwitch(
+    'auto',
+    async () => {
+      // Load fresh meeting data
+      const meetingsData = await fileOperationManager.readMeetingsData();
+      const meeting = meetingsData.pastMeetings.find(m => m.id === meetingId);
 
-  if (desiredProvider !== originalProvider) {
-    console.log(
-      `${logPrefix} Switching LLM provider from ${originalProvider} to ${desiredProvider} (auto-summary preference: ${preferences.autoSummaryProvider})`
-    );
-    llmService.switchProvider(desiredProvider);
-  }
-
-  try {
-    // Load fresh meeting data
-    const meetingsData = await fileOperationManager.readMeetingsData();
-    const meeting = meetingsData.pastMeetings.find(m => m.id === meetingId);
-
-    if (!meeting || !meeting.transcript || meeting.transcript.length === 0) {
-      console.warn(`${logPrefix} Skipping - no transcript available`);
-      return { success: false, error: 'No transcript' };
-    }
-
-    // Generate summary (may update meeting.title if generic)
-    // Note: Don't stream progress during auto-summary to avoid race condition with title updates
-    const summary = await generateMeetingSummary(meeting, null);
-
-    // Save summary, title, and flag to file
-    await fileOperationManager.scheduleOperation(async data => {
-      const idx = data.pastMeetings.findIndex(m => m.id === meetingId);
-      if (idx !== -1) {
-        data.pastMeetings[idx].content = `# ${meeting.title}\n\n${summary}`;
-        data.pastMeetings[idx].title = meeting.title; // May have been updated by generateMeetingSummary
-        data.pastMeetings[idx].summaryGenerated = true;
-        console.log(`${logPrefix} ✓ Summary and title saved`);
-        console.log(`${logPrefix} ✓ Title: "${data.pastMeetings[idx].title}"`);
+      if (!meeting || !meeting.transcript || meeting.transcript.length === 0) {
+        console.warn(`${logPrefix} Skipping - no transcript available`);
+        return { success: false, error: 'No transcript' };
       }
-      return data;
-    });
 
-    // Notify renderer to refresh UI
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('summary-generated', meetingId);
-    }
+      // Generate summary (may update meeting.title if generic)
+      // Note: Don't stream progress during auto-summary to avoid race condition with title updates
+      const summary = await generateMeetingSummary(meeting, null);
 
-    console.log(`${logPrefix} ✓ AI summary generation complete`);
-    return { success: true };
-  } catch (error) {
+      // Save summary, title, and flag to file
+      await fileOperationManager.scheduleOperation(async data => {
+        const idx = data.pastMeetings.findIndex(m => m.id === meetingId);
+        if (idx !== -1) {
+          data.pastMeetings[idx].content = `# ${meeting.title}\n\n${summary}`;
+          data.pastMeetings[idx].title = meeting.title; // May have been updated by generateMeetingSummary
+          data.pastMeetings[idx].summaryGenerated = true;
+          console.log(`${logPrefix} ✓ Summary and title saved`);
+          console.log(`${logPrefix} ✓ Title: "${data.pastMeetings[idx].title}"`);
+        }
+        return data;
+      });
+
+      // Notify renderer to refresh UI
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('summary-generated', meetingId);
+      }
+
+      console.log(`${logPrefix} ✓ AI summary generation complete`);
+      return { success: true };
+    },
+    logPrefix
+  ).catch(error => {
     console.error(`${logPrefix} ✗ Error generating summary:`, error);
     // Don't throw - let caller decide how to handle
     return { success: false, error: error.message };
-  } finally {
-    // Restore original provider if it was changed (Phase 10.3)
-    if (desiredProvider !== originalProvider) {
-      console.log(
-        `${logPrefix} Restoring LLM provider from ${desiredProvider} back to ${originalProvider}`
-      );
-      llmService.switchProvider(originalProvider);
-    }
-  }
+  });
 }
 
 /**

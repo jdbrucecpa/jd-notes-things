@@ -43,41 +43,112 @@ class TranscriptParser {
     const entries = [];
     let rawText = '';
 
-    // Try to detect speaker labels (e.g., "John: Hello there")
+    // Try to detect speaker labels (e.g., "John: Hello there" or "John:" on one line followed by text)
     // or timestamps (e.g., "[00:15:30] Hello there")
-    const speakerPattern = /^([A-Za-z\s]+):\s*(.+)/;
+    const speakerInlinePattern = /^([A-Za-z\s]+):\s*(.+)/; // Speaker: text on same line
+    const speakerHeaderPattern = /^([A-Za-z\s]+):$/; // Speaker: on its own line
     const timestampPattern = /^\[?(\d{1,2}:?\d{2}:?\d{2})\]?\s*(.+)/;
+    const quotedTextPattern = /^["″](.+)["″]$/; // Text wrapped in quotes (regular or curly)
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
+    let currentSpeaker = 'Unknown';
+    let i = 0;
 
-      const speakerMatch = line.match(speakerPattern);
+    while (i < lines.length) {
+      const line = lines[i].trim();
+
+      if (!line) {
+        i++;
+        continue;
+      }
+
+      const speakerInlineMatch = line.match(speakerInlinePattern);
+      const speakerHeaderMatch = line.match(speakerHeaderPattern);
       const timestampMatch = line.match(timestampPattern);
 
-      if (speakerMatch) {
-        // Line has speaker label
+      if (speakerInlineMatch && speakerInlineMatch[2]) {
+        // Line has speaker label with text on same line
+        currentSpeaker = speakerInlineMatch[1].trim();
+        let text = speakerInlineMatch[2].trim();
+
+        // Remove quotes if present
+        const quotedMatch = text.match(quotedTextPattern);
+        if (quotedMatch) {
+          text = quotedMatch[1];
+        }
+
         entries.push({
-          speaker: speakerMatch[1].trim(),
-          text: speakerMatch[2].trim(),
+          speaker: currentSpeaker,
+          text: text,
           timestamp: null,
         });
-        rawText += `${speakerMatch[1].trim()}: ${speakerMatch[2].trim()}\n`;
+        rawText += `${currentSpeaker}: ${text}\n`;
+        i++;
+      } else if (speakerHeaderMatch) {
+        // Line has speaker label on its own - collect text from following lines
+        currentSpeaker = speakerHeaderMatch[1].trim();
+        i++; // Move to next line
+
+        // Collect all text lines for this speaker until we hit another speaker or empty line
+        const textLines = [];
+        while (i < lines.length) {
+          const nextLine = lines[i].trim();
+
+          // Stop if we hit an empty line or another speaker
+          if (!nextLine || nextLine.match(speakerHeaderPattern) || nextLine.match(speakerInlinePattern)) {
+            break;
+          }
+
+          // Stop if we hit a timestamp
+          if (nextLine.match(timestampPattern)) {
+            break;
+          }
+
+          // Remove quotes and add to text lines
+          let text = nextLine;
+          const quotedMatch = text.match(quotedTextPattern);
+          if (quotedMatch) {
+            text = quotedMatch[1];
+          }
+
+          textLines.push(text);
+          i++;
+        }
+
+        // Add entry with combined text
+        if (textLines.length > 0) {
+          const combinedText = textLines.join(' ');
+          entries.push({
+            speaker: currentSpeaker,
+            text: combinedText,
+            timestamp: null,
+          });
+          rawText += `${currentSpeaker}: ${combinedText}\n`;
+        }
       } else if (timestampMatch) {
         // Line has timestamp
+        currentSpeaker = 'Unknown';
         entries.push({
           speaker: 'Unknown',
           text: timestampMatch[2].trim(),
           timestamp: this.parseTimestamp(timestampMatch[1]),
         });
         rawText += `${timestampMatch[2].trim()}\n`;
+        i++;
       } else {
-        // Plain text line
+        // Plain text line - use current speaker if available
+        let text = line;
+        const quotedMatch = text.match(quotedTextPattern);
+        if (quotedMatch) {
+          text = quotedMatch[1];
+        }
+
         entries.push({
-          speaker: 'Unknown',
-          text: line.trim(),
+          speaker: currentSpeaker,
+          text: text,
           timestamp: null,
         });
-        rawText += `${line.trim()}\n`;
+        rawText += `${text}\n`;
+        i++;
       }
     }
 
