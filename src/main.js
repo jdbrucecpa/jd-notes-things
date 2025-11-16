@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, globalShortcut, shell, screen, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('fs');
 const RecallAiSdk = require('@recallai/desktop-sdk');
@@ -141,11 +141,482 @@ let googleContacts = null;
 let speakerMatcher = null;
 
 let mainWindow;
+let tray = null; // System tray icon (Phase 10.7)
+let isRecording = false; // Track recording state for UI updates (Phase 10.7)
 
 // Meeting monitor state
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
 const autoStartedMeetings = new Set(); // Track meetings we've auto-started recording
 let meetingMonitorInterval = null;
+
+// App settings storage (Phase 10.7)
+let appSettings = {
+  notifications: {
+    enableToasts: true,
+    enableSounds: true,
+    minimizeToTray: true,
+  },
+  shortcuts: {
+    startStopRecording: 'CommandOrControl+Shift+R',
+    quickRecord: 'CommandOrControl+Shift+Q',
+    stopRecording: 'CommandOrControl+Shift+S',
+  },
+  windowBounds: null, // Will store {x, y, width, height, displayId}
+};
+
+// Settings file path (Phase 10.7)
+const SETTINGS_FILE_PATH = () => path.join(app.getPath('userData'), 'app-settings.json');
+
+/**
+ * Load app settings from disk (Phase 10.7)
+ */
+function loadAppSettings() {
+  try {
+    const settingsPath = SETTINGS_FILE_PATH();
+    if (fs.existsSync(settingsPath)) {
+      const data = fs.readFileSync(settingsPath, 'utf8');
+      const savedSettings = JSON.parse(data);
+      // Merge with defaults to handle new settings added in updates
+      appSettings = {
+        ...appSettings,
+        ...savedSettings,
+        notifications: { ...appSettings.notifications, ...savedSettings.notifications },
+        shortcuts: { ...appSettings.shortcuts, ...savedSettings.shortcuts },
+      };
+      logger.main.info('App settings loaded successfully');
+    }
+  } catch (error) {
+    logger.main.error('Failed to load app settings:', error);
+  }
+}
+
+/**
+ * Save app settings to disk (Phase 10.7)
+ */
+function saveAppSettings() {
+  try {
+    const settingsPath = SETTINGS_FILE_PATH();
+    const dir = path.dirname(settingsPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(settingsPath, JSON.stringify(appSettings, null, 2), 'utf8');
+    logger.main.debug('App settings saved successfully');
+  } catch (error) {
+    logger.main.error('Failed to save app settings:', error);
+  }
+}
+
+/**
+ * Create system tray icon and menu (Phase 10.7)
+ */
+function createSystemTray() {
+  try {
+    // Create tray icon - try multiple sources
+    let trayIcon = null;
+
+    // Try multiple possible locations for the icon
+    const possiblePaths = [
+      path.join(__dirname, 'assets', 'tray-icon.png'),
+      path.join(__dirname, '..', 'assets', 'tray-icon.png'),
+      path.join(__dirname, '..', 'src', 'assets', 'tray-icon.png'),
+      path.join(process.cwd(), 'src', 'assets', 'tray-icon.png'),
+      path.join(app.getAppPath(), 'src', 'assets', 'tray-icon.png'),
+    ];
+
+    logger.main.debug('[Tray] Searching for tray icon in multiple locations...');
+    logger.main.debug('[Tray] __dirname:', __dirname);
+    logger.main.debug('[Tray] process.cwd():', process.cwd());
+    logger.main.debug('[Tray] app.getAppPath():', app.getAppPath());
+
+    // Try custom tray icon from multiple locations
+    for (const iconPath of possiblePaths) {
+      logger.main.debug(`[Tray] Trying: ${iconPath}`);
+      if (fs.existsSync(iconPath)) {
+        logger.main.info(`[Tray] Found tray icon at: ${iconPath}`);
+        trayIcon = nativeImage.createFromPath(iconPath);
+        if (trayIcon && !trayIcon.isEmpty()) {
+          logger.main.info('[Tray] Successfully loaded tray icon');
+          break;
+        } else {
+          logger.main.warn(`[Tray] Icon exists but failed to load: ${iconPath}`);
+        }
+      }
+    }
+
+    // Try app icon as fallback
+    if (!trayIcon || trayIcon.isEmpty()) {
+      logger.main.warn('[Tray] Custom tray icon not found, trying app icon...');
+      const appIconPath = path.join(__dirname, 'assets', 'icon.png');
+      if (fs.existsSync(appIconPath)) {
+        trayIcon = nativeImage.createFromPath(appIconPath);
+      }
+    }
+
+    // Create a simple colored icon as final fallback
+    if (!trayIcon || trayIcon.isEmpty()) {
+      logger.main.warn('[Tray] No icon files found, using programmatic fallback icon');
+      // Create a simple 16x16 icon programmatically
+      const canvas = {
+        width: 16,
+        height: 16,
+        data: Buffer.alloc(16 * 16 * 4) // RGBA
+      };
+
+      // Fill with orange color (since user mentioned seeing orange)
+      for (let i = 0; i < canvas.data.length; i += 4) {
+        canvas.data[i] = 255;     // R
+        canvas.data[i + 1] = 140; // G
+        canvas.data[i + 2] = 0;   // B (orange color)
+        canvas.data[i + 3] = 255; // A
+      }
+
+      trayIcon = nativeImage.createFromBuffer(canvas.data, {
+        width: canvas.width,
+        height: canvas.height
+      });
+    }
+
+    tray = new Tray(trayIcon);
+
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Open JD Notes Things',
+        click: () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+          } else {
+            createWindow();
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Quick Note',
+        accelerator: appSettings.shortcuts.quickRecord,
+        click: async () => {
+          try {
+            await startQuickRecord();
+          } catch (error) {
+            logger.main.error('Quick record failed:', error);
+          }
+        }
+      },
+      {
+        label: 'Record Meeting',
+        accelerator: appSettings.shortcuts.startStopRecording,
+        click: async () => {
+          try {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('toggle-recording-shortcut');
+            }
+          } catch (error) {
+            logger.main.error('Toggle recording failed:', error);
+          }
+        }
+      },
+      {
+        label: 'Stop Recording',
+        accelerator: appSettings.shortcuts.stopRecording,
+        enabled: false, // Will be enabled when recording is active
+        id: 'stop-recording',
+        click: async () => {
+          try {
+            // Trigger stop recording
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('stop-recording-requested');
+            }
+          } catch (error) {
+            logger.main.error('Stop recording failed:', error);
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Open Vault Folder',
+        click: async () => {
+          try {
+            // Use the properly initialized vault path from vaultStructure
+            const vaultPath = vaultStructure?.vaultBasePath;
+
+            if (!vaultPath) {
+              logger.main.error('[Tray] Vault path not configured');
+              return;
+            }
+
+            logger.main.info('[Tray] Opening vault folder:', vaultPath);
+            const result = await shell.openPath(vaultPath);
+
+            if (result) {
+              // openPath returns an error string if it fails, empty string on success
+              logger.main.error('[Tray] Failed to open vault folder:', result);
+            }
+          } catch (error) {
+            logger.main.error('[Tray] Error opening vault folder:', error);
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Settings',
+        click: () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+            mainWindow.webContents.send('open-settings');
+          }
+        }
+      },
+      {
+        label: 'View Logs',
+        click: () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+            mainWindow.webContents.send('open-logs-viewer');
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit',
+        accelerator: 'CommandOrControl+Q',
+        click: () => {
+          app.isQuitting = true;
+          app.quit();
+        }
+      }
+    ]);
+
+    tray.setToolTip('JD Notes Things');
+    tray.setContextMenu(contextMenu);
+
+    // Double-click to show/hide window
+    tray.on('double-click', () => {
+      if (mainWindow) {
+        if (mainWindow.isVisible()) {
+          mainWindow.hide();
+        } else {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      } else {
+        createWindow();
+      }
+    });
+
+    logger.main.info('System tray created successfully');
+  } catch (error) {
+    logger.main.error('Failed to create system tray:', error);
+  }
+}
+
+/**
+ * Update system tray menu state (Phase 10.7)
+ * Call this when recording state changes
+ */
+function updateSystemTrayMenu() {
+  if (!tray) return;
+
+  try {
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: 'Open JD Notes Things',
+        click: () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+          } else {
+            createWindow();
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Quick Note',
+        accelerator: appSettings.shortcuts.quickRecord,
+        enabled: !isRecording, // Disable when recording
+        click: async () => {
+          try {
+            await startQuickRecord();
+          } catch (error) {
+            logger.main.error('Quick record failed:', error);
+          }
+        }
+      },
+      {
+        label: 'Record Meeting',
+        accelerator: appSettings.shortcuts.startStopRecording,
+        enabled: !isRecording, // Disable when recording
+        click: async () => {
+          try {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('toggle-recording-shortcut');
+            }
+          } catch (error) {
+            logger.main.error('Toggle recording failed:', error);
+          }
+        }
+      },
+      {
+        label: 'Stop Recording',
+        accelerator: appSettings.shortcuts.stopRecording,
+        enabled: isRecording, // Enable only when recording
+        click: async () => {
+          try {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('stop-recording-requested');
+            }
+          } catch (error) {
+            logger.main.error('Stop recording failed:', error);
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Open Vault Folder',
+        click: async () => {
+          try {
+            const vaultPath = vaultStructure?.vaultBasePath;
+            if (!vaultPath) {
+              logger.main.error('[Tray] Vault path not configured');
+              return;
+            }
+            logger.main.info('[Tray] Opening vault folder:', vaultPath);
+            const result = await shell.openPath(vaultPath);
+            if (result) {
+              logger.main.error('[Tray] Failed to open vault folder:', result);
+            }
+          } catch (error) {
+            logger.main.error('[Tray] Error opening vault folder:', error);
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Settings',
+        click: () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+            mainWindow.webContents.send('open-settings');
+          }
+        }
+      },
+      {
+        label: 'View Logs',
+        click: () => {
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.show();
+            mainWindow.focus();
+            mainWindow.webContents.send('open-logs-viewer');
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: 'Quit',
+        accelerator: 'CommandOrControl+Q',
+        click: () => {
+          app.isQuitting = true;
+          app.quit();
+        }
+      }
+    ]);
+
+    tray.setContextMenu(contextMenu);
+    tray.setToolTip(isRecording ? 'JD Notes Things - Recording' : 'JD Notes Things');
+    logger.main.debug('[Tray] Menu updated, recording:', isRecording);
+  } catch (error) {
+    logger.main.error('[Tray] Failed to update tray menu:', error);
+  }
+}
+
+/**
+ * Update tray menu to reflect recording state (Phase 10.7)
+ */
+function updateTrayMenu(isRecording) {
+  if (!tray) return;
+
+  const menu = tray.getContextMenu();
+  if (menu) {
+    const stopRecordingItem = menu.getMenuItemById('stop-recording');
+    if (stopRecordingItem) {
+      stopRecordingItem.enabled = isRecording;
+    }
+  }
+}
+
+/**
+ * Quick record function (Phase 10.7)
+ * Starts an in-person recording immediately
+ */
+async function startQuickRecord() {
+  logger.main.info('Quick record triggered from tray');
+
+  // Show notification
+  if (appSettings.notifications.enableToasts) {
+    const notification = new Notification({
+      title: 'Quick Record Started',
+      body: 'Recording in-person meeting...',
+      silent: !appSettings.notifications.enableSounds,
+    });
+    notification.show();
+  }
+
+  // Trigger recording start via IPC
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('quick-record-requested');
+  }
+}
+
+/**
+ * Register global keyboard shortcuts (Phase 10.7)
+ */
+function registerGlobalShortcuts() {
+  try {
+    // Start/Stop Recording shortcut
+    globalShortcut.register(appSettings.shortcuts.startStopRecording, () => {
+      logger.main.debug('Global shortcut triggered: Start/Stop Recording');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('toggle-recording-shortcut');
+      }
+    });
+
+    // Quick Record shortcut
+    globalShortcut.register(appSettings.shortcuts.quickRecord, async () => {
+      logger.main.debug('Global shortcut triggered: Quick Record');
+      await startQuickRecord();
+    });
+
+    // Stop Recording shortcut
+    globalShortcut.register(appSettings.shortcuts.stopRecording, () => {
+      logger.main.debug('Global shortcut triggered: Stop Recording');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('stop-recording-requested');
+      }
+    });
+
+    logger.main.info('Global shortcuts registered successfully');
+  } catch (error) {
+    logger.main.error('Failed to register global shortcuts:', error);
+  }
+}
+
+/**
+ * Unregister all global shortcuts (Phase 10.7)
+ */
+function unregisterGlobalShortcuts() {
+  globalShortcut.unregisterAll();
+  logger.main.debug('Global shortcuts unregistered');
+}
 
 /**
  * Meeting monitor - checks for upcoming meetings and auto-starts recording
@@ -292,8 +763,8 @@ async function autoStartRecording(meeting) {
 }
 
 const createWindow = () => {
-  // Create the browser window.
-  mainWindow = new BrowserWindow({
+  // Restore window bounds from settings (Phase 10.7)
+  let windowOptions = {
     width: 1024,
     height: 768,
     webPreferences: {
@@ -303,6 +774,84 @@ const createWindow = () => {
     },
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#f9f9f9',
+  };
+
+  // Restore previous window position if available
+  if (appSettings.windowBounds) {
+    const displays = screen.getAllDisplays();
+    const displayStillExists = displays.some(
+      display => display.id === appSettings.windowBounds.displayId
+    );
+
+    if (displayStillExists) {
+      windowOptions.x = appSettings.windowBounds.x;
+      windowOptions.y = appSettings.windowBounds.y;
+      windowOptions.width = appSettings.windowBounds.width;
+      windowOptions.height = appSettings.windowBounds.height;
+      logger.main.debug('Restored window bounds from settings');
+    } else {
+      logger.main.debug('Previous display not found, using default position');
+    }
+  }
+
+  // Create the browser window.
+  mainWindow = new BrowserWindow(windowOptions);
+
+  // Save window bounds when moved or resized (Phase 10.7)
+  const saveWindowBounds = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+
+    const bounds = mainWindow.getBounds();
+    const display = screen.getDisplayMatching(bounds);
+
+    appSettings.windowBounds = {
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      displayId: display.id,
+    };
+
+    saveAppSettings();
+  };
+
+  // Throttle save to avoid excessive writes
+  let saveTimeout;
+  mainWindow.on('resize', () => {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveWindowBounds, 500);
+  });
+
+  mainWindow.on('move', () => {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveWindowBounds, 500);
+  });
+
+  // Minimize to tray behavior (Phase 10.7)
+  mainWindow.on('minimize', (event) => {
+    if (appSettings.notifications.minimizeToTray) {
+      event.preventDefault();
+      mainWindow.hide();
+
+      // Show notification on first minimize
+      if (appSettings.notifications.enableToasts) {
+        const notification = new Notification({
+          title: 'JD Notes Things',
+          body: 'App minimized to tray. Double-click tray icon to restore.',
+          silent: !appSettings.notifications.enableSounds,
+        });
+        notification.show();
+      }
+    }
+  });
+
+  // Prevent quit on window close (minimize to tray instead)
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting && appSettings.notifications.minimizeToTray) {
+      event.preventDefault();
+      mainWindow.hide();
+      return false;
+    }
   });
 
   // Allow the debug panel header to act as a drag region
@@ -379,6 +928,9 @@ app.whenReady().then(async () => {
   } catch (e) {
     logger.main.error("Couldn't create the meetings file:", e);
   }
+
+  // Load app settings from disk (Phase 10.7)
+  loadAppSettings();
 
   // Initialize the Recall.ai SDK
   initSDK();
@@ -506,6 +1058,11 @@ app.whenReady().then(async () => {
     }
   });
 
+  // Phase 10.7: Desktop App Polish
+  // Load app settings from disk
+  loadAppSettings();
+  logger.main.info('[Phase 10.7] App settings loaded');
+
   // Make mainWindow available to server.js for IPC communication
   // This allows server.js to send webhook events to the main process
   global.mainWindow = null; // Will be set after createWindow()
@@ -514,6 +1071,10 @@ app.whenReady().then(async () => {
 
   // Set global reference after window is created
   global.mainWindow = mainWindow;
+
+  // Phase 10.7: Create system tray and register shortcuts (after window creation)
+  createSystemTray();
+  registerGlobalShortcuts();
 
   // When the window is ready, send the initial meeting detection status
   mainWindow.webContents.on('did-finish-load', () => {
@@ -534,7 +1095,8 @@ app.whenReady().then(async () => {
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // Phase 10.7: Don't quit when window closed if minimizeToTray is enabled
+  if (process.platform !== 'darwin' && !appSettings.notifications.minimizeToTray) {
     app.quit();
   }
 });
@@ -558,6 +1120,10 @@ app.on('before-quit', async () => {
       console.log('[Webhook Server] Server closed');
     });
   }
+
+  // Phase 10.7: Unregister global shortcuts
+  unregisterGlobalShortcuts();
+  console.log('[Phase 10.7] Global shortcuts unregistered');
 
   // Note: IPC listeners are automatically cleaned up by Electron on app quit
   // Event listeners on individual windows (like auth window) must be cleaned up manually
@@ -823,34 +1389,56 @@ function initSDK() {
     },
   });
 
-  RecallAiSdk.init({
+  const sdkConfig = {
     apiUrl: process.env.RECALLAI_API_URL,
     acquirePermissionsOnStartup: ['accessibility', 'screen-capture', 'microphone'],
     restartOnError: true,
     config: {
       recording_path: RECORDING_PATH,
     },
-  });
-
-  // Debug: Log ALL SDK events to see what we're actually getting
-  const originalAddEventListener = RecallAiSdk.addEventListener;
-  const eventLog = new Set();
-  RecallAiSdk.addEventListener = function (eventName, handler) {
-    if (!eventLog.has(eventName)) {
-      console.log(`[SDK Debug] Registered listener for event: ${eventName}`);
-      eventLog.add(eventName);
-    }
-
-    // Wrap handler to log when events fire (skip upload-progress to reduce spam)
-    const wrappedHandler = function (...args) {
-      if (eventName !== 'upload-progress') {
-        console.log(`[SDK Debug] Event fired: ${eventName}`, args[0]);
-      }
-      return handler.apply(this, args);
-    };
-
-    return originalAddEventListener.call(this, eventName, wrappedHandler);
   };
+
+  RecallAiSdk.init(sdkConfig);
+
+  // Workaround for detecting already-open meetings
+  // The SDK is event-driven and only fires meeting-detected when a window opens
+  // For meetings already open before the SDK initialized, we need to trigger a re-scan
+  // We do this by shutting down and re-initializing the SDK
+  setTimeout(async () => {
+    try {
+      logger.main.info('[SDK] Attempting to detect already-open meetings via SDK restart...');
+
+      // Temporarily suppress console errors from the SDK during shutdown
+      // The SDK logs "Failed to send log to Desktop SDK" when shutting down, which is harmless
+      const originalConsoleError = console.error;
+      console.error = (...args) => {
+        const message = args.join(' ');
+        if (!message.includes('Failed to send log to Desktop SDK')) {
+          originalConsoleError.apply(console, args);
+        }
+      };
+
+      // Shutdown the SDK
+      await RecallAiSdk.shutdown();
+      logger.main.info('[SDK] Shutdown complete');
+
+      // Wait a moment for SDK process to fully terminate
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Restore console.error
+      console.error = originalConsoleError;
+
+      // Re-initialize the SDK with same config
+      RecallAiSdk.init(sdkConfig);
+      logger.main.info('[SDK] Re-initialized - should now detect any open meetings');
+
+      // The meeting-detected event listener should fire if there are any open meetings
+    } catch (error) {
+      logger.main.error('[SDK] Error during SDK restart:', error);
+    }
+  }, 3000); // Wait 3 seconds after initial SDK init
+
+  // SDK event listeners are now registered below
 
   // Listen for meeting detected events
   RecallAiSdk.addEventListener('meeting-detected', evt => {
@@ -1033,13 +1621,18 @@ function initSDK() {
       activeRecordings.removeRecording(windowId);
       console.log(`[Recording] Cleaned up active recording: ${windowId}`);
 
+      // Update recording state and tray menu (Phase 10.7)
+      isRecording = false;
+      updateSystemTrayMenu();
+
+
       // Wait for file to be fully written before starting transcription
       setTimeout(async () => {
         console.log('[Transcription] Starting transcription after 3 second delay...');
         console.log('[Transcription] Window ID:', windowId);
         console.log('[Transcription] Provider:', transcriptionProvider);
 
-        // Check if recording file exists
+        // Check if recording file exists (SDK always creates MP3)
         const fs = require('fs');
         const recordingPath = path.join(RECORDING_PATH, `windows-desktop-${windowId}.mp3`);
         console.log('[Transcription] Checking for recording file:', recordingPath);
@@ -1193,7 +1786,7 @@ function initSDK() {
   // See pollForUploadCompletion() function below
 
   RecallAiSdk.addEventListener('permissions-granted', async evt => {
-    console.log('PERMISSIONS GRANTED');
+    logger.main.info('[SDK] Permissions granted');
   });
 
   // Track SDK state changes
@@ -3223,6 +3816,120 @@ ipcMain.handle('settings:getProviderPreferences', async (event) => {
 });
 
 // ===================================================================
+// Phase 10.7: Desktop App Polish IPC Handlers
+// ===================================================================
+
+// Get all app settings
+ipcMain.handle('app:getSettings', async () => {
+  try {
+    return { success: true, data: appSettings };
+  } catch (error) {
+    logger.ipc.error('[IPC] app:getSettings failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Update app settings
+ipcMain.handle('app:updateSettings', async (event, updates) => {
+  try {
+    // Merge updates into current settings
+    if (updates.recordingQuality) {
+      appSettings.recordingQuality = { ...appSettings.recordingQuality, ...updates.recordingQuality };
+    }
+    if (updates.notifications) {
+      appSettings.notifications = { ...appSettings.notifications, ...updates.notifications };
+    }
+    if (updates.shortcuts) {
+      // Unregister old shortcuts
+      unregisterGlobalShortcuts();
+
+      // Update shortcuts
+      appSettings.shortcuts = { ...appSettings.shortcuts, ...updates.shortcuts };
+
+      // Register new shortcuts
+      registerGlobalShortcuts();
+    }
+
+    // Save to disk
+    saveAppSettings();
+    logger.ipc.info('[IPC] app:updateSettings - Settings updated successfully');
+
+    return { success: true, data: appSettings };
+  } catch (error) {
+    logger.ipc.error('[IPC] app:updateSettings failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get application logs (Phase 10.7)
+ipcMain.handle('app:getLogs', async (event, options = {}) => {
+  try {
+    const { limit = 1000, level = 'all' } = options;
+
+    // Read log file
+    const logPath = log.transports.file.getFile().path;
+
+    if (!fs.existsSync(logPath)) {
+      return { success: true, data: { logs: [], logPath } };
+    }
+
+    const logContent = fs.readFileSync(logPath, 'utf8');
+    const logLines = logContent.split('\n').filter(line => line.trim().length > 0);
+
+    // Filter by level if specified
+    let filteredLogs = logLines;
+    if (level !== 'all') {
+      filteredLogs = logLines.filter(line => line.includes(`[${level}]`));
+    }
+
+    // Get last N lines
+    const recentLogs = filteredLogs.slice(-limit);
+
+    return {
+      success: true,
+      data: {
+        logs: recentLogs,
+        logPath,
+        totalLines: logLines.length,
+        filteredLines: filteredLogs.length,
+      }
+    };
+  } catch (error) {
+    logger.ipc.error('[IPC] app:getLogs failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Clear logs (Phase 10.7)
+ipcMain.handle('app:clearLogs', async () => {
+  try {
+    const logPath = log.transports.file.getFile().path;
+
+    if (fs.existsSync(logPath)) {
+      fs.writeFileSync(logPath, '', 'utf8');
+      logger.ipc.info('[IPC] app:clearLogs - Log file cleared');
+    }
+
+    return { success: true };
+  } catch (error) {
+    logger.ipc.error('[IPC] app:clearLogs failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Open log file in default editor (Phase 10.7)
+ipcMain.handle('app:openLogFile', async () => {
+  try {
+    const logPath = log.transports.file.getFile().path;
+    await shell.openPath(logPath);
+    return { success: true };
+  } catch (error) {
+    logger.ipc.error('[IPC] app:openLogFile failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
 // End Settings IPC Handlers
 // ===================================================================
 
@@ -3660,6 +4367,10 @@ ipcMain.handle(
           windowId: key,
           uploadToken: uploadData.upload_token,
         });
+
+        // Update recording state and tray menu (Phase 10.7)
+        isRecording = true;
+        updateSystemTrayMenu();
 
         return {
           success: true,

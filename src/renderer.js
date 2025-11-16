@@ -8,10 +8,11 @@
 
 import './index.css';
 import { sanitizeHtml, escapeHtml, markdownToSafeHtml, safeSetInnerHTML } from './renderer/security.js';
-import { initializeSettingsUI } from './renderer/settings.js';
+import { initializeSettingsUI, openSettingsTab } from './renderer/settings.js';
 import { initializeTemplateEditor } from './renderer/templates.js';
 import { initializeRoutingEditor } from './renderer/routing.js';
 import { initializeMeetingDetail, clearMeetingDetail, updateMeetingDetail } from './renderer/meetingDetail.js';
+import { initAppSettingsUI } from './renderer/appSettings.js';
 
 // Create empty meetings data structure to be filled from the file
 const meetingsData = {
@@ -488,6 +489,8 @@ function debounce(func, wait) {
 
 // Show toast notification
 function showToast(message, type = 'info') {
+  console.log('[Toast] Showing:', message, 'Type:', type);
+
   const toast = document.createElement('div');
   toast.style.cssText = `
     position: fixed;
@@ -515,6 +518,7 @@ function showToast(message, type = 'info') {
   toast.textContent = message;
 
   document.body.appendChild(toast);
+  console.log('[Toast] Element appended to body, z-index:', toast.style.zIndex);
 
   // Auto-remove after 4 seconds
   setTimeout(() => {
@@ -2103,6 +2107,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize Routing Editor (Phase 10.4)
   initializeRoutingEditor();
 
+  // Initialize App Settings UI (Phase 10.7)
+  await initAppSettingsUI();
+
   // Initialize Google integration (Calendar + Contacts)
   await initializeGoogle();
 
@@ -2215,6 +2222,120 @@ document.addEventListener('DOMContentLoaded', async () => {
         }, 1500);
       }
     });
+  });
+
+  // ===================================================================
+  // Phase 10.7: Desktop App Polish Event Listeners
+  // ===================================================================
+
+  // Listen for open settings request (from system tray)
+  window.electronAPI.onOpenSettings(() => {
+    openSettingsTab('general');
+  });
+
+  // Listen for open logs viewer request (from system tray)
+  window.electronAPI.onOpenLogsViewer(() => {
+    openSettingsTab('logs');
+  });
+
+  // Listen for quick record shortcut (starts in-person meeting recording)
+  window.electronAPI.onQuickRecordRequested(() => {
+    // Switch to main view if settings are open
+    const settingsView = document.getElementById('settingsView');
+    const mainView = document.getElementById('mainView');
+    if (settingsView && mainView && settingsView.style.display !== 'none') {
+      settingsView.style.display = 'none';
+      mainView.style.display = 'block';
+    }
+
+    const newNoteBtn = document.getElementById('newNoteBtn');
+    if (newNoteBtn) {
+      newNoteBtn.click();
+    } else {
+      console.warn('[Phase 10.7] Cannot quick record: New Note button not found');
+    }
+  });
+
+  // Listen for toggle recording shortcut
+  window.electronAPI.onToggleRecordingShortcut(() => {
+    // Switch to main view if settings are open
+    const settingsView = document.getElementById('settingsView');
+    const mainView = document.getElementById('mainView');
+    if (settingsView && mainView && settingsView.style.display !== 'none') {
+      settingsView.style.display = 'none';
+      mainView.style.display = 'block';
+    }
+
+    const stopRecordingBtn = document.getElementById('stopRecordingBtn');
+    const joinMeetingBtn = document.getElementById('joinMeetingBtn');
+    const newNoteBtn = document.getElementById('newNoteBtn');
+
+    // If recording, stop it
+    if (stopRecordingBtn && stopRecordingBtn.style.display !== 'none') {
+      stopRecordingBtn.click();
+    }
+    // Otherwise, try to join a detected meeting first
+    else if (joinMeetingBtn && !joinMeetingBtn.disabled) {
+      joinMeetingBtn.click();
+    }
+    // If no meeting detected, start in-person recording
+    else if (newNoteBtn) {
+      newNoteBtn.click();
+    } else {
+      console.warn('[Phase 10.7] Cannot toggle recording: no buttons available');
+    }
+  });
+
+  // Listen for stop recording request (from system tray or keyboard shortcut)
+  window.electronAPI.onStopRecordingRequested(async () => {
+    console.log('[Phase 10.7] Stop recording requested');
+
+    // Check if we have an active recording
+    if (window.currentRecordingId) {
+      try {
+        const result = await window.electronAPI.stopManualRecording(window.currentRecordingId);
+
+        if (result.success) {
+          console.log('[Phase 10.7] Recording stopped successfully');
+          window.currentRecordingId = null;
+          window.isRecording = false;
+
+          // Update UI if the record button exists
+          const recordButton = document.getElementById('recordButton');
+          if (recordButton && recordButton.classList.contains('recording')) {
+            recordButton.classList.remove('recording');
+            const recordIcon = recordButton.querySelector('.record-icon');
+            const stopIcon = recordButton.querySelector('.stop-icon');
+            if (recordIcon) recordIcon.style.display = 'block';
+            if (stopIcon) stopIcon.style.display = 'none';
+            recordButton.disabled = false;
+          }
+
+          // Show a toast notification
+          const toast = document.createElement('div');
+          toast.className = 'toast';
+          toast.textContent = 'Recording stopped';
+          document.body.appendChild(toast);
+          setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => {
+              if (toast.parentElement) {
+                document.body.removeChild(toast);
+              }
+            }, 300);
+          }, 2000);
+        } else {
+          console.error('[Phase 10.7] Failed to stop recording:', result.error);
+          alert('Failed to stop recording: ' + result.error);
+        }
+      } catch (error) {
+        console.error('[Phase 10.7] Error stopping recording:', error);
+        alert('Error stopping recording: ' + error.message);
+      }
+    } else {
+      console.warn('[Phase 10.7] No active recording to stop');
+      alert('No active recording to stop');
+    }
   });
 
   // Listen for recording completed events

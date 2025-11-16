@@ -126,6 +126,59 @@ export function importSettings(file) {
 }
 
 /**
+ * Open settings and switch to a specific tab
+ */
+export function openSettingsTab(tabName) {
+  const settingsView = document.getElementById('settingsView');
+  const mainView = document.getElementById('mainView');
+  const settingsTabs = document.querySelectorAll('.settings-tab');
+  const settingsPanels = {
+    general: document.getElementById('generalPanel'),
+    appearance: document.getElementById('appearancePanel'),
+    security: document.getElementById('securityPanel'),
+    routing: document.getElementById('routingPanel'),
+    templates: document.getElementById('templatesPanel'),
+    notifications: document.getElementById('notificationsPanel'),
+    shortcuts: document.getElementById('shortcutsPanel'),
+    logs: document.getElementById('logsPanel'),
+    advanced: document.getElementById('advancedPanel'),
+    about: document.getElementById('aboutPanel'),
+  };
+
+  // Show settings view
+  if (mainView) mainView.style.display = 'none';
+  if (settingsView) settingsView.style.display = 'block';
+
+  // Switch to the requested tab
+  settingsTabs.forEach(tab => {
+    if (tab.dataset.tab === tabName) {
+      tab.classList.add('active');
+    } else {
+      tab.classList.remove('active');
+    }
+  });
+
+  // Show the corresponding panel
+  Object.entries(settingsPanels).forEach(([name, panel]) => {
+    if (panel) {
+      panel.style.display = name === tabName ? 'block' : 'none';
+    }
+  });
+
+  // Trigger panel-specific actions
+  if (tabName === 'templates' && window.loadTemplates) {
+    window.loadTemplates();
+  }
+  if (tabName === 'routing' && window.loadRouting) {
+    window.loadRouting();
+  }
+  if (tabName === 'logs' && window.refreshLogs) {
+    console.log('[Settings] Auto-loading logs');
+    window.refreshLogs();
+  }
+}
+
+/**
  * Initialize settings UI
  */
 export function initializeSettingsUI() {
@@ -148,6 +201,9 @@ export function initializeSettingsUI() {
     security: document.getElementById('securityPanel'),
     routing: document.getElementById('routingPanel'),
     templates: document.getElementById('templatesPanel'),
+    notifications: document.getElementById('notificationsPanel'), // Phase 10.7
+    shortcuts: document.getElementById('shortcutsPanel'), // Phase 10.7
+    logs: document.getElementById('logsPanel'), // Phase 10.7
     advanced: document.getElementById('advancedPanel'),
     about: document.getElementById('aboutPanel'),
   };
@@ -218,6 +274,12 @@ export function initializeSettingsUI() {
         if (tabName === 'routing' && window.loadRouting) {
           console.log('[Settings] Routing tab clicked, calling loadRouting()');
           window.loadRouting();
+        }
+
+        // Load logs when logs panel is shown (Phase 10.7)
+        if (tabName === 'logs' && window.refreshLogs) {
+          console.log('[Settings] Logs tab clicked, auto-loading logs');
+          window.refreshLogs();
         }
       }
     });

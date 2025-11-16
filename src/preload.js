@@ -111,4 +111,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
   keysDelete: keyName => ipcRenderer.invoke('keys:delete', keyName),
   keysMigrate: () => ipcRenderer.invoke('keys:migrate'),
   keysTest: keyName => ipcRenderer.invoke('keys:test', keyName),
+  // Desktop App Polish (Phase 10.7)
+  appGetSettings: () => ipcRenderer.invoke('app:getSettings'),
+  appUpdateSettings: updates => ipcRenderer.invoke('app:updateSettings', updates),
+  appGetLogs: options => ipcRenderer.invoke('app:getLogs', options),
+  appClearLogs: () => ipcRenderer.invoke('app:clearLogs'),
+  appOpenLogFile: () => ipcRenderer.invoke('app:openLogFile'),
+  // Phase 10.7: Event listeners for tray/shortcuts
+  onQuickRecordRequested: callback =>
+    ipcRenderer.on('quick-record-requested', (_, data) => callback(data)),
+  onToggleRecordingShortcut: callback =>
+    ipcRenderer.on('toggle-recording-shortcut', (_, data) => callback(data)),
+  onOpenSettings: callback => ipcRenderer.on('open-settings', (_, data) => callback(data)),
+  onOpenLogsViewer: callback => ipcRenderer.on('open-logs-viewer', (_, data) => callback(data)),
+  onStopRecordingRequested: callback =>
+    ipcRenderer.on('stop-recording-requested', (_, data) => callback(data)),
 });
