@@ -3436,8 +3436,20 @@ ipcMain.handle('deleteMeeting', async (event, meetingId) => {
 
 // Handle generating AI summary for a meeting (non-streaming)
 ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
+  // Get provider preferences and switch to auto-summary provider
+  const preferences = await getProviderPreferences();
+  const desiredProvider = mapProviderValue(preferences.autoSummaryProvider);
+  const originalProvider = llmService.config.provider;
+
   try {
     console.log(`Manual summary generation requested for meeting: ${meetingId}`);
+
+    if (desiredProvider !== originalProvider) {
+      console.log(
+        `[RegenerateSummary] Switching LLM provider from ${originalProvider} to ${desiredProvider} (auto-summary preference: ${preferences.autoSummaryProvider})`
+      );
+      llmService.switchProvider(desiredProvider);
+    }
 
     // Read current data
     const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
@@ -3449,6 +3461,10 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
     );
 
     if (pastMeetingIndex === -1) {
+      // Restore original provider before returning
+      if (desiredProvider !== originalProvider) {
+        llmService.switchProvider(originalProvider);
+      }
       return { success: false, error: 'Meeting not found' };
     }
 
@@ -3456,6 +3472,10 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
 
     // Check if there's a transcript to summarize
     if (!meeting.transcript || meeting.transcript.length === 0) {
+      // Restore original provider before returning
+      if (desiredProvider !== originalProvider) {
+        llmService.switchProvider(originalProvider);
+      }
       return {
         success: false,
         error: 'No transcript available for this meeting',
@@ -3524,12 +3544,25 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
       mainWindow.webContents.send('summary-generated', meetingId);
     }
 
+    // Restore original provider after successful generation
+    if (desiredProvider !== originalProvider) {
+      console.log(`[RegenerateSummary] Restoring LLM provider to ${originalProvider}`);
+      llmService.switchProvider(originalProvider);
+    }
+
     return {
       success: true,
       summary,
     };
   } catch (error) {
     console.error('Error generating meeting summary:', error);
+
+    // Restore original provider on error
+    if (desiredProvider !== originalProvider) {
+      console.log(`[RegenerateSummary] Restoring LLM provider to ${originalProvider} (after error)`);
+      llmService.switchProvider(originalProvider);
+    }
+
     return { success: false, error: error.message };
   }
 });
@@ -5306,15 +5339,15 @@ function loadAutoSummaryPrompt(needsTitleSuggestion) {
       let processedTemplate = templateContent;
 
       if (needsTitleSuggestion) {
-        // Include the title suggestion section
+        // Include the title suggestion section, remove the handlebars tags
         processedTemplate = processedTemplate.replace(
-          /\{\{#if needsTitleSuggestion\}\}\n([\s\S]*?)\n\{\{\/if\}\}\n/,
-          '$1\n\n'
+          /\{\{#if needsTitleSuggestion\}\}\s*([\s\S]*?)\s*\{\{\/if\}\}/,
+          '$1'
         );
       } else {
-        // Remove the title suggestion section
+        // Remove the entire title suggestion section including tags
         processedTemplate = processedTemplate.replace(
-          /\{\{#if needsTitleSuggestion\}\}\n[\s\S]*?\n\{\{\/if\}\}\n/,
+          /\{\{#if needsTitleSuggestion\}\}\s*[\s\S]*?\s*\{\{\/if\}\}\s*/,
           ''
         );
       }
@@ -5440,6 +5473,7 @@ ${transcriptText}`;
       );
 
       // Extract suggested title if present and update meeting
+      let finalContent = result.content;
       if (needsTitleSuggestion && result.content) {
         const titleMatch = result.content.match(/# Suggested Title\s*\n([^\n]+)/i);
         if (titleMatch && titleMatch[1]) {
@@ -5447,10 +5481,14 @@ ${transcriptText}`;
           console.log(`[AutoSummary] Extracted suggested title: "${suggestedTitle}"`);
           meeting.title = suggestedTitle;
           console.log(`[AutoSummary] Updated meeting title to: "${meeting.title}"`);
+
+          // Remove the "# Suggested Title" section from the content
+          finalContent = finalContent.replace(/# Suggested Title\s*\n[^\n]+\n+/i, '');
+          console.log(`[AutoSummary] Removed suggested title section from content`);
         }
       }
 
-      return result.content;
+      return finalContent;
     } else {
       // Use streaming version with progress callback
       const fullText = await llmService.streamCompletion({
@@ -5472,6 +5510,7 @@ ${transcriptText}`;
       }
 
       // Extract suggested title if present and update meeting
+      let finalContent = fullText;
       if (needsTitleSuggestion && fullText) {
         const titleMatch = fullText.match(/# Suggested Title\s*\n([^\n]+)/i);
         if (titleMatch && titleMatch[1]) {
@@ -5479,10 +5518,14 @@ ${transcriptText}`;
           console.log(`[AutoSummary] Extracted suggested title: "${suggestedTitle}"`);
           meeting.title = suggestedTitle;
           console.log(`[AutoSummary] Updated meeting title to: "${meeting.title}"`);
+
+          // Remove the "# Suggested Title" section from the content
+          finalContent = finalContent.replace(/# Suggested Title\s*\n[^\n]+\n+/i, '');
+          console.log(`[AutoSummary] Removed suggested title section from content`);
         }
       }
 
-      return fullText;
+      return finalContent;
     }
   } catch (error) {
     console.error('Error generating meeting summary:', error);

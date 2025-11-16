@@ -62,20 +62,22 @@ function toggleBulkSelectionMode() {
     console.log('[Bulk] Checkbox display set to:', checkbox.style.display);
   });
 
-  // Update toolbar visibility
-  updateBulkActionsToolbar();
+  // Disable/enable individual delete buttons when in bulk mode
+  const deleteButtons = document.querySelectorAll('.delete-meeting-btn');
+  deleteButtons.forEach(btn => {
+    btn.disabled = bulkSelectionState.enabled;
+    btn.style.opacity = bulkSelectionState.enabled ? '0.3' : '1';
+    btn.style.cursor = bulkSelectionState.enabled ? 'not-allowed' : 'pointer';
+  });
 
-  // Update toggle button text (preserve the icon)
+  // Show/hide the multi-select toggle button (hide when active, show when inactive)
   const toggleBtn = document.getElementById('toggleBulkSelectBtn');
   if (toggleBtn) {
-    const buttonText = bulkSelectionState.enabled ? 'Cancel' : 'Select';
-    toggleBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>
-      </svg>
-      ${buttonText}
-    `;
+    toggleBtn.style.display = bulkSelectionState.enabled ? 'none' : 'inline-flex';
   }
+
+  // Update toolbar visibility
+  updateBulkActionsToolbar();
 
   // If disabling, clear selections
   if (!bulkSelectionState.enabled) {
@@ -88,6 +90,7 @@ function updateBulkActionsToolbar() {
   const toolbar = document.getElementById('bulkActionsToolbar');
   const countSpan = document.getElementById('bulkSelectionCount');
   const exportBtn = document.getElementById('batchExportBtn');
+  const deleteBtn = document.getElementById('batchDeleteBtn');
 
   if (!toolbar || !countSpan) return;
 
@@ -100,11 +103,17 @@ function updateBulkActionsToolbar() {
     if (exportBtn) {
       exportBtn.disabled = false;
     }
+    if (deleteBtn) {
+      deleteBtn.disabled = false;
+    }
   } else if (bulkSelectionState.enabled) {
     toolbar.style.display = 'flex';
     countSpan.textContent = '0 selected';
     if (exportBtn) {
       exportBtn.disabled = true;
+    }
+    if (deleteBtn) {
+      deleteBtn.disabled = true;
     }
   } else {
     toolbar.style.display = 'none';
@@ -172,14 +181,7 @@ async function batchExportToObsidian() {
     try {
       console.log(`Exporting meeting: ${meeting.title} (${meeting.id})`);
 
-      const result = await window.electronAPI.exportMeetingToObsidian({
-        id: meeting.id,
-        title: meeting.title,
-        date: meeting.date,
-        participants: meeting.participants || [],
-        transcript: meeting.transcript || [],
-        duration: meeting.duration,
-      });
+      const result = await window.electronAPI.obsidianExportMeeting(meeting.id);
 
       if (result.success) {
         successCount++;
@@ -208,6 +210,73 @@ async function batchExportToObsidian() {
 
   // Show success message
   alert(`Exported ${successCount} of ${selectedIds.length} meetings to Obsidian`);
+
+  // Clear selection and exit bulk mode
+  toggleBulkSelectionMode();
+}
+
+// Function to batch delete selected meetings
+async function batchDeleteMeetings() {
+  const selectedIds = Array.from(bulkSelectionState.selectedMeetings);
+
+  if (selectedIds.length === 0) {
+    console.warn('No meetings selected for deletion');
+    return;
+  }
+
+  // Confirm deletion
+  const confirmMessage = `Are you sure you want to delete ${selectedIds.length} meeting${selectedIds.length > 1 ? 's' : ''}? This cannot be undone.`;
+  if (!confirm(confirmMessage)) {
+    return;
+  }
+
+  console.log(`Deleting ${selectedIds.length} meetings...`);
+
+  let successCount = 0;
+  let errorCount = 0;
+
+  // Delete each meeting
+  for (const meetingId of selectedIds) {
+    try {
+      console.log(`Deleting meeting: ${meetingId}`);
+
+      const result = await window.electronAPI.deleteMeeting(meetingId);
+
+      if (result.success) {
+        successCount++;
+        console.log(`Successfully deleted: ${meetingId}`);
+
+        // Remove from local arrays
+        const pastIndex = pastMeetings.findIndex(m => m.id === meetingId);
+        if (pastIndex !== -1) {
+          pastMeetings.splice(pastIndex, 1);
+        }
+
+        const upcomingIndex = upcomingMeetings.findIndex(m => m.id === meetingId);
+        if (upcomingIndex !== -1) {
+          upcomingMeetings.splice(upcomingIndex, 1);
+        }
+      } else {
+        errorCount++;
+        console.error(`Failed to delete ${meetingId}:`, result.error);
+      }
+    } catch (error) {
+      errorCount++;
+      console.error(`Error deleting ${meetingId}:`, error);
+    }
+  }
+
+  console.log(`Batch delete complete: ${successCount} succeeded, ${errorCount} failed`);
+
+  // Refresh UI
+  renderMeetings();
+
+  // Show success message
+  if (errorCount === 0) {
+    alert(`Successfully deleted ${successCount} meeting${successCount > 1 ? 's' : ''}`);
+  } else {
+    alert(`Deleted ${successCount} meeting${successCount > 1 ? 's' : ''}, ${errorCount} failed`);
+  }
 
   // Clear selection and exit bulk mode
   toggleBulkSelectionMode();
@@ -477,66 +546,7 @@ window.clearSearch = function () {
 // Display AI Generated Summaries
 // ========================================
 
-function displaySummaries(summaries) {
-  const summariesSection = document.getElementById('summariesSection');
-  const summariesContent = document.getElementById('summariesContent');
-
-  if (!summaries || summaries.length === 0) {
-    summariesSection.style.display = 'none';
-    return;
-  }
-
-  // Clear existing content
-  summariesContent.innerHTML = '';
-
-  // Create summary cards
-  summaries.forEach((summary, index) => {
-    const card = document.createElement('div');
-    card.className = 'summary-card';
-    card.dataset.summaryId = summary.templateId;
-
-    // Sanitize template name and content to prevent XSS
-    card.innerHTML = sanitizeHtml(`
-      <div class="summary-card-header">
-        <div class="summary-card-title">${escapeHtml(summary.templateName)}</div>
-        <div class="summary-card-toggle">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M7 10L12 15L17 10H7Z" fill="currentColor"/>
-          </svg>
-        </div>
-      </div>
-      <div class="summary-card-body">
-        ${markdownToSafeHtml(summary.content)}
-      </div>
-    `);
-
-    // Add click handler to toggle collapse
-    const header = card.querySelector('.summary-card-header');
-    header.addEventListener('click', () => {
-      card.classList.toggle('collapsed');
-    });
-
-    summariesContent.appendChild(card);
-  });
-
-  // Show the summaries section
-  summariesSection.style.display = 'block';
-
-  // Add collapse all button handler
-  const collapseBtn = document.getElementById('collapseSummaries');
-  collapseBtn.onclick = () => {
-    const allCards = summariesContent.querySelectorAll('.summary-card');
-    const allCollapsed = Array.from(allCards).every(card => card.classList.contains('collapsed'));
-
-    allCards.forEach(card => {
-      if (allCollapsed) {
-        card.classList.remove('collapsed');
-      } else {
-        card.classList.add('collapsed');
-      }
-    });
-  };
-}
+// Obsolete function removed - summaries are now displayed via updateMeetingDetail() in meetingDetail.js
 
 // Markdown conversion is now handled by the security module
 // using the marked library + DOMPurify sanitization
@@ -1003,6 +1013,12 @@ function showEditorView(meetingId) {
     },
     // onUpdate callback
     async (updatedMeetingId, updatedMeeting) => {
+      // Guard against null meeting (user navigated away during async operation)
+      if (!updatedMeeting || !updatedMeetingId) {
+        console.warn('[Renderer] Meeting update callback received null data, ignoring');
+        return;
+      }
+
       console.log('[Renderer] Meeting update callback received:', {
         meetingId: updatedMeetingId,
         participantCount: updatedMeeting.participants?.length || 0,
@@ -1389,12 +1405,14 @@ function renderMeetings() {
   notesSection.innerHTML = `
     <div class="section-header">
       <h2 class="section-title">Notes</h2>
-      <button class="btn btn-secondary" id="toggleBulkSelectBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>
-        </svg>
-        Select
-      </button>
+      <div class="section-actions">
+        <button class="btn btn-outline btn-icon-text" id="toggleBulkSelectBtn" title="Select multiple meetings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>
+          </svg>
+          Multi-Select
+        </button>
+      </div>
     </div>
     <div class="meetings-list" id="notes-list"></div>
   `;
@@ -2202,13 +2220,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Listen for recording completed events
   window.electronAPI.onRecordingCompleted(meetingId => {
     console.log('Recording completed for meeting:', meetingId);
-    // If this note is currently being edited, reload its content
+    // If this note is currently being viewed, reload its content
     if (currentEditingMeetingId === meetingId) {
       loadMeetingsDataFromFile().then(() => {
-        // Refresh the editor with the updated content
+        // Refresh the meeting detail view with updated content
         const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === meetingId);
         if (meeting) {
-          document.getElementById('simple-editor').value = meeting.content;
+          updateMeetingDetail(meeting);
         }
       });
     }
@@ -2335,38 +2353,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadMeetingsDataFromFile().then(() => {
       const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === meetingId);
 
-      // If this note is currently being edited, also refresh the editor content AND title
+      // If this note is currently being viewed, refresh the meeting detail view
       if (currentEditingMeetingId === meetingId && meeting) {
-        console.log(`Updating editor for meeting ${meetingId} - New title: ${meeting.title}`);
+        console.log(`Updating meeting detail view for ${meetingId} - New title: ${meeting.title}`);
 
-        // Update the editor content with the new summary
-        document.getElementById('simple-editor').value = meeting.content;
-
-        // IMPORTANT: Update the title in the DOM to prevent auto-save from overwriting with old title
-        document.getElementById('noteTitle').textContent = meeting.title;
+        // Update the meeting detail view with new data
+        updateMeetingDetail(meeting);
       }
     });
   });
 
-  // Listen for streaming summary updates
+  // Listen for streaming summary updates (currently not used in new meeting detail view)
   window.electronAPI.onSummaryUpdate(data => {
     const { meetingId, content, timestamp } = data;
 
-    // If this note is currently being edited, update the content immediately
-    if (currentEditingMeetingId === meetingId) {
-      // Get the editor element
-      const editorElement = document.getElementById('simple-editor');
-
-      // Update the editor with the latest streamed content
-      // Use requestAnimationFrame for smoother updates that don't block the main thread
-      requestAnimationFrame(() => {
-        editorElement.value = content;
-
-        // Force the editor to scroll to the bottom to follow the new text
-        // This creates a better experience of watching text appear
-        editorElement.scrollTop = editorElement.scrollHeight;
-      });
-    }
+    // Note: Streaming updates are not currently displayed in the new meeting detail view
+    // The view will be updated when the final summary is complete via onSummaryGenerated event
+    console.log(`Streaming update received for meeting ${meetingId} (${content.length} chars)`);
   });
 
   // Listen for recording ended events (cleanup after AssemblyAI/Deepgram transcription)
@@ -2737,6 +2740,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const batchExportBtn = document.getElementById('batchExportBtn');
   if (batchExportBtn) {
     batchExportBtn.addEventListener('click', batchExportToObsidian);
+  }
+
+  const batchDeleteBtn = document.getElementById('batchDeleteBtn');
+  if (batchDeleteBtn) {
+    batchDeleteBtn.addEventListener('click', batchDeleteMeetings);
   }
 
   const cancelBulkSelectionBtn = document.getElementById('cancelBulkSelectionBtn');
@@ -3128,12 +3136,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Clear previous content
     templateList.innerHTML = '';
 
-    // Render template items
-    if (availableTemplates.length === 0) {
+    // Render template items (exclude auto-summary template - only used for regenerate button)
+    const selectableTemplates = availableTemplates.filter(t => t.id !== 'auto-summary-prompt');
+
+    if (selectableTemplates.length === 0) {
       templateList.innerHTML =
         '<p style="text-align: center; color: #999;">No templates found. Add templates to config/templates/</p>';
     } else {
-      availableTemplates.forEach(template => {
+      selectableTemplates.forEach(template => {
         const templateItem = document.createElement('div');
         templateItem.className = 'template-item';
         templateItem.dataset.templateId = template.id;
@@ -3291,10 +3301,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             meeting.obsidianLink = result.obsidianLink;
           }
           await loadMeetingsDataFromFile(); // Reload to ensure we have latest data
-        }
 
-        // Display summaries in UI
-        displaySummaries(result.summaries);
+          // Update the meeting detail view to show new summaries
+          updateMeetingDetail(meeting);
+        }
 
         // Update UI to show Obsidian sync status if exported
         if (result.exported && result.obsidianLink) {
@@ -3868,18 +3878,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Listen for recording completed events
-  window.electronAPI.onRecordingCompleted(meetingId => {
-    console.log('Recording completed for meeting:', meetingId);
-    if (currentEditingMeetingId === meetingId) {
-      // Reload the meeting data first
-      loadMeetingsDataFromFile().then(() => {
-        // Refresh the editor with the updated content
-        const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === meetingId);
-        if (meeting) {
-          document.getElementById('simple-editor').value = meeting.content;
-        }
-      });
-    }
-  });
+  // Note: onRecordingCompleted event listener is registered earlier in the file (line ~2213)
+  // Duplicate removed to prevent multiple handlers
 });

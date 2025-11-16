@@ -363,6 +363,42 @@ body {
   margin: 0;
 }
 
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-outline {
+  background-color: transparent;
+  border: 1.5px solid #D0D0D0;
+  color: #555;
+  transition: all 0.2s ease;
+}
+
+.btn-outline:hover {
+  background-color: #F8F8F8;
+  border-color: #6947BD;
+  color: #6947BD;
+}
+
+.btn-outline:active {
+  background-color: #F0F0F0;
+}
+
+.btn-icon-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-icon-text svg {
+  flex-shrink: 0;
+}
+
 .bulk-actions-toolbar {
   display: none;
   justify-content: space-between;
@@ -371,6 +407,9 @@ body {
   background-color: #F5F5F5;
   border-bottom: 1px solid #E0E0E0;
   gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
 }
 
 .bulk-actions-left,
@@ -3974,6 +4013,43 @@ body {
 }
 
 /* Summary Tab */
+.summary-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.summary-view-mode {
+  display: block;
+}
+
+.summary-edit-mode {
+  display: none;
+}
+
+.summary-editor {
+  width: 100%;
+  min-height: 400px;
+  padding: 16px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--card-bg);
+  color: var(--text-primary);
+  resize: vertical;
+}
+
+.summary-editor:focus {
+  outline: none;
+  border-color: #6947BD;
+  box-shadow: 0 0 0 2px rgba(105, 71, 189, 0.1);
+}
+
 .summary-content {
   font-size: 15px;
   line-height: 1.7;

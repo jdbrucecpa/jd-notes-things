@@ -98,6 +98,21 @@ function setupEventListeners(onBack, onUpdate) {
     generateTemplatesBtn.onclick = () => generateTemplates(onUpdate);
   }
 
+  // Summary edit/save buttons
+  const editSummaryBtn = document.getElementById('editSummaryBtn');
+  const saveSummaryBtn = document.getElementById('saveSummaryBtn');
+  const cancelEditSummaryBtn = document.getElementById('cancelEditSummaryBtn');
+
+  if (editSummaryBtn) {
+    editSummaryBtn.onclick = () => enterSummaryEditMode();
+  }
+  if (saveSummaryBtn) {
+    saveSummaryBtn.onclick = () => saveSummaryEdit(onUpdate);
+  }
+  if (cancelEditSummaryBtn) {
+    cancelEditSummaryBtn.onclick = () => exitSummaryEditMode();
+  }
+
   // Save vault path button
   const saveVaultPathBtn = document.getElementById('saveVaultPathBtn');
   if (saveVaultPathBtn) {
@@ -261,6 +276,7 @@ function getInitials(name) {
  */
 function populateSummary(meeting) {
   const summaryContent = document.getElementById('meetingDetailSummary');
+  const editBtn = document.getElementById('editSummaryBtn');
   if (!summaryContent) return;
 
   console.log('[MeetingDetail] populateSummary called for meeting:', meeting.id);
@@ -277,11 +293,15 @@ function populateSummary(meeting) {
         </button>
       </div>
     `;
+    if (editBtn) editBtn.style.display = 'none';
     return;
   }
 
   // Display the auto-summary content directly
   summaryContent.innerHTML = markdownToSafeHtml(meeting.content);
+
+  // Show edit button when there's content
+  if (editBtn) editBtn.style.display = 'inline-flex';
 }
 
 /**
@@ -943,15 +963,36 @@ async function regenerateSummary(onUpdate) {
     if (result.success) {
       console.log('[MeetingDetail] Summary regenerated successfully');
 
-      // Update the meeting object with new summary
-      if (result.data && result.data.summaries) {
-        currentMeeting.summaries = result.data.summaries;
-        populateSummary(currentMeeting);
+      // Check if user has navigated away (currentMeeting would be null)
+      if (!currentMeetingId) {
+        console.log('[MeetingDetail] User navigated away, skipping summary update');
+        return;
       }
 
-      // Notify update
-      if (onUpdate) {
-        onUpdate(currentMeetingId, currentMeeting);
+      // The backend saves the summary to meeting.content, so we need to reload the data
+      // to get the updated content
+      const meetingsData = await window.electronAPI.loadMeetingsData();
+
+      if (meetingsData.success) {
+        // Find the updated meeting
+        const allMeetings = [...meetingsData.data.upcomingMeetings, ...meetingsData.data.pastMeetings];
+        const updatedMeeting = allMeetings.find(m => m.id === currentMeetingId);
+
+        if (updatedMeeting) {
+          // Update the current meeting reference
+          currentMeeting = updatedMeeting;
+
+          // Re-render the summary tab with new content (only if still viewing this meeting)
+          if (currentMeetingId) {
+            populateSummary(currentMeeting);
+            console.log('[MeetingDetail] Summary view updated with regenerated content');
+          }
+
+          // Notify parent that data has changed (only if we have valid meeting data)
+          if (onUpdate && currentMeeting) {
+            onUpdate(currentMeetingId, currentMeeting);
+          }
+        }
       }
     } else {
       console.error('[MeetingDetail] Failed to regenerate summary:', result.error);
@@ -961,8 +1002,11 @@ async function regenerateSummary(onUpdate) {
     console.error('[MeetingDetail] Error regenerating summary:', error);
     alert(`Error regenerating summary: ${error.message}`);
   } finally {
-    btn.disabled = false;
-    btn.textContent = originalText;
+    // Only update button if it still exists (user might have navigated away)
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
   }
 }
 
@@ -1246,6 +1290,83 @@ function closeSpeakerEditor() {
 
   // Clear context
   window._speakerEditContext = null;
+}
+
+/**
+ * Enter summary edit mode
+ */
+function enterSummaryEditMode() {
+  const viewMode = document.getElementById('summaryViewMode');
+  const editMode = document.getElementById('summaryEditMode');
+  const editor = document.getElementById('summaryEditor');
+  const editBtn = document.getElementById('editSummaryBtn');
+  const saveBtn = document.getElementById('saveSummaryBtn');
+  const cancelBtn = document.getElementById('cancelEditSummaryBtn');
+
+  if (!currentMeeting || !currentMeeting.content) return;
+
+  // Hide view mode, show edit mode
+  viewMode.style.display = 'none';
+  editMode.style.display = 'block';
+
+  // Populate editor with current content (markdown)
+  editor.value = currentMeeting.content;
+
+  // Update buttons
+  editBtn.style.display = 'none';
+  saveBtn.style.display = 'inline-flex';
+  cancelBtn.style.display = 'inline-flex';
+
+  // Focus editor
+  editor.focus();
+}
+
+/**
+ * Exit summary edit mode without saving
+ */
+function exitSummaryEditMode() {
+  const viewMode = document.getElementById('summaryViewMode');
+  const editMode = document.getElementById('summaryEditMode');
+  const editBtn = document.getElementById('editSummaryBtn');
+  const saveBtn = document.getElementById('saveSummaryBtn');
+  const cancelBtn = document.getElementById('cancelEditSummaryBtn');
+
+  // Show view mode, hide edit mode
+  viewMode.style.display = 'block';
+  editMode.style.display = 'none';
+
+  // Update buttons
+  editBtn.style.display = 'inline-flex';
+  saveBtn.style.display = 'none';
+  cancelBtn.style.display = 'none';
+}
+
+/**
+ * Save summary edit
+ */
+async function saveSummaryEdit(onUpdate) {
+  const editor = document.getElementById('summaryEditor');
+  const newContent = editor.value;
+
+  if (!currentMeeting) return;
+
+  console.log('[MeetingDetail] Saving summary edit');
+
+  // Update current meeting object
+  currentMeeting.content = newContent;
+
+  // Exit edit mode
+  exitSummaryEditMode();
+
+  // Re-render the summary with new content
+  populateSummary(currentMeeting);
+
+  // Notify parent to save changes
+  if (onUpdate) {
+    onUpdate(currentMeetingId, currentMeeting);
+  }
+
+  console.log('[MeetingDetail] Summary saved successfully');
 }
 
 /**
