@@ -14,6 +14,8 @@ const TemplateManager = require('./main/templates/TemplateManager');
 const VaultStructure = require('./main/storage/VaultStructure');
 const RoutingEngine = require('./main/routing/RoutingEngine');
 const ImportManager = require('./main/import/ImportManager');
+const TranscriptParser = require('./main/import/TranscriptParser');
+const PatternConfigLoader = require('./main/import/PatternConfigLoader');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
@@ -3795,6 +3797,132 @@ ipcMain.handle('import:selectFolder', async () => {
 
 // ===================================================================
 // End Import IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Pattern Testing IPC Handlers (Phase 10.8.2)
+// ===================================================================
+
+// Test parsing with given patterns and sample text
+ipcMain.handle('patterns:testParse', async (event, { content, filePath }) => {
+  try {
+    const parser = new TranscriptParser();
+
+    // Parse the content (determine format from file extension or content)
+    let result;
+    if (filePath && filePath.endsWith('.md')) {
+      result = await parser.parseMarkdown(content, filePath);
+    } else {
+      result = await parser.parsePlainText(content, filePath || 'sample.txt');
+    }
+
+    // Calculate statistics
+    const speakers = parser.getSpeakers(result);
+    const totalEntries = result.entries.length;
+    const unknownCount = result.entries.filter(e => e.speaker === 'Unknown').length;
+    const matchRate = totalEntries > 0 ? ((totalEntries - unknownCount) / totalEntries) * 100 : 0;
+
+    // Get speaker distribution
+    const speakerDistribution = speakers.map(speaker => ({
+      speaker,
+      count: result.entries.filter(e => e.speaker === speaker).length,
+    }));
+
+    return {
+      success: true,
+      result: {
+        format: result.format,
+        entries: result.entries,
+        totalEntries,
+        speakers,
+        speakerDistribution,
+        matchRate: matchRate.toFixed(1),
+        unknownCount,
+        hasSpeakers: result.hasSpeakers,
+        hasTimestamps: result.hasTimestamps,
+      },
+    };
+  } catch (error) {
+    logger.main.error('[Patterns] Failed to test parse:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get current pattern configuration
+ipcMain.handle('patterns:getConfig', async () => {
+  try {
+    const patternConfigLoader = PatternConfigLoader.getInstance();
+    const config = await patternConfigLoader.loadConfig();
+
+    return {
+      success: true,
+      config,
+    };
+  } catch (error) {
+    logger.main.error('[Patterns] Failed to load config:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Save pattern configuration with validation
+ipcMain.handle('patterns:saveConfig', async (event, { configYaml }) => {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'config', 'transcript-patterns.yaml');
+
+    // Parse YAML to validate syntax
+    let parsedConfig;
+    try {
+      parsedConfig = yaml.load(configYaml);
+    } catch (yamlError) {
+      return {
+        success: false,
+        error: `Invalid YAML syntax: ${yamlError.message}`,
+      };
+    }
+
+    // Validate structure using PatternConfigLoader
+    const patternConfigLoader = PatternConfigLoader.getInstance();
+    try {
+      // Validate each pattern
+      if (parsedConfig.patterns && Array.isArray(parsedConfig.patterns)) {
+        for (const pattern of parsedConfig.patterns) {
+          patternConfigLoader.validatePattern(pattern);
+        }
+      } else {
+        return {
+          success: false,
+          error: 'Config must have a "patterns" array',
+        };
+      }
+    } catch (validationError) {
+      return {
+        success: false,
+        error: `Validation failed: ${validationError.message}`,
+      };
+    }
+
+    // Ensure config directory exists
+    const configDir = path.dirname(configPath);
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+
+    // Write the file
+    fs.writeFileSync(configPath, configYaml, 'utf8');
+
+    // Force reload the config
+    await patternConfigLoader.loadConfig(true);
+
+    logger.main.info('[Patterns] Saved pattern configuration');
+    return { success: true };
+  } catch (error) {
+    logger.main.error('[Patterns] Failed to save config:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// End Pattern Testing IPC Handlers
 // ===================================================================
 
 // ===================================================================

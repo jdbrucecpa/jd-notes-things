@@ -649,6 +649,53 @@
         </div>
       </div>
     </div>
+
+    <!-- Pattern Preview Modal (Phase 10.8.2) -->
+    <div class="modal-overlay" id="patternPreviewModal" style="display: none;">
+      <div class="modal-content pattern-preview-modal">
+        <div class="modal-header">
+          <h2>Import Preview</h2>
+          <button class="modal-close" id="closePatternPreviewModal">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <div id="patternPreviewFileInfo"></div>
+
+          <!-- Statistics -->
+          <div class="pattern-section">
+            <h3>Parsing Statistics</h3>
+            <div id="patternTestStats"></div>
+          </div>
+
+          <!-- Warnings -->
+          <div id="patternTestWarnings" style="display: none;"></div>
+
+          <!-- Speaker Distribution -->
+          <div class="pattern-section">
+            <h3>Speaker Distribution</h3>
+            <div id="patternTestSpeakerDist"></div>
+          </div>
+
+          <!-- Sample Entries -->
+          <div class="pattern-section">
+            <h3>Sample Entries (First 10)</h3>
+            <div id="patternTestSampleEntries"></div>
+          </div>
+
+          <!-- Error Display -->
+          <div id="patternTestError" class="pattern-error" style="display: none;"></div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="patternPreviewCancelBtn">Cancel Import</button>
+          <button class="btn btn-primary" id="patternPreviewConfirmBtn">Confirm & Import</button>
+        </div>
+      </div>
+    </div>
     </div><!-- end mainView -->
 
     <!-- Settings Full-Page View (Phase 10.2) -->
@@ -694,6 +741,12 @@
                 <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/>
               </svg>
               <span>Templates</span>
+            </div>
+            <div class="settings-tab" data-tab="patterns">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z" fill="currentColor"/>
+              </svg>
+              <span>Transcript Patterns</span>
             </div>
             <div class="settings-tab" data-tab="notifications">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1014,6 +1067,74 @@
                       <p style="text-align: center; color: var(--text-secondary); margin-top: 60px;">Select a template to preview</p>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Phase 10.8.2: Transcript Patterns Editor -->
+          <div class="settings-panel" id="patternsPanel" style="display: none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Transcript Pattern Testing</h3>
+              <p style="color: #666; margin-bottom: 20px;">
+                Test and edit patterns for parsing transcript files. Patterns are defined in YAML and use regex to extract speaker names and text.
+              </p>
+
+              <div class="pattern-editor-container">
+                <!-- Pattern Editor (Monaco) -->
+                <div class="pattern-editor-left">
+                  <div class="pattern-editor-header">
+                    <h4>Pattern Configuration (YAML)</h4>
+                    <button class="btn btn-primary btn-sm" id="patternEditorSaveBtn">Save Patterns</button>
+                  </div>
+                  <div id="patternEditorMonaco" style="height: 400px; border: 1px solid var(--border-color); border-radius: 4px;"></div>
+                </div>
+
+                <!-- Test Area -->
+                <div class="pattern-editor-right">
+                  <div class="pattern-test-header">
+                    <h4>Test Sample</h4>
+                    <div class="pattern-test-controls">
+                      <select id="patternTestSampleSelect" class="settings-input" style="width: 150px;">
+                        <option value="inline">Inline Format</option>
+                        <option value="header">Header Format</option>
+                        <option value="krisp">Krisp Format</option>
+                        <option value="markdown">Markdown</option>
+                        <option value="timestamp">Timestamp</option>
+                      </select>
+                      <button class="btn btn-secondary btn-sm" id="patternEditorTestBtn">Test Parse</button>
+                    </div>
+                  </div>
+
+                  <div class="pattern-test-sample">
+                    <textarea id="patternTestSampleText"
+                              placeholder="Paste sample transcript text here to test patterns..."
+                              rows="8"
+                              style="width: 100%; padding: 12px; font-family: monospace; font-size: 13px; resize: vertical; border: 1px solid var(--border-color); border-radius: 4px;"></textarea>
+                  </div>
+
+                  <!-- Results -->
+                  <div class="pattern-test-results">
+                    <h4>Parse Results</h4>
+
+                    <!-- Statistics -->
+                    <div id="patternTestStats" style="margin-bottom: 16px;"></div>
+
+                    <!-- Warnings -->
+                    <div id="patternTestWarnings" style="margin-bottom: 16px;"></div>
+
+                    <!-- Speaker Distribution -->
+                    <div id="patternTestSpeakerDist" style="margin-bottom: 16px;"></div>
+
+                    <!-- Sample Entries (collapsed by default) -->
+                    <details style="margin-bottom: 16px;">
+                      <summary style="cursor: pointer; font-weight: 500; margin-bottom: 8px;">Sample Entries</summary>
+                      <div id="patternTestSampleEntries"></div>
+                    </details>
+                  </div>
+
+                  <!-- Error Display -->
+                  <div id="patternTestError" class="pattern-error" style="display: none; margin-top: 16px;"></div>
                 </div>
               </div>
             </div>

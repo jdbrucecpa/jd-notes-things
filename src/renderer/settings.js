@@ -9,6 +9,7 @@
 import { initializeSecurityPanel } from './securitySettings.js';
 import { updateEditorTheme } from './templates.js';
 import { updateRoutingEditorTheme } from './routing.js';
+import { initialize as initializePatternTestingPanel, updateEditorTheme as updatePatternEditorTheme } from './components/PatternTestingPanel.js';
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -138,6 +139,7 @@ export function openSettingsTab(tabName) {
     security: document.getElementById('securityPanel'),
     routing: document.getElementById('routingPanel'),
     templates: document.getElementById('templatesPanel'),
+    patterns: document.getElementById('patternsPanel'),
     notifications: document.getElementById('notificationsPanel'),
     shortcuts: document.getElementById('shortcutsPanel'),
     logs: document.getElementById('logsPanel'),
@@ -172,6 +174,11 @@ export function openSettingsTab(tabName) {
   if (tabName === 'routing' && window.loadRouting) {
     window.loadRouting();
   }
+  if (tabName === 'patterns') {
+    initializePatternTestingPanel('pattern-editor').catch(err => {
+      console.error('[Settings] Failed to initialize pattern editor:', err);
+    });
+  }
   if (tabName === 'logs' && window.refreshLogs) {
     console.log('[Settings] Auto-loading logs');
     window.refreshLogs();
@@ -201,6 +208,7 @@ export function initializeSettingsUI() {
     security: document.getElementById('securityPanel'),
     routing: document.getElementById('routingPanel'),
     templates: document.getElementById('templatesPanel'),
+    patterns: document.getElementById('patternsPanel'), // Phase 10.8.2
     notifications: document.getElementById('notificationsPanel'), // Phase 10.7
     shortcuts: document.getElementById('shortcutsPanel'), // Phase 10.7
     logs: document.getElementById('logsPanel'), // Phase 10.7
@@ -276,6 +284,14 @@ export function initializeSettingsUI() {
           window.loadRouting();
         }
 
+        // Initialize pattern editor when patterns panel is shown (Phase 10.8.2)
+        if (tabName === 'patterns') {
+          console.log('[Settings] Patterns tab clicked, initializing pattern editor');
+          initializePatternTestingPanel('pattern-editor').catch(err => {
+            console.error('[Settings] Failed to initialize pattern editor:', err);
+          });
+        }
+
         // Load logs when logs panel is shown (Phase 10.7)
         if (tabName === 'logs' && window.refreshLogs) {
           console.log('[Settings] Logs tab clicked, auto-loading logs');
@@ -297,6 +313,7 @@ export function initializeSettingsUI() {
       // Update Monaco editor themes
       updateEditorTheme(isActive);
       updateRoutingEditorTheme(isActive);
+      updatePatternEditorTheme(isActive);
     });
   }
 
