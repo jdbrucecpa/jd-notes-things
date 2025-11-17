@@ -1,0 +1,10 @@
+"All right, let's get started with the quarterly review," said Alex.
+"I thought we were pushing this to next week," replied Jordan.
+[00:01:42] "No, we agreed to keep the original schedule," Morgan added.
+"Okay, then can we at least shorten the financials section?" asked Taylor.
+"Maybe, but marketing needs more time this quarter," Alex responded.
+[00:03:10] "That figures… we added three new campaigns," muttered Jordan.
+"Exactly, and we also need to cover the churn analysis," said Morgan.
+"Fine. Can someone send me the latest churn deck?" Jordan asked.
+"I shared it yesterday in the #reports channel," replied Taylor.
+[00:05:55] "Perfect, I’ll open that now," said Jordan.

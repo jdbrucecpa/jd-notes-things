@@ -567,10 +567,58 @@ function createLLMServiceFromEnv() {
   return new LLMService(config);
 }
 
+/**
+ * Create LLM service from a provider preference string
+ * @param {string} providerPreference - e.g., 'openai-gpt-4o-mini', 'azure-gpt-5-mini', 'claude-haiku-4-5'
+ * @returns {LLMService}
+ */
+function createLLMServiceFromPreference(providerPreference) {
+  const config = {
+    openai: {
+      apiKey: process.env.OPENAI_API_KEY,
+      model: 'gpt-4o-mini',
+    },
+    azure: {
+      apiKey: process.env.AZURE_OPENAI_API_KEY,
+      endpoint: process.env.AZURE_OPENAI_ENDPOINT,
+      deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
+      apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview',
+    },
+    anthropic: {
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      model: 'claude-haiku-4-5-20251001',
+    },
+  };
+
+  // Parse provider preference
+  if (providerPreference.startsWith('openai')) {
+    config.provider = 'openai';
+    if (!config.openai.apiKey) {
+      throw new Error('OpenAI API key not found in environment variables');
+    }
+  } else if (providerPreference.startsWith('azure')) {
+    config.provider = 'azure';
+    if (!config.azure.apiKey || !config.azure.endpoint || !config.azure.deployment) {
+      throw new Error('Azure OpenAI credentials not found in environment variables');
+    }
+  } else if (providerPreference.startsWith('claude')) {
+    config.provider = 'anthropic';
+    if (!config.anthropic.apiKey) {
+      throw new Error('Anthropic API key not found in environment variables');
+    }
+  } else {
+    // Default to whatever is available
+    return createLLMServiceFromEnv();
+  }
+
+  return new LLMService(config);
+}
+
 module.exports = {
   LLMService,
   OpenAIAdapter,
   AzureOpenAIAdapter,
   AnthropicAdapter,
   createLLMServiceFromEnv,
+  createLLMServiceFromPreference,
 };

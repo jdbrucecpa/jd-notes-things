@@ -12,7 +12,7 @@
 
 **Current Baseline:** Muesli (Recall.ai reference implementation)
 **Phase:** Phase 10 - Advanced UI & Settings
-**Status:** Phase 10.7 COMPLETE (Desktop App Polish) - Phase 10 Complete, Ready for Phase 11
+**Status:** Phase 10.8.3 COMPLETE (LLM Pattern Builder) - Remaining: 10.9 (Code Quality - optional cleanup tasks)
 
 **Development Philosophy:** Unless otherwise instructed, progress through phases in sequential order. We follow our initial plan to maintain consistency and ensure dependencies are properly met.
 
@@ -91,6 +91,10 @@
     - ✅ Notification preferences (toast notifications, sounds, minimize to tray)
     - ✅ Multi-monitor support with window bounds persistence
     - ✅ Logs and diagnostics viewer with filtering and live updates
+  - ✅ Phase 10.8: Transcript Pattern Learning System (COMPLETE - All 3 sub-phases)
+    - ✅ Phase 10.8.1: Pattern Configuration System (file-based YAML config with regex patterns)
+    - ✅ Phase 10.8.2: Unified Pattern Testing Component (dual-mode preview + editor with Monaco)
+    - ✅ Phase 10.8.3: LLM Pattern Builder (AI-assisted pattern generation)
 
 **Recent Architectural Changes (Nov 10-12, 2025):**
 
@@ -2549,18 +2553,18 @@ patterns:
 
 ##### Phase 10.8.3: LLM Pattern Builder (AI Magic) 🤖
 
-**Status:** ⏳ PLANNED
+**Status:** ✅ COMPLETE (January 16, 2025)
 
 **Goal:** AI-assisted pattern generation from sample transcripts
 
-**Deliverables:**
-1. Create `PatternGenerationService.js` - LLM-based pattern builder
-2. Design specialized LLM prompt for regex pattern generation
-3. Add "Generate Pattern with AI" button to `PatternTestingPanel`
-4. Sample transcript input modal (5-10 lines minimum)
-5. AI-generated pattern preview with test results
-6. Option to save generated pattern to config
-7. Cost tracking for pattern generation
+**Deliverables:** ✅ All Complete
+1. ✅ Create `PatternGenerationService.js` - LLM-based pattern builder
+2. ✅ Design specialized LLM prompt for regex pattern generation
+3. ✅ Add "Generate Pattern with AI" button to `PatternTestingPanel`
+4. ✅ Sample transcript input modal (5-10 lines minimum)
+5. ✅ AI-generated pattern preview with test results
+6. ✅ Option to save generated pattern to config
+7. ✅ Model tracking for pattern generation (shows which AI model was used)
 
 **User Flow:**
 1. User clicks "Generate Pattern with AI" (available in import preview OR settings)
@@ -2645,7 +2649,29 @@ Return ONLY the YAML configuration, no additional text.
 - **Total annual cost:** < $0.10 per user
 - **Value:** Saves hours of regex debugging
 
-**Estimated Effort:** 4-6 hours
+**Implementation Summary:**
+- **Files Created:**
+  - `src/main/services/patternGenerationService.js` (212 lines) - LLM-based pattern builder with specialized prompts
+- **Files Modified:**
+  - `src/main.js` (~50 lines) - Added `patterns:generateFromSample` IPC handler, updated `withProviderSwitch()` and `getProviderPreferences()`
+  - `src/preload.js` (~3 lines) - Exposed `patternsGenerateFromSample` API
+  - `src/renderer/components/PatternTestingPanel.js` (~200 lines) - Added AI generation modal, button, and auto-load logic
+  - `src/index.html` (~60 lines) - Added AI pattern generation modal and pattern generation provider setting
+  - `src/renderer/settings.js` (~20 lines) - Added pattern generation provider dropdown handling
+- **Architecture:**
+  - Uses `withProviderSwitch('pattern', callback)` pattern matching auto-summary and template-summary
+  - Global `patternGenerationService` initialized at startup using shared `llmService`
+  - Specialized LLM prompt outputs YAML matching pattern schema
+  - Pattern validation and testing before returning to UI
+  - Auto-loads generated pattern into Monaco editor
+  - Auto-tests pattern with sample text showing match rate
+- **Provider Selection:**
+  - Added "Pattern Generation Provider" setting in General tab
+  - Default: OpenAI gpt-4o-mini (lightweight, cost-effective for regex tasks)
+  - Options: OpenAI gpt-4o-mini, Azure gpt-5-mini, Claude Haiku 4.5
+  - Respects user preference via localStorage sync
+
+**Estimated Effort:** 4-6 hours | **Actual Effort:** ~5 hours
 
 ---
 

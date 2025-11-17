@@ -107,6 +107,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   patternsGetConfig: () => ipcRenderer.invoke('patterns:getConfig'),
   patternsGetConfigYaml: () => ipcRenderer.invoke('patterns:getConfigYaml'),
   patternsSaveConfig: configYaml => ipcRenderer.invoke('patterns:saveConfig', { configYaml }),
+  // Pattern Generation with AI (Phase 10.8.3)
+  patternsGenerateFromSample: (sampleText, previousAttempt) =>
+    ipcRenderer.invoke('patterns:generateFromSample', { sampleText, previousAttempt }),
   // Settings (Phase 10.1 + 10.3)
   getAppVersion: () => ipcRenderer.invoke('settings:getAppVersion'),
   getVaultPath: () => ipcRenderer.invoke('settings:getVaultPath'),

@@ -8,6 +8,7 @@
  */
 
 const fs = require('fs').promises;
+const fsSync = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const { z } = require('zod');
@@ -68,16 +69,22 @@ class PatternConfigLoader {
       return this.configPath;
     }
 
-    // Try development path first (./config)
+    // Try user data path first (where UI saves patterns)
+    const { app } = require('electron');
+    const userPath = path.join(app.getPath('userData'), 'config', 'transcript-patterns.yaml');
+
+    // Development fallback path
     const devPath = path.join(process.cwd(), 'config', 'transcript-patterns.yaml');
 
-    // Production path would be in user data directory
-    // const { app } = require('electron');
-    // const prodPath = path.join(app.getPath('userData'), 'config', 'transcript-patterns.yaml');
+    // Check if user config exists, otherwise use default
+    if (fsSync.existsSync(userPath)) {
+      console.log('[PatternConfigLoader] Using user config:', userPath);
+      this.configPath = userPath;
+    } else {
+      console.log('[PatternConfigLoader] Using default config:', devPath);
+      this.configPath = devPath;
+    }
 
-    // For now, use development path
-    // In production, you'd check if prodPath exists, otherwise fall back to devPath
-    this.configPath = devPath;
     return this.configPath;
   }
 

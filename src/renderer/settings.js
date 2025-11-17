@@ -223,6 +223,7 @@ export function initializeSettingsUI() {
   const vaultPathInput = document.getElementById('vaultPathInput');
   const autoSummaryProviderSelect = document.getElementById('autoSummaryProviderSelect');
   const templateSummaryProviderSelect = document.getElementById('templateSummaryProviderSelect');
+  const patternGenerationProviderSelect = document.getElementById('patternGenerationProviderSelect');
   const exportSettingsBtn = document.getElementById('exportSettingsBtn');
   const importSettingsBtn = document.getElementById('importSettingsBtn');
   const importSettingsFile = document.getElementById('importSettingsFile');
@@ -349,6 +350,14 @@ export function initializeSettingsUI() {
     });
   }
 
+  // Pattern Generation Provider selection (Phase 10.8.3)
+  if (patternGenerationProviderSelect) {
+    patternGenerationProviderSelect.addEventListener('change', (e) => {
+      updateSetting('patternGenerationProvider', e.target.value);
+      showToast(`Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`);
+    });
+  }
+
   // Export settings
   if (exportSettingsBtn) {
     exportSettingsBtn.addEventListener('click', () => {
@@ -434,6 +443,10 @@ export function initializeSettingsUI() {
 
     if (templateSummaryProviderSelect) {
       templateSummaryProviderSelect.value = currentSettings.templateSummaryProvider || 'azure-gpt-5-mini';
+    }
+
+    if (patternGenerationProviderSelect) {
+      patternGenerationProviderSelect.value = currentSettings.patternGenerationProvider || 'openai-gpt-4o-mini';
     }
 
     // Update vault path (this will be populated from main process)

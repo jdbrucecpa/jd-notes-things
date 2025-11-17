@@ -19,6 +19,7 @@ const PatternConfigLoader = require('./main/import/PatternConfigLoader');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
+const PatternGenerationService = require('./main/services/patternGenerationService');
 const yaml = require('js-yaml');
 // const encryptionService = require('./main/services/encryptionService'); // Not needed - Obsidian requires plain text
 const expressApp = require('./server');
@@ -112,6 +113,11 @@ global.getAPIKeySync = getAPIKeySync;
 // Priority: Azure OpenAI > Anthropic > OpenAI
 const llmService = createLLMServiceFromEnv();
 logger.main.info(`LLM Service initialized with provider: ${llmService.getProviderName()}`);
+
+// Initialize Pattern Generation Service (Phase 10.8.3)
+// Uses global llmService which can be temporarily switched via withProviderSwitch()
+const patternGenerationService = new PatternGenerationService(llmService);
+logger.main.info('[PatternGeneration] Service initialized');
 
 // Express server instance (for webhook endpoint)
 let expressServer = null;
@@ -3989,6 +3995,43 @@ ipcMain.handle('patterns:saveConfig', async (event, { configYaml }) => {
   }
 });
 
+// Generate pattern from sample using AI (Phase 10.8.3)
+ipcMain.handle('patterns:generateFromSample', async (event, { sampleText, previousAttempt }) => {
+  try {
+    logger.main.info('[Patterns] Generating pattern from sample...');
+
+    if (!sampleText || sampleText.trim().length < 20) {
+      return {
+        success: false,
+        error: 'Sample text must be at least 20 characters. Please provide a longer sample (5-10 lines recommended).',
+      };
+    }
+
+    // Use withProviderSwitch to temporarily switch to the pattern generation provider
+    const result = await withProviderSwitch(
+      'pattern',
+      async () => {
+        return await patternGenerationService.generatePatternFromSample(sampleText, previousAttempt);
+      },
+      '[Patterns]'
+    );
+
+    return {
+      success: true,
+      pattern: result.pattern,
+      yaml: result.yaml,
+      testResult: result.testResult,
+      model: result.model,
+    };
+  } catch (error) {
+    logger.main.error('[Patterns] Failed to generate pattern:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
 // ===================================================================
 // End Pattern Testing IPC Handlers
 // ===================================================================
@@ -4021,12 +4064,14 @@ ipcMain.handle('settings:getProviderPreferences', async (event) => {
         const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
         return {
           autoSummaryProvider: settings.autoSummaryProvider || 'azure-gpt-5-mini',
-          templateSummaryProvider: settings.templateSummaryProvider || 'azure-gpt-5-mini'
+          templateSummaryProvider: settings.templateSummaryProvider || 'azure-gpt-5-mini',
+          patternGenerationProvider: settings.patternGenerationProvider || 'openai-gpt-4o-mini'
         };
       } catch (e) {
         return {
           autoSummaryProvider: 'azure-gpt-5-mini',
-          templateSummaryProvider: 'azure-gpt-5-mini'
+          templateSummaryProvider: 'azure-gpt-5-mini',
+          patternGenerationProvider: 'openai-gpt-4o-mini'
         };
       }
     })()
@@ -6110,7 +6155,7 @@ function mapProviderValue(providerValue) {
  * Switches to the user's preferred provider for the operation type, executes the callback,
  * then restores the original provider (even if callback throws)
  *
- * @param {'auto' | 'template'} providerType - Which provider preference to use ('auto' for autoSummaryProvider, 'template' for templateSummaryProvider)
+ * @param {'auto' | 'template' | 'pattern'} providerType - Which provider preference to use ('auto' for autoSummaryProvider, 'template' for templateSummaryProvider, 'pattern' for patternGenerationProvider)
  * @param {Function} callback - Async function to execute with the switched provider
  * @param {string} logContext - Context string for logging (e.g., '[Import]', '[RegenerateSummary]')
  * @returns {Promise<any>} Result of the callback function
@@ -6118,7 +6163,11 @@ function mapProviderValue(providerValue) {
 async function withProviderSwitch(providerType, callback, logContext = '[LLM]') {
   const preferences = await getProviderPreferences();
   const preferenceKey =
-    providerType === 'auto' ? 'autoSummaryProvider' : 'templateSummaryProvider';
+    providerType === 'auto'
+      ? 'autoSummaryProvider'
+      : providerType === 'template'
+      ? 'templateSummaryProvider'
+      : 'patternGenerationProvider';
   const desiredProvider = mapProviderValue(preferences[preferenceKey]);
   const originalProvider = llmService.config.provider;
 
@@ -6143,7 +6192,7 @@ async function withProviderSwitch(providerType, callback, logContext = '[LLM]') 
 
 /**
  * Get provider preferences from renderer's localStorage
- * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string}>}
+ * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string, patternGenerationProvider: string}>}
  */
 async function getProviderPreferences() {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -6151,6 +6200,7 @@ async function getProviderPreferences() {
     return {
       autoSummaryProvider: 'azure-gpt-5-mini',
       templateSummaryProvider: 'azure-gpt-5-mini',
+      patternGenerationProvider: 'openai-gpt-4o-mini',
     };
   }
 
@@ -6161,12 +6211,14 @@ async function getProviderPreferences() {
           const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
           return {
             autoSummaryProvider: settings.autoSummaryProvider || 'azure-gpt-5-mini',
-            templateSummaryProvider: settings.templateSummaryProvider || 'azure-gpt-5-mini'
+            templateSummaryProvider: settings.templateSummaryProvider || 'azure-gpt-5-mini',
+            patternGenerationProvider: settings.patternGenerationProvider || 'openai-gpt-4o-mini'
           };
         } catch (e) {
           return {
             autoSummaryProvider: 'azure-gpt-5-mini',
-            templateSummaryProvider: 'azure-gpt-5-mini'
+            templateSummaryProvider: 'azure-gpt-5-mini',
+            patternGenerationProvider: 'openai-gpt-4o-mini'
           };
         }
       })()
@@ -6177,6 +6229,7 @@ async function getProviderPreferences() {
     return {
       autoSummaryProvider: 'azure-gpt-5-mini',
       templateSummaryProvider: 'azure-gpt-5-mini',
+      patternGenerationProvider: 'openai-gpt-4o-mini',
     };
   }
 }

@@ -1,0 +1,13 @@
+# Meeting Transcript
+
+| Time     | Who        | Text                                                                  |
+|----------|------------|-----------------------------------------------------------------------|
+| 00:00:05 | Alex M.    | Welcome, everyone. Let’s use this session to finalize the rollout.    |
+| 00:00:18 | Priya      | Sounds good. I still have concerns about phase two of the launch.     |
+| 00:00:32 | A. Johnson | Same here; support doesn’t have the new scripts ready yet.           |
+| 00:01:05 | Priya      | Right, and training hasn’t seen the final workflow diagrams either.   |
+| 00:01:40 | Alex M.    | Okay, let’s list the blockers in order and assign owners.             |
+| 00:02:10 | System     | *Screen sharing started by Alex M.*                                   |
+| 00:02:35 | A. Johnson | I can own the script updates if product signs off on messaging.       |
+| 00:03:02 | Priya      | Deal. I’ll get product sign-off by tomorrow afternoon.                |
+| 00:03:30 | Alex M.    | Great, then we’ll keep the launch date as-is unless something slips.  |
