@@ -2305,6 +2305,10 @@ Entire meeting history organized and searchable using new system. Background pro
 - Easy access to logs for troubleshooting without leaving the app
 
 ---
+#### Pre 10.8: Code Quality & Validation 🧹
+- Do Darkmodefixes.md corrections to remove hardcoded colors
+
+
 
 #### Phase 10.8: Code Quality & Validation 🧹
 

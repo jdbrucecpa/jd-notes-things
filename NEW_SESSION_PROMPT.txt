@@ -1,0 +1,52 @@
+I'm working on JD Notes Things, a Windows Electron app for recording/transcribing/summarizing meetings. The app has an import feature (Phase 8) that parses existing transcripts from .txt, .md, .vtt, and .srt files.
+
+CURRENT TRANSCRIPT PARSER (src/main/import/TranscriptParser.js):
+
+The plain text parser currently supports TWO patterns:
+
+1. INLINE: "Name: transcribed speech"
+   Regex: /^([A-Za-z\s]+):\s+(.+)/
+
+2. HEADER: Speaker on own line followed by text:
+   Name:
+   "transcribed speech"
+   Regex: /^([A-Za-z\s]+):$/
+
+Additional support: Timestamps [HH:MM:SS], quote stripping (both " and curly ″)
+
+RECENT BUG FIX: Pattern matching was ambiguous - speakers were being parsed as separate "Unknown" entries. Fixed by requiring at least one space after colon for inline pattern and reordering checks.
+
+CURRENT LIMITATIONS:
+- Hardcoded regex patterns (not user-configurable)
+- No preview/confirmation before import
+- Can't learn new patterns without code changes
+- Won't match speaker names with numbers, hyphens, special chars
+- No UI for pattern validation
+
+RELATED FEATURES:
+- Template system: User-editable files in vault/config/templates/ (.md, .yaml, .json, .txt)
+- Routing system: YAML config with regex support
+- LLM integration: Multi-provider with recently-created withProviderSwitch() utility
+
+PROJECT CONSTRAINTS:
+- Personal use (not multi-tenant)
+- Prefer file-based config over hardcoded
+- Users can edit config files directly, UI is convenience layer
+
+MY QUESTIONS:
+
+In looking at the whole transcript import process, it looks like to me that there are two scenarios we are testing for, an inline speaker with a colon like "Name: transcribed speech" and also with the same thing when the speaker is on their own line and then the quote follows.
+
+1. Are there other scenarios that will get picked up? What edge cases should we consider?
+
+2. How do we best set this up to allow for learning new patterns in the future? Should patterns be config files? Plugin system?
+
+3. Should we put in an optional test/confirmation/pattern checker step as part of the import where the user confirms that the speakers will be picked up correctly?
+
+4. Is there a way in the UI to "learn" patterns? User highlights examples? Pattern builder wizard?
+
+5. Could we call an LLM chatbot to help build the pattern for a new transcript? User provides sample → LLM suggests regex?
+
+6. What's the best way to handle this overall? Balance between flexibility and complexity?
+
+The import works but feels brittle - small variations in format break parsing. I want to think ahead about extensibility without requiring code changes for each new format.
