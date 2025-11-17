@@ -3901,13 +3901,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function performBatchImport(options) {
     const { generateAutoSummary, selectedTemplateIds, autoExport } = options;
 
+    // Extract file paths BEFORE closing modal (closeImportModal clears selectedFiles!)
+    const filePaths = selectedFiles.map(file => file.path);
+
     // Close modal immediately and run in background
     closeImportModal();
     backgroundImportRunning = true;
     updateBackgroundImportIndicator();
-
-    // Extract file paths from selected files
-    const filePaths = selectedFiles.map(file => file.path);
 
     // Show starting notification
     showToast(`Importing ${filePaths.length} transcript${filePaths.length > 1 ? 's' : ''}...`);
@@ -3938,7 +3938,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (result.failed > 0) {
           showToast(`${message} (${result.failed} failed)`, 'warning');
-          console.error('Import errors:', result.errors);
+          if (result.errors && result.errors.length > 0) {
+            console.error('Import errors:', result.errors);
+          }
         } else {
           showToast(message, 'success');
         }
@@ -3948,7 +3950,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderMeetings();
       } else {
         showToast(`Import failed: ${result.error || 'All files failed'}`, 'error');
-        console.error('Import errors:', result.errors);
+        if (result.errors && result.errors.length > 0) {
+          console.error('Import errors:', result.errors);
+        } else if (result.error) {
+          console.error('Import error:', result.error);
+        }
       }
     } catch (error) {
       console.error('Import error:', error);

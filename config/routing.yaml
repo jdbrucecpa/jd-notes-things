@@ -24,7 +24,14 @@ clients:
       - john@brooklynfi.com
       - aj@brooklynfi.com
       - shane@brooklynfi.com
-industry: 
+  spp:
+    vault_path: clients/spp
+    emails:
+      - spcfo.com
+    contacts:
+      - shaun.erickson@spcfo.com
+      - rene.jarquin@spcfo.com
+industry:
   liyria:
     vault_path: industry/liyria
     emails:
