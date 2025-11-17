@@ -625,6 +625,17 @@
                 <span>Auto-export to Obsidian vault</span>
               </label>
             </div>
+
+            <!-- Line break -->
+            <div style="height: 16px;"></div>
+
+            <div class="import-option-group">
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Pattern Testing</h4>
+              <label class="checkbox-label">
+                <input type="checkbox" id="previewParsingCheck" />
+                <span>Preview parsing before importing (shows first file)</span>
+              </label>
+            </div>
           </div>
 
           <!-- Progress Indicator -->
@@ -668,26 +679,26 @@
           <!-- Statistics -->
           <div class="pattern-section">
             <h3>Parsing Statistics</h3>
-            <div id="patternTestStats"></div>
+            <div id="patternPreviewStats"></div>
           </div>
 
           <!-- Warnings -->
-          <div id="patternTestWarnings" style="display: none;"></div>
+          <div id="patternPreviewWarnings" style="display: none;"></div>
 
           <!-- Speaker Distribution -->
           <div class="pattern-section">
             <h3>Speaker Distribution</h3>
-            <div id="patternTestSpeakerDist"></div>
+            <div id="patternPreviewSpeakerDist"></div>
           </div>
 
           <!-- Sample Entries -->
           <div class="pattern-section">
             <h3>Sample Entries (First 10)</h3>
-            <div id="patternTestSampleEntries"></div>
+            <div id="patternPreviewSampleEntries"></div>
           </div>
 
           <!-- Error Display -->
-          <div id="patternTestError" class="pattern-error" style="display: none;"></div>
+          <div id="patternPreviewError" class="pattern-error" style="display: none;"></div>
         </div>
 
         <div class="modal-footer">
@@ -1118,13 +1129,13 @@
                     <h4>Parse Results</h4>
 
                     <!-- Statistics -->
-                    <div id="patternTestStats" style="margin-bottom: 16px;"></div>
+                    <div id="patternTestStats" style="margin-bottom: 16px; display: block; width: 100%;"></div>
 
                     <!-- Warnings -->
-                    <div id="patternTestWarnings" style="margin-bottom: 16px;"></div>
+                    <div id="patternTestWarnings" style="margin-bottom: 16px; display: block; width: 100%;"></div>
 
                     <!-- Speaker Distribution -->
-                    <div id="patternTestSpeakerDist" style="margin-bottom: 16px;"></div>
+                    <div id="patternTestSpeakerDist" style="margin-bottom: 16px; display: block; width: 100%;"></div>
 
                     <!-- Sample Entries (collapsed by default) -->
                     <details style="margin-bottom: 16px;">

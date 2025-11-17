@@ -16,21 +16,33 @@ let onConfirmCallback = null;
 let onCancelCallback = null;
 
 /**
+ * Get element ID with correct prefix based on current mode
+ * @param {string} baseName - Base element name (e.g., 'Stats', 'SpeakerDist')
+ * @returns {string} - Full element ID
+ */
+function getElementId(baseName) {
+  const prefix = currentMode === 'import-preview' ? 'patternPreview' : 'patternTest';
+  return prefix + baseName;
+}
+
+/**
  * Initialize the pattern testing panel
  * @param {string} mode - "import-preview" or "pattern-editor"
  * @param {Object} options - Configuration options
  */
 export async function initialize(mode, options = {}) {
-  console.log(`[PatternTestingPanel] Initializing in ${mode} mode`);
+  console.log(`[PatternTestingPanel] Initializing in ${mode} mode`, options);
   currentMode = mode;
 
   if (mode === 'import-preview') {
-    initializeImportPreview(options);
+    await initializeImportPreview(options);
   } else if (mode === 'pattern-editor') {
-    initializePatternEditor(options);
+    await initializePatternEditor(options);
   } else {
     console.error('[PatternTestingPanel] Invalid mode:', mode);
   }
+
+  console.log(`[PatternTestingPanel] Initialization complete for ${mode} mode`);
 }
 
 /**
@@ -76,13 +88,15 @@ async function initializePatternEditor(options) {
   // Detect theme
   const isDarkTheme = document.body.classList.contains('dark-theme');
 
-  // Load current config
-  const configResponse = await window.electronAPI.patternsGetConfig();
+  // Load current config as YAML string (via new IPC handler)
+  const configResponse = await window.electronAPI.patternsGetConfigYaml();
   let configYaml = '';
 
   if (configResponse.success) {
-    // Convert config object back to YAML string
-    configYaml = generateYamlFromConfig(configResponse.config);
+    configYaml = configResponse.yaml;
+  } else {
+    console.error('[PatternTestingPanel] Failed to load config:', configResponse.error);
+    configYaml = '# Failed to load configuration\n# Error: ' + (configResponse.error || 'Unknown error');
   }
 
   // Create Monaco editor for YAML
@@ -103,8 +117,8 @@ async function initializePatternEditor(options) {
   // Set up event listeners
   setupPatternEditorListeners();
 
-  // Auto-preview on load
-  await testCurrentSample();
+  // Load first sample and auto-preview on load
+  await loadTestSample();
 }
 
 /**
@@ -175,7 +189,12 @@ function displayFileInfo(filePath, fileSize) {
  * Display parse results (both modes)
  */
 function displayParseResults() {
-  if (!parseResults) return;
+  console.log('[PatternTestingPanel] displayParseResults called, results:', parseResults);
+
+  if (!parseResults) {
+    console.warn('[PatternTestingPanel] No parse results to display');
+    return;
+  }
 
   // Update statistics
   displayStatistics();
@@ -194,15 +213,19 @@ function displayParseResults() {
  * Display parsing statistics
  */
 function displayStatistics() {
-  const statsEl = document.getElementById('patternTestStats');
-  if (!statsEl) return;
+  const statsEl = document.getElementById(getElementId('Stats'));
+  if (!statsEl) {
+    console.error(`[PatternTestingPanel] ${getElementId('Stats')} element not found!`);
+    return;
+  }
+  console.log('[PatternTestingPanel] Displaying statistics');
 
   const { totalEntries, matchRate, speakers, hasTimestamps } = parseResults;
 
   const matchRateNum = parseFloat(matchRate);
   const matchRateClass = matchRateNum >= 90 ? 'success' : matchRateNum >= 70 ? 'warning' : 'error';
 
-  statsEl.innerHTML = `
+  const html = `
     <div class="pattern-stats-grid">
       <div class="stat-item">
         <div class="stat-label">Total Entries</div>
@@ -222,13 +245,17 @@ function displayStatistics() {
       </div>
     </div>
   `;
+
+  console.log('[PatternTestingPanel] Stats HTML:', html);
+  statsEl.innerHTML = html;
+  console.log('[PatternTestingPanel] Stats element after update:', statsEl);
 }
 
 /**
  * Display speaker distribution chart
  */
 function displaySpeakerDistribution() {
-  const distEl = document.getElementById('patternTestSpeakerDist');
+  const distEl = document.getElementById(getElementId('SpeakerDist'));
   if (!distEl) return;
 
   const { speakerDistribution, totalEntries } = parseResults;
@@ -260,7 +287,7 @@ function displaySpeakerDistribution() {
  * Display sample parsed entries
  */
 function displaySampleEntries() {
-  const samplesEl = document.getElementById('patternTestSampleEntries');
+  const samplesEl = document.getElementById(getElementId('SampleEntries'));
   if (!samplesEl) return;
 
   const { entries } = parseResults;
@@ -299,7 +326,7 @@ function displaySampleEntries() {
  * Display warnings if parse quality is poor
  */
 function displayWarnings() {
-  const warningsEl = document.getElementById('patternTestWarnings');
+  const warningsEl = document.getElementById(getElementId('Warnings'));
   if (!warningsEl) return;
 
   const { unknownCount, matchRate } = parseResults;
@@ -380,27 +407,41 @@ async function savePatternConfig() {
  * Test current sample with patterns (pattern editor mode)
  */
 async function testCurrentSample() {
+  console.log('[PatternTestingPanel] testCurrentSample called');
+
   const sampleTextarea = document.getElementById('patternTestSampleText');
-  if (!sampleTextarea) return;
+  if (!sampleTextarea) {
+    console.error('[PatternTestingPanel] Sample textarea not found');
+    return;
+  }
 
   const sampleText = sampleTextarea.value.trim();
   if (!sampleText) {
+    console.warn('[PatternTestingPanel] No sample text to test');
     showError('Please enter sample transcript text to test');
     return;
   }
+
+  console.log('[PatternTestingPanel] Testing sample, length:', sampleText.length);
 
   // Determine file type from sample select
   const sampleSelect = document.getElementById('patternTestSampleSelect');
   const fileType = sampleSelect?.value || 'txt';
 
+  console.log('[PatternTestingPanel] File type:', fileType);
+
   try {
     const response = await window.electronAPI.patternsTestParse(sampleText, `sample.${fileType}`);
+
+    console.log('[PatternTestingPanel] Parse response:', response);
 
     if (!response.success) {
       throw new Error(response.error);
     }
 
     parseResults = response.result;
+    console.log('[PatternTestingPanel] Parse results:', parseResults);
+
     displayParseResults();
   } catch (error) {
     console.error('[PatternTestingPanel] Failed to test parse:', error);
@@ -454,24 +495,12 @@ Hi John, happy to be here.`,
   await testCurrentSample();
 }
 
-/**
- * Generate YAML string from config object
- * Simple YAML generator - for complex needs, would use a library
- */
-function generateYamlFromConfig(config) {
-  const yaml = require('js-yaml');
-  return yaml.dump(config, {
-    indent: 2,
-    lineWidth: 120,
-    noRefs: true,
-  });
-}
 
 /**
  * Show error message
  */
 function showError(message) {
-  const errorEl = document.getElementById('patternTestError');
+  const errorEl = document.getElementById(getElementId('Error'));
   if (errorEl) {
     errorEl.textContent = message;
     errorEl.style.display = 'block';

@@ -101,9 +101,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectImportFolder: () => ipcRenderer.invoke('import:selectFolder'),
   onImportProgress: callback => ipcRenderer.on('import:progress', (_, data) => callback(data)),
   // Pattern Testing (Phase 10.8.2)
+  readTranscriptFile: filePath => ipcRenderer.invoke('patterns:readFile', filePath),
   patternsTestParse: (content, filePath) =>
     ipcRenderer.invoke('patterns:testParse', { content, filePath }),
   patternsGetConfig: () => ipcRenderer.invoke('patterns:getConfig'),
+  patternsGetConfigYaml: () => ipcRenderer.invoke('patterns:getConfigYaml'),
   patternsSaveConfig: configYaml => ipcRenderer.invoke('patterns:saveConfig', { configYaml }),
   // Settings (Phase 10.1 + 10.3)
   getAppVersion: () => ipcRenderer.invoke('settings:getAppVersion'),

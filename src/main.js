@@ -3803,6 +3803,17 @@ ipcMain.handle('import:selectFolder', async () => {
 // Pattern Testing IPC Handlers (Phase 10.8.2)
 // ===================================================================
 
+// Read transcript file content (for import preview)
+ipcMain.handle('patterns:readFile', async (event, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    return { success: true, content };
+  } catch (error) {
+    logger.main.error('[Patterns] Failed to read file:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // Test parsing with given patterns and sample text
 ipcMain.handle('patterns:testParse', async (event, { content, filePath }) => {
   try {
@@ -3851,8 +3862,8 @@ ipcMain.handle('patterns:testParse', async (event, { content, filePath }) => {
 // Get current pattern configuration
 ipcMain.handle('patterns:getConfig', async () => {
   try {
-    const patternConfigLoader = PatternConfigLoader.getInstance();
-    const config = await patternConfigLoader.loadConfig();
+    // PatternConfigLoader is exported as a singleton instance, not a class
+    const config = await PatternConfigLoader.loadConfig();
 
     return {
       success: true,
@@ -3860,6 +3871,64 @@ ipcMain.handle('patterns:getConfig', async () => {
     };
   } catch (error) {
     logger.main.error('[Patterns] Failed to load config:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get current pattern configuration as YAML string (for Monaco editor)
+ipcMain.handle('patterns:getConfigYaml', async () => {
+  try {
+    const userConfigPath = path.join(app.getPath('userData'), 'config', 'transcript-patterns.yaml');
+
+    // Read YAML file directly from user config if it exists
+    if (fs.existsSync(userConfigPath)) {
+      const yamlContent = fs.readFileSync(userConfigPath, 'utf8');
+      return {
+        success: true,
+        yaml: yamlContent,
+      };
+    } else {
+      // If user config doesn't exist, read the default YAML from project
+      // In development, app.getAppPath() points to project root
+      // In production, it points to app.asar
+      const appPath = app.getAppPath();
+      const defaultConfigPath = path.join(appPath, 'config', 'transcript-patterns.yaml');
+
+      logger.main.info(`[Patterns] Looking for default config at: ${defaultConfigPath}`);
+
+      if (fs.existsSync(defaultConfigPath)) {
+        const yamlContent = fs.readFileSync(defaultConfigPath, 'utf8');
+        logger.main.info('[Patterns] Loaded default config from project');
+        return {
+          success: true,
+          yaml: yamlContent,
+        };
+      } else {
+        logger.main.warn('[Patterns] Default config not found at:', defaultConfigPath);
+        // Fallback: minimal YAML config
+        const fallbackYaml = `# Transcript Pattern Configuration
+# Default patterns not found - please create config/transcript-patterns.yaml
+
+patterns: []
+settings:
+  skipEmptyLines: true
+  stripQuotes: true
+  combineConsecutiveSpeaker: false
+  defaultSpeaker: "Unknown"
+  headerStopPatterns:
+    emptyLine: true
+    nextSpeakerHeader: true
+    nextInlineSpeaker: true
+    nextTimestamp: true
+`;
+        return {
+          success: true,
+          yaml: fallbackYaml,
+        };
+      }
+    }
+  } catch (error) {
+    logger.main.error('[Patterns] Failed to load config YAML:', error);
     return { success: false, error: error.message };
   }
 });
@@ -3881,12 +3950,11 @@ ipcMain.handle('patterns:saveConfig', async (event, { configYaml }) => {
     }
 
     // Validate structure using PatternConfigLoader
-    const patternConfigLoader = PatternConfigLoader.getInstance();
     try {
       // Validate each pattern
       if (parsedConfig.patterns && Array.isArray(parsedConfig.patterns)) {
         for (const pattern of parsedConfig.patterns) {
-          patternConfigLoader.validatePattern(pattern);
+          PatternConfigLoader.validatePattern(pattern);
         }
       } else {
         return {
@@ -3911,7 +3979,7 @@ ipcMain.handle('patterns:saveConfig', async (event, { configYaml }) => {
     fs.writeFileSync(configPath, configYaml, 'utf8');
 
     // Force reload the config
-    await patternConfigLoader.loadConfig(true);
+    await PatternConfigLoader.loadConfig(true);
 
     logger.main.info('[Patterns] Saved pattern configuration');
     return { success: true };

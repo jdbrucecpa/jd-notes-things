@@ -3808,6 +3808,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Read import options
     const generateAutoSummary = document.getElementById('generateAutoSummaryCheck').checked;
     const autoExport = document.getElementById('autoExportCheck').checked;
+    const previewParsing = document.getElementById('previewParsingCheck').checked;
 
     // Get selected template IDs
     const selectedTemplateIds = [];
@@ -3818,10 +3819,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('Starting background import of', selectedFiles.length, 'files');
     console.log('Generate auto-summary:', generateAutoSummary);
     console.log('Selected templates:', selectedTemplateIds);
-
-    // Extract file paths from selected files
-    const filePaths = selectedFiles.map(file => file.path);
-    console.log('[Import] Extracted file paths:', filePaths);
+    console.log('Preview parsing:', previewParsing);
 
     // Validate that we have valid paths
     const invalidFiles = selectedFiles.filter(f => !f.path);
@@ -3836,10 +3834,80 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
+    // If preview is enabled, show pattern preview modal for first file
+    if (previewParsing && selectedFiles.length > 0) {
+      await showImportPreview(selectedFiles[0], {
+        generateAutoSummary,
+        selectedTemplateIds,
+        autoExport,
+      });
+      return; // Modal will handle the import on confirm
+    }
+
+    // Otherwise, proceed directly with import
+    await performBatchImport({
+      generateAutoSummary,
+      selectedTemplateIds,
+      autoExport,
+    });
+  });
+
+  /**
+   * Show pattern preview modal for import (Phase 10.8.2)
+   */
+  async function showImportPreview(file, importOptions) {
+    const { initialize } = await import('./renderer/components/PatternTestingPanel.js');
+
+    // Read file content via IPC (can't use fs directly in renderer)
+    const response = await window.electronAPI.readTranscriptFile(file.path);
+
+    if (!response.success) {
+      showToast('Failed to read file for preview: ' + response.error, 'error');
+      return;
+    }
+
+    const fileContent = response.content;
+
+    // Show preview modal
+    const previewModal = document.getElementById('patternPreviewModal');
+    const importModal = document.getElementById('importModal');
+
+    importModal.style.display = 'none';
+    previewModal.style.display = 'flex';
+
+    // Initialize pattern testing panel in import-preview mode
+    await initialize('import-preview', {
+      fileContent,
+      filePath: file.path,
+      fileSize: file.size,
+      onConfirm: async () => {
+        // Close preview modal
+        previewModal.style.display = 'none';
+
+        // Start the import
+        await performBatchImport(importOptions);
+      },
+      onCancel: () => {
+        // Close preview modal and return to import modal
+        previewModal.style.display = 'none';
+        importModal.style.display = 'flex';
+      },
+    });
+  }
+
+  /**
+   * Perform the actual batch import
+   */
+  async function performBatchImport(options) {
+    const { generateAutoSummary, selectedTemplateIds, autoExport } = options;
+
     // Close modal immediately and run in background
     closeImportModal();
     backgroundImportRunning = true;
     updateBackgroundImportIndicator();
+
+    // Extract file paths from selected files
+    const filePaths = selectedFiles.map(file => file.path);
 
     // Show starting notification
     showToast(`Importing ${filePaths.length} transcript${filePaths.length > 1 ? 's' : ''}...`);
@@ -3889,6 +3957,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       backgroundImportRunning = false;
       updateBackgroundImportIndicator();
     }
+  }
+
+  // Close pattern preview modal
+  document.getElementById('closePatternPreviewModal')?.addEventListener('click', () => {
+    document.getElementById('patternPreviewModal').style.display = 'none';
+    document.getElementById('importModal').style.display = 'flex';
   });
 
   // ========================================
