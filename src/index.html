@@ -708,72 +708,7 @@
       </div>
     </div>
 
-    <!-- AI Pattern Generation Modal (Phase 10.8.3) -->
-    <div class="modal-overlay" id="aiPatternGeneratorModal" style="display: none;">
-      <div class="modal-content" style="max-width: 700px;">
-        <div class="modal-header">
-          <h2>✨ Generate Pattern with AI</h2>
-          <button class="modal-close" id="closeAIPatternGeneratorModal">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
-            </svg>
-          </button>
-        </div>
-
-        <div class="modal-body">
-          <p style="margin-bottom: 16px; color: var(--text-secondary);">
-            Paste a sample of your transcript (5-10 lines) and AI will analyze the format and generate a regex pattern to parse it.
-          </p>
-
-          <div style="margin-bottom: 16px;">
-            <label style="display: block; font-weight: 500; margin-bottom: 8px;">Sample Transcript:</label>
-            <textarea
-              id="aiPatternSampleInput"
-              placeholder="Example:&#10;John Smith: Hello everyone&#10;Mary Johnson: Hi John, nice to meet you&#10;John Smith: Let's get started"
-              rows="10"
-              style="width: 100%; padding: 12px; font-family: monospace; font-size: 13px; resize: vertical; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary);"></textarea>
-          </div>
-
-          <div id="aiPatternGenerationStatus" style="display: none; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; margin-bottom: 16px;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div class="spinner" style="width: 16px; height: 16px;"></div>
-              <span id="aiPatternGenerationStatusText">Analyzing transcript format...</span>
-            </div>
-          </div>
-
-          <div id="aiPatternGenerationResult" style="display: none; padding: 12px; background: var(--bg-secondary); border: 1px solid var(--success-color); border-radius: 4px; margin-bottom: 16px;">
-            <div style="font-weight: 500; margin-bottom: 12px; color: var(--success-color);">✓ Pattern Generated Successfully</div>
-
-            <div style="margin-bottom: 12px;">
-              <div style="font-weight: 500; margin-bottom: 4px;">Test Results:</div>
-              <div id="aiPatternGenerationDetails" style="font-size: 13px; color: var(--text-secondary);"></div>
-            </div>
-
-            <div id="aiPatternGenerationWarning" style="display: none; padding: 8px; background: var(--warning-bg, #fff3cd); border: 1px solid var(--warning-border, #ffc107); border-radius: 4px; margin-bottom: 12px; color: var(--warning-text, #856404);">
-              ⚠️ Low match rate detected. The pattern may not work well for your transcript format.
-            </div>
-
-            <div style="margin-bottom: 12px;">
-              <div style="font-weight: 500; margin-bottom: 4px;">Generated Pattern:</div>
-              <pre id="aiPatternGenerationYaml" style="font-size: 11px; padding: 8px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; overflow-x: auto; max-height: 200px;"></pre>
-            </div>
-          </div>
-
-          <div id="aiPatternGenerationError" style="display: none;"></div>
-        </div>
-
-        <div class="modal-footer">
-          <div id="aiPatternGeneratorInitialButtons">
-            <button class="btn btn-secondary" id="aiPatternGeneratorCancelBtn">Cancel</button>
-            <button class="btn btn-primary" id="aiPatternGeneratorGenerateBtn">Generate Pattern</button>
-          </div>
-          <div id="aiPatternGeneratorReviewButtons" style="display: none;">
-            <button class="btn btn-secondary" id="aiPatternGeneratorRetryBtn">Retry</button>
-            <button class="btn btn-primary" id="aiPatternGeneratorApproveBtn">Approve & Add to Config</button>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- AI Pattern Generation Modal removed (Phase 10.8.3 removed) -->
 
     </div><!-- end mainView -->
 
@@ -1179,7 +1114,6 @@
                   <div class="pattern-editor-header">
                     <h4>Pattern Configuration (YAML)</h4>
                     <div style="display: flex; gap: 8px;">
-                      <button class="btn btn-secondary btn-sm" id="patternEditorGenerateBtn">✨ Generate with AI</button>
                       <button class="btn btn-primary btn-sm" id="patternEditorSaveBtn">Save Patterns</button>
                     </div>
                   </div>

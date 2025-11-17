@@ -19,7 +19,6 @@ const PatternConfigLoader = require('./main/import/PatternConfigLoader');
 const { createLLMServiceFromEnv } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
-const PatternGenerationService = require('./main/services/patternGenerationService');
 const yaml = require('js-yaml');
 // const encryptionService = require('./main/services/encryptionService'); // Not needed - Obsidian requires plain text
 const expressApp = require('./server');
@@ -114,10 +113,7 @@ global.getAPIKeySync = getAPIKeySync;
 const llmService = createLLMServiceFromEnv();
 logger.main.info(`LLM Service initialized with provider: ${llmService.getProviderName()}`);
 
-// Initialize Pattern Generation Service (Phase 10.8.3)
-// Uses global llmService which can be temporarily switched via withProviderSwitch()
-const patternGenerationService = new PatternGenerationService(llmService);
-logger.main.info('[PatternGeneration] Service initialized');
+// Pattern Generation Service removed (Phase 10.8.3 removed)
 
 // Express server instance (for webhook endpoint)
 let expressServer = null;
@@ -3995,42 +3991,7 @@ ipcMain.handle('patterns:saveConfig', async (event, { configYaml }) => {
   }
 });
 
-// Generate pattern from sample using AI (Phase 10.8.3)
-ipcMain.handle('patterns:generateFromSample', async (event, { sampleText, previousAttempt }) => {
-  try {
-    logger.main.info('[Patterns] Generating pattern from sample...');
-
-    if (!sampleText || sampleText.trim().length < 20) {
-      return {
-        success: false,
-        error: 'Sample text must be at least 20 characters. Please provide a longer sample (5-10 lines recommended).',
-      };
-    }
-
-    // Use withProviderSwitch to temporarily switch to the pattern generation provider
-    const result = await withProviderSwitch(
-      'pattern',
-      async () => {
-        return await patternGenerationService.generatePatternFromSample(sampleText, previousAttempt);
-      },
-      '[Patterns]'
-    );
-
-    return {
-      success: true,
-      pattern: result.pattern,
-      yaml: result.yaml,
-      testResult: result.testResult,
-      model: result.model,
-    };
-  } catch (error) {
-    logger.main.error('[Patterns] Failed to generate pattern:', error);
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-});
+// AI Pattern Generation removed (Phase 10.8.3 removed)
 
 // ===================================================================
 // End Pattern Testing IPC Handlers
