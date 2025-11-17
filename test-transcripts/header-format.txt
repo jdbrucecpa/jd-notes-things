@@ -1,0 +1,11 @@
+John Smith:
+"Hello everyone, welcome to today's meeting."
+
+Mary Johnson:
+"Thanks for having me, John."
+
+John Smith:
+"Let's get started with the agenda."
+
+Mary Johnson:
+"Sounds good to me."

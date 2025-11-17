@@ -1,0 +1,212 @@
+# Transcript Pattern Configuration
+#
+# This file defines patterns for parsing plain text transcripts (.txt files).
+# The parser attempts patterns in order of priority (1 = highest).
+#
+# Phase 10.8.1 - Pattern Configuration System
+
+# Pattern definitions
+patterns:
+  # ===== SPEAKER HEADER PATTERNS =====
+  # Speaker name on its own line, followed by text on next line(s)
+
+  - id: "header-basic"
+    name: "Speaker Header (Basic)"
+    description: "Speaker name on own line. Example: John:"
+    type: "header"
+    regex: "^([A-Za-z\\s]+):$"
+    captureGroups:
+      speaker: 1
+    enabled: true
+    priority: 1
+    examples:
+      - "John:"
+      - "Mary Smith:"
+
+  - id: "header-extended"
+    name: "Speaker Header (Extended)"
+    description: "Speaker with numbers, hyphens, apostrophes, periods. Example: Dr. O'Brien:"
+    type: "header"
+    regex: "^([A-Za-z0-9\\s.'-]+):$"
+    captureGroups:
+      speaker: 1
+    enabled: true
+    priority: 2
+    examples:
+      - "Dr. Smith:"
+      - "Speaker 1:"
+      - "O'Brien:"
+      - "John-2:"
+
+  - id: "header-no-colon"
+    name: "Speaker Header No Colon (Krisp style)"
+    description: "Speaker name without colon on own line, followed by timestamp - text. Example: Speaker 1"
+    type: "header"
+    regex: "^(Speaker \\d+|You|[A-Za-z][A-Za-z\\s]+)$"
+    captureGroups:
+      speaker: 1
+    enabled: true
+    priority: 2
+    examples:
+      - "Speaker 1"
+      - "Speaker 23"
+      - "You"
+      - "John Smith"
+
+  # ===== INLINE PATTERNS =====
+  # Speaker and text on the same line
+
+  - id: "inline-basic"
+    name: "Inline Speaker with Text (Basic)"
+    description: "Speaker: text on same line. Example: John: Hello there"
+    type: "inline"
+    regex: "^([A-Za-z\\s]+):\\s+(.+)"
+    captureGroups:
+      speaker: 1
+      text: 2
+    enabled: true
+    priority: 3
+    examples:
+      - "John: Hello there"
+      - "Mary Smith: How are you?"
+
+  - id: "inline-extended"
+    name: "Inline Speaker with Text (Extended)"
+    description: "Supports numbers, hyphens, apostrophes, periods in names"
+    type: "inline"
+    regex: "^([A-Za-z0-9\\s.'-]+):\\s+(.+)"
+    captureGroups:
+      speaker: 1
+      text: 2
+    enabled: true
+    priority: 4
+    examples:
+      - "Dr. Smith: Let me explain..."
+      - "Speaker 1: Good morning everyone"
+      - "O'Brien: That's correct"
+
+  - id: "inline-bracketed"
+    name: "Bracketed Speaker Role"
+    description: "Speaker with role/title in brackets. Example: [Moderator] John: Welcome"
+    type: "inline"
+    regex: "^\\[([^\\]]+)\\]\\s*([A-Za-z0-9\\s.'-]+):\\s+(.+)"
+    captureGroups:
+      speaker: 2
+      text: 3
+      role: 1
+    enabled: false
+    priority: 5
+    examples:
+      - "[Moderator] John: Welcome everyone"
+      - "[Host] Mary: Let's begin"
+
+  - id: "inline-parenthetical"
+    name: "Parenthetical Speaker Role"
+    description: "Speaker with role in parentheses. Example: (Host) John: Welcome"
+    type: "inline"
+    regex: "^\\(([^)]+)\\)\\s*([A-Za-z0-9\\s.'-]+):\\s+(.+)"
+    captureGroups:
+      speaker: 2
+      text: 3
+      role: 1
+    enabled: false
+    priority: 6
+    examples:
+      - "(Host) John: Welcome everyone"
+      - "(Presenter) Mary: Let's begin"
+
+  # ===== TIMESTAMP PATTERNS =====
+  # Lines with timestamps
+
+  - id: "timestamp-bracketed"
+    name: "Bracketed Timestamp"
+    description: "Timestamp in brackets. Example: [10:23:45] Hello there"
+    type: "timestamp"
+    regex: "^\\[(\\d{1,2}:?\\d{2}:?\\d{2})\\]\\s*(.+)"
+    captureGroups:
+      timestamp: 1
+      text: 2
+    enabled: true
+    priority: 7
+    examples:
+      - "[10:23:45] Hello there"
+      - "[1:23] Good morning"
+
+  - id: "timestamp-plain"
+    name: "Plain Timestamp"
+    description: "Timestamp without brackets. Example: 10:23:45 Hello there"
+    type: "timestamp"
+    regex: "^(\\d{1,2}:?\\d{2}:?\\d{2})\\s+(.+)"
+    captureGroups:
+      timestamp: 1
+      text: 2
+    enabled: true
+    priority: 8
+    examples:
+      - "10:23:45 Hello there"
+      - "1:23 Good morning"
+
+  - id: "timestamp-dash"
+    name: "Timestamp with Dash"
+    description: "Timestamp with dash separator. Example: 10:23:45 - Hello there"
+    type: "timestamp"
+    regex: "^(\\d{1,2}:?\\d{2}:?\\d{2})\\s*-\\s*(.+)"
+    captureGroups:
+      timestamp: 1
+      text: 2
+    enabled: true
+    priority: 9
+    examples:
+      - "10:23:45 - Hello there"
+      - "1:23 - Good morning"
+
+  # ===== MARKDOWN-SPECIFIC PATTERNS =====
+  # Patterns for markdown transcript files
+
+  - id: "markdown-heading-speaker"
+    name: "Markdown Heading Speaker"
+    description: "Speaker as markdown heading. Example: ## John Smith"
+    type: "header"
+    regex: "^##\\s+(.+)"
+    captureGroups:
+      speaker: 1
+    enabled: true
+    priority: 1
+    examples:
+      - "## John Smith"
+      - "## Dr. Smith"
+
+  - id: "markdown-bold-inline"
+    name: "Markdown Bold Inline Speaker"
+    description: "Speaker in bold with text. Example: **John**: Hello there"
+    type: "inline"
+    regex: "^\\*\\*([^*]+)\\*\\*:\\s*(.+)"
+    captureGroups:
+      speaker: 1
+      text: 2
+    enabled: true
+    priority: 3
+    examples:
+      - "**John Smith**: Hello there"
+      - "**Dr. Smith**: Good morning"
+
+# Settings for pattern matching behavior
+settings:
+  # Skip empty lines
+  skipEmptyLines: true
+
+  # Strip surrounding quotes from text ("text", 'text', "text", «text»)
+  stripQuotes: true
+
+  # Combine multiple consecutive lines from same speaker
+  combineConsecutiveSpeaker: false
+
+  # Default speaker name when no pattern matches
+  defaultSpeaker: "Unknown"
+
+  # Stop collecting text for header pattern when encountering these
+  headerStopPatterns:
+    emptyLine: true
+    nextSpeakerHeader: true
+    nextInlineSpeaker: true
+    nextTimestamp: true

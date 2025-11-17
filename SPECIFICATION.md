@@ -2305,12 +2305,400 @@ Entire meeting history organized and searchable using new system. Background pro
 - Easy access to logs for troubleshooting without leaving the app
 
 ---
-#### Pre 10.8: Code Quality & Validation 🧹
+#### Phase 10.8: Transcript Pattern Learning System 🎯
+
+**Status:** ⏳ PLANNED (3-phase implementation)
+
+**Goal:** Flexible, extensible transcript parsing that can learn new patterns without code changes
+
+**Context:** The current transcript parser (Phase 8) supports two hardcoded patterns for plain text transcripts:
+1. **Inline:** `Name: transcribed speech` - Regex: `/^([A-Za-z\s]+):\s+(.+)/`
+2. **Header:** `Name:\n"transcribed speech"` - Regex: `/^([A-Za-z\s]+):$/`
+
+**Current Limitations:**
+- Hardcoded regex patterns (not user-configurable)
+- No preview/confirmation before import
+- Can't learn new patterns without code changes
+- Won't match speaker names with numbers, hyphens, special chars (e.g., `Speaker 1:`, `Dr. Smith:`, `O'Brien:`)
+- No UI for pattern validation or testing
+
+**Strategic Approach:** 3-phase implementation building on existing architecture (routing.yaml, template files, file-based config philosophy)
+
+---
+
+##### Phase 10.8.1: Pattern Configuration System (Foundation) 🏗️
+
+**Status:** ✅ COMPLETE (January 16, 2025)
+
+**Goal:** Make transcript patterns user-configurable via YAML file (follows routing/template precedent)
+
+**Deliverables:**
+1. ✅ Create `config/transcript-patterns.yaml` configuration file
+2. ✅ Implement `PatternConfigLoader.js` to load and validate patterns
+3. ✅ Refactor `TranscriptParser.js` to use config patterns instead of hardcoded regex
+4. ✅ Ship default patterns covering common formats (11 patterns: 4 header, 4 inline, 3 timestamp)
+5. ✅ Pattern priority system (allows ordering pattern checks)
+6. ✅ Enable/disable individual patterns
+7. ✅ **Extended to markdown files (.md)** - Pattern system works for both .txt and .md formats
+
+**Pattern YAML Schema:**
+```yaml
+patterns:
+  - id: "inline-basic"
+    name: "Inline Speaker with Text"
+    description: "Name: transcribed speech"
+    type: "inline"
+    regex: "^([A-Za-z\\s]+):\\s+(.+)"
+    captureGroups:
+      speaker: 1
+      text: 2
+    enabled: true
+    priority: 2
+
+  - id: "header-quoted"
+    name: "Speaker Header on Own Line"
+    description: "Name:\n\"text\""
+    type: "header"
+    regex: "^([A-Za-z\\s]+):$"
+    captureGroups:
+      speaker: 1
+    enabled: true
+    priority: 1
+
+  - id: "inline-extended"
+    name: "Speaker with Numbers/Special Chars"
+    description: "Supports: Dr. Smith:, Speaker 1:, O'Brien:"
+    type: "inline"
+    regex: "^([A-Za-z0-9\\s.'-]+):\\s+(.+)"
+    captureGroups:
+      speaker: 1
+      text: 2
+    enabled: true
+    priority: 3
+```
+
+**Success Criteria:**
+- ✅ Parser loads patterns from YAML config
+- ✅ Can add/edit patterns without code changes
+- ✅ Backward compatible with existing imports
+- ✅ Priority ordering works correctly
+- ✅ Enable/disable toggles function
+
+**Implementation Details:**
+- **Files Created:**
+  - `config/transcript-patterns.yaml` (197 lines) - Pattern configuration with 11 default patterns (includes markdown-specific)
+  - `src/main/import/PatternConfigLoader.js` (285 lines) - Load, validate, cache patterns
+  - `test-pattern-loader.js` (127 lines) - Comprehensive test suite
+  - `test-transcript-patterns.txt` - Sample transcript for testing
+  - `test-transcripts/` folder with 6 test files (.txt and .md formats)
+- **Files Modified:**
+  - `src/main/import/TranscriptParser.js` - Refactored both `parsePlainText()` and `parseMarkdown()` to use config patterns (~400 lines refactored)
+- **Architecture:**
+  - Singleton pattern for config loader with hot-reload capability
+  - Patterns loaded on demand and cached for performance
+  - Separated patterns by type (header, inline, timestamp) for efficient matching
+- **Validation:**
+  - Zod schema for pattern structure validation
+  - Regex compilation validation
+  - Comprehensive error reporting with path and message
+- **Backward Compatibility:**
+  - Default patterns match original hardcoded behavior
+  - Basic patterns (priority 1-3) identical to Phase 8 implementation
+  - Extended patterns (priority 4+) add support for special characters
+- **Default Patterns Included:**
+  - Header patterns: Basic (letters/spaces), Extended (numbers, apostrophes, periods, hyphens)
+  - Inline patterns: Basic, Extended, Bracketed role (disabled), Parenthetical role (disabled)
+  - Timestamp patterns: Bracketed, Plain, Dash separator
+- **Settings:**
+  - `skipEmptyLines`, `stripQuotes`, `combineConsecutiveSpeaker`
+  - `defaultSpeaker`, `headerStopPatterns` (configurable stop conditions)
+
+**User Value:**
+- ✅ Immediate flexibility to add new transcript formats
+- ✅ No code changes needed for new patterns
+- ✅ Users can edit patterns like they edit routing.yaml
+- ✅ Power users can customize for their specific transcript sources
+- ✅ Supports speaker names with numbers, apostrophes, periods (Dr. Smith, O'Brien, Speaker 1)
+- ✅ Works with both .txt and .md files (markdown support extended after testing with real transcript)
+- ✅ Handles curly quotes (″) and other Unicode quote characters
+
+**Actual Effort:** 4 hours (3 hours initial + 1 hour markdown extension)
+
+---
+
+##### Phase 10.8.2: Unified Pattern Testing Component 🔍
+
+**Status:** ⏳ PLANNED
+
+**Goal:** Build ONE reusable component serving both import preview and pattern development
+
+**Deliverables:**
+1. Create `PatternTestingPanel.js` - Reusable React component with two modes
+2. **Mode 1: Import Preview** - Embedded in import flow
+   - Shows parsed transcript preview before confirming import
+   - Speaker detection statistics (unique speakers, match rate)
+   - Sample parsed entries (first 5-10)
+   - Warning if many "Unknown" speakers detected
+   - Confirm/Cancel buttons
+3. **Mode 2: Pattern Editor** - Standalone in settings
+   - Monaco editor for editing transcript-patterns.yaml
+   - Test area for pasting sample transcript
+   - Live preview of parsed results
+   - Save custom patterns to config
+   - Pattern testing with visual feedback
+4. Integration into existing import modal (Phase 8)
+5. Integration into settings panel (new tab)
+
+**Component Interface:**
+```javascript
+// Import Preview Mode (embedded in import flow)
+<PatternTestingPanel
+  mode="import-preview"
+  sourceFile={selectedFile}
+  patterns={userPatterns}
+  onConfirm={handleImport}
+  onCancel={cancelImport}
+/>
+
+// Pattern Editor Mode (standalone in settings)
+<PatternTestingPanel
+  mode="pattern-editor"
+  editable={true}
+  allowSave={true}
+/>
+```
+
+**Shared Features (both modes):**
+- Parser preview (displays parsed entries with speaker names)
+- Speaker detection stats (count, unique speakers, match rate %)
+- Match rate visualization (progress bar or chart)
+- Sample text input area
+- Pattern selection dropdown (test with different pattern sets)
+
+**Mode-Specific Features:**
+- **Import Preview:** File info header, "Confirm/Cancel" buttons, file path display
+- **Pattern Editor:** Monaco YAML editor, "Save Pattern" button, test samples library, validation errors
+
+**Success Criteria:**
+- ✅ Import flow shows preview before importing
+- ✅ User can validate parsing quality before committing
+- ✅ Settings has pattern testing sandbox
+- ✅ Both modes use same component (DRY principle)
+- ✅ Monaco editor has YAML syntax highlighting
+- ✅ Live preview updates as patterns change
+- ✅ Visual feedback for parse success/failure
+
+**Implementation Details:**
+- **Files:**
+  - `src/renderer/components/PatternTestingPanel.js` (~400-500 lines) - Unified component
+  - `src/renderer/import.js` (modify ~30 lines) - Integrate preview mode
+  - `src/renderer/settings.js` (add ~50 lines) - Add pattern editor tab
+  - `src/index.html` (add ~30 lines) - Pattern editor tab markup
+  - `src/index.css` (add ~100 lines) - Pattern testing styles
+- **IPC Handlers:**
+  - `patterns:testParse` - Test parsing with given patterns and sample text
+  - `patterns:getConfig` - Load current pattern configuration
+  - `patterns:saveConfig` - Save edited patterns with validation
+- **UI Components:**
+  - Pattern statistics display (speakers found, match rate)
+  - Parsed entries preview (table or card layout)
+  - Monaco editor integration (reuse from template editor)
+  - Test sample library (common transcript formats)
+
+**User Value:**
+- No more "import and hope" - see results before committing
+- Confidence that speakers will be detected correctly
+- Pattern development sandbox for testing new formats
+- Consistent UX across import and settings
+- Prevents failed imports due to pattern mismatches
+
+**Estimated Effort:** 6-10 hours
+
+---
+
+##### Phase 10.8.3: LLM Pattern Builder (AI Magic) 🤖
+
+**Status:** ⏳ PLANNED
+
+**Goal:** AI-assisted pattern generation from sample transcripts
+
+**Deliverables:**
+1. Create `PatternGenerationService.js` - LLM-based pattern builder
+2. Design specialized LLM prompt for regex pattern generation
+3. Add "Generate Pattern with AI" button to `PatternTestingPanel`
+4. Sample transcript input modal (5-10 lines minimum)
+5. AI-generated pattern preview with test results
+6. Option to save generated pattern to config
+7. Cost tracking for pattern generation
+
+**User Flow:**
+1. User clicks "Generate Pattern with AI" (available in import preview OR settings)
+2. Modal appears: "Paste 5-10 lines of sample transcript"
+3. User pastes sample (e.g., transcript from new source)
+4. LLM analyzes structure → suggests regex pattern + YAML config
+5. Pattern loads into `PatternTestingPanel` for validation
+6. User tests pattern with full transcript sample
+7. User saves to `transcript-patterns.yaml`
+
+**LLM Prompt Strategy:**
+```javascript
+// Pseudo-code example
+const prompt = `
+Analyze this transcript sample and generate a regex pattern to extract speaker names and text.
+
+Sample transcript:
+${sampleText}
+
+Requirements:
+- Identify the pattern of speaker identification (inline, header, prefix, etc.)
+- Generate a JavaScript-compatible regex pattern
+- Specify capture groups for speaker name and text
+- Output as YAML config matching this schema:
+  id: string (kebab-case)
+  name: string (human-readable)
+  description: string
+  type: "inline" | "header" | "timestamp"
+  regex: string (JavaScript regex)
+  captureGroups:
+    speaker: number (capture group index)
+    text: number (capture group index)
+  enabled: true
+  priority: number
+
+Return ONLY the YAML configuration, no additional text.
+`;
+```
+
+**Success Criteria:**
+- ✅ AI generates valid regex patterns from samples
+- ✅ Generated patterns work on full transcripts
+- ✅ YAML output is valid and loadable
+- ✅ User can test before saving
+- ✅ Cost per generation < $0.05
+- ✅ Works with various transcript formats
+- ✅ Handles edge cases (multi-line, timestamps, special chars)
+
+**Implementation Details:**
+- **Files:**
+  - `src/main/services/patternGenerationService.js` (~200 lines) - LLM pattern builder
+  - `src/renderer/components/PatternTestingPanel.js` (add ~100 lines) - "Generate with AI" button and modal
+  - `src/main.js` (add ~30 lines) - IPC handler for pattern generation
+- **LLM Integration:**
+  - Use existing `llmService.js` with provider switching
+  - Small token budget (~1,000 tokens input, ~500 tokens output)
+  - Estimated cost: $0.01-$0.03 per generation
+  - Cache-friendly (sample transcripts are small)
+- **IPC Handlers:**
+  - `patterns:generateFromSample` - Send sample to LLM, return YAML pattern
+- **Validation:**
+  - Test generated regex against sample text
+  - Validate YAML structure before returning
+  - Show success/failure rate in UI
+
+**Integration with Phase 10.8.2:**
+- "Generate with AI" button appears in both modes (import preview, pattern editor)
+- Generated pattern automatically loads into testing panel
+- User can immediately test with full transcript
+- Save button enabled after successful test
+
+**User Value:**
+- Zero regex knowledge required
+- New transcript format? Paste sample → get pattern in seconds
+- Reduces barrier to extensibility
+- "Magic" factor - app learns from examples
+- Empowers non-technical users to customize
+
+**Cost Analysis:**
+- **Per generation:** ~1,500 tokens total (~$0.02 with gpt-4o-mini)
+- **Usage pattern:** Infrequent (1-5 times per year per user)
+- **Total annual cost:** < $0.10 per user
+- **Value:** Saves hours of regex debugging
+
+**Estimated Effort:** 4-6 hours
+
+---
+
+##### Overall Transcript Pattern Learning Summary
+
+**Total Effort Estimate:** 12-20 hours (across 3 phases)
+
+**Sequential Dependencies:**
+- Phase 10.8.1 MUST complete before 10.8.2 (testing needs config system)
+- Phase 10.8.3 builds on 10.8.2 (AI generates into testing panel)
+
+**User Value Progression:**
+1. **After 10.8.1:** Users can add patterns via YAML (power users)
+2. **After 10.8.2:** All users see preview, validate before import (confidence)
+3. **After 10.8.3:** Non-technical users generate patterns with AI (magic)
+
+**Architectural Benefits:**
+- Follows existing design patterns (routing.yaml, template files)
+- Reuses Monaco editor from template system
+- Leverages existing LLM service with prompt caching
+- One component serves two use cases (DRY principle)
+- File-based config (users can version control, backup)
+
+**Edge Cases Handled:**
+- Speaker names with numbers: `Speaker 1:`, `John-2:`
+- Special characters: `Dr. Smith:`, `O'Brien:`, `[Moderator] John:`
+- Timestamps: `[10:23] John: Hello`, `10:23 - John: Hello`
+- Indentation: `    John: text`
+- Mixed formats in same file (priority system)
+- Quote variations: `«text»`, `'text'`, `"text"`
+
+**Testing Checkpoints:**
+
+**After Phase 10.8.1:**
+- ✅ Load patterns from YAML
+- ✅ Parse transcripts with config patterns
+- ✅ Backward compatible with Phase 8 imports
+- ✅ Priority ordering works
+
+**After Phase 10.8.2:**
+- ✅ Import preview shows before import
+- ✅ Settings pattern editor saves changes
+- ✅ Both modes use same component
+- ✅ Monaco editor syntax highlighting works
+
+**After Phase 10.8.3:**
+- ✅ AI generates valid patterns
+- ✅ Generated patterns test successfully
+- ✅ End-to-end: sample → AI → test → save → import
+
+**Files Modified/Created:**
+
+**Phase 10.8.1:**
+- NEW: `src/main/import/PatternConfigLoader.js` (~150 lines)
+- NEW: `vault/config/transcript-patterns.yaml` (default patterns)
+- MODIFY: `src/main/import/TranscriptParser.js` (refactor ~50 lines)
+
+**Phase 10.8.2:**
+- NEW: `src/renderer/components/PatternTestingPanel.js` (~400-500 lines)
+- MODIFY: `src/renderer/import.js` (~30 lines)
+- MODIFY: `src/renderer/settings.js` (~50 lines)
+- MODIFY: `src/index.html` (~30 lines)
+- MODIFY: `src/index.css` (~100 lines)
+
+**Phase 10.8.3:**
+- NEW: `src/main/services/patternGenerationService.js` (~200 lines)
+- MODIFY: `src/renderer/components/PatternTestingPanel.js` (~100 lines)
+- MODIFY: `src/main.js` (~30 lines for IPC)
+
+**Total Lines of Code:** ~1,200 lines (new + modified)
+
+---
+
+#### Pre 10.9: fixes 🧹
+
+
+
+
+
 - Do Darkmodefixes.md corrections to remove hardcoded colors
 
 
 
-#### Phase 10.8: Code Quality & Validation 🧹
+#### Phase 10.9: Code Quality & Validation 🧹
 
 **Status:** ⏳ ONGOING (Can happen in parallel with other phases)
 

@@ -5,10 +5,12 @@
  * and converts them to a standardized format for import into the system.
  *
  * Phase 8 - Import Prior Transcripts
+ * Phase 10.8.1 - Pattern Configuration System (refactored to use config patterns)
  */
 
 const fs = require('fs').promises;
 const path = require('path');
+const patternConfigLoader = require('./PatternConfigLoader');
 
 class TranscriptParser {
   /**
@@ -22,9 +24,9 @@ class TranscriptParser {
 
     switch (ext) {
       case '.txt':
-        return this.parsePlainText(content, filePath);
+        return await this.parsePlainText(content, filePath);
       case '.md':
-        return this.parseMarkdown(content, filePath);
+        return await this.parseMarkdown(content, filePath);
       case '.vtt':
         return this.parseVTT(content, filePath);
       case '.srt':
@@ -36,137 +38,211 @@ class TranscriptParser {
 
   /**
    * Parse plain text transcript
-   * Attempts to detect timestamps and speaker labels
+   * Uses configurable patterns from transcript-patterns.yaml
+   * Phase 10.8.1 - Refactored to use pattern configuration
    */
-  parsePlainText(content, filePath) {
+  async parsePlainText(content, filePath) {
+    // Load patterns and settings from config
+    const config = await patternConfigLoader.loadConfig();
+    const patterns = await patternConfigLoader.getEnabledPatterns();
+    const settings = await patternConfigLoader.getSettings();
+
     const lines = content.split('\n');
     const entries = [];
     let rawText = '';
 
-    // Pattern for speaker header on its own line (e.g., "John:")
-    const speakerHeaderPattern = /^([A-Za-z\s]+):$/;
-    // Pattern for speaker with text on same line (e.g., "John: Hello")
-    const speakerInlinePattern = /^([A-Za-z\s]+):\s+(.+)/; // Note: \s+ requires at least one space
-    // Pattern for timestamps
-    const timestampPattern = /^\[?(\d{1,2}:?\d{2}:?\d{2})\]?\s*(.+)/;
     // Pattern for quoted text (regular or curly quotes)
-    const quotedTextPattern = /^["″](.+)["″]$/;
+    const quotedTextPattern = /^["″''](.+)["″'']$/;
 
-    let currentSpeaker = 'Unknown';
+    let currentSpeaker = settings.defaultSpeaker || 'Unknown';
     let i = 0;
+
+    // Separate patterns by type for efficiency
+    const headerPatterns = patterns.filter(p => p.type === 'header');
+    const inlinePatterns = patterns.filter(p => p.type === 'inline');
+    const timestampPatterns = patterns.filter(p => p.type === 'timestamp');
 
     while (i < lines.length) {
       const line = lines[i].trim();
 
-      // Skip empty lines
-      if (!line) {
+      // Skip empty lines if configured
+      if (!line && settings.skipEmptyLines) {
         i++;
         continue;
       }
 
-      // Check patterns in order of specificity
-      const headerMatch = line.match(speakerHeaderPattern);
-      const inlineMatch = line.match(speakerInlinePattern);
-      const timestampMatch = line.match(timestampPattern);
+      // Try to match patterns in priority order
+      let matched = false;
 
-      if (headerMatch) {
-        // Speaker header on its own line (e.g., "JD:")
-        currentSpeaker = headerMatch[1].trim();
-        i++;
+      // 1. Try header patterns first (highest priority)
+      for (const pattern of headerPatterns) {
+        const match = line.match(pattern.compiledRegex);
+        if (match) {
+          // Extract speaker from capture group
+          const speakerGroup = pattern.captureGroups.speaker;
+          if (speakerGroup && match[speakerGroup]) {
+            currentSpeaker = match[speakerGroup].trim();
+            i++;
 
-        // Collect text lines for this speaker
-        const textLines = [];
-        while (i < lines.length) {
-          const nextLine = lines[i].trim();
+            // Collect text lines for this speaker
+            const textLines = [];
+            while (i < lines.length) {
+              const nextLine = lines[i].trim();
 
-          // Stop at empty line
-          if (!nextLine) {
+              // Stop at empty line (if configured)
+              if (!nextLine && settings.headerStopPatterns?.emptyLine) {
+                break;
+              }
+
+              // Check if next line matches any stop pattern
+              let shouldStop = false;
+
+              // Stop at next speaker header
+              if (settings.headerStopPatterns?.nextSpeakerHeader) {
+                for (const hp of headerPatterns) {
+                  if (nextLine.match(hp.compiledRegex)) {
+                    shouldStop = true;
+                    break;
+                  }
+                }
+              }
+
+              // Stop at speaker with inline text
+              if (!shouldStop && settings.headerStopPatterns?.nextInlineSpeaker) {
+                for (const ip of inlinePatterns) {
+                  if (nextLine.match(ip.compiledRegex)) {
+                    shouldStop = true;
+                    break;
+                  }
+                }
+              }
+
+              // Stop at timestamp
+              if (!shouldStop && settings.headerStopPatterns?.nextTimestamp) {
+                for (const tp of timestampPatterns) {
+                  if (nextLine.match(tp.compiledRegex)) {
+                    shouldStop = true;
+                    break;
+                  }
+                }
+              }
+
+              if (shouldStop) {
+                break;
+              }
+
+              // Collect this line as text
+              let text = nextLine;
+
+              // Remove surrounding quotes if configured
+              if (settings.stripQuotes) {
+                const quotedMatch = text.match(quotedTextPattern);
+                if (quotedMatch) {
+                  text = quotedMatch[1];
+                }
+              }
+
+              textLines.push(text);
+              i++;
+            }
+
+            // Create entry if we collected any text
+            if (textLines.length > 0) {
+              const combinedText = textLines.join(' ');
+              entries.push({
+                speaker: currentSpeaker,
+                text: combinedText,
+                timestamp: null,
+              });
+              rawText += `${currentSpeaker}: ${combinedText}\n`;
+            }
+
+            matched = true;
             break;
           }
-
-          // Stop at next speaker header
-          if (nextLine.match(speakerHeaderPattern)) {
-            break;
-          }
-
-          // Stop at speaker with inline text
-          if (nextLine.match(speakerInlinePattern)) {
-            break;
-          }
-
-          // Stop at timestamp
-          if (nextLine.match(timestampPattern)) {
-            break;
-          }
-
-          // Collect this line as text
-          let text = nextLine;
-
-          // Remove surrounding quotes if present
-          const quotedMatch = text.match(quotedTextPattern);
-          if (quotedMatch) {
-            text = quotedMatch[1];
-          }
-
-          textLines.push(text);
-          i++;
         }
+      }
 
-        // Create entry if we collected any text
-        if (textLines.length > 0) {
-          const combinedText = textLines.join(' ');
+      if (matched) continue;
+
+      // 2. Try inline patterns
+      for (const pattern of inlinePatterns) {
+        const match = line.match(pattern.compiledRegex);
+        if (match) {
+          // Extract speaker and text from capture groups
+          const speakerGroup = pattern.captureGroups.speaker;
+          const textGroup = pattern.captureGroups.text;
+
+          if (speakerGroup && match[speakerGroup]) {
+            currentSpeaker = match[speakerGroup].trim();
+          }
+
+          let text = textGroup && match[textGroup] ? match[textGroup].trim() : '';
+
+          // Remove quotes if configured
+          if (settings.stripQuotes) {
+            const quotedMatch = text.match(quotedTextPattern);
+            if (quotedMatch) {
+              text = quotedMatch[1];
+            }
+          }
+
           entries.push({
             speaker: currentSpeaker,
-            text: combinedText,
+            text: text,
             timestamp: null,
           });
-          rawText += `${currentSpeaker}: ${combinedText}\n`;
+          rawText += `${currentSpeaker}: ${text}\n`;
+          i++;
+          matched = true;
+          break;
         }
-      } else if (inlineMatch) {
-        // Speaker with text on same line (e.g., "JD: Hello there")
-        currentSpeaker = inlineMatch[1].trim();
-        let text = inlineMatch[2].trim();
-
-        // Remove quotes if present
-        const quotedMatch = text.match(quotedTextPattern);
-        if (quotedMatch) {
-          text = quotedMatch[1];
-        }
-
-        entries.push({
-          speaker: currentSpeaker,
-          text: text,
-          timestamp: null,
-        });
-        rawText += `${currentSpeaker}: ${text}\n`;
-        i++;
-      } else if (timestampMatch) {
-        // Timestamp line
-        entries.push({
-          speaker: 'Unknown',
-          text: timestampMatch[2].trim(),
-          timestamp: this.parseTimestamp(timestampMatch[1]),
-        });
-        rawText += `${timestampMatch[2].trim()}\n`;
-        i++;
-      } else {
-        // Plain text line - attribute to current speaker
-        let text = line;
-
-        // Remove quotes if present
-        const quotedMatch = text.match(quotedTextPattern);
-        if (quotedMatch) {
-          text = quotedMatch[1];
-        }
-
-        entries.push({
-          speaker: currentSpeaker,
-          text: text,
-          timestamp: null,
-        });
-        rawText += `${text}\n`;
-        i++;
       }
+
+      if (matched) continue;
+
+      // 3. Try timestamp patterns
+      for (const pattern of timestampPatterns) {
+        const match = line.match(pattern.compiledRegex);
+        if (match) {
+          const timestampGroup = pattern.captureGroups.timestamp;
+          const textGroup = pattern.captureGroups.text;
+
+          const timestamp = timestampGroup && match[timestampGroup] ? match[timestampGroup] : null;
+          const text = textGroup && match[textGroup] ? match[textGroup].trim() : '';
+
+          entries.push({
+            speaker: currentSpeaker,
+            text: text,
+            timestamp: this.parseTimestamp(timestamp),
+          });
+          rawText += `${text}\n`;
+          i++;
+          matched = true;
+          break;
+        }
+      }
+
+      if (matched) continue;
+
+      // 4. Plain text line - attribute to current speaker
+      let text = line;
+
+      // Remove quotes if configured
+      if (settings.stripQuotes) {
+        const quotedMatch = text.match(quotedTextPattern);
+        if (quotedMatch) {
+          text = quotedMatch[1];
+        }
+      }
+
+      entries.push({
+        speaker: currentSpeaker,
+        text: text,
+        timestamp: null,
+      });
+      rawText += `${text}\n`;
+      i++;
     }
 
     return {
@@ -174,7 +250,7 @@ class TranscriptParser {
       filePath,
       entries,
       rawText: rawText.trim(),
-      hasSpeakers: entries.some(e => e.speaker !== 'Unknown'),
+      hasSpeakers: entries.some(e => e.speaker !== settings.defaultSpeaker),
       hasTimestamps: entries.some(e => e.timestamp !== null),
     };
   }
@@ -182,8 +258,9 @@ class TranscriptParser {
   /**
    * Parse markdown transcript
    * Supports common markdown transcript formats
+   * Phase 10.8.1 - Refactored to use pattern configuration
    */
-  parseMarkdown(content, filePath) {
+  async parseMarkdown(content, filePath) {
     const lines = content.split('\n');
     const entries = [];
     const rawText = '';
@@ -198,64 +275,233 @@ class TranscriptParser {
 
         // Process content after frontmatter
         const mainContent = content.substring(frontmatterEnd + 3);
-        return this.parseMarkdownContent(mainContent, filePath, metadata);
+        return await this.parseMarkdownContent(mainContent, filePath, metadata);
       }
     }
 
     // Parse without frontmatter
-    return this.parseMarkdownContent(content, filePath, metadata);
+    return await this.parseMarkdownContent(content, filePath, metadata);
   }
 
-  parseMarkdownContent(content, filePath, metadata) {
+  async parseMarkdownContent(content, filePath, metadata) {
+    // Load patterns and settings from config (same as plain text)
+    const config = await patternConfigLoader.loadConfig();
+    const patterns = await patternConfigLoader.getEnabledPatterns();
+    const settings = await patternConfigLoader.getSettings();
+
     const lines = content.split('\n');
     const entries = [];
     let rawText = '';
 
-    // Patterns for markdown transcripts
-    const speakerHeaderPattern = /^##\s+(.+)/; // ## Speaker Name
-    const speakerInlinePattern = /^\*\*([^*]+)\*\*:\s*(.+)/; // **Speaker**: text
-    const timestampPattern = /^(\d{1,2}:\d{2}(?::\d{2})?)\s+-\s+(.+)/; // 00:15:30 - text
+    // Pattern for quoted text (regular or curly quotes)
+    const quotedTextPattern = /^["″''](.+)["″'']$/;
 
-    let currentSpeaker = 'Unknown';
+    let currentSpeaker = settings.defaultSpeaker || 'Unknown';
+    let i = 0;
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
+    // Separate patterns by type for efficiency
+    const headerPatterns = patterns.filter(p => p.type === 'header');
+    const inlinePatterns = patterns.filter(p => p.type === 'inline');
+    const timestampPatterns = patterns.filter(p => p.type === 'timestamp');
 
-      // Skip markdown headers (unless they're speaker names)
-      if (line.startsWith('#')) {
-        const headerMatch = line.match(speakerHeaderPattern);
-        if (headerMatch) {
-          currentSpeaker = headerMatch[1].trim();
-        }
+    while (i < lines.length) {
+      const line = lines[i].trim();
+
+      // Skip empty lines if configured
+      if (!line && settings.skipEmptyLines) {
+        i++;
         continue;
       }
 
-      const speakerMatch = line.match(speakerInlinePattern);
-      const timestampMatch = line.match(timestampPattern);
-
-      if (speakerMatch) {
-        entries.push({
-          speaker: speakerMatch[1].trim(),
-          text: speakerMatch[2].trim(),
-          timestamp: null,
-        });
-        rawText += `${speakerMatch[1].trim()}: ${speakerMatch[2].trim()}\n`;
-      } else if (timestampMatch) {
-        entries.push({
-          speaker: currentSpeaker,
-          text: timestampMatch[2].trim(),
-          timestamp: this.parseTimestamp(timestampMatch[1]),
-        });
-        rawText += `${timestampMatch[2].trim()}\n`;
-      } else if (line.trim() && !line.startsWith('<!--')) {
-        // Regular line (skip HTML comments)
-        entries.push({
-          speaker: currentSpeaker,
-          text: line.trim(),
-          timestamp: null,
-        });
-        rawText += `${line.trim()}\n`;
+      // Skip HTML comments
+      if (line.startsWith('<!--')) {
+        i++;
+        continue;
       }
+
+      // Try to match patterns in priority order
+      let matched = false;
+
+      // 1. Try header patterns first (highest priority)
+      for (const pattern of headerPatterns) {
+        const match = line.match(pattern.compiledRegex);
+        if (match) {
+          // Extract speaker from capture group
+          const speakerGroup = pattern.captureGroups.speaker;
+          if (speakerGroup && match[speakerGroup]) {
+            currentSpeaker = match[speakerGroup].trim();
+            i++;
+
+            // For markdown headings (##), just set speaker and continue
+            if (line.startsWith('#')) {
+              matched = true;
+              break;
+            }
+
+            // Collect text lines for this speaker (non-markdown header patterns)
+            const textLines = [];
+            while (i < lines.length) {
+              const nextLine = lines[i].trim();
+
+              // Stop at empty line (if configured)
+              if (!nextLine && settings.headerStopPatterns?.emptyLine) {
+                break;
+              }
+
+              // Stop at HTML comments
+              if (nextLine.startsWith('<!--')) {
+                break;
+              }
+
+              // Check if next line matches any stop pattern
+              let shouldStop = false;
+
+              // Stop at next speaker header
+              if (settings.headerStopPatterns?.nextSpeakerHeader) {
+                for (const hp of headerPatterns) {
+                  if (nextLine.match(hp.compiledRegex)) {
+                    shouldStop = true;
+                    break;
+                  }
+                }
+              }
+
+              // Stop at speaker with inline text
+              if (!shouldStop && settings.headerStopPatterns?.nextInlineSpeaker) {
+                for (const ip of inlinePatterns) {
+                  if (nextLine.match(ip.compiledRegex)) {
+                    shouldStop = true;
+                    break;
+                  }
+                }
+              }
+
+              // Stop at timestamp
+              if (!shouldStop && settings.headerStopPatterns?.nextTimestamp) {
+                for (const tp of timestampPatterns) {
+                  if (nextLine.match(tp.compiledRegex)) {
+                    shouldStop = true;
+                    break;
+                  }
+                }
+              }
+
+              if (shouldStop) {
+                break;
+              }
+
+              // Collect this line as text
+              let text = nextLine;
+
+              // Remove surrounding quotes if configured
+              if (settings.stripQuotes) {
+                const quotedMatch = text.match(quotedTextPattern);
+                if (quotedMatch) {
+                  text = quotedMatch[1];
+                }
+              }
+
+              textLines.push(text);
+              i++;
+            }
+
+            // Create entry if we collected any text
+            if (textLines.length > 0) {
+              const combinedText = textLines.join(' ');
+              entries.push({
+                speaker: currentSpeaker,
+                text: combinedText,
+                timestamp: null,
+              });
+              rawText += `${currentSpeaker}: ${combinedText}\n`;
+            }
+
+            matched = true;
+            break;
+          }
+        }
+      }
+
+      if (matched) continue;
+
+      // 2. Try inline patterns
+      for (const pattern of inlinePatterns) {
+        const match = line.match(pattern.compiledRegex);
+        if (match) {
+          // Extract speaker and text from capture groups
+          const speakerGroup = pattern.captureGroups.speaker;
+          const textGroup = pattern.captureGroups.text;
+
+          if (speakerGroup && match[speakerGroup]) {
+            currentSpeaker = match[speakerGroup].trim();
+          }
+
+          let text = textGroup && match[textGroup] ? match[textGroup].trim() : '';
+
+          // Remove quotes if configured
+          if (settings.stripQuotes) {
+            const quotedMatch = text.match(quotedTextPattern);
+            if (quotedMatch) {
+              text = quotedMatch[1];
+            }
+          }
+
+          entries.push({
+            speaker: currentSpeaker,
+            text: text,
+            timestamp: null,
+          });
+          rawText += `${currentSpeaker}: ${text}\n`;
+          i++;
+          matched = true;
+          break;
+        }
+      }
+
+      if (matched) continue;
+
+      // 3. Try timestamp patterns
+      for (const pattern of timestampPatterns) {
+        const match = line.match(pattern.compiledRegex);
+        if (match) {
+          const timestampGroup = pattern.captureGroups.timestamp;
+          const textGroup = pattern.captureGroups.text;
+
+          const timestamp = timestampGroup && match[timestampGroup] ? match[timestampGroup] : null;
+          const text = textGroup && match[textGroup] ? match[textGroup].trim() : '';
+
+          entries.push({
+            speaker: currentSpeaker,
+            text: text,
+            timestamp: this.parseTimestamp(timestamp),
+          });
+          rawText += `${text}\n`;
+          i++;
+          matched = true;
+          break;
+        }
+      }
+
+      if (matched) continue;
+
+      // 4. Plain text line - attribute to current speaker
+      let text = line;
+
+      // Remove quotes if configured
+      if (settings.stripQuotes) {
+        const quotedMatch = text.match(quotedTextPattern);
+        if (quotedMatch) {
+          text = quotedMatch[1];
+        }
+      }
+
+      entries.push({
+        speaker: currentSpeaker,
+        text: text,
+        timestamp: null,
+      });
+      rawText += `${text}\n`;
+      i++;
     }
 
     return {
@@ -264,7 +510,7 @@ class TranscriptParser {
       entries,
       rawText: rawText.trim(),
       metadata,
-      hasSpeakers: entries.some(e => e.speaker !== 'Unknown'),
+      hasSpeakers: entries.some(e => e.speaker !== settings.defaultSpeaker),
       hasTimestamps: entries.some(e => e.timestamp !== null),
     };
   }

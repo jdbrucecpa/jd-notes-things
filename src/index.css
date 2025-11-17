@@ -11,6 +11,18 @@
   --bg-secondary: #f0f0f0;
   --card-hover: #f5f5f5;
   --primary-color: #007aff;
+
+  /* Status indicators */
+  --status-recording: #ff3b30;
+  --status-connected: #4285f4;
+  --status-success: #4caf50;
+
+  /* Event colors */
+  --event-meeting: #6947bd;
+  --event-break: #059669;
+
+  /* Brand colors */
+  --brand-google: #4285f4;
 }
 
 /* Dark Theme Variables */
@@ -26,6 +38,44 @@ body.dark-theme {
   --bg-secondary: #252525;
   --card-hover: #353535;
   --primary-color: #0a84ff;
+
+  /* Status indicators (adjusted for dark mode) */
+  --status-recording: #ff6961;
+  --status-connected: #5a9fd4;
+  --status-success: #6fbf73;
+
+  /* Event colors (adjusted for dark mode) */
+  --event-meeting: #8b5cf6;
+  --event-break: #10b981;
+
+  /* Brand colors (Google blue stays same for brand consistency) */
+  --brand-google: #4285f4;
+}
+
+/* Scrollbar Styling */
+/* Webkit scrollbars (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Firefox scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) var(--bg-primary);
 }
 
 * {
@@ -114,7 +164,7 @@ body {
   padding: 8px 8px 8px 35px;
   border-radius: 5px;
   border: 1px solid var(--border-color);
-  background-color: #f2f2f2;
+  background-color: var(--bg-secondary);
   font-size: 14px;
   -webkit-app-region: no-drag; /* Make input not draggable to allow text selection */
 }
@@ -220,7 +270,7 @@ body {
 }
 
 .llm-dropdown:hover {
-  background-color: #f5f5f5;
+  background-color: var(--card-hover);
   border-color: #999;
 }
 
@@ -250,7 +300,7 @@ body {
 }
 
 .transcription-dropdown:hover {
-  background-color: #f5f5f5;
+  background-color: var(--card-hover);
   border-color: #999;
 }
 
@@ -271,12 +321,12 @@ body {
 }
 
 .google-btn:hover {
-  background-color: #f5f5f5;
+  background-color: var(--card-hover);
 }
 
 .google-btn.connected {
-  color: #4285f4;
-  border-color: #4285f4;
+  color: var(--brand-google);
+  border-color: var(--brand-google);
 }
 
 .google-status {
@@ -291,7 +341,7 @@ body {
 }
 
 .google-btn.connected .google-status {
-  background-color: #4285f4;
+  background-color: var(--brand-google);
 }
 
 /* Import Button */
@@ -308,7 +358,7 @@ body {
 }
 
 .import-btn:hover {
-  background-color: #f5f5f5;
+  background-color: var(--card-hover);
   color: var(--primary-color);
 }
 
@@ -377,13 +427,13 @@ body {
 }
 
 .btn-outline:hover {
-  background-color: #F8F8F8;
+  background-color: var(--card-hover);
   border-color: #6947BD;
   color: #6947BD;
 }
 
 .btn-outline:active {
-  background-color: #F0F0F0;
+  background-color: var(--bg-secondary);
 }
 
 .btn-icon-text {
@@ -404,8 +454,8 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 12px 20px;
-  background-color: #F5F5F5;
-  border-bottom: 1px solid #E0E0E0;
+  background-color: var(--card-hover);
+  border-bottom: 1px solid var(--border-color);
   gap: 16px;
   position: sticky;
   top: 0;
@@ -448,8 +498,8 @@ body {
 }
 
 .meeting-card.selected {
-  background-color: #E3F2FD;
-  border: 2px solid #2196F3;
+  background-color: var(--light-purple);
+  border: 2px solid var(--primary-color);
 }
 
 .meeting-select-checkbox {
@@ -747,9 +797,9 @@ body {
   padding: 8px 12px;
   font-family: 'Courier New', monospace;
   font-size: 13px;
-  color: #333;
-  background-color: white;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: var(--text-primary);
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: 4px;
   outline: none;
   transition:
@@ -772,8 +822,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   font-size: 16px;
   line-height: 1.6;
-  color: #333;
-  background-color: white;
+  color: var(--text-primary);
+  background-color: var(--card-bg);
   padding: 20px;
   border: none;
   border-radius: 4px;
@@ -882,7 +932,7 @@ body {
   align-items: center;
   gap: 8px;
   padding: 5px;
-  background-color: white;
+  background-color: var(--card-bg);
   border-radius: 25px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
@@ -891,7 +941,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f5f5f5;
+  background: var(--card-hover);
   border: none;
   border-radius: 20px;
   min-width: 36px;
@@ -900,19 +950,19 @@ body {
   transition:
     background-color 0.2s,
     color 0.2s;
-  color: #666;
+  color: var(--text-secondary);
   padding: 0 15px;
   font-size: 13px;
   font-weight: 500;
 }
 
 .control-btn:hover {
-  background-color: #eaeaea;
+  background-color: var(--bg-secondary);
 }
 
 .record-btn {
-  color: #666;
-  background: #f5f5f5;
+  color: var(--text-secondary);
+  background: var(--card-hover);
   border-radius: 50%;
   padding: 0;
   width: 36px;
@@ -920,17 +970,17 @@ body {
 }
 
 .record-btn:hover {
-  background-color: #eaeaea;
+  background-color: var(--bg-secondary);
 }
 
 .record-btn.recording {
   color: #fff;
-  background-color: #ff3b30;
+  background-color: var(--status-recording);
 }
 
 /* Upload Progress */
 .upload-progress {
-  background-color: white;
+  background-color: var(--card-bg);
   border-radius: 20px;
   padding: 12px 20px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
@@ -939,7 +989,7 @@ body {
 
 .upload-progress-bar {
   height: 6px;
-  background-color: #e0e0e0;
+  background-color: var(--border-color);
   border-radius: 3px;
   overflow: hidden;
   margin-bottom: 8px;
@@ -947,25 +997,27 @@ body {
 
 .upload-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #6947bd, #8b5cf6);
+  background: linear-gradient(90deg, var(--event-meeting), var(--event-meeting));
+  filter: brightness(1.1);
   border-radius: 3px;
   transition: width 0.3s ease;
 }
 
 .upload-progress-text {
   font-size: 12px;
-  color: #666;
+  color: var(--text-secondary);
   text-align: center;
   font-weight: 500;
 }
 
 .record-btn.recording:hover {
-  background-color: #d93129;
+  background-color: var(--status-recording);
+  filter: brightness(0.9);
 }
 
 .generate-btn {
-  color: #00957b;
-  background: #e3f3f1;
+  color: var(--event-break);
+  background: var(--light-green);
   font-weight: 500;
   font-size: 13px;
   display: flex;
@@ -974,8 +1026,8 @@ body {
 }
 
 .obsidian-btn {
-  color: #7c3aed;
-  background: #f3e8ff;
+  color: var(--event-meeting);
+  background: var(--light-purple);
   font-weight: 500;
   font-size: 13px;
   display: flex;
@@ -985,16 +1037,18 @@ body {
 }
 
 .obsidian-btn:hover {
-  background: #e9d5ff;
+  background: var(--light-purple);
+  filter: brightness(0.95);
 }
 
 .obsidian-btn.published {
-  color: #059669;
-  background: #d1fae5;
+  color: var(--event-break);
+  background: var(--light-green);
 }
 
 .obsidian-btn.published:hover {
-  background: #a7f3d0;
+  background: var(--light-green);
+  filter: brightness(0.9);
 }
 
 /* Obsidian sync badge on meeting cards */
@@ -1009,13 +1063,13 @@ body {
   right: -3px;
   width: 18px;
   height: 18px;
-  background: #059669;
+  background: var(--event-break);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-  border: 2px solid white;
+  border: 2px solid var(--card-bg);
 }
 
 .obsidian-sync-badge svg {
@@ -1061,8 +1115,8 @@ body {
   right: 0;
   width: 50%; /* Takes up half the screen */
   height: 100vh;
-  background-color: #1e1e1e;
-  color: #e0e0e0;
+  background-color: var(--card-bg);
+  color: var(--text-primary);
   z-index: 999; /* Ensure it's above everything */
   display: flex;
   flex-direction: column;
@@ -1082,8 +1136,8 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 10px 15px;
-  background-color: #333;
-  border-bottom: 1px solid #444;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .debug-panel-header h3 {
@@ -1116,8 +1170,8 @@ body {
   right: 0;
   width: 40px;
   height: 40px;
-  background: #333;
-  color: #fff;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
   border: none;
   border-radius: 4px 0 0 4px;
   cursor: pointer;
@@ -1130,7 +1184,7 @@ body {
 }
 
 .debug-panel-toggle:hover {
-  background: #444;
+  background: var(--border-color);
 }
 
 .debug-panel-toggle:before {
@@ -1240,7 +1294,7 @@ body {
 }
 
 .debug-section {
-  background-color: #252525;
+  background-color: var(--bg-primary);
   border-radius: 6px;
   overflow: hidden;
   display: flex;
@@ -1255,8 +1309,8 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 8px 15px;
-  background-color: #333;
-  border-bottom: 1px solid #444;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .debug-section-header h4 {
@@ -1302,7 +1356,7 @@ body {
 }
 
 .video-placeholder {
-  background-color: #1a1a1a;
+  background-color: var(--bg-primary);
   border-radius: 4px;
   min-height: 120px;
 }
@@ -1318,23 +1372,23 @@ body {
 .transcript-entry {
   padding: 8px;
   border-radius: 4px;
-  background-color: #2a2a2a;
+  background-color: var(--card-bg);
   position: relative;
 }
 
 .transcript-entry.newest-entry {
-  background-color: #2d3b4a;
-  border-left: 3px solid #0077ff;
+  background-color: var(--bg-secondary);
+  border-left: 3px solid var(--primary-color);
 }
 
 .transcript-speaker {
   font-weight: bold;
-  color: #0077ff;
+  color: var(--primary-color);
   margin-bottom: 4px;
 }
 
 .transcript-text {
-  color: #e0e0e0;
+  color: var(--text-primary);
   margin-bottom: 4px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
@@ -1359,7 +1413,7 @@ body {
   gap: 10px;
   padding: 8px;
   border-radius: 4px;
-  background-color: #2a2a2a;
+  background-color: var(--card-bg);
 }
 
 .participant-avatar {
@@ -1387,7 +1441,7 @@ body {
 /* Video preview styling */
 .video-participant-container {
   margin-bottom: 15px;
-  background-color: #1a1a1a;
+  background-color: var(--bg-primary);
   border-radius: 4px;
   overflow: hidden;
   position: relative;
@@ -1435,8 +1489,8 @@ body {
   margin-bottom: 10px;
   padding: 8px;
   border-radius: 4px;
-  background-color: #2a2a2a;
-  border-left: 3px solid #555;
+  background-color: var(--card-bg);
+  border-left: 3px solid var(--border-color);
   word-break: break-word;
 }
 
@@ -1602,20 +1656,20 @@ body {
 }
 
 .template-item:hover {
-  border-color: #007aff;
-  background: #f8f9fa;
+  border-color: var(--primary-color);
+  background: var(--card-hover);
 }
 
 .template-item.selected {
-  border-color: #007aff;
-  background: #e3f2fd;
+  border-color: var(--primary-color);
+  background: var(--light-purple);
 }
 
 .template-checkbox {
   flex-shrink: 0;
   width: 20px;
   height: 20px;
-  border: 2px solid #ccc;
+  border: 2px solid var(--border-color);
   border-radius: 4px;
   display: flex;
   align-items: center;
@@ -1624,8 +1678,8 @@ body {
 }
 
 .template-item.selected .template-checkbox {
-  background: #007aff;
-  border-color: #007aff;
+  background: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
 .template-checkbox svg {
@@ -1667,7 +1721,7 @@ body {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  background: #f0f0f0;
+  background: var(--bg-secondary);
   border-radius: 4px;
   font-weight: 500;
 }
@@ -1682,7 +1736,7 @@ body {
 .cost-estimate {
   margin-top: 24px;
   padding: 16px;
-  background: #f8f9fa;
+  background: var(--bg-secondary);
   border-radius: 8px;
   border: 1px solid var(--border-color);
 }
@@ -1898,16 +1952,16 @@ body {
 }
 
 .btn-secondary {
-  background: #f0f0f0;
+  background: var(--bg-secondary);
   color: var(--text-primary);
 }
 
 .btn-secondary:hover {
-  background: #e0e0e0;
+  background: var(--border-color);
 }
 
 .btn-primary {
-  background: #007aff;
+  background: var(--primary-color);
   color: white;
 }
 
@@ -1916,7 +1970,7 @@ body {
 }
 
 .btn-primary:disabled {
-  background: #ccc;
+  background: var(--border-color);
   cursor: not-allowed;
   opacity: 0.6;
 }
@@ -2127,7 +2181,7 @@ body {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4285f4 0%, #34a853 100%);
+  background: linear-gradient(90deg, var(--brand-google) 0%, var(--status-success) 100%);
   transition: width 0.3s ease;
   width: 0%;
 }
@@ -2136,7 +2190,7 @@ body {
   font-size: 13px;
   color: var(--text-secondary);
   padding: 8px 12px;
-  background: #f5f5f5;
+  background: var(--card-hover);
   border-radius: 4px;
   font-family: monospace;
 }
