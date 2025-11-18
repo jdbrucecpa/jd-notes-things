@@ -4,6 +4,7 @@
  */
 
 import * as monaco from 'monaco-editor';
+import { createModal } from './utils/modalHelper.js';
 
 let routingEditor = null;
 let routingConfig = null;
@@ -363,55 +364,33 @@ async function refreshRouting() {
 async function undoRouting() {
   console.log('[RoutingEditor] Restoring from backup...');
 
-  // Confirm undo
-  const confirmModal = document.createElement('div');
-  confirmModal.className = 'modal-overlay';
-  confirmModal.innerHTML = `
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <h3>Restore from Backup</h3>
-        <button class="modal-close" id="closeUndoModal">×</button>
-      </div>
-      <div class="modal-body">
-        <p style="margin-bottom: 16px;">Are you sure you want to restore the routing configuration from the backup file?</p>
-        <p style="color: var(--text-secondary); font-size: 13px;">This will discard any unsaved changes in the editor.</p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="cancelUndo">Cancel</button>
-        <button class="btn-primary" id="confirmUndo">Restore Backup</button>
-      </div>
-    </div>
-  `;
+  // Confirm undo using modal helper
+  createModal({
+    title: 'Restore from Backup',
+    body: `
+      <p style="margin-bottom: 16px;">Are you sure you want to restore the routing configuration from the backup file?</p>
+      <p style="color: var(--text-secondary); font-size: 13px;">This will discard any unsaved changes in the editor.</p>
+    `,
+    confirmText: 'Restore Backup',
+    cancelText: 'Cancel',
+    onConfirm: async () => {
+      try {
+        const response = await window.electronAPI.routingRestoreBackup();
 
-  document.body.appendChild(confirmModal);
+        if (!response || !response.success) {
+          throw new Error(response?.error || 'Failed to restore from backup');
+        }
 
-  const closeBtn = confirmModal.querySelector('#closeUndoModal');
-  const cancelBtn = confirmModal.querySelector('#cancelUndo');
-  const confirmBtn = confirmModal.querySelector('#confirmUndo');
+        window.showToast('Configuration restored from backup successfully', 'success');
 
-  const closeModal = () => {
-    document.body.removeChild(confirmModal);
-  };
-
-  closeBtn.addEventListener('click', closeModal);
-  cancelBtn.addEventListener('click', closeModal);
-
-  confirmBtn.addEventListener('click', async () => {
-    try {
-      const response = await window.electronAPI.routingRestoreBackup();
-
-      if (!response || !response.success) {
-        throw new Error(response?.error || 'Failed to restore from backup');
+        // Reload the configuration
+        await loadRouting();
+      } catch (error) {
+        console.error('[RoutingEditor] Failed to restore backup:', error);
+        window.showToast('Failed to restore: ' + error.message, 'error');
+        // Re-throw to let modalHelper handle the error state
+        throw error;
       }
-
-      window.showToast('Configuration restored from backup successfully', 'success');
-      closeModal();
-
-      // Reload the configuration
-      await loadRouting();
-    } catch (error) {
-      console.error('[RoutingEditor] Failed to restore backup:', error);
-      window.showToast('Failed to restore: ' + error.message, 'error');
     }
   });
 }
