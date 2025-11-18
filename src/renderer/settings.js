@@ -338,7 +338,7 @@ export function initializeSettingsUI() {
   if (autoSummaryProviderSelect) {
     autoSummaryProviderSelect.addEventListener('change', (e) => {
       updateSetting('autoSummaryProvider', e.target.value);
-      showToast(`Auto-summary provider changed to ${e.target.options[e.target.selectedIndex].text}`);
+      window.showToast(`Auto-summary provider changed to ${e.target.options[e.target.selectedIndex].text}`, 'success');
     });
   }
 
@@ -346,7 +346,7 @@ export function initializeSettingsUI() {
   if (templateSummaryProviderSelect) {
     templateSummaryProviderSelect.addEventListener('change', (e) => {
       updateSetting('templateSummaryProvider', e.target.value);
-      showToast(`Template summary provider changed to ${e.target.options[e.target.selectedIndex].text}`);
+      window.showToast(`Template summary provider changed to ${e.target.options[e.target.selectedIndex].text}`, 'success');
     });
   }
 
@@ -354,7 +354,7 @@ export function initializeSettingsUI() {
   if (patternGenerationProviderSelect) {
     patternGenerationProviderSelect.addEventListener('change', (e) => {
       updateSetting('patternGenerationProvider', e.target.value);
-      showToast(`Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`);
+      window.showToast(`Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`, 'success');
     });
   }
 
@@ -362,7 +362,7 @@ export function initializeSettingsUI() {
   if (exportSettingsBtn) {
     exportSettingsBtn.addEventListener('click', () => {
       exportSettings();
-      showToast('Settings exported successfully');
+      window.showToast('Settings exported successfully', 'success');
     });
   }
 
@@ -380,14 +380,14 @@ export function initializeSettingsUI() {
 
       try {
         await importSettings(file);
-        showToast('Settings imported successfully');
+        window.showToast('Settings imported successfully', 'success');
         loadSettingsIntoUI();
 
         // Clear file input
         e.target.value = '';
       } catch (error) {
         console.error('Error importing settings:', error);
-        showToast('Failed to import settings: ' + error.message);
+        window.showToast('Failed to import settings: ' + error.message, 'error');
       }
     });
   }
@@ -459,22 +459,7 @@ export function initializeSettingsUI() {
     }
   }
 
-  /**
-   * Show toast notification
-   */
-  function showToast(message) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    setTimeout(() => {
-      toast.style.opacity = '0';
-      setTimeout(() => {
-        document.body.removeChild(toast);
-      }, 300);
-    }, 2000);
-  }
+  // Use global showToast from renderer.js (available via window.showToast)
 
   // Initial load
   loadSettingsIntoUI();

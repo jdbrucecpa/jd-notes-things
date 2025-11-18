@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onVideoFrame: callback => ipcRenderer.on('video-frame', (_, data) => callback(data)),
   onMeetingDetectionStatus: callback =>
     ipcRenderer.on('meeting-detection-status', (_, data) => callback(data)),
+  onShowToast: callback => ipcRenderer.on('show-toast', (_, data) => callback(data)),
   onAuthExpired: callback => ipcRenderer.on('auth:expired', (_, data) => callback(data)),
   getActiveRecordingId: noteId => ipcRenderer.invoke('getActiveRecordingId', noteId),
   // Unified Google Authentication (Calendar + Contacts)

@@ -2148,6 +2148,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Listen for toast notifications from main process
+  window.electronAPI.onShowToast(data => {
+    console.log('Received toast from main process:', data);
+    showToast(data.message, data.type || 'info');
+  });
+
   // Listen for authentication expiration notifications
   window.electronAPI.onAuthExpired(data => {
     console.log('Authentication expired:', data);
@@ -2891,24 +2897,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.getItem('transcriptionProvider')
       );
 
-      // Show confirmation toast
-      const toast = document.createElement('div');
-      toast.className = 'toast success';
+      // Show confirmation toast using global showToast
       const providerNames = {
         recallai: 'Recall.ai',
         assemblyai: 'AssemblyAI',
         deepgram: 'Deepgram',
       };
-      toast.textContent = `Transcription provider: ${providerNames[newProvider] || newProvider}`;
-      toast.style.cssText =
-        'position: fixed; top: 80px; right: 20px; background: #4CAF50; color: white; padding: 12px 20px; border-radius: 5px; font-size: 14px; z-index: 10000; box-shadow: 0 2px 8px rgba(0,0,0,0.2);';
-      document.body.appendChild(toast);
-
-      setTimeout(() => {
-        toast.style.transition = 'opacity 0.3s ease';
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-      }, 2000);
+      showToast(`Transcription provider changed to ${providerNames[newProvider] || newProvider}`, 'success');
     });
   }
 

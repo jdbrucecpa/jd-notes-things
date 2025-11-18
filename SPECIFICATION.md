@@ -2833,6 +2833,363 @@ Focus only on items #1-4 above (total: 21-29 hours) for measurable reliability a
 
 ---
 
+## Phase 10.9: Incremental Refactoring Progress
+
+**Status:** 🔄 IN PROGRESS (January 17, 2025)
+
+**Approach:** Implementing high-value refactorings one-by-one with testing and commits between each.
+
+### ✅ Refactor #1: Toast Notification Consolidation (COMPLETE)
+
+**Completed:** January 17, 2025
+**Lines Removed:** ~60 lines
+
+**Changes Made:**
+1. Removed 4 duplicate toast implementations:
+   - `src/renderer/settings.js` - 15-line duplicate removed
+   - `src/renderer/securitySettings.js` - 16-line duplicate removed
+   - `src/renderer.js` - 18-line inline toast (transcription provider) removed
+   - All now use `window.showToast(message, type)` from renderer.js
+
+2. Converted meeting detection from Windows Notification to toast:
+   - `src/main.js:1470-1478` - Now sends `show-toast` event to renderer
+   - `src/preload.js:51` - Added `onShowToast` listener
+   - `src/renderer.js:2151-2155` - Added handler for `show-toast` events
+
+3. Updated 17 toast calls with appropriate type parameters:
+   - `'success'` - Green (settings saved, keys migrated, etc.)
+   - `'error'` - Red (failures, validation errors)
+   - `'warning'` - Orange/amber (empty values, warnings)
+   - `'info'` - Blue (testing, informational)
+
+**Files Modified:**
+- `src/renderer/settings.js` (6 calls updated, duplicate removed)
+- `src/renderer/securitySettings.js` (11 calls updated, duplicate removed)
+- `src/renderer.js` (transcription provider toast replaced)
+- `src/main.js` (meeting detection changed to toast)
+- `src/preload.js` (added onShowToast)
+
+**Testing Completed:**
+- ✅ Settings provider changes show green success toasts
+- ✅ Transcription provider change shows toast (not big green popup)
+- ✅ SDK meeting detection shows blue info toast
+- ✅ All toasts display in top-right, 4-second duration, proper animations
+
+---
+
+### 🔄 Refactor #2: Modal Dialog Helper Utility (NEXT)
+
+**Goal:** Extract reusable modal creation function
+**Estimated Lines Saved:** ~200 lines (6 modals consolidated)
+**Estimated Time:** ~2 hours
+
+**Implementation Plan:**
+
+1. **Create utility file:**
+   ```
+   src/renderer/utils/modalHelper.js
+   ```
+
+2. **Modal helper function signature:**
+   ```javascript
+   export function createModal({
+     title,              // Modal title (string)
+     body,               // HTML content (string, will be sanitized)
+     confirmText,        // Confirm button text (default: "Confirm")
+     cancelText,         // Cancel button text (default: "Cancel")
+     onConfirm,          // Async function called on confirm
+     onCancel,           // Optional function called on cancel
+     size                // Optional: 'small', 'medium' (default), 'large'
+   })
+   ```
+
+3. **Modals to refactor (6 total):**
+   - `src/renderer/routing.js:367-416` - Add Organization modal
+   - `src/renderer/routing.js:544-657` - Delete Organization confirmation
+   - `src/renderer/routing.js:676-739` - Restore Backup confirmation
+   - `src/renderer/meetingDetail.js:750-864` - Contact search modal (different pattern, may skip)
+   - Additional modals in routing.js and other files
+
+4. **Implementation steps:**
+   - [ ] Create `src/renderer/utils/modalHelper.js`
+   - [ ] Implement `createModal()` function with DOMPurify sanitization
+   - [ ] Add keyboard shortcuts (Escape to close, Enter to confirm)
+   - [ ] Add click-outside-to-close behavior
+   - [ ] Replace first modal in routing.js as proof-of-concept
+   - [ ] Test thoroughly
+   - [ ] Replace remaining 5 modals
+   - [ ] Remove old modal code
+
+**Example usage (before vs after):**
+
+Before (50+ lines):
+```javascript
+const modal = document.createElement('div');
+modal.className = 'modal-overlay';
+modal.innerHTML = `...complex HTML...`;
+document.body.appendChild(modal);
+// ... 30+ lines of event listener setup ...
+```
+
+After (5 lines):
+```javascript
+createModal({
+  title: 'Delete Organization',
+  body: '<p>Are you sure you want to delete this organization?</p>',
+  confirmText: 'Delete',
+  onConfirm: async () => await deleteOrg(orgId)
+});
+```
+
+---
+
+### ⏳ Refactor #3: IPC Handler Wrapper (PENDING)
+
+**Goal:** Standardize IPC handler error handling and response format
+**Estimated Lines Saved:** ~300 lines (66 handlers)
+**Estimated Time:** ~3 hours
+
+**Implementation Plan:**
+
+1. **Create utility file:**
+   ```
+   src/main/utils/ipcHelpers.js
+   ```
+
+2. **Helper function:**
+   ```javascript
+   function createIpcHandler(handlerFn) {
+     return async (event, ...args) => {
+       try {
+         const result = await handlerFn(event, ...args);
+         return { success: true, ...result };
+       } catch (error) {
+         logger.ipc.error('[IPC Error]', error);
+         return { success: false, error: error.message };
+       }
+     };
+   }
+   ```
+
+3. **Implementation approach:**
+   - Start with non-critical handlers (settings, routing)
+   - Test each batch (10-15 handlers at a time)
+   - Avoid touching critical recording/transcription handlers until stable
+
+4. **Pattern to replace (appears 66 times):**
+   ```javascript
+   // Before:
+   ipcMain.handle('some:handler', async (event, data) => {
+     try {
+       // ... logic
+       return { success: true, data: result };
+     } catch (error) {
+       console.error('[Handler] Error:', error);
+       return { success: false, error: error.message };
+     }
+   });
+
+   // After:
+   ipcMain.handle('some:handler', createIpcHandler(async (event, data) => {
+     // ... logic
+     return { data: result };
+   }));
+   ```
+
+---
+
+### ⏳ Refactor #4: Button Loading State Helper (PENDING)
+
+**Goal:** Standardize button disabled states during async operations
+**Estimated Lines Saved:** ~120 lines (15+ occurrences)
+**Estimated Time:** ~1 hour
+
+**Implementation Plan:**
+
+1. **Create utility:**
+   ```
+   src/renderer/utils/buttonHelper.js
+   ```
+
+2. **Helper function:**
+   ```javascript
+   export async function withButtonLoading(buttonId, loadingText, asyncFn) {
+     const btn = document.getElementById(buttonId);
+     if (!btn) return;
+
+     const originalText = btn.textContent;
+     const originalDisabled = btn.disabled;
+
+     btn.disabled = true;
+     btn.textContent = loadingText;
+
+     try {
+       return await asyncFn();
+     } finally {
+       btn.disabled = originalDisabled;
+       btn.textContent = originalText;
+     }
+   }
+   ```
+
+3. **Usage pattern:**
+   ```javascript
+   // Before (8 lines):
+   const btn = document.getElementById('saveBtn');
+   btn.disabled = true;
+   const originalText = btn.textContent;
+   btn.textContent = 'Saving...';
+   try {
+     await saveConfig();
+   } finally {
+     btn.disabled = false;
+     btn.textContent = originalText;
+   }
+
+   // After (1 line):
+   await withButtonLoading('saveBtn', 'Saving...', () => saveConfig());
+   ```
+
+---
+
+### ⏳ Refactor #5: IPC Call Wrapper for Renderer (PENDING)
+
+**Goal:** Standardize renderer-side IPC calls with error handling
+**Estimated Lines Saved:** ~400 lines (59 calls)
+**Estimated Time:** ~2-3 hours
+
+**Implementation Plan:**
+
+1. **Create utility:**
+   ```
+   src/renderer/utils/ipcWrapper.js
+   ```
+
+2. **Helper function:**
+   ```javascript
+   export async function callIpc(method, args, options = {}) {
+     const {
+       successMessage,
+       errorMessage = 'Operation failed',
+       showSuccessToast = false,
+       showErrorToast = true,
+       context = 'IPC'
+     } = options;
+
+     try {
+       const response = await window.electronAPI[method](
+         ...(Array.isArray(args) ? args : [args])
+       );
+
+       if (!response || !response.success) {
+         throw new Error(response?.error || errorMessage);
+       }
+
+       if (showSuccessToast && successMessage) {
+         window.showToast(successMessage, 'success');
+       }
+
+       return response;
+     } catch (error) {
+       console.error(`[${context}]`, error);
+       if (showErrorToast) {
+         window.showToast(`${errorMessage}: ${error.message}`, 'error');
+       }
+       throw error;
+     }
+   }
+   ```
+
+3. **Usage pattern:**
+   ```javascript
+   // Before (12 lines):
+   try {
+     const response = await window.electronAPI.routingSaveConfig(content);
+     if (!response || !response.success) {
+       throw new Error(response?.error || 'Failed to save configuration');
+     }
+     console.log('Configuration saved');
+     window.showToast('Configuration saved successfully', 'success');
+   } catch (error) {
+     console.error('[RoutingEditor] Error:', error);
+     window.showToast('Error: ' + error.message, 'error');
+   }
+
+   // After (5 lines):
+   await callIpc('routingSaveConfig', [content], {
+     successMessage: 'Configuration saved successfully',
+     errorMessage: 'Failed to save configuration',
+     showSuccessToast: true,
+     context: 'RoutingEditor'
+   });
+   ```
+
+---
+
+### ⏳ Refactor #6: Tab Switching Helper (PENDING)
+
+**Goal:** Standardize tab UI switching logic
+**Estimated Lines Saved:** ~80 lines (4 implementations)
+**Estimated Time:** ~1 hour
+
+**Implementation Plan:**
+
+1. **Create utility:**
+   ```
+   src/renderer/utils/tabHelper.js
+   ```
+
+2. **Helper function:**
+   ```javascript
+   export function initializeTabs(tabs) {
+     tabs.forEach(({ buttonId, contentId, onActivate }) => {
+       const button = document.getElementById(buttonId);
+       const content = document.getElementById(contentId);
+
+       if (!button || !content) return;
+
+       button.addEventListener('click', () => {
+         // Deactivate all tabs
+         tabs.forEach(({ buttonId: id, contentId: cId }) => {
+           document.getElementById(id)?.classList.remove('active');
+           const c = document.getElementById(cId);
+           if (c) c.style.display = 'none';
+         });
+
+         // Activate this tab
+         button.classList.add('active');
+         content.style.display = 'block';
+
+         if (onActivate) onActivate();
+       });
+     });
+   }
+   ```
+
+3. **Files with tab implementations:**
+   - `src/renderer/templates.js:56-76`
+   - `src/renderer/routing.js:57-76`
+   - `src/renderer/meetingDetail.js:144-168`
+   - `src/renderer/settings.js:154-186`
+
+---
+
+### Summary: Remaining Refactoring Work
+
+| Refactor | Status | Est. Time | Lines Saved | Priority |
+|----------|--------|-----------|-------------|----------|
+| #1: Toast Consolidation | ✅ DONE | - | 60 | - |
+| #2: Modal Helper | 🔄 NEXT | 2h | 200 | HIGH |
+| #3: IPC Handler Wrapper | ⏳ Pending | 3h | 300 | HIGH |
+| #4: Button Loading Helper | ⏳ Pending | 1h | 120 | MEDIUM |
+| #5: IPC Call Wrapper | ⏳ Pending | 2-3h | 400 | HIGH |
+| #6: Tab Switching Helper | ⏳ Pending | 1h | 80 | MEDIUM |
+| **TOTAL** | **17% Done** | **9-10h** | **~1,160** | - |
+
+**Next Session:** Start with Refactor #2 (Modal Dialog Helper)
+
+---
+
 #### Overall Success Criteria
 
 - All settings accessible and functional

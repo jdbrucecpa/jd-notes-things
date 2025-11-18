@@ -1467,23 +1467,14 @@ function initSDK() {
     // Get a user-friendly platform name, or use the raw platform name if not in our map
     const platformName = platformNames[evt.window.platform] || evt.window.platform;
 
-    // Send a notification
-    const notification = new Notification({
-      title: `${platformName} Meeting Detected`,
-      body: platformName,
-    });
-
-    // Handle notification click
-    notification.on('click', () => {
-      console.log('Notification clicked for platform:', platformName);
-      joinDetectedMeeting();
-    });
-
-    notification.show();
-
-    // Send the meeting detected status to the renderer process
+    // Send the meeting detected status to the renderer process with toast notification
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('meeting-detection-status', { detected: true });
+      // Send toast notification to renderer
+      mainWindow.webContents.send('show-toast', {
+        message: `${platformName} meeting detected`,
+        type: 'info'
+      });
     }
   });
 

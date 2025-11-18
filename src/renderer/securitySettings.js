@@ -153,8 +153,9 @@ async function handleMigration() {
 
     const { migrated, failed, skipped } = result.data;
 
-    showToast(
-      `Migration complete: ${migrated.length} migrated, ${failed.length} failed, ${skipped.length} skipped`
+    window.showToast(
+      `Migration complete: ${migrated.length} migrated, ${failed.length} failed, ${skipped.length} skipped`,
+      'success'
     );
 
     if (failed.length > 0) {
@@ -165,7 +166,7 @@ async function handleMigration() {
     await loadAPIKeys();
   } catch (error) {
     console.error('[SecuritySettings] Migration failed:', error);
-    showToast('Migration failed: ' + error.message);
+    window.showToast('Migration failed: ' + error.message, 'error');
     btn.disabled = false;
     btn.textContent = 'Migrate Keys from .env';
   }
@@ -231,7 +232,7 @@ window.saveAPIKey = async function (keyName) {
   const value = input.value.trim();
 
   if (!value) {
-    showToast('Key value cannot be empty');
+    window.showToast('Key value cannot be empty', 'warning');
     return;
   }
 
@@ -244,14 +245,14 @@ window.saveAPIKey = async function (keyName) {
       throw new Error(result.error || 'Failed to save key');
     }
 
-    showToast(`${keyName} saved successfully`);
+    window.showToast(`${keyName} saved successfully`, 'success');
 
     // Remove edit row and reload keys
     await cancelEditAPIKey();
     await loadAPIKeys();
   } catch (error) {
     console.error(`[SecuritySettings] Failed to save key ${keyName}:`, error);
-    showToast('Failed to save key: ' + error.message);
+    window.showToast('Failed to save key: ' + error.message, 'error');
     input.disabled = false;
   }
 };
@@ -275,18 +276,18 @@ window.cancelEditAPIKey = async function () {
  */
 window.testAPIKey = async function (keyName) {
   try {
-    showToast(`Testing ${keyName}...`);
+    window.showToast(`Testing ${keyName}...`, 'info');
 
     const result = await window.electronAPI.keysTest(keyName);
 
     if (result.success) {
-      showToast(`✓ ${keyName} format is valid`);
+      window.showToast(`✓ ${keyName} format is valid`, 'success');
     } else {
-      showToast(`✗ ${keyName} validation failed: ${result.message || result.error}`);
+      window.showToast(`✗ ${keyName} validation failed: ${result.message || result.error}`, 'error');
     }
   } catch (error) {
     console.error(`[SecuritySettings] Failed to test key ${keyName}:`, error);
-    showToast('Test failed: ' + error.message);
+    window.showToast('Test failed: ' + error.message, 'error');
   }
 };
 
@@ -305,29 +306,14 @@ window.deleteAPIKey = async function (keyName) {
       throw new Error(result.error || 'Failed to delete key');
     }
 
-    showToast(`${keyName} deleted successfully`);
+    window.showToast(`${keyName} deleted successfully`, 'success');
 
     // Reload keys table
     await loadAPIKeys();
   } catch (error) {
     console.error(`[SecuritySettings] Failed to delete key ${keyName}:`, error);
-    showToast('Failed to delete key: ' + error.message);
+    window.showToast('Failed to delete key: ' + error.message, 'error');
   }
 };
 
-/**
- * Show toast notification
- */
-function showToast(message) {
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    setTimeout(() => {
-      document.body.removeChild(toast);
-    }, 300);
-  }, 3000);
-}
+// Use global showToast from renderer.js (available via window.showToast)
