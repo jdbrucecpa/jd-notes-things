@@ -31,6 +31,12 @@ clients:
     contacts:
       - shaun.erickson@spcfo.com
       - rene.jarquin@spcfo.com
+  north-road:
+    vault_path: clients/north-road
+    emails:
+      - northroadic.com
+    contacts:
+      - marshall.mcalister@northroadic.com
 industry:
   liyria:
     vault_path: industry/liyria
