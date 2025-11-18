@@ -2915,7 +2915,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Set up the initial auto-save handler (legacy - not used in new meeting detail view)
   setupAutoSaveHandler();
 
-  // Toggle sidebar button with initial state (legacy Muesli template code)
+  // Toggle sidebar button with initial state (legacy template code - may be removed)
   const toggleSidebarBtn = document.getElementById('toggleSidebar');
   const sidebar = document.getElementById('sidebar');
   const editorContent = document.querySelector('.editor-content');

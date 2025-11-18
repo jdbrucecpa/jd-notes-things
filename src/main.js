@@ -1745,7 +1745,7 @@ function initSDK() {
             });
           }
         }
-      }, 3000); // 3 second delay to ensure file is fully written (matches muesli timing)
+      }, 3000); // 3 second delay to ensure file is fully written
     } catch (error) {
       console.error('Error handling recording ended:', error);
     }

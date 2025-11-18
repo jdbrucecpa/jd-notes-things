@@ -2747,68 +2747,89 @@ Return ONLY the YAML configuration, no additional text.
 
 #### Pre 10.9: fixes 🧹
 
+**Status:** ✅ COMPLETE
 
+**Deliverables:**
+- ✅ Darkmodefixes.md corrections to remove hardcoded colors
 
-
-
-- Do Darkmodefixes.md corrections to remove hardcoded colors
-
-
+---
 
 #### Phase 10.9: Code Quality & Validation 🧹
 
-**Status:** ⏳ ONGOING (Can happen in parallel with other phases)
+**Status:** ⏳ OPTIONAL (Can be deferred or skipped entirely)
 
-**Goal:** Maintainability and robustness improvements
+**Goal:** Maintainability and robustness improvements (only if measurable impact)
 
-**Deliverables:**
-- ⏳ Complete IPC validation rollout (34/36 handlers remaining)
-- ⏳ Component extraction and refactoring
-- ⏳ Performance profiling
-- ⏳ TypeScript migration (optional, discuss separately)
-- ⏳ Remove all casual references to meusli, electron, or other copyrights or legacy template code.
+**Decision:** TypeScript migration **REJECTED** - not worth 40-50 hour investment for personal-use app. Plenty of successful open-source projects remain in JavaScript.
 
-**Estimated Effort:** Medium | **Priority:** Ongoing
+**Recommended High-Value Improvements:**
 
-**Code Quality Improvements (Moved from "Phase 11"):**
+**1. Complete IPC Validation Rollout (HIGH VALUE)**
+- **Current:** 2/36 handlers validated with Zod schemas
+- **Impact:** Prevents crashes from malformed renderer data, catches bugs at runtime
+- **Why:** IPC boundary is where Electron bugs actually happen - compile-time types don't help here
+- **Priority:** HIGH - improves reliability
+- **Estimated effort:** 8-10 hours (34 handlers × 15 min each)
 
-**19. Global State Management Refactoring**
-- **Issue**: `main.js` uses module-level variables for state (40+ globals)
-- **Current**: `let detectedMeeting, googleAuth, googleCalendar, templateManager...`
-- **Fix**: Create `AppState` class to encapsulate state
-- **Priority**: Medium - improves maintainability
-- **Estimated effort**: 6-8 hours
+**2. JSDoc Type Annotations (HIGH VALUE, LOW EFFORT)**
+- **Fix:** Add JSDoc comments to key functions for IDE autocomplete
+  ```javascript
+  /**
+   * @param {Meeting} meeting
+   * @param {string[]} participantEmails
+   * @returns {Promise<string>} Vault path
+   */
+  async function routeMeeting(meeting, participantEmails) { ... }
+  ```
+- **Impact:** 80% of TypeScript benefits, zero migration cost, works in VSCode immediately
+- **Priority:** HIGH - improves developer experience
+- **Estimated effort:** 2-3 hours (20-30 key functions)
 
-**20. Configuration Centralization**
+**3. Integration Tests for Critical Paths (HIGH VALUE)**
+- **Coverage:** Recording → Transcription → Export → Obsidian vault
+- **Impact:** Prevents regressions during refactoring, better ROI than TypeScript
+- **Priority:** MEDIUM - valuable but optional
+- **Estimated effort:** 10-15 hours
+
+**4. ESLint Strict Rules (HIGH VALUE, LOW EFFORT)**
+- **Fix:** Add `no-unused-vars`, `no-implicit-globals`, `prefer-const`, etc.
+- **Impact:** Catches common bugs automatically
+- **Priority:** HIGH - quick wins
+- **Estimated effort:** 1 hour setup
+
+**Lower Priority / Optional Improvements:**
+
+**5. Remove Legacy References**
+- Remove casual references to "muesli", "electron", or other copyrights/legacy template code
+- **Priority:** LOW - cosmetic cleanup
+- **Estimated effort:** 2-3 hours
+
+**6. Configuration Centralization**
 - **Issue**: Hardcoded values scattered throughout codebase
 - **Examples**: `60000` (meeting check interval), `200` (tokens per section)
 - **Fix**: Create `config/constants.js` with named constants
-- **Priority**: Medium - improves maintainability
-- **Estimated effort**: 3-4 hours
+- **Priority:** LOW - improves maintainability but no functional impact
+- **Estimated effort:** 3-4 hours
 
-**21. Routing Configuration Validation**
+**7. Routing Configuration Validation**
 - **Issue**: `ConfigLoader.js` validates structure but not data validity
 - **Fix**: Use Zod schemas to validate email formats, domain formats, vault paths
-- **Priority**: Medium - prevents configuration errors
-- **Estimated effort**: 2-3 hours
+- **Priority:** LOW - config errors already caught by YAML parser
+- **Estimated effort:** 2-3 hours
 
-**22. Code Duplication Cleanup**
-- Refactor repeated patterns (video file checking, upload tokens, error handling)
-- Extract common code into utility functions/modules
-- **Priority**: Low - fix when convenient
-- **Estimated effort**: 4-6 hours total, done opportunistically
+**Explicitly SKIPPED (Low ROI):**
 
-**23. Async File Operations Migration**
-- **Issue**: `VaultStructure.js` and `ConfigLoader.js` use sync operations
-- **Fix**: Migrate to async versions: `fs.promises.writeFile()`, etc.
-- **Priority**: Low - mostly small files in this app
-- **Estimated effort**: 2-3 hours
+**❌ Global State Management Refactoring** - 6-8 hours for no functional benefit
+**❌ Code Duplication Cleanup** - 4-6 hours, works fine as-is
+**❌ Async File Operations Migration** - 2-3 hours, files are small, sync is fine
+**❌ Environment Configuration** - 3-4 hours, only needed for multi-user deployment
+**❌ Component Extraction** - Nice-to-have, but app is stable and working
+**❌ Performance Profiling** - No reported performance issues
+**❌ TypeScript Migration** - 40-50 hours with minimal practical benefit for solo dev
 
-**24. Environment Configuration**
-- Implement dev/staging/production environment separation
-- Create environment-specific configuration files
-- **Priority**: Implement when deployment/distribution needs arise
-- **Estimated effort**: 3-4 hours
+**Recommended Phase 10.9 Scope (if pursuing):**
+
+Focus only on items #1-4 above (total: 21-29 hours) for measurable reliability and developer experience improvements. Skip the rest unless specific bugs or issues arise that justify the effort.
 
 ---
 

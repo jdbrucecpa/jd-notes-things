@@ -17,7 +17,7 @@ module.exports = {
         };
       },
     },
-    icon: './muesli',
+    icon: './jd-notes-things',
     extendInfo: {
       NSUserNotificationAlertStyle: 'alert',
     },
