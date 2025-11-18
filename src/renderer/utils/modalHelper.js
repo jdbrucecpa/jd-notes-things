@@ -56,8 +56,8 @@ export function createModal({
 
   // Sanitize body HTML to prevent XSS attacks
   const sanitizedBody = DOMPurify.sanitize(body, {
-    ALLOWED_TAGS: ['p', 'div', 'span', 'strong', 'em', 'br', 'ul', 'ol', 'li', 'code', 'pre'],
-    ALLOWED_ATTR: ['class', 'style']
+    ALLOWED_TAGS: ['p', 'div', 'span', 'strong', 'em', 'br', 'ul', 'ol', 'li', 'code', 'pre', 'label', 'input', 'select', 'option', 'textarea', 'small'],
+    ALLOWED_ATTR: ['class', 'style', 'id', 'for', 'type', 'placeholder', 'value', 'name']
   });
 
   // Escape title to prevent XSS (title is plain text, not HTML)
