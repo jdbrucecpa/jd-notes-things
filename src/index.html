@@ -202,10 +202,10 @@
           <!-- Tabbed Content Area -->
           <div class="meeting-content-tabs">
             <div class="tab-headers">
-              <button class="tab-header active" data-tab="summary">Summary</button>
-              <button class="tab-header" data-tab="transcript">Transcript</button>
-              <button class="tab-header" data-tab="templates">Templates</button>
-              <button class="tab-header" data-tab="metadata">Metadata</button>
+              <button id="summaryTabBtn" class="tab-header active" data-tab="summary">Summary</button>
+              <button id="transcriptTabBtn" class="tab-header" data-tab="transcript">Transcript</button>
+              <button id="templatesTabBtn" class="tab-header" data-tab="templates">Templates</button>
+              <button id="metadataTabBtn" class="tab-header" data-tab="metadata">Metadata</button>
             </div>
 
             <div class="tab-content-container">
@@ -726,67 +726,67 @@
         <div class="settings-content">
           <!-- Settings Sidebar -->
           <div class="settings-sidebar">
-            <div class="settings-tab active" data-tab="general">
+            <div id="generalSettingsTab" class="settings-tab active" data-tab="general">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/>
               </svg>
               <span>General</span>
             </div>
-            <div class="settings-tab" data-tab="appearance">
+            <div id="appearanceSettingsTab" class="settings-tab" data-tab="appearance">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" fill="currentColor"/>
               </svg>
               <span>Appearance</span>
             </div>
-            <div class="settings-tab" data-tab="security">
+            <div id="securitySettingsTab" class="settings-tab" data-tab="security">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" fill="currentColor"/>
               </svg>
               <span>Security</span>
             </div>
-            <div class="settings-tab" data-tab="routing">
+            <div id="routingSettingsTab" class="settings-tab" data-tab="routing">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2zm0 11.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
               </svg>
               <span>Routing</span>
             </div>
-            <div class="settings-tab" data-tab="templates">
+            <div id="templatesSettingsTab" class="settings-tab" data-tab="templates">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z" fill="currentColor"/>
               </svg>
               <span>Templates</span>
             </div>
-            <div class="settings-tab" data-tab="patterns">
+            <div id="patternsSettingsTab" class="settings-tab" data-tab="patterns">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z" fill="currentColor"/>
               </svg>
               <span>Transcript Patterns</span>
             </div>
-            <div class="settings-tab" data-tab="notifications">
+            <div id="notificationsSettingsTab" class="settings-tab" data-tab="notifications">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2zm-2 1H8v-6c0-2.48 1.51-4.5 4-4.5s4 2.02 4 4.5v6z" fill="currentColor"/>
               </svg>
               <span>Notifications</span>
             </div>
-            <div class="settings-tab" data-tab="shortcuts">
+            <div id="shortcutsSettingsTab" class="settings-tab" data-tab="shortcuts">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z" fill="currentColor"/>
               </svg>
               <span>Keyboard Shortcuts</span>
             </div>
-            <div class="settings-tab" data-tab="logs">
+            <div id="logsSettingsTab" class="settings-tab" data-tab="logs">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z" fill="currentColor"/>
               </svg>
               <span>Logs & Diagnostics</span>
             </div>
-            <div class="settings-tab" data-tab="advanced">
+            <div id="advancedSettingsTab" class="settings-tab" data-tab="advanced">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" fill="currentColor"/>
               </svg>
               <span>Advanced</span>
             </div>
-            <div class="settings-tab" data-tab="about">
+            <div id="aboutSettingsTab" class="settings-tab" data-tab="about">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="currentColor"/>
               </svg>

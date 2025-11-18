@@ -6,6 +6,7 @@
 import * as monaco from 'monaco-editor';
 import { createModal } from './utils/modalHelper.js';
 import { callIpc } from './utils/ipcWrapper.js';
+import { initializeTabs } from './utils/tabHelper.js';
 
 let routingEditor = null;
 let routingConfig = null;
@@ -56,26 +57,10 @@ export function initializeRoutingEditor() {
  */
 function setupEventListeners() {
   // Tab switching
-  const editorTabBtn = document.getElementById('routingEditorTabBtn');
-  const testTabBtn = document.getElementById('routingTestTabBtn');
-  const editorTabContent = document.getElementById('routingEditorTabContent');
-  const testTabContent = document.getElementById('routingTestTabContent');
-
-  if (editorTabBtn && testTabBtn) {
-    editorTabBtn.addEventListener('click', () => {
-      editorTabBtn.classList.add('active');
-      testTabBtn.classList.remove('active');
-      editorTabContent.style.display = 'block';
-      testTabContent.style.display = 'none';
-    });
-
-    testTabBtn.addEventListener('click', () => {
-      testTabBtn.classList.add('active');
-      editorTabBtn.classList.remove('active');
-      testTabContent.style.display = 'block';
-      editorTabContent.style.display = 'none';
-    });
-  }
+  initializeTabs([
+    { buttonId: 'routingEditorTabBtn', contentId: 'routingEditorTabContent' },
+    { buttonId: 'routingTestTabBtn', contentId: 'routingTestTabContent' }
+  ]);
 
   // Refresh routing button
   const refreshRoutingBtn = document.getElementById('refreshRoutingBtn');
@@ -106,7 +91,8 @@ function setupEventListeners() {
   if (testRoutingBtn) {
     testRoutingBtn.addEventListener('click', () => {
       // Switch to test tab
-      testTabBtn.click();
+      const testTab = document.getElementById('routingTestTabBtn');
+      if (testTab) testTab.click();
     });
   }
 

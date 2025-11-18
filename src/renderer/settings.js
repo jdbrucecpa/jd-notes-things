@@ -10,6 +10,7 @@ import { initializeSecurityPanel } from './securitySettings.js';
 import { updateEditorTheme } from './templates.js';
 import { updateRoutingEditorTheme } from './routing.js';
 import { initialize as initializePatternTestingPanel, updateEditorTheme as updatePatternEditorTheme } from './components/PatternTestingPanel.js';
+import { initializeTabs } from './utils/tabHelper.js';
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -132,56 +133,20 @@ export function importSettings(file) {
 export function openSettingsTab(tabName) {
   const settingsView = document.getElementById('settingsView');
   const mainView = document.getElementById('mainView');
-  const settingsTabs = document.querySelectorAll('.settings-tab');
-  const settingsPanels = {
-    general: document.getElementById('generalPanel'),
-    appearance: document.getElementById('appearancePanel'),
-    security: document.getElementById('securityPanel'),
-    routing: document.getElementById('routingPanel'),
-    templates: document.getElementById('templatesPanel'),
-    patterns: document.getElementById('patternsPanel'),
-    notifications: document.getElementById('notificationsPanel'),
-    shortcuts: document.getElementById('shortcutsPanel'),
-    logs: document.getElementById('logsPanel'),
-    advanced: document.getElementById('advancedPanel'),
-    about: document.getElementById('aboutPanel'),
-  };
 
   // Show settings view
   if (mainView) mainView.style.display = 'none';
   if (settingsView) settingsView.style.display = 'block';
 
-  // Switch to the requested tab
-  settingsTabs.forEach(tab => {
-    if (tab.dataset.tab === tabName) {
-      tab.classList.add('active');
-    } else {
-      tab.classList.remove('active');
-    }
-  });
+  // Map tab names to button IDs
+  const tabButtonId = `${tabName}SettingsTab`;
+  const tabButton = document.getElementById(tabButtonId);
 
-  // Show the corresponding panel
-  Object.entries(settingsPanels).forEach(([name, panel]) => {
-    if (panel) {
-      panel.style.display = name === tabName ? 'block' : 'none';
-    }
-  });
-
-  // Trigger panel-specific actions
-  if (tabName === 'templates' && window.loadTemplates) {
-    window.loadTemplates();
-  }
-  if (tabName === 'routing' && window.loadRouting) {
-    window.loadRouting();
-  }
-  if (tabName === 'patterns') {
-    initializePatternTestingPanel('pattern-editor').catch(err => {
-      console.error('[Settings] Failed to initialize pattern editor:', err);
-    });
-  }
-  if (tabName === 'logs' && window.refreshLogs) {
-    console.log('[Settings] Auto-loading logs');
-    window.refreshLogs();
+  // Trigger click on the tab button to activate it (this will use the initializeTabs logic)
+  if (tabButton) {
+    tabButton.click();
+  } else {
+    console.warn(`[Settings] Tab button not found for tab: ${tabName}`);
   }
 }
 
@@ -199,22 +164,6 @@ export function initializeSettingsUI() {
   const mainView = document.getElementById('mainView');
   const settingsBtn = document.getElementById('settingsBtn');
   const closeSettingsBtn = document.getElementById('closeSettings');
-
-  // Tab elements
-  const settingsTabs = document.querySelectorAll('.settings-tab');
-  const settingsPanels = {
-    general: document.getElementById('generalPanel'),
-    appearance: document.getElementById('appearancePanel'),
-    security: document.getElementById('securityPanel'),
-    routing: document.getElementById('routingPanel'),
-    templates: document.getElementById('templatesPanel'),
-    patterns: document.getElementById('patternsPanel'), // Phase 10.8.2
-    notifications: document.getElementById('notificationsPanel'), // Phase 10.7
-    shortcuts: document.getElementById('shortcutsPanel'), // Phase 10.7
-    logs: document.getElementById('logsPanel'), // Phase 10.7
-    advanced: document.getElementById('advancedPanel'),
-    about: document.getElementById('aboutPanel'),
-  };
 
   // Control elements
   const darkModeToggle = document.getElementById('darkModeToggle');
@@ -258,48 +207,35 @@ export function initializeSettingsUI() {
   }
 
   // Tab switching
-  settingsTabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      const tabName = tab.dataset.tab;
-
-      // Update active tab
-      settingsTabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-
-      // Show corresponding panel
-      Object.values(settingsPanels).forEach(panel => {
-        if (panel) panel.style.display = 'none';
+  initializeTabs([
+    { buttonId: 'generalSettingsTab', contentId: 'generalPanel' },
+    { buttonId: 'appearanceSettingsTab', contentId: 'appearancePanel' },
+    { buttonId: 'securitySettingsTab', contentId: 'securityPanel' },
+    { buttonId: 'routingSettingsTab', contentId: 'routingPanel' },
+    { buttonId: 'templatesSettingsTab', contentId: 'templatesPanel' },
+    { buttonId: 'patternsSettingsTab', contentId: 'patternsPanel' },
+    { buttonId: 'notificationsSettingsTab', contentId: 'notificationsPanel' },
+    { buttonId: 'shortcutsSettingsTab', contentId: 'shortcutsPanel' },
+    { buttonId: 'logsSettingsTab', contentId: 'logsPanel' },
+    { buttonId: 'advancedSettingsTab', contentId: 'advancedPanel' },
+    { buttonId: 'aboutSettingsTab', contentId: 'aboutPanel' }
+  ], (buttonId) => {
+    // Trigger panel-specific actions based on which tab was activated
+    if (buttonId === 'templatesSettingsTab' && window.loadTemplates) {
+      console.log('[Settings] Templates tab clicked, calling loadTemplates()');
+      window.loadTemplates();
+    } else if (buttonId === 'routingSettingsTab' && window.loadRouting) {
+      console.log('[Settings] Routing tab clicked, calling loadRouting()');
+      window.loadRouting();
+    } else if (buttonId === 'patternsSettingsTab') {
+      console.log('[Settings] Patterns tab clicked, initializing pattern editor');
+      initializePatternTestingPanel('pattern-editor').catch(err => {
+        console.error('[Settings] Failed to initialize pattern editor:', err);
       });
-      if (settingsPanels[tabName]) {
-        settingsPanels[tabName].style.display = 'block';
-
-        // Load templates when templates panel is shown
-        if (tabName === 'templates' && window.loadTemplates) {
-          console.log('[Settings] Templates tab clicked, calling loadTemplates()');
-          window.loadTemplates();
-        }
-
-        // Load routing when routing panel is shown
-        if (tabName === 'routing' && window.loadRouting) {
-          console.log('[Settings] Routing tab clicked, calling loadRouting()');
-          window.loadRouting();
-        }
-
-        // Initialize pattern editor when patterns panel is shown (Phase 10.8.2)
-        if (tabName === 'patterns') {
-          console.log('[Settings] Patterns tab clicked, initializing pattern editor');
-          initializePatternTestingPanel('pattern-editor').catch(err => {
-            console.error('[Settings] Failed to initialize pattern editor:', err);
-          });
-        }
-
-        // Load logs when logs panel is shown (Phase 10.7)
-        if (tabName === 'logs' && window.refreshLogs) {
-          console.log('[Settings] Logs tab clicked, auto-loading logs');
-          window.refreshLogs();
-        }
-      }
-    });
+    } else if (buttonId === 'logsSettingsTab' && window.refreshLogs) {
+      console.log('[Settings] Logs tab clicked, auto-loading logs');
+      window.refreshLogs();
+    }
   });
 
   // Dark mode toggle

@@ -3,16 +3,14 @@
  * Handles the modern meeting detail interface with tabs
  */
 
-import { sanitizeHtml, escapeHtml, markdownToSafeHtml } from './security.js';
+import { escapeHtml, markdownToSafeHtml } from './security.js';
 import { contactsService } from './services/contactsService.js';
 import { withButtonLoadingElement } from './utils/buttonHelper.js';
+import { initializeTabs } from './utils/tabHelper.js';
 
 // Current meeting being viewed
 let currentMeeting = null;
 let currentMeetingId = null;
-
-// Tab state
-let currentTab = 'summary';
 
 /**
  * Initialize the meeting detail view
@@ -46,9 +44,6 @@ export function initializeMeetingDetail(meetingId, meeting, onBack, onUpdate) {
   populateTranscript(meeting);
   populateTemplates(meeting);
   populateMetadata(meeting);
-
-  // Switch to summary tab by default
-  switchTab('summary');
 }
 
 /**
@@ -66,14 +61,13 @@ function setupEventListeners(onBack, onUpdate) {
     };
   }
 
-  // Tab headers
-  const tabHeaders = document.querySelectorAll('.tab-header');
-  tabHeaders.forEach(header => {
-    header.addEventListener('click', () => {
-      const tabName = header.dataset.tab;
-      switchTab(tabName);
-    });
-  });
+  // Tab switching
+  initializeTabs([
+    { buttonId: 'summaryTabBtn', contentId: 'summaryTab' },
+    { buttonId: 'transcriptTabBtn', contentId: 'transcriptTab' },
+    { buttonId: 'templatesTabBtn', contentId: 'templatesTab' },
+    { buttonId: 'metadataTabBtn', contentId: 'metadataTab' }
+  ]);
 
   // Edit title button
   const editTitleBtn = document.getElementById('editMeetingTitleBtn');
@@ -139,34 +133,6 @@ function setupEventListeners(onBack, onUpdate) {
   }
 }
 
-/**
- * Switch to a different tab
- */
-function switchTab(tabName) {
-  console.log(`[MeetingDetail] Switching to tab: ${tabName}`);
-  currentTab = tabName;
-
-  // Update tab headers
-  const tabHeaders = document.querySelectorAll('.tab-header');
-  tabHeaders.forEach(header => {
-    if (header.dataset.tab === tabName) {
-      header.classList.add('active');
-    } else {
-      header.classList.remove('active');
-    }
-  });
-
-  // Update tab content
-  const tabContents = document.querySelectorAll('.tab-content');
-  tabContents.forEach(content => {
-    content.classList.remove('active');
-  });
-
-  const activeContent = document.getElementById(`${tabName}Tab`);
-  if (activeContent) {
-    activeContent.classList.add('active');
-  }
-}
 
 /**
  * Populate meeting info card
@@ -1371,6 +1337,5 @@ export function getCurrentMeetingId() {
 export function clearMeetingDetail() {
   currentMeeting = null;
   currentMeetingId = null;
-  currentTab = 'summary';
   console.log('[MeetingDetail] Cleared');
 }

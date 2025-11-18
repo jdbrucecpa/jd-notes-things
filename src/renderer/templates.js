@@ -4,6 +4,7 @@
  */
 
 import * as monaco from 'monaco-editor';
+import { initializeTabs } from './utils/tabHelper.js';
 
 let editor = null;
 let currentTemplateId = null;
@@ -53,27 +54,15 @@ export function initializeTemplateEditor() {
  */
 function setupEventListeners() {
   // Tab switching
-  const editorTabBtn = document.getElementById('editorTabBtn');
-  const previewTabBtn = document.getElementById('previewTabBtn');
-  const editorTabContent = document.getElementById('editorTabContent');
-  const previewTabContent = document.getElementById('previewTabContent');
-
-  if (editorTabBtn && previewTabBtn) {
-    editorTabBtn.addEventListener('click', () => {
-      editorTabBtn.classList.add('active');
-      previewTabBtn.classList.remove('active');
-      editorTabContent.style.display = 'block';
-      previewTabContent.style.display = 'none';
-    });
-
-    previewTabBtn.addEventListener('click', () => {
-      previewTabBtn.classList.add('active');
-      editorTabBtn.classList.remove('active');
-      previewTabContent.style.display = 'block';
-      editorTabContent.style.display = 'none';
+  initializeTabs([
+    { buttonId: 'editorTabBtn', contentId: 'editorTabContent' },
+    { buttonId: 'previewTabBtn', contentId: 'previewTabContent' }
+  ], (tabId) => {
+    // Update preview when switching to preview tab
+    if (tabId === 'previewTabBtn') {
       updatePreview();
-    });
-  }
+    }
+  });
 
   // New template button
   const newTemplateBtn = document.getElementById('newTemplateBtn');
