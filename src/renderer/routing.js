@@ -519,120 +519,102 @@ async function runRoutingTest() {
  * Create new organization
  */
 async function createNewOrganization() {
-  // Create modal dialog
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.innerHTML = `
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <h3>Add New Organization</h3>
-        <button class="modal-close" id="closeAddOrgModal">×</button>
+  // Generate unique IDs for form elements to avoid conflicts
+  const formId = 'addOrgForm_' + Date.now();
+
+  createModal({
+    title: 'Add New Organization',
+    body: `
+      <div class="form-group">
+        <label for="${formId}_type">Type</label>
+        <select id="${formId}_type" class="form-control">
+          <option value="clients">Client</option>
+          <option value="industry">Industry Contact</option>
+        </select>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="orgType">Type</label>
-          <select id="orgType" class="form-control">
-            <option value="clients">Client</option>
-            <option value="industry">Industry Contact</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="orgId">Organization ID</label>
-          <input type="text" id="orgId" class="form-control" placeholder="e.g., acme-corp" />
-          <small class="form-help">Use lowercase with hyphens (e.g., acme-corp, tech-solutions)</small>
-        </div>
-        <div class="form-group">
-          <label for="orgVaultPath">Vault Path</label>
-          <input type="text" id="orgVaultPath" class="form-control" placeholder="e.g., clients/acme-corp" />
-          <small class="form-help">Relative path in Obsidian vault</small>
-        </div>
-        <div class="form-group">
-          <label for="orgEmails">Email Domains (comma-separated, optional)</label>
-          <input type="text" id="orgEmails" class="form-control" placeholder="e.g., acmecorp.com, acme.io" />
-          <small class="form-help">Email domains to match (without @)</small>
-        </div>
-        <div class="form-group">
-          <label for="orgContacts">Specific Email Contacts (comma-separated, optional)</label>
-          <input type="text" id="orgContacts" class="form-control" placeholder="e.g., john@example.com" />
-          <small class="form-help">Specific email addresses to match</small>
-        </div>
+      <div class="form-group">
+        <label for="${formId}_id">Organization ID</label>
+        <input type="text" id="${formId}_id" class="form-control" placeholder="e.g., acme-corp" />
+        <small class="form-help">Use lowercase with hyphens (e.g., acme-corp, tech-solutions)</small>
       </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="cancelAddOrg">Cancel</button>
-        <button class="btn-primary" id="confirmAddOrg">Add Organization</button>
+      <div class="form-group">
+        <label for="${formId}_vaultPath">Vault Path</label>
+        <input type="text" id="${formId}_vaultPath" class="form-control" placeholder="e.g., clients/acme-corp" />
+        <small class="form-help">Relative path in Obsidian vault</small>
       </div>
-    </div>
-  `;
+      <div class="form-group">
+        <label for="${formId}_emails">Email Domains (comma-separated, optional)</label>
+        <input type="text" id="${formId}_emails" class="form-control" placeholder="e.g., acmecorp.com, acme.io" />
+        <small class="form-help">Email domains to match (without @)</small>
+      </div>
+      <div class="form-group">
+        <label for="${formId}_contacts">Specific Email Contacts (comma-separated, optional)</label>
+        <input type="text" id="${formId}_contacts" class="form-control" placeholder="e.g., john@example.com" />
+        <small class="form-help">Specific email addresses to match</small>
+      </div>
+    `,
+    confirmText: 'Add Organization',
+    cancelText: 'Cancel',
+    size: 'medium',
+    onConfirm: async () => {
+      const type = document.getElementById(`${formId}_type`).value;
+      const id = document.getElementById(`${formId}_id`).value.trim();
+      const vaultPath = document.getElementById(`${formId}_vaultPath`).value.trim();
+      const emailsStr = document.getElementById(`${formId}_emails`).value.trim();
+      const contactsStr = document.getElementById(`${formId}_contacts`).value.trim();
 
-  document.body.appendChild(modal);
-
-  // Set up event listeners
-  const closeBtn = modal.querySelector('#closeAddOrgModal');
-  const cancelBtn = modal.querySelector('#cancelAddOrg');
-  const confirmBtn = modal.querySelector('#confirmAddOrg');
-
-  const closeModal = () => {
-    document.body.removeChild(modal);
-  };
-
-  closeBtn.addEventListener('click', closeModal);
-  cancelBtn.addEventListener('click', closeModal);
-
-  confirmBtn.addEventListener('click', async () => {
-    const type = modal.querySelector('#orgType').value;
-    const id = modal.querySelector('#orgId').value.trim();
-    const vaultPath = modal.querySelector('#orgVaultPath').value.trim();
-    const emailsStr = modal.querySelector('#orgEmails').value.trim();
-    const contactsStr = modal.querySelector('#orgContacts').value.trim();
-
-    // Validate
-    if (!id) {
-      window.showToast('Organization ID is required', 'error');
-      return;
-    }
-
-    if (!vaultPath) {
-      window.showToast('Vault path is required', 'error');
-      return;
-    }
-
-    // Validate ID format (lowercase with hyphens)
-    if (!/^[a-z0-9-]+$/.test(id)) {
-      window.showToast('Organization ID must be lowercase alphanumeric with hyphens', 'error');
-      return;
-    }
-
-    // Parse emails and contacts
-    const emails = emailsStr ? emailsStr.split(',').map(e => e.trim()).filter(e => e) : [];
-    const contacts = contactsStr ? contactsStr.split(',').map(c => c.trim()).filter(c => c) : [];
-
-    try {
-      const response = await window.electronAPI.routingAddOrganization(type, id, vaultPath, emails, contacts);
-
-      if (!response || !response.success) {
-        throw new Error(response?.error || 'Failed to add organization');
+      // Validate
+      if (!id) {
+        window.showToast('Organization ID is required', 'error');
+        throw new Error('Validation failed'); // Prevent modal from closing
       }
 
-      window.showToast('Organization added successfully', 'success');
-      closeModal();
-
-      // Update the editor content
-      if (routingEditor && response.content) {
-        routingEditor.setValue(response.content);
+      if (!vaultPath) {
+        window.showToast('Vault path is required', 'error');
+        throw new Error('Validation failed'); // Prevent modal from closing
       }
 
-      // Reload the configuration and organization list
-      await loadRouting();
-    } catch (error) {
-      console.error('[RoutingEditor] Failed to add organization:', error);
-      window.showToast('Failed to add organization: ' + error.message, 'error');
+      // Validate ID format (lowercase with hyphens)
+      if (!/^[a-z0-9-]+$/.test(id)) {
+        window.showToast('Organization ID must be lowercase alphanumeric with hyphens', 'error');
+        throw new Error('Validation failed'); // Prevent modal from closing
+      }
+
+      // Parse emails and contacts
+      const emails = emailsStr ? emailsStr.split(',').map(e => e.trim()).filter(e => e) : [];
+      const contacts = contactsStr ? contactsStr.split(',').map(c => c.trim()).filter(c => c) : [];
+
+      try {
+        const response = await window.electronAPI.routingAddOrganization(type, id, vaultPath, emails, contacts);
+
+        if (!response || !response.success) {
+          throw new Error(response?.error || 'Failed to add organization');
+        }
+
+        window.showToast('Organization added successfully', 'success');
+
+        // Update the editor content
+        if (routingEditor && response.content) {
+          routingEditor.setValue(response.content);
+        }
+
+        // Reload the configuration and organization list
+        await loadRouting();
+      } catch (error) {
+        console.error('[RoutingEditor] Failed to add organization:', error);
+        window.showToast('Failed to add organization: ' + error.message, 'error');
+        throw error; // Re-throw to prevent modal from closing on error
+      }
     }
   });
 
-  // Focus on the ID input
+  // Focus on the ID input after modal is created
   setTimeout(() => {
-    modal.querySelector('#orgId').focus();
-  }, 100);
+    const idInput = document.getElementById(`${formId}_id`);
+    if (idInput) {
+      idInput.focus();
+    }
+  }, 150);
 }
 
 /**
@@ -652,68 +634,45 @@ async function deleteOrganization() {
   // Confirm deletion
   const orgName = id.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
-  const confirmModal = document.createElement('div');
-  confirmModal.className = 'modal-overlay';
-  confirmModal.innerHTML = `
-    <div class="modal-dialog">
-      <div class="modal-header">
-        <h3>Confirm Deletion</h3>
-        <button class="modal-close" id="closeDeleteModal">×</button>
-      </div>
-      <div class="modal-body">
-        <p style="margin-bottom: 16px;">Are you sure you want to delete the organization <strong>"${orgName}"</strong>?</p>
-        <p style="color: var(--text-secondary); font-size: 13px;">This action cannot be undone. A backup will be created automatically.</p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="cancelDelete">Cancel</button>
-        <button class="btn-danger" id="confirmDelete">Delete Organization</button>
-      </div>
-    </div>
-  `;
+  createModal({
+    title: 'Confirm Deletion',
+    body: `
+      <p style="margin-bottom: 16px;">Are you sure you want to delete the organization <strong>"${orgName}"</strong>?</p>
+      <p style="color: var(--text-secondary); font-size: 13px;">This action cannot be undone. A backup will be created automatically.</p>
+    `,
+    confirmText: 'Delete Organization',
+    cancelText: 'Cancel',
+    onConfirm: async () => {
+      try {
+        const response = await window.electronAPI.routingDeleteOrganization(type, id);
 
-  document.body.appendChild(confirmModal);
+        if (!response || !response.success) {
+          throw new Error(response?.error || 'Failed to delete organization');
+        }
 
-  const closeBtn = confirmModal.querySelector('#closeDeleteModal');
-  const cancelBtn = confirmModal.querySelector('#cancelDelete');
-  const confirmBtn = confirmModal.querySelector('#confirmDelete');
+        window.showToast('Organization deleted successfully', 'success');
 
-  const closeModal = () => {
-    document.body.removeChild(confirmModal);
-  };
+        // Update the editor content
+        if (routingEditor && response.content) {
+          routingEditor.setValue(response.content);
+        }
 
-  closeBtn.addEventListener('click', closeModal);
-  cancelBtn.addEventListener('click', closeModal);
+        // Clear current selection
+        currentOrgSelection = null;
 
-  confirmBtn.addEventListener('click', async () => {
-    try {
-      const response = await window.electronAPI.routingDeleteOrganization(type, id);
+        // Disable delete button
+        const deleteBtn = document.getElementById('deleteOrganizationBtn');
+        if (deleteBtn) {
+          deleteBtn.disabled = true;
+        }
 
-      if (!response || !response.success) {
-        throw new Error(response?.error || 'Failed to delete organization');
+        // Reload the configuration and organization list
+        await loadRouting();
+      } catch (error) {
+        console.error('[RoutingEditor] Failed to delete organization:', error);
+        window.showToast('Failed to delete organization: ' + error.message, 'error');
+        throw error; // Re-throw to prevent modal from closing on error
       }
-
-      window.showToast('Organization deleted successfully', 'success');
-      closeModal();
-
-      // Update the editor content
-      if (routingEditor && response.content) {
-        routingEditor.setValue(response.content);
-      }
-
-      // Clear current selection
-      currentOrgSelection = null;
-
-      // Disable delete button
-      const deleteBtn = document.getElementById('deleteOrganizationBtn');
-      if (deleteBtn) {
-        deleteBtn.disabled = true;
-      }
-
-      // Reload the configuration and organization list
-      await loadRouting();
-    } catch (error) {
-      console.error('[RoutingEditor] Failed to delete organization:', error);
-      window.showToast('Failed to delete organization: ' + error.message, 'error');
     }
   });
 }
