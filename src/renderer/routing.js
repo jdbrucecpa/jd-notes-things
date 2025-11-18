@@ -5,6 +5,7 @@
 
 import * as monaco from 'monaco-editor';
 import { createModal } from './utils/modalHelper.js';
+import { callIpc } from './utils/ipcWrapper.js';
 
 let routingEditor = null;
 let routingConfig = null;
@@ -135,11 +136,11 @@ async function loadRouting() {
   console.log('[RoutingEditor] Loading routing configuration...');
 
   try {
-    const response = await window.electronAPI.routingGetConfig();
-
-    if (!response || !response.success) {
-      throw new Error(response?.error || 'Failed to load routing configuration');
-    }
+    const response = await callIpc('routingGetConfig', [], {
+      errorMessage: 'Failed to load routing configuration',
+      showErrorToast: false, // Custom error handling below
+      context: 'RoutingEditor'
+    });
 
     routingConfig = response.config;
     const content = response.content || '';
@@ -155,8 +156,7 @@ async function loadRouting() {
     parseOrganizations();
     renderOrganizationList();
   } catch (error) {
-    console.error('[RoutingEditor] Failed to load routing configuration:', error);
-
+    // Custom error handling for routing editor
     if (routingEditor) {
       routingEditor.setValue(`# Error loading routing configuration: ${error.message}\n\n# Please check your config/routing.yaml file`);
     }
@@ -374,23 +374,15 @@ async function undoRouting() {
     confirmText: 'Restore Backup',
     cancelText: 'Cancel',
     onConfirm: async () => {
-      try {
-        const response = await window.electronAPI.routingRestoreBackup();
+      await callIpc('routingRestoreBackup', [], {
+        successMessage: 'Configuration restored from backup successfully',
+        errorMessage: 'Failed to restore from backup',
+        showSuccessToast: true,
+        context: 'RoutingEditor'
+      });
 
-        if (!response || !response.success) {
-          throw new Error(response?.error || 'Failed to restore from backup');
-        }
-
-        window.showToast('Configuration restored from backup successfully', 'success');
-
-        // Reload the configuration
-        await loadRouting();
-      } catch (error) {
-        console.error('[RoutingEditor] Failed to restore backup:', error);
-        window.showToast('Failed to restore: ' + error.message, 'error');
-        // Re-throw to let modalHelper handle the error state
-        throw error;
-      }
+      // Reload the configuration
+      await loadRouting();
     }
   });
 }
@@ -406,20 +398,17 @@ async function saveRouting() {
   const content = routingEditor.getValue();
 
   try {
-    const response = await window.electronAPI.routingSaveConfig(content);
-
-    if (!response || !response.success) {
-      throw new Error(response?.error || 'Failed to save routing configuration');
-    }
-
-    console.log('[RoutingEditor] Routing configuration saved successfully');
-    window.showToast('Routing configuration saved successfully', 'success');
+    await callIpc('routingSaveConfig', [content], {
+      successMessage: 'Routing configuration saved successfully',
+      errorMessage: 'Failed to save routing configuration',
+      showSuccessToast: true,
+      context: 'RoutingEditor'
+    });
 
     // Reload to update organizations list
     await loadRouting();
   } catch (error) {
-    console.error('[RoutingEditor] Failed to save routing configuration:', error);
-    window.showToast('Failed to save: ' + error.message, 'error');
+    // Error already logged and toast shown by callIpc
   }
 }
 
@@ -434,20 +423,20 @@ async function validateRouting() {
   const content = routingEditor.getValue();
 
   try {
-    const response = await window.electronAPI.routingValidateConfig(content);
+    const response = await callIpc('routingValidateConfig', [content], {
+      errorMessage: 'Validation failed',
+      showErrorToast: true,
+      context: 'RoutingEditor'
+    });
 
-    if (!response || !response.success) {
-      throw new Error(response?.error || 'Validation failed');
-    }
-
+    // Custom validation result handling
     if (response.valid) {
       window.showToast('Routing configuration is valid ✓', 'success');
     } else {
       window.showToast(`Validation errors: ${response.errors.join(', ')}`, 'error');
     }
   } catch (error) {
-    console.error('[RoutingEditor] Validation failed:', error);
-    window.showToast('Validation error: ' + error.message, 'error');
+    // Error already logged and toast shown by callIpc
   }
 }
 
@@ -474,11 +463,11 @@ async function runRoutingTest() {
   }
 
   try {
-    const response = await window.electronAPI.routingTestEmails(emails);
-
-    if (!response || !response.success) {
-      throw new Error(response?.error || 'Routing test failed');
-    }
+    const response = await callIpc('routingTestEmails', [emails], {
+      errorMessage: 'Routing test failed',
+      showErrorToast: true,
+      context: 'RoutingEditor'
+    });
 
     // Display results
     const resultsDiv = document.getElementById('routingTestResults');
@@ -510,8 +499,7 @@ async function runRoutingTest() {
 
     console.log('[RoutingEditor] Routing test completed:', response);
   } catch (error) {
-    console.error('[RoutingEditor] Routing test failed:', error);
-    window.showToast('Test failed: ' + error.message, 'error');
+    // Error already logged and toast shown by callIpc
   }
 }
 
@@ -584,27 +572,20 @@ async function createNewOrganization() {
       const emails = emailsStr ? emailsStr.split(',').map(e => e.trim()).filter(e => e) : [];
       const contacts = contactsStr ? contactsStr.split(',').map(c => c.trim()).filter(c => c) : [];
 
-      try {
-        const response = await window.electronAPI.routingAddOrganization(type, id, vaultPath, emails, contacts);
+      const response = await callIpc('routingAddOrganization', [type, id, vaultPath, emails, contacts], {
+        successMessage: 'Organization added successfully',
+        errorMessage: 'Failed to add organization',
+        showSuccessToast: true,
+        context: 'RoutingEditor'
+      });
 
-        if (!response || !response.success) {
-          throw new Error(response?.error || 'Failed to add organization');
-        }
-
-        window.showToast('Organization added successfully', 'success');
-
-        // Update the editor content
-        if (routingEditor && response.content) {
-          routingEditor.setValue(response.content);
-        }
-
-        // Reload the configuration and organization list
-        await loadRouting();
-      } catch (error) {
-        console.error('[RoutingEditor] Failed to add organization:', error);
-        window.showToast('Failed to add organization: ' + error.message, 'error');
-        throw error; // Re-throw to prevent modal from closing on error
+      // Update the editor content
+      if (routingEditor && response.content) {
+        routingEditor.setValue(response.content);
       }
+
+      // Reload the configuration and organization list
+      await loadRouting();
     }
   });
 
@@ -643,36 +624,29 @@ async function deleteOrganization() {
     confirmText: 'Delete Organization',
     cancelText: 'Cancel',
     onConfirm: async () => {
-      try {
-        const response = await window.electronAPI.routingDeleteOrganization(type, id);
+      const response = await callIpc('routingDeleteOrganization', [type, id], {
+        successMessage: 'Organization deleted successfully',
+        errorMessage: 'Failed to delete organization',
+        showSuccessToast: true,
+        context: 'RoutingEditor'
+      });
 
-        if (!response || !response.success) {
-          throw new Error(response?.error || 'Failed to delete organization');
-        }
-
-        window.showToast('Organization deleted successfully', 'success');
-
-        // Update the editor content
-        if (routingEditor && response.content) {
-          routingEditor.setValue(response.content);
-        }
-
-        // Clear current selection
-        currentOrgSelection = null;
-
-        // Disable delete button
-        const deleteBtn = document.getElementById('deleteOrganizationBtn');
-        if (deleteBtn) {
-          deleteBtn.disabled = true;
-        }
-
-        // Reload the configuration and organization list
-        await loadRouting();
-      } catch (error) {
-        console.error('[RoutingEditor] Failed to delete organization:', error);
-        window.showToast('Failed to delete organization: ' + error.message, 'error');
-        throw error; // Re-throw to prevent modal from closing on error
+      // Update the editor content
+      if (routingEditor && response.content) {
+        routingEditor.setValue(response.content);
       }
+
+      // Clear current selection
+      currentOrgSelection = null;
+
+      // Disable delete button
+      const deleteBtn = document.getElementById('deleteOrganizationBtn');
+      if (deleteBtn) {
+        deleteBtn.disabled = true;
+      }
+
+      // Reload the configuration and organization list
+      await loadRouting();
     }
   });
 }
