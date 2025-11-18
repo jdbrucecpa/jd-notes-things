@@ -5,6 +5,7 @@
 
 import { sanitizeHtml, escapeHtml, markdownToSafeHtml } from './security.js';
 import { contactsService } from './services/contactsService.js';
+import { withButtonLoadingElement } from './utils/buttonHelper.js';
 
 // Current meeting being viewed
 let currentMeeting = null;
@@ -600,12 +601,7 @@ async function generateTemplates(onUpdate) {
   const btn = document.getElementById('generateTemplatesBtn');
   if (!btn) return;
 
-  // Disable button and show loading state
-  btn.disabled = true;
-  const originalText = btn.textContent;
-  btn.textContent = 'Generating...';
-
-  try {
+  await withButtonLoadingElement(btn, 'Generating...', async () => {
     console.log(`[MeetingDetail] Generating templates for meeting: ${currentMeetingId}`);
 
     // Get all available templates
@@ -649,13 +645,7 @@ async function generateTemplates(onUpdate) {
       console.error('[MeetingDetail] Failed to generate templates:', result.error);
       alert(`Failed to generate templates: ${result.error}`);
     }
-  } catch (error) {
-    console.error('[MeetingDetail] Error generating templates:', error);
-    alert(`Error generating templates: ${error.message}`);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = originalText;
-  }
+  });
 }
 
 /**
@@ -897,11 +887,7 @@ async function exportToObsidian() {
   const btn = document.getElementById('exportToObsidianBtn');
   if (!btn) return;
 
-  btn.disabled = true;
-  const originalText = btn.textContent;
-  btn.textContent = 'Exporting...';
-
-  try {
+  await withButtonLoadingElement(btn, 'Exporting...', async () => {
     console.log(`[MeetingDetail] Exporting meeting to Obsidian: ${currentMeetingId}`);
 
     const result = await window.electronAPI.obsidianExportMeeting(currentMeetingId);
@@ -929,13 +915,7 @@ async function exportToObsidian() {
       console.error('[MeetingDetail] Export failed:', result.error);
       alert(`Failed to export to Obsidian: ${result.error}`);
     }
-  } catch (error) {
-    console.error('[MeetingDetail] Error exporting to Obsidian:', error);
-    alert(`Error exporting to Obsidian: ${error.message}`);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = originalText;
-  }
+  });
 }
 
 /**
@@ -951,11 +931,7 @@ async function regenerateSummary(onUpdate) {
     return;
   }
 
-  btn.disabled = true;
-  const originalText = btn.textContent;
-  btn.textContent = 'Regenerating...';
-
-  try {
+  await withButtonLoadingElement(btn, 'Regenerating...', async () => {
     console.log(`[MeetingDetail] Regenerating summary for meeting: ${currentMeetingId}`);
 
     const result = await window.electronAPI.generateMeetingSummary(currentMeetingId);
@@ -998,16 +974,7 @@ async function regenerateSummary(onUpdate) {
       console.error('[MeetingDetail] Failed to regenerate summary:', result.error);
       alert(`Failed to regenerate summary: ${result.error}`);
     }
-  } catch (error) {
-    console.error('[MeetingDetail] Error regenerating summary:', error);
-    alert(`Error regenerating summary: ${error.message}`);
-  } finally {
-    // Only update button if it still exists (user might have navigated away)
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = originalText;
-    }
-  }
+  });
 }
 
 /**
