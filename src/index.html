@@ -732,12 +732,6 @@
               </svg>
               <span>General</span>
             </div>
-            <div id="appearanceSettingsTab" class="settings-tab" data-tab="appearance">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" fill="currentColor"/>
-              </svg>
-              <span>Appearance</span>
-            </div>
             <div id="securitySettingsTab" class="settings-tab" data-tab="security">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" fill="currentColor"/>
@@ -820,6 +814,18 @@
                   </div>
                 </div>
               </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Dark Mode</div>
+                  <div class="settings-item-description">Use dark theme for the application interface</div>
+                </div>
+                <div class="settings-item-control">
+                  <div class="toggle-switch" id="darkModeToggle">
+                    <div class="toggle-switch-thumb"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- AI Model Configuration Section -->
@@ -890,24 +896,6 @@
                     <option value="assemblyai">AssemblyAI</option>
                     <option value="deepgram">Deepgram</option>
                   </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="settings-panel" id="appearancePanel" style="display: none;">
-            <div class="settings-section">
-              <h3 class="settings-section-title">Theme</h3>
-
-              <div class="settings-item">
-                <div class="settings-item-info">
-                  <div class="settings-item-label">Dark Mode</div>
-                  <div class="settings-item-description">Use dark theme for the application interface</div>
-                </div>
-                <div class="settings-item-control">
-                  <div class="toggle-switch" id="darkModeToggle">
-                    <div class="toggle-switch-thumb"></div>
-                  </div>
                 </div>
               </div>
             </div>

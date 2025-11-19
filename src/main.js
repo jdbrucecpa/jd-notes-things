@@ -772,6 +772,7 @@ const createWindow = () => {
   let windowOptions = {
     width: 1024,
     height: 768,
+    icon: path.join(__dirname, 'assets', 'jd-notes-things.ico'),
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       contextIsolation: true,

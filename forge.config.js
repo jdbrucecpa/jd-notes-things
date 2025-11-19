@@ -17,7 +17,7 @@ module.exports = {
         };
       },
     },
-    icon: './jd-notes-things',
+    icon: './src/assets/jd-notes-things',
     extendInfo: {
       NSUserNotificationAlertStyle: 'alert',
     },

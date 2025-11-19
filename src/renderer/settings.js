@@ -209,7 +209,6 @@ export function initializeSettingsUI() {
   // Tab switching
   initializeTabs([
     { buttonId: 'generalSettingsTab', contentId: 'generalPanel' },
-    { buttonId: 'appearanceSettingsTab', contentId: 'appearancePanel' },
     { buttonId: 'securitySettingsTab', contentId: 'securityPanel' },
     { buttonId: 'routingSettingsTab', contentId: 'routingPanel' },
     { buttonId: 'templatesSettingsTab', contentId: 'templatesPanel' },

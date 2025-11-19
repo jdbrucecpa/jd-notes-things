@@ -2318,18 +2318,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
 
           // Show a toast notification
-          const toast = document.createElement('div');
-          toast.className = 'toast';
-          toast.textContent = 'Recording stopped';
-          document.body.appendChild(toast);
-          setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => {
-              if (toast.parentElement) {
-                document.body.removeChild(toast);
-              }
-            }, 300);
-          }, 2000);
+          window.showToast('Recording stopped', 'info');
         } else {
           console.error('[Phase 10.7] Failed to stop recording:', result.error);
           alert('Failed to stop recording: ' + result.error);
@@ -2573,18 +2562,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           joinButton.textContent = originalText;
 
           // Show a little toast message
-          const toast = document.createElement('div');
-          toast.className = 'toast';
-          toast.textContent = 'No active meeting detected';
-          document.body.appendChild(toast);
-
-          // Remove toast after 3 seconds
-          setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => {
-              document.body.removeChild(toast);
-            }, 300);
-          }, 3000);
+          window.showToast('No active meeting detected', 'info');
         }
       } catch (error) {
         console.error('Error joining meeting:', error);
@@ -2594,18 +2572,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         joinButton.textContent = originalText;
 
         // Show error toast
-        const toast = document.createElement('div');
-        toast.className = 'toast';
-        toast.textContent = 'Error joining meeting';
-        document.body.appendChild(toast);
-
-        // Remove toast after 3 seconds
-        setTimeout(() => {
-          toast.style.opacity = '0';
-          setTimeout(() => {
-            document.body.removeChild(toast);
-          }, 300);
-        }, 3000);
+        window.showToast('Error joining meeting', 'error');
       }
     } else {
       // Fallback for direct call
@@ -3135,18 +3102,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.currentRecordingId = result.recordingId;
 
             // Show a little toast message
-            const toast = document.createElement('div');
-            toast.className = 'toast';
-            toast.textContent = 'Recording started...';
-            document.body.appendChild(toast);
-
-            // Remove toast after 3 seconds
-            setTimeout(() => {
-              toast.style.opacity = '0';
-              setTimeout(() => {
-                document.body.removeChild(toast);
-              }, 300);
-            }, 3000);
+            window.showToast('Recording started...', 'info');
           } else {
             // If starting failed, revert UI
             console.error('Failed to start recording:', result.error);
@@ -3188,18 +3144,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               console.log('Manual recording stopped successfully');
 
               // Show a little toast message
-              const toast = document.createElement('div');
-              toast.className = 'toast';
-              toast.textContent = 'Recording stopped. Transcript saved.';
-              document.body.appendChild(toast);
-
-              // Remove toast after 3 seconds
-              setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => {
-                  document.body.removeChild(toast);
-                }, 300);
-              }, 3000);
+              window.showToast('Recording stopped. Transcript saved.', 'success');
 
               // The recording-completed event handler will take care of refreshing the content
             } else {
@@ -3394,18 +3339,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Generated', result.summaries.length, 'summaries');
 
         // Show success toast with export status
-        const toast = document.createElement('div');
-        toast.className = 'toast success';
         const exportStatus = result.exported ? ' and exported to Obsidian' : '';
-        toast.textContent = `Generated ${result.summaries.length} summaries successfully${exportStatus}!`;
-        toast.style.cssText =
-          'position: fixed; top: 80px; right: 20px; background: #4CAF50; color: white; padding: 12px 20px; border-radius: 5px; font-size: 14px; z-index: 10000; box-shadow: 0 2px 8px rgba(0,0,0,0.2); transition: opacity 0.3s ease;';
-        document.body.appendChild(toast);
-
-        setTimeout(() => {
-          toast.style.opacity = '0';
-          setTimeout(() => toast.remove(), 300);
-        }, 3000);
+        const message = `Generated ${result.summaries.length} summaries successfully${exportStatus}!`;
+        window.showToast(message, 'success');
 
         // Update meeting data (summaries already saved by backend, but update obsidianLink if exported)
         const meeting = [...upcomingMeetings, ...pastMeetings].find(
@@ -4048,18 +3984,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           await loadMeetingsDataFromFile();
 
           // Show success message
-          const toast = document.createElement('div');
-          toast.className = 'toast success';
-          toast.textContent = isRepublish ? 'Republished to Obsidian!' : 'Published to Obsidian!';
-          toast.style.cssText =
-            'position: fixed; top: 80px; right: 20px; background: #4CAF50; color: white; padding: 12px 20px; border-radius: 5px; font-size: 14px; z-index: 10000; box-shadow: 0 2px 8px rgba(0,0,0,0.2);';
-          document.body.appendChild(toast);
-
-          setTimeout(() => {
-            toast.style.transition = 'opacity 0.3s ease';
-            toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 300);
-          }, 3000);
+          const message = isRepublish ? 'Republished to Obsidian!' : 'Published to Obsidian!';
+          window.showToast(message, 'success');
 
           // Update button to show "Republish"
           updateObsidianButton(meeting);
