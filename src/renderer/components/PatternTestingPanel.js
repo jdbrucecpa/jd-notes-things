@@ -78,7 +78,7 @@ async function initializeImportPreview(options) {
  * Initialize Pattern Editor Mode
  * Standalone testing sandbox with Monaco editor
  */
-async function initializePatternEditor(options) {
+async function initializePatternEditor(_options) {
   const container = document.getElementById('patternEditorMonaco');
 
   if (!container) {

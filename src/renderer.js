@@ -7,7 +7,7 @@
  */
 
 import './index.css';
-import { sanitizeHtml, escapeHtml, markdownToSafeHtml, safeSetInnerHTML } from './renderer/security.js';
+import { sanitizeHtml, escapeHtml } from './renderer/security.js';
 import { initializeSettingsUI, openSettingsTab } from './renderer/settings.js';
 import { initializeTemplateEditor } from './renderer/templates.js';
 import { initializeRoutingEditor } from './renderer/routing.js';
@@ -123,7 +123,6 @@ function updateBulkActionsToolbar() {
 
 // Function to select all meetings
 function selectAllMeetings() {
-  const allMeetings = [...upcomingMeetings, ...pastMeetings];
   const checkboxes = document.querySelectorAll('.meeting-checkbox');
 
   checkboxes.forEach(checkbox => {
@@ -284,6 +283,8 @@ async function batchDeleteMeetings() {
 }
 
 // Function to check if there's an active recording for the current note
+// Note: Currently unused - kept for future feature
+// eslint-disable-next-line no-unused-vars
 async function checkActiveRecordingState() {
   if (!currentEditingMeetingId) return;
 
@@ -1065,6 +1066,8 @@ function showEditorView(meetingId) {
 }
 
 // Setup the title editing and save function
+// Note: Currently unused - title editing handled inline
+// eslint-disable-next-line no-unused-vars
 function setupTitleEditing() {
   const titleElement = document.getElementById('noteTitle');
 
@@ -1138,6 +1141,8 @@ function setupAutoSaveHandler() {
 let currentObsidianLinkAutoSaveHandler = null;
 
 // Function to set up auto-save handler for Obsidian link input
+// Note: Currently unused - auto-save handled inline
+// eslint-disable-next-line no-unused-vars
 function setupObsidianLinkAutoSave() {
   // Create a debounced auto-save handler
   const obsidianLinkAutoSaveHandler = debounce(async () => {
@@ -1857,7 +1862,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Listen for streaming summary updates (currently not used in new meeting detail view)
   window.electronAPI.onSummaryUpdate(data => {
-    const { meetingId, content, timestamp } = data;
+    const { meetingId, content, timestamp: _timestamp } = data;
 
     // Note: Streaming updates are not currently displayed in the new meeting detail view
     // The view will be updated when the final summary is complete via onSummaryGenerated event
@@ -2027,7 +2032,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('Record calendar meeting:', meetingId);
 
       // Create a new note for this meeting
-      const noteId = await createNewMeeting();
+      const _noteId = await createNewMeeting();
 
       // TODO: Future enhancement - associate calendar meeting with this note
       // Could store calendar meeting ID in the note metadata
@@ -2506,7 +2511,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Re-record Confirmation Modal Logic
   // ===================================
 
-  function showReRecordModal(meeting) {
+  function showReRecordModal(_meeting) {
     const modal = document.getElementById('reRecordModal');
     const closeBtn = document.getElementById('closeReRecordModal');
     const options = document.querySelectorAll('.re-record-option');

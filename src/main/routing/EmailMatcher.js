@@ -254,7 +254,7 @@ class EmailMatcher {
    */
   determinePrimary(matchResults) {
     const config = this.configLoader.getConfig();
-    const settings = config.settings;
+    const _settings = config.settings; // Reserved for future routing preferences
 
     let maxCount = 0;
     let primary = null;

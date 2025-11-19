@@ -181,7 +181,7 @@ window.editAPIKey = async function (keyName) {
 
   // Close any other editing rows
   if (currentEditingKey && currentEditingKey !== keyName) {
-    await cancelEditAPIKey();
+    await window.cancelEditAPIKey();
   }
 
   currentEditingKey = keyName;
@@ -248,7 +248,7 @@ window.saveAPIKey = async function (keyName) {
     window.showToast(`${keyName} saved successfully`, 'success');
 
     // Remove edit row and reload keys
-    await cancelEditAPIKey();
+    await window.cancelEditAPIKey();
     await loadAPIKeys();
   } catch (error) {
     console.error(`[SecuritySettings] Failed to save key ${keyName}:`, error);

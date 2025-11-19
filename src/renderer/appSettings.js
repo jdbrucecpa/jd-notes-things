@@ -139,7 +139,7 @@ function setupToggle(toggleId, category, key) {
 /**
  * Handle keyboard shortcut changes
  */
-async function handleShortcutChange(event) {
+async function handleShortcutChange(_event) {
   try {
     const startStopShortcut = document.getElementById('startStopShortcut')?.value || 'CommandOrControl+Shift+R';
     const quickRecordShortcut = document.getElementById('quickRecordShortcut')?.value || 'CommandOrControl+Shift+Q';

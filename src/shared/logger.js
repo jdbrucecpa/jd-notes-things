@@ -30,7 +30,7 @@ try {
     const userDataPath = app.getPath('userData');
     log.transports.file.resolvePathFn = () => path.join(userDataPath, 'logs', 'main.log');
   }
-} catch (error) {
+} catch {
   // If electron is not available (e.g., in renderer process), use current directory
   log.transports.file.resolvePathFn = () => path.join(process.cwd(), 'logs', 'renderer.log');
 }

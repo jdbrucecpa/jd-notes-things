@@ -208,7 +208,8 @@ class EncryptionService {
       // Try to detect if it's binary vs text
       const textSample = contents.slice(0, 100).toString('utf8');
       const hasNullBytes = textSample.includes('\0');
-      const hasControlChars = /[\x00-\x08\x0E-\x1F]/.test(textSample);
+      // eslint-disable-next-line no-control-regex
+      const hasControlChars = /[\x00-\x08\x0E-\x1F]/.test(textSample); // Intentionally checking for control characters
 
       return hasNullBytes || hasControlChars;
     } catch (error) {

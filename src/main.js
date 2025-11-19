@@ -41,13 +41,14 @@ const log = require('electron-log');
 // ===================================================
 const {
   withValidation,
-  saveMeetingsDataSchema,
-  googleAuthenticateSchema,
+  // Reserved for future IPC validation rollout (Phase 9 security hardening)
+  saveMeetingsDataSchema: _saveMeetingsDataSchema,
+  googleAuthenticateSchema: _googleAuthenticateSchema,
   templatesGenerateSummariesSchema,
   llmSwitchProviderSchema,
-  obsidianExportMeetingSchema,
-  importFileSchema,
-  importBatchSchema,
+  obsidianExportMeetingSchema: _obsidianExportMeetingSchema,
+  importFileSchema: _importFileSchema,
+  importBatchSchema: _importBatchSchema,
 } = require('./main/validation/ipcSchemas');
 require('dotenv').config();
 
@@ -546,7 +547,10 @@ function updateSystemTrayMenu() {
 
 /**
  * Update tray menu to reflect recording state (Phase 10.7)
+ * Note: Currently unused - tray menu is recreated on each recording state change
+ * Kept for potential future dynamic menu updates
  */
+// eslint-disable-next-line no-unused-vars
 function updateTrayMenu(isRecording) {
   if (!tray) return;
 
@@ -769,7 +773,7 @@ async function autoStartRecording(meeting) {
 
 const createWindow = () => {
   // Restore window bounds from settings (Phase 10.7)
-  let windowOptions = {
+  const windowOptions = {
     width: 1024,
     height: 768,
     icon: path.join(__dirname, 'assets', 'jd-notes-things.ico'),
@@ -1800,7 +1804,7 @@ function initSDK() {
   // Desktop apps can't receive webhooks, so we poll the API instead
   // See pollForUploadCompletion() function below
 
-  RecallAiSdk.addEventListener('permissions-granted', async evt => {
+  RecallAiSdk.addEventListener('permissions-granted', async _evt => {
     logger.main.info('[SDK] Permissions granted');
   });
 
@@ -1923,7 +1927,7 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
     }
 
     // Create participants from speaker mapping
-    for (const [speakerLabel, speakerInfo] of Object.entries(speakerMapping)) {
+    for (const [_speakerLabel, speakerInfo] of Object.entries(speakerMapping)) {
       if (speakerInfo.email) {
         const contact = contactsMap.get(speakerInfo.email);
 
@@ -2199,8 +2203,8 @@ function generateSummaryMarkdown(meeting, baseFilename) {
         // If we have speaker mapping, include which speaker label(s) map to this participant
         if (meeting.speakerMapping) {
           const speakerLabels = Object.entries(meeting.speakerMapping)
-            .filter(([label, info]) => info.name === participant.name)
-            .map(([label, info]) => label);
+            .filter(([_label, info]) => info.name === participant.name)
+            .map(([label, _info]) => label);
 
           if (speakerLabels.length > 0) {
             participantLine += `\n    speaker_labels: [${speakerLabels.join(', ')}]`;
@@ -2220,8 +2224,8 @@ function generateSummaryMarkdown(meeting, baseFilename) {
         // If we have speaker mapping, include which speaker label(s) map to this participant
         if (meeting.speakerMapping) {
           const speakerLabels = Object.entries(meeting.speakerMapping)
-            .filter(([label, info]) => info.email === email)
-            .map(([label, info]) => label);
+            .filter(([_label, info]) => info.email === email)
+            .map(([label, _info]) => label);
 
           if (speakerLabels.length > 0) {
             participantLine += `\n    name: "${meeting.speakerMapping[speakerLabels[0]].name}"`;
@@ -2479,7 +2483,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
 
     // Calculate safe concurrency based on token budget
     const safeConcurrency = Math.max(1, Math.floor(tokenBudgetPerMinute / estimatedTokensPerRequest));
-    const actualConcurrency = Math.min(3, safeConcurrency); // Cap at 3 for safety
+    const _actualConcurrency = Math.min(3, safeConcurrency); // Cap at 3 for safety (reserved for future use)
 
     console.log(`[TemplateSummary] Transcript: ~${estimatedTokensPerRequest} tokens/request`);
     console.log(
@@ -2554,7 +2558,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
     });
 
     // Build final markdown for each template
-    for (const [templateId, templateData] of templateMap) {
+    for (const [_templateId, templateData] of templateMap) {
       let summaryMarkdown = `# ${meeting.title}\n\n`;
       summaryMarkdown += `Generated using template: **${templateData.templateName}**\n\n`;
       summaryMarkdown += `---\n\n`;
@@ -4816,7 +4820,7 @@ global.webhookHandlers = {
     }
   },
 
-  handleTranscriptFailed: async ({ transcriptId, recordingId, error }) => {
+  handleTranscriptFailed: async ({ transcriptId: _transcriptId, recordingId, error }) => {
     console.error(`[Webhook] Transcript failed for recording: ${recordingId}`, error);
 
     try {
@@ -4900,7 +4904,7 @@ ipcMain.on('webhook-transcript-done', async (event, { transcriptId, recordingId 
 });
 
 // Handle transcript failed webhook
-ipcMain.on('webhook-transcript-failed', async (event, { transcriptId, recordingId, error }) => {
+ipcMain.on('webhook-transcript-failed', async (event, { transcriptId: _transcriptId, recordingId, error }) => {
   console.error(`[Webhook] Transcript failed for recording: ${recordingId}`, error);
 
   try {
@@ -5531,7 +5535,9 @@ const windowSpeakerLabels = new Map(); // windowId -> latest speaker label
 /**
  * Match speaker labels to participant names using simple heuristics
  * @param {Object} meeting - Meeting object with transcript and participants
+ * Note: Currently unused - replaced by SpeakerMatcher service
  */
+// eslint-disable-next-line no-unused-vars
 async function matchSpeakersToParticipants(meeting) {
   if (!meeting.transcript || !meeting.participants) {
     return;
@@ -5625,7 +5631,9 @@ async function matchSpeakersToParticipants(meeting) {
  * Poll Recall.ai API to check if upload is complete
  * (Webhooks don't work for desktop apps, so we poll instead)
  * @param {string} windowId - Window ID from Desktop SDK
+ * Note: Currently unused - using webhook-based transcription instead
  */
+// eslint-disable-next-line no-unused-vars
 async function pollForUploadCompletion(windowId) {
   const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
   const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
@@ -5771,7 +5779,7 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
     }
 
     // Get expected speaker count from participants
-    const speakersExpected = meeting.participants ? meeting.participants.length : null;
+    const _speakersExpected = meeting.participants ? meeting.participants.length : null;
 
     // Call Recall.ai API to create async transcript with built-in provider
     const url = `${RECALLAI_API_URL}/api/v1/recording/${recordingId}/create_transcript/`;
@@ -5903,7 +5911,7 @@ async function pollRecallAITranscript(recordingId, transcriptId, windowId, meeti
  * @param {string} meetingId - Our meeting ID
  * @param {string} windowId - Window ID
  */
-async function processRecallAITranscript(transcript, meetingId, windowId) {
+async function processRecallAITranscript(transcript, meetingId, _windowId) {
   console.log('[Recall.ai] Processing transcript with speaker labels');
 
   try {
@@ -6065,6 +6073,8 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
 }
 
 // Function to process transcript data and store it with the meeting note
+// Note: Currently unused - using webhook-based processing instead
+// eslint-disable-next-line no-unused-vars
 async function processTranscriptData(evt) {
   try {
     const windowId = evt.window?.id;
@@ -6488,7 +6498,7 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
     }
 
     // Load system prompt from template file or use hardcoded fallback (Phase 10.3)
-    let systemMessage = loadAutoSummaryPrompt(needsTitleSuggestion);
+    const systemMessage = loadAutoSummaryPrompt(needsTitleSuggestion);
 
     // Prepare the user prompt
     const userPrompt = `Summarize the following meeting transcript with the EXACT format specified in your instructions:

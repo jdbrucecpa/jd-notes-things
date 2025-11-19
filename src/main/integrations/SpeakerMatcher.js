@@ -16,7 +16,7 @@ class SpeakerMatcher {
    * @returns {Object} Speaker mapping (speakerLabel -> participant info)
    */
   async matchSpeakers(transcript, participantEmails, options = {}) {
-    const { includeOrganizer = true, useWordCount = true, useTimingHeuristics = true } = options;
+    const { includeOrganizer: _includeOrganizer = true, useWordCount: _useWordCount = true, useTimingHeuristics: _useTimingHeuristics = true } = options;
 
     if (!transcript || transcript.length === 0) {
       console.log('[SpeakerMatcher] Empty transcript - no speakers to match');
@@ -219,7 +219,7 @@ class SpeakerMatcher {
         .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
       return name;
-    } catch (error) {
+    } catch {
       return 'Unknown';
     }
   }

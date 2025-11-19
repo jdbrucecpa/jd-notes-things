@@ -1,7 +1,7 @@
 const axios = require('axios');
-const FormData = require('form-data');
+const _FormData = require('form-data'); // Reserved for future multipart uploads
 const fs = require('fs');
-const path = require('path');
+const _path = require('path'); // Reserved for future path utilities
 
 /**
  * Unified Transcription Service
@@ -45,7 +45,7 @@ class TranscriptionService {
    * Recall.ai (existing implementation - kept for when SDK is fixed)
    * Note: Currently broken - SDK uploadRecording() doesn't work
    */
-  async transcribeWithRecallAI(audioFilePath, options = {}) {
+  async transcribeWithRecallAI(audioFilePath, _options = {}) {
     throw new Error('Recall.ai SDK upload is currently broken. Please use AssemblyAI or Deepgram.');
   }
 
@@ -53,7 +53,7 @@ class TranscriptionService {
    * AssemblyAI Transcription
    * https://www.assemblyai.com/docs
    */
-  async transcribeWithAssemblyAI(audioFilePath, options = {}) {
+  async transcribeWithAssemblyAI(audioFilePath, _options = {}) {
     const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
 
     if (!ASSEMBLYAI_API_KEY) {
@@ -164,7 +164,7 @@ class TranscriptionService {
    * Deepgram Transcription
    * https://developers.deepgram.com/docs
    */
-  async transcribeWithDeepgram(audioFilePath, options = {}) {
+  async transcribeWithDeepgram(audioFilePath, _options = {}) {
     const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
 
     if (!DEEPGRAM_API_KEY) {

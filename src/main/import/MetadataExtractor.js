@@ -95,7 +95,7 @@ class MetadataExtractor {
    * Extract title from filename
    * Removes date portions and file extensions
    */
-  extractTitleFromFilename(filename, dateObj) {
+  extractTitleFromFilename(filename, _dateObj) {
     let title = filename;
 
     // Remove common date patterns

@@ -121,7 +121,7 @@ class GoogleAuth {
           }
 
           // Remove inheritance and grant full control to current user only
-          const { stdout, stderr } = await execAsync(
+          const { stdout: _stdout, stderr } = await execAsync(
             `icacls "${this.tokenPath}" /inheritance:r /grant:r "${username}:F"`
           );
 
@@ -315,7 +315,7 @@ class GoogleAuth {
         try {
           await fs.unlink(this.tokenPath);
           console.log('[GoogleAuth] Deleted invalid token file');
-        } catch (unlinkErr) {
+        } catch {
           // File may not exist, ignore
         }
 

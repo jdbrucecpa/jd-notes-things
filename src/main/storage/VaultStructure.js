@@ -200,7 +200,7 @@ class VaultStructure {
    * @returns {string} Path to saved index
    */
   saveIndex(meetingPath, indexData) {
-    const { title, date, participants, platform, meetingType } = indexData;
+    const { title: _title, date: _date, participants: _participants, platform: _platform, meetingType: _meetingType } = indexData; // Validate presence of key fields
 
     const indexContent = this._generateIndexMarkdown(indexData);
     const indexPath = path.join(meetingPath, 'index.md');

@@ -25,12 +25,17 @@ module.exports = {
   rebuildConfig: {},
   makers: [
     {
+      name: '@electron-forge/maker-squirrel',
+      config: {
+        name: 'JDNotesThings',
+        authors: 'JD Knows Things',
+        description: 'AI Meeting Notetaker for Zoom, Teams, and Google Meet',
+        exe: 'JDNotesThings.exe',
+      },
+    },
+    {
       name: '@electron-forge/maker-dmg',
     },
-    // {
-    //   name: '@electron-forge/maker-squirrel',
-    //   config: {},
-    // },
     // {
     //   name: '@electron-forge/maker-zip',
     //   platforms: ['darwin'],

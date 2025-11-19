@@ -21,7 +21,7 @@ class LLMAdapter {
    * @param {number} options.temperature - Temperature (0-1)
    * @returns {Promise<{content: string, model: string}>}
    */
-  async generateCompletion(options) {
+  async generateCompletion(_options) {
     throw new Error('generateCompletion must be implemented by subclass');
   }
 
@@ -35,7 +35,7 @@ class LLMAdapter {
    * @param {Function} options.onChunk - Callback for each chunk (cumulative text)
    * @returns {Promise<string>} - Final complete text
    */
-  async streamCompletion(options) {
+  async streamCompletion(_options) {
     throw new Error('streamCompletion must be implemented by subclass');
   }
 

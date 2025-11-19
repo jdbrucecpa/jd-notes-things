@@ -97,7 +97,7 @@ export function createModal({
   const closeBtn = modal.querySelector('[data-modal-action="close"]');
   const cancelBtn = modal.querySelector('[data-modal-action="cancel"]');
   const confirmBtn = modal.querySelector('[data-modal-action="confirm"]');
-  const modalDialog = modal.querySelector('.modal-dialog');
+  const _modalDialog = modal.querySelector('.modal-dialog'); // Reserved for future event handling
 
   // Track if modal is being closed (prevent duplicate closures)
   let isClosing = false;

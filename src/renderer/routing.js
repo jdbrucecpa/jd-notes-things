@@ -393,7 +393,7 @@ async function saveRouting() {
 
     // Reload to update organizations list
     await loadRouting();
-  } catch (error) {
+  } catch {
     // Error already logged and toast shown by callIpc
   }
 }
@@ -421,7 +421,7 @@ async function validateRouting() {
     } else {
       window.showToast(`Validation errors: ${response.errors.join(', ')}`, 'error');
     }
-  } catch (error) {
+  } catch {
     // Error already logged and toast shown by callIpc
   }
 }
@@ -484,7 +484,7 @@ async function runRoutingTest() {
     }
 
     console.log('[RoutingEditor] Routing test completed:', response);
-  } catch (error) {
+  } catch {
     // Error already logged and toast shown by callIpc
   }
 }

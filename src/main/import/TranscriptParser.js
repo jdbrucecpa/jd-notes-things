@@ -43,7 +43,7 @@ class TranscriptParser {
    */
   async parsePlainText(content, filePath) {
     // Load patterns and settings from config
-    const config = await patternConfigLoader.loadConfig();
+    const _config = await patternConfigLoader.loadConfig();
     const patterns = await patternConfigLoader.getEnabledPatterns();
     const settings = await patternConfigLoader.getSettings();
 
@@ -261,9 +261,9 @@ class TranscriptParser {
    * Phase 10.8.1 - Refactored to use pattern configuration
    */
   async parseMarkdown(content, filePath) {
-    const lines = content.split('\n');
-    const entries = [];
-    const rawText = '';
+    const _lines = content.split('\n');
+    const _entries = [];
+    const _rawText = '';
     let metadata = {};
 
     // Extract YAML frontmatter if present
@@ -285,7 +285,7 @@ class TranscriptParser {
 
   async parseMarkdownContent(content, filePath, metadata) {
     // Load patterns and settings from config (same as plain text)
-    const config = await patternConfigLoader.loadConfig();
+    const _config = await patternConfigLoader.loadConfig();
     const patterns = await patternConfigLoader.getEnabledPatterns();
     const settings = await patternConfigLoader.getSettings();
 
