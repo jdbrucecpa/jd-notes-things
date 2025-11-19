@@ -527,6 +527,7 @@ class LLMService {
 
 /**
  * Create LLM service from environment variables
+ * @deprecated Use createLLMServiceFromCredentials() instead for production
  */
 function createLLMServiceFromEnv() {
   // Determine which provider to use based on env vars
@@ -560,6 +561,52 @@ function createLLMServiceFromEnv() {
     },
     anthropic: {
       apiKey: process.env.ANTHROPIC_API_KEY,
+      model: 'claude-haiku-4-5-20251001', // Fast and cost-effective
+    },
+  };
+
+  return new LLMService(config);
+}
+
+/**
+ * Create LLM service from Windows Credential Manager (with .env fallback)
+ * @param {Object} keyManagementService - Key management service instance
+ */
+async function createLLMServiceFromCredentials(keyManagementService) {
+  // Try to get API keys from Windows Credential Manager first, fall back to env vars
+  const azureKey = (await keyManagementService.getKey('AZURE_OPENAI_API_KEY')) || process.env.AZURE_OPENAI_API_KEY;
+  const azureEndpoint = (await keyManagementService.getKey('AZURE_OPENAI_ENDPOINT')) || process.env.AZURE_OPENAI_ENDPOINT;
+  const azureDeployment = (await keyManagementService.getKey('AZURE_OPENAI_DEPLOYMENT')) || process.env.AZURE_OPENAI_DEPLOYMENT;
+  const anthropicKey = (await keyManagementService.getKey('ANTHROPIC_API_KEY')) || process.env.ANTHROPIC_API_KEY;
+  const openaiKey = (await keyManagementService.getKey('OPENAI_API_KEY')) || process.env.OPENAI_API_KEY;
+
+  // Determine which provider to use based on available keys
+  // Priority: Azure > Anthropic > OpenAI
+  let provider;
+  if (azureKey && azureEndpoint && azureDeployment) {
+    provider = 'azure';
+  } else if (anthropicKey) {
+    provider = 'anthropic';
+  } else if (openaiKey) {
+    provider = 'openai';
+  } else {
+    throw new Error('No LLM API keys found in Windows Credential Manager or environment variables');
+  }
+
+  const config = {
+    provider,
+    openai: {
+      apiKey: openaiKey,
+      model: 'gpt-4o-mini', // Can be overridden
+    },
+    azure: {
+      apiKey: azureKey,
+      endpoint: azureEndpoint,
+      deployment: azureDeployment,
+      apiVersion: (await keyManagementService.getKey('AZURE_OPENAI_API_VERSION')) || process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview',
+    },
+    anthropic: {
+      apiKey: anthropicKey,
       model: 'claude-haiku-4-5-20251001', // Fast and cost-effective
     },
   };
@@ -620,5 +667,6 @@ module.exports = {
   AzureOpenAIAdapter,
   AnthropicAdapter,
   createLLMServiceFromEnv,
+  createLLMServiceFromCredentials,
   createLLMServiceFromPreference,
 };

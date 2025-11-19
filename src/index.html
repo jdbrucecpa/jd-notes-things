@@ -772,8 +772,9 @@
                   <div class="settings-item-label">Vault Path</div>
                   <div class="settings-item-description">Location of your Obsidian vault</div>
                 </div>
-                <div class="settings-item-control">
-                  <input type="text" class="settings-input" id="vaultPathInput" placeholder="C:\Users\...\vault" readonly />
+                <div class="settings-item-control" style="display: flex; gap: 8px; align-items: center;">
+                  <input type="text" class="settings-input" id="vaultPathInput" placeholder="C:\Users\...\vault" readonly style="flex: 1;" />
+                  <button class="btn btn-secondary" id="browseVaultPathBtn">Browse</button>
                 </div>
               </div>
 
@@ -1304,7 +1305,7 @@
             <div class="settings-section">
               <div class="about-info">
                 <h3>JD Notes Things</h3>
-                <p class="version">v0.1.0</p>
+                <p class="version" id="appVersion">v1.0.0</p>
                 <p>AI-Powered Meeting Transcription & Summarization</p>
               </div>
             </div>

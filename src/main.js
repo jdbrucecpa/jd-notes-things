@@ -16,7 +16,7 @@ const RoutingEngine = require('./main/routing/RoutingEngine');
 const ImportManager = require('./main/import/ImportManager');
 const TranscriptParser = require('./main/import/TranscriptParser');
 const PatternConfigLoader = require('./main/import/PatternConfigLoader');
-const { createLLMServiceFromEnv } = require('./main/services/llmService');
+const { createLLMServiceFromEnv, createLLMServiceFromCredentials } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
 const { createIpcHandler } = require('./main/utils/ipcHelpers');
@@ -112,8 +112,8 @@ global.getAPIKeySync = getAPIKeySync;
 
 // Initialize LLM service with auto-detection of available provider
 // Priority: Azure OpenAI > Anthropic > OpenAI
-const llmService = createLLMServiceFromEnv();
-logger.main.info(`LLM Service initialized with provider: ${llmService.getProviderName()}`);
+// Initialized in app.whenReady() using Windows Credential Manager
+let llmService = null;
 
 // Pattern Generation Service removed (Phase 10.8.3 removed)
 
@@ -895,6 +895,164 @@ const createWindow = () => {
   });
 };
 
+/**
+ * Initialize default config files on first launch (production only)
+ * Creates routing.yaml and default templates if they don't exist
+ */
+async function initializeDefaultConfigFiles() {
+  const userDataPath = app.getPath('userData');
+  const configDir = path.join(userDataPath, 'config');
+  const templatesDir = path.join(configDir, 'templates');
+  const routingPath = path.join(configDir, 'routing.yaml');
+
+  try {
+    // Create config directory if it doesn't exist
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+      logger.main.info('[Config] Created config directory:', configDir);
+    }
+
+    // Create routing.yaml if it doesn't exist
+    if (!fs.existsSync(routingPath)) {
+      const defaultRouting = `# JD Notes Things - Routing Configuration
+# This file controls how meetings are organized in your Obsidian vault
+# See documentation for full configuration options
+
+clients: {}
+  # Example:
+  # acme-corp:
+  #   vault_path: clients/acme-corp
+  #   emails:
+  #     - acmecorp.com
+  #   contacts:
+  #     - john@acmecorp.com
+
+industry: {}
+  # Example:
+  # consultant-jane:
+  #   vault_path: industry/consultant-jane
+  #   emails:
+  #     - janeconsulting.com
+  #   contacts:
+  #     - jane@janeconsulting.com
+
+internal:
+  vault_path: internal/meetings
+  team_emails: []
+    # Add your company domain(s) here
+    # - yourcompany.com
+
+email_overrides: {}
+  # Override specific email addresses to route to specific clients
+  # personal@gmail.com: acme-corp
+
+settings:
+  unfiled_path: _unfiled
+  duplicate_multi_org: all
+  domain_priority: most_attendees
+  enable_email_overrides: true
+  case_sensitive_emails: false
+`;
+      fs.writeFileSync(routingPath, defaultRouting, 'utf8');
+      logger.main.info('[Config] Created default routing.yaml');
+    }
+
+    // Create templates directory if it doesn't exist
+    if (!fs.existsSync(templatesDir)) {
+      fs.mkdirSync(templatesDir, { recursive: true });
+      logger.main.info('[Config] Created templates directory:', templatesDir);
+    }
+
+    // Create default template files if they don't exist
+    const defaultTemplates = {
+      'auto-summary-prompt.txt': `You are an AI assistant helping to summarize meeting transcripts.
+
+Given the transcript below, create a concise summary that includes:
+1. Main discussion topics
+2. Key decisions made
+3. Action items and owners
+4. Important deadlines or dates mentioned
+
+Keep the summary clear and actionable.`,
+
+      'client-meeting.yaml': `name: Client Meeting Summary
+description: Structured summary for client meetings
+
+sections:
+  - name: Executive Summary
+    prompt: Provide a brief 2-3 sentence overview of the meeting
+
+  - name: Discussion Topics
+    prompt: List the main topics discussed in bullet points
+
+  - name: Decisions Made
+    prompt: List any decisions that were made during the meeting
+
+  - name: Action Items
+    prompt: Create a list of action items with owners and deadlines if mentioned
+
+  - name: Next Steps
+    prompt: Summarize the agreed next steps and follow-up plan`,
+
+      'internal-meeting.yaml': `name: Internal Meeting Summary
+description: Summary for internal team meetings
+
+sections:
+  - name: Meeting Overview
+    prompt: Provide a brief summary of the meeting purpose and outcomes
+
+  - name: Key Topics
+    prompt: List the main topics discussed
+
+  - name: Action Items
+    prompt: List action items with assigned team members`,
+
+      'quick-notes.json': `{
+  "name": "Quick Notes",
+  "description": "Fast summary for brief meetings",
+  "sections": [
+    {
+      "name": "Summary",
+      "prompt": "Provide a brief 3-5 sentence summary of the meeting"
+    },
+    {
+      "name": "Follow-up",
+      "prompt": "List any follow-up items or action points"
+    }
+  ]
+}`,
+
+      'one-on-one.md': `# One-on-One Meeting Template
+
+## Attendees
+List the meeting participants
+
+## Topics Discussed
+Summarize the main topics covered in the one-on-one
+
+## Action Items
+- List action items with owners
+- Include deadlines if mentioned
+
+## Notes
+Any additional notes or context from the meeting`
+    };
+
+    // Create each template file if it doesn't exist
+    for (const [filename, content] of Object.entries(defaultTemplates)) {
+      const templatePath = path.join(templatesDir, filename);
+      if (!fs.existsSync(templatePath)) {
+        fs.writeFileSync(templatePath, content, 'utf8');
+        logger.main.info('[Config] Created default template:', filename);
+      }
+    }
+
+    logger.main.info('[Config] Default config files initialized successfully');
+  } catch (error) {
+    logger.main.error('[Config] Error initializing default config files:', error);
+  }
+}
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -942,6 +1100,15 @@ app.whenReady().then(async () => {
   // Load app settings from disk (Phase 10.7)
   loadAppSettings();
 
+  // Initialize LLM service from Windows Credential Manager (with .env fallback)
+  try {
+    llmService = await createLLMServiceFromCredentials(keyManagementService);
+    logger.main.info(`LLM Service initialized with provider: ${llmService.getProviderName()}`);
+  } catch (error) {
+    logger.main.warn('LLM Service not initialized - no API keys configured yet:', error.message);
+    logger.main.info('User will need to configure LLM API keys in settings');
+  }
+
   // Initialize the Recall.ai SDK
   initSDK();
 
@@ -980,8 +1147,8 @@ app.whenReady().then(async () => {
   // Initialize Obsidian Export System (Phase 5)
   console.log('[ObsidianExport] Initializing vault and routing system...');
 
-  // Read vault path from environment variable (supports relative and absolute paths)
-  let vaultPath = process.env.VAULT_PATH || './vault';
+  // Read vault path from saved settings first, then fall back to environment variable
+  let vaultPath = appSettings.vaultPath || process.env.VAULT_PATH || './vault';
 
   // If path is relative, resolve it from project root
   if (!path.isAbsolute(vaultPath)) {
@@ -1000,6 +1167,8 @@ app.whenReady().then(async () => {
     console.log('[ObsidianExport] Development mode - using routing config:', configPath);
   } else {
     configPath = path.join(app.getPath('userData'), 'config', 'routing.yaml');
+    // Initialize default config files on first launch (production only)
+    await initializeDefaultConfigFiles();
   }
 
   try {
@@ -1333,10 +1502,10 @@ const fileOperationManager = {
 async function createDesktopSdkUpload() {
   try {
     const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-    const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+    const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
     if (!RECALLAI_API_KEY) {
-      console.error('RECALLAI_API_KEY is missing! Set it in .env file');
+      console.error('RECALLAI_API_KEY is missing! Configure it in Settings > Security');
       return null;
     }
 
@@ -3564,6 +3733,9 @@ ipcMain.handle('routing:restoreBackup', createIpcHandler(async () => {
 // Get current LLM provider
 ipcMain.handle('llm:getProvider', async () => {
   try {
+    if (!llmService) {
+      return { success: false, error: 'LLM service not configured - please add API keys in settings' };
+    }
     return {
       success: true,
       provider: llmService.getProviderName(),
@@ -3579,6 +3751,10 @@ ipcMain.handle(
   'llm:switchProvider',
   withValidation(llmSwitchProviderSchema, async (event, { provider }) => {
     try {
+      if (!llmService) {
+        return { success: false, error: 'LLM service not configured - please add API keys in settings' };
+      }
+
       console.log(`[LLM] Switching provider to: ${provider}`);
 
       // Validation is now handled by Zod schema
@@ -4093,6 +4269,46 @@ ipcMain.handle('settings:getAppVersion', async () => {
 // Get vault path
 ipcMain.handle('settings:getVaultPath', async () => {
   return vaultStructure?.vaultBasePath || null;
+});
+
+// Choose vault path with directory picker
+ipcMain.handle('settings:chooseVaultPath', async () => {
+  const { dialog } = require('electron');
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Obsidian Vault Directory',
+    properties: ['openDirectory'],
+    buttonLabel: 'Select Vault',
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { success: false, path: null };
+  }
+
+  const selectedPath = result.filePaths[0];
+
+  // Validate that the directory exists
+  if (!fs.existsSync(selectedPath)) {
+    logger.main.error(`[Settings] Selected vault path does not exist: ${selectedPath}`);
+    return { success: false, path: null, error: 'Selected directory does not exist' };
+  }
+
+  try {
+    // Update vault structure
+    if (vaultStructure) {
+      vaultStructure.setVaultPath(selectedPath);
+    }
+
+    // Save to app settings
+    appSettings.vaultPath = selectedPath;
+    saveAppSettings();
+
+    logger.main.info(`[Settings] Vault path updated to: ${selectedPath}`);
+    return { success: true, path: selectedPath };
+  } catch (error) {
+    logger.main.error('[Settings] Failed to update vault path:', error);
+    return { success: false, path: null, error: error.message };
+  }
 });
 
 // Get AI provider preferences (Phase 10.3)
@@ -4775,7 +4991,7 @@ global.webhookHandlers = {
 
     try {
       const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-      const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+      const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
       // Fetch the transcript
       const response = await axios.get(`${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`, {
@@ -4858,7 +5074,7 @@ ipcMain.on('webhook-transcript-done', async (event, { transcriptId, recordingId 
 
   try {
     const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-    const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+    const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
     // Fetch the transcript
     const response = await axios.get(`${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`, {
@@ -5636,10 +5852,10 @@ async function matchSpeakersToParticipants(meeting) {
 // eslint-disable-next-line no-unused-vars
 async function pollForUploadCompletion(windowId) {
   const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-  const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+  const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
   if (!RECALLAI_API_KEY) {
-    throw new Error('RECALLAI_API_KEY not set in .env file');
+    throw new Error('RECALLAI_API_KEY not configured. Set it in Settings > Security');
   }
 
   console.log(`[Upload] Polling for upload completion: ${windowId}`);
@@ -5763,10 +5979,10 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
   console.log(`[Recall.ai] Starting async transcription for recording: ${recordingId}`);
 
   const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-  const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+  const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
   if (!RECALLAI_API_KEY) {
-    throw new Error('RECALLAI_API_KEY not set in .env file');
+    throw new Error('RECALLAI_API_KEY not configured. Set it in Settings > Security');
   }
 
   try {
@@ -5833,7 +6049,7 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
  */
 async function pollRecallAITranscript(recordingId, transcriptId, windowId, meetingId) {
   const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-  const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
+  const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
   // Poll the specific transcript endpoint
   const pollingEndpoint = `${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`;

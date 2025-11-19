@@ -1,11 +1,89 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+const fs = require('fs-extra');
+const path = require('path');
 
 module.exports = {
   packagerConfig: {
+    executableName: 'JDNotesThings',
     asar: {
-      unpackDir: '{node_modules/@recallai,node_modules/ngrok}',
+      unpack: '**/{@recallai,@sindresorhus,@szmarczak,@types,buffer-crc32,cacheable-lookup,cacheable-request,clone-response,debug,decompress-response,defer-to-connect,end-of-stream,extract-zip,fd-slicer,get-stream,got,hpagent,http-cache-semantics,http2-wrapper,json-buffer,keyv,lodash.clonedeep,lowercase-keys,mimic-response,ms,ngrok,normalize-url,once,p-cancelable,pend,pump,quick-lru,resolve-alpn,responselike,undici-types,uuid,wrappy,yaml,yauzl}/**',
     },
+    afterCopy: [(buildPath, electronVersion, platform, arch, callback) => {
+      // Manually copy ngrok and its dependencies to node_modules (will be unpacked)
+      // Complete dependency tree for ngrok (recursively resolved)
+      const modulesToCopy = [
+        '@sindresorhus/is',
+        '@szmarczak/http-timer',
+        '@types/cacheable-request',
+        '@types/http-cache-semantics',
+        '@types/keyv',
+        '@types/node',
+        '@types/responselike',
+        '@types/yauzl',
+        'buffer-crc32',
+        'cacheable-lookup',
+        'cacheable-request',
+        'clone-response',
+        'debug',
+        'decompress-response',
+        'defer-to-connect',
+        'end-of-stream',
+        'extract-zip',
+        'fd-slicer',
+        'get-stream',
+        'got',
+        'hpagent',
+        'http-cache-semantics',
+        'http2-wrapper',
+        'json-buffer',
+        'keyv',
+        'lodash.clonedeep',
+        'lowercase-keys',
+        'mimic-response',
+        'ms',
+        'ngrok',
+        'normalize-url',
+        'once',
+        'p-cancelable',
+        'pend',
+        'pump',
+        'quick-lru',
+        'resolve-alpn',
+        'responselike',
+        'undici-types',
+        'uuid',
+        'wrappy',
+        'yaml',
+        'yauzl'
+      ];
+
+      console.log('[Build] Copying ngrok and dependencies...');
+
+      const copyPromises = modulesToCopy.map(moduleName => {
+        const source = path.join(__dirname, 'node_modules', moduleName);
+        const dest = path.join(buildPath, 'node_modules', moduleName);
+
+        // Check if module exists before copying
+        if (fs.existsSync(source)) {
+          console.log(`[Build] Copying ${moduleName}...`);
+          return fs.copy(source, dest, { overwrite: true });
+        } else {
+          console.log(`[Build] Skipping ${moduleName} (not found)`);
+          return Promise.resolve();
+        }
+      });
+
+      Promise.all(copyPromises)
+        .then(() => {
+          console.log('[Build] All modules copied successfully');
+          callback();
+        })
+        .catch(err => {
+          console.error('[Build] Failed to copy modules:', err);
+          callback(err);
+        });
+    }],
     osxSign: {
       continueOnError: false,
       optionsForFile: _ => {

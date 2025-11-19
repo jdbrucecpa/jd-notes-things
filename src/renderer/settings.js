@@ -170,6 +170,7 @@ export function initializeSettingsUI() {
   const autoStartToggle = document.getElementById('autoStartToggle');
   const debugModeToggle = document.getElementById('debugModeToggle');
   const vaultPathInput = document.getElementById('vaultPathInput');
+  const browseVaultPathBtn = document.getElementById('browseVaultPathBtn');
   const autoSummaryProviderSelect = document.getElementById('autoSummaryProviderSelect');
   const templateSummaryProviderSelect = document.getElementById('templateSummaryProviderSelect');
   const patternGenerationProviderSelect = document.getElementById('patternGenerationProviderSelect');
@@ -266,6 +267,29 @@ export function initializeSettingsUI() {
     debugModeToggle.addEventListener('click', () => {
       const isActive = debugModeToggle.classList.toggle('active');
       updateSetting('debugMode', isActive);
+    });
+  }
+
+  // Browse vault path button
+  if (browseVaultPathBtn) {
+    browseVaultPathBtn.addEventListener('click', async () => {
+      try {
+        const result = await window.electronAPI.chooseVaultPath();
+
+        if (result.success && result.path) {
+          // Update the input field
+          if (vaultPathInput) {
+            vaultPathInput.value = result.path;
+          }
+          window.showToast('Vault path updated successfully', 'success');
+        } else if (result.error) {
+          window.showToast(`Failed to update vault path: ${result.error}`, 'error');
+        }
+        // If canceled (success: false, no error), do nothing
+      } catch (error) {
+        console.error('[Settings] Error choosing vault path:', error);
+        window.showToast('Failed to update vault path', 'error');
+      }
     });
   }
 

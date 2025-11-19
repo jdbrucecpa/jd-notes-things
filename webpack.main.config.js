@@ -13,13 +13,7 @@ module.exports = {
   },
   externals: {
     '@recallai/desktop-sdk': 'commonjs @recallai/desktop-sdk',
-    ngrok: 'commonjs ngrok',
-    svix: 'commonjs svix',
-    keytar: 'commonjs keytar',
-    googleapis: 'commonjs googleapis',
-    'google-auth-library': 'commonjs google-auth-library',
-    gaxios: 'commonjs gaxios',
-    'gcp-metadata': 'commonjs gcp-metadata',
+    'ngrok': 'commonjs ngrok',
   },
   plugins: [
     new CopyWebpackPlugin({

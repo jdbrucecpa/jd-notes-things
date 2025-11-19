@@ -29,10 +29,12 @@ class NgrokManager {
       console.log('[ngrok] Authtoken set successfully');
 
       // Connect with options (ngrok v3 API via npm package v4.x)
-      // Let ngrok find the global v3 binary automatically (works in test-ngrok.js)
+      // Configure for Electron production builds
       const options = {
         addr: port,
         proto: 'http',
+        // Fix for Electron ASAR packaging - ngrok binary location
+        binPathReplacer: ['app.asar/node_modules/ngrok/bin', 'app.asar.unpacked/node_modules/ngrok/bin'],
       };
 
       if (domain) {
