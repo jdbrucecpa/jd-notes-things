@@ -1902,6 +1902,90 @@ function initSDK() {
 // ============================================================================
 
 /**
+ * Populate participants array from speaker mapping and Google Contacts
+ * @param {Object} meeting - Meeting object
+ * @param {Array<string>} participantEmails - Array of participant emails
+ * @param {Object} speakerMapping - Speaker mapping from SpeakerMatcher
+ */
+async function populateParticipantsFromSpeakerMapping(meeting, participantEmails, speakerMapping) {
+  try {
+    if (!googleContacts || !speakerMapping) {
+      console.log('[ParticipantPopulation] Skipping - Google Contacts not available');
+      return;
+    }
+
+    // Get contact info for all participant emails
+    const contactsMap = await googleContacts.findContactsByEmails(participantEmails);
+
+    // Initialize participants array if it doesn't exist
+    if (!meeting.participants) {
+      meeting.participants = [];
+    }
+
+    // Create participants from speaker mapping
+    for (const [speakerLabel, speakerInfo] of Object.entries(speakerMapping)) {
+      if (speakerInfo.email) {
+        const contact = contactsMap.get(speakerInfo.email);
+
+        // Check if participant already exists
+        const existingIndex = meeting.participants.findIndex(
+          p => p.email && p.email.toLowerCase() === speakerInfo.email.toLowerCase()
+        );
+
+        const participantData = {
+          name: speakerInfo.name || (contact ? contact.name : speakerInfo.email),
+          email: speakerInfo.email,
+        };
+
+        if (existingIndex !== -1) {
+          // Update existing participant with email
+          meeting.participants[existingIndex] = {
+            ...meeting.participants[existingIndex],
+            ...participantData,
+          };
+        } else {
+          // Add new participant
+          meeting.participants.push(participantData);
+        }
+      }
+    }
+
+    console.log(`[ParticipantPopulation] Populated ${meeting.participants.length} participants with contact info`);
+  } catch (error) {
+    console.error('[ParticipantPopulation] Error populating participants:', error);
+  }
+}
+
+/**
+ * Deduplicate participants by email (primary) or name (fallback)
+ * @param {Array<Object>} participants - Array of participant objects
+ * @returns {Array<Object>} Deduplicated array
+ */
+function deduplicateParticipants(participants) {
+  const seen = new Map();
+  const result = [];
+
+  for (const participant of participants) {
+    // Use email as primary key (case-insensitive)
+    const key = participant.email
+      ? participant.email.toLowerCase()
+      : participant.name?.toLowerCase() || `unknown-${result.length}`;
+
+    if (!seen.has(key)) {
+      seen.set(key, true);
+      result.push(participant);
+    }
+  }
+
+  const duplicatesRemoved = participants.length - result.length;
+  if (duplicatesRemoved > 0) {
+    console.log(`[Deduplication] Removed ${duplicatesRemoved} duplicate participant(s)`);
+  }
+
+  return result;
+}
+
+/**
  * Export a meeting to Obsidian vault with two-file structure
  * @param {Object} meeting - Meeting object with transcript and summaries
  * @returns {Promise<Object>} Export result with paths created
@@ -1952,6 +2036,9 @@ async function exportMeetingToObsidian(meeting) {
         // Store mapping in meeting object for future reference
         meeting.speakerMapping = speakerMapping;
 
+        // Populate participants array from speaker mapping and contacts
+        await populateParticipantsFromSpeakerMapping(meeting, participantEmails, speakerMapping);
+
         console.log('[ObsidianExport] Speaker matching completed successfully');
       } catch (error) {
         console.warn(
@@ -1963,6 +2050,11 @@ async function exportMeetingToObsidian(meeting) {
       console.log(
         '[ObsidianExport] Speaker matching skipped - speaker matcher not available or no participants'
       );
+    }
+
+    // Deduplicate participants if they exist
+    if (meeting.participants && meeting.participants.length > 0) {
+      meeting.participants = deduplicateParticipants(meeting.participants);
     }
 
     // Get routing decisions (or use manual override)
@@ -2215,6 +2307,20 @@ summary_file: "${baseFilename}.md"
 ---
 
 `;
+
+  // Add speaker directory if we have participants with emails
+  if (meeting.participants && meeting.participants.length > 0) {
+    const participantsWithEmail = meeting.participants.filter(p => p.email);
+    if (participantsWithEmail.length > 0) {
+      markdown += `## Participants\n\n`;
+      participantsWithEmail.forEach(participant => {
+        markdown += `- **${participant.name}**: ${participant.email}\n`;
+      });
+      markdown += `\n---\n\n`;
+    }
+  }
+
+  markdown += `## Transcript\n\n`;
 
   // Add transcript
   if (meeting.transcript) {
