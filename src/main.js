@@ -1690,13 +1690,31 @@ function initSDK() {
               console.log(
                 `[Transcription] Updating meeting: ${meetingsData.pastMeetings[meetingIndex].id}`
               );
-              meetingsData.pastMeetings[meetingIndex].transcript = transcript.entries;
+              const meeting = meetingsData.pastMeetings[meetingIndex];
+
+              // Check if we need to append to previous transcript
+              if (meeting.recordingAction === 'append' && meeting.previousTranscript) {
+                console.log(`[Transcription] Appending ${transcript.entries.length} new entries to ${meeting.previousTranscript.length} existing entries`);
+                meetingsData.pastMeetings[meetingIndex].transcript = [
+                  ...meeting.previousTranscript,
+                  ...transcript.entries
+                ];
+                // Clean up temporary fields
+                delete meetingsData.pastMeetings[meetingIndex].previousTranscript;
+                delete meetingsData.pastMeetings[meetingIndex].recordingAction;
+              } else {
+                // Overwrite or new transcript
+                meetingsData.pastMeetings[meetingIndex].transcript = transcript.entries;
+                // Clean up temporary fields
+                delete meetingsData.pastMeetings[meetingIndex].recordingAction;
+              }
+
               meetingsData.pastMeetings[meetingIndex].transcriptProvider = transcript.provider;
               meetingsData.pastMeetings[meetingIndex].transcriptConfidence = transcript.confidence;
 
               console.log('[Transcription] Writing updated meeting data...');
               await fileOperationManager.writeData(meetingsData);
-              console.log('[Transcription] ✓ Transcript saved to meeting');
+              console.log(`[Transcription] ✓ Transcript saved with ${meetingsData.pastMeetings[meetingIndex].transcript.length} total entries`);
 
               // Notify renderer of completion
               if (mainWindow && !mainWindow.isDestroyed()) {
@@ -4424,12 +4442,13 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
 // Handle starting a manual desktop recording
 ipcMain.handle(
   'startManualRecording',
-  async (event, meetingId, transcriptionProvider = 'recallai') => {
+  async (event, meetingId, transcriptionProvider = 'recallai', action = 'new') => {
     try {
       // Validate meetingId
       const validatedId = MeetingIdSchema.parse(meetingId);
       console.log(`Starting manual desktop recording for meeting: ${validatedId}`);
       console.log(`Using transcription provider: ${transcriptionProvider}`);
+      console.log(`Recording action: ${action}`);
 
       // Read current data
       const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
@@ -4445,6 +4464,19 @@ ipcMain.handle(
       }
 
       const meeting = meetingsData.pastMeetings[pastMeetingIndex];
+
+      // If action is 'append', save the existing transcript
+      if (action === 'append' && meeting.transcript && meeting.transcript.length > 0) {
+        console.log(`[Recording] Saving ${meeting.transcript.length} existing transcript entries for append`);
+        meeting.previousTranscript = meeting.transcript;
+        meeting.recordingAction = 'append';
+      } else if (action === 'overwrite') {
+        console.log('[Recording] Will overwrite existing transcript');
+        meeting.recordingAction = 'overwrite';
+      } else {
+        console.log('[Recording] New recording (no existing transcript)');
+        meeting.recordingAction = 'new';
+      }
 
       try {
         // Prepare desktop audio recording - this is the key difference from our previous implementation
@@ -5881,9 +5913,27 @@ async function processRecallAITranscript(transcript, meetingId, windowId) {
     await fileOperationManager.scheduleOperation(async data => {
       const meetingIndex = data.pastMeetings.findIndex(m => m.id === meetingId);
       if (meetingIndex !== -1) {
-        data.pastMeetings[meetingIndex].transcript = processedTranscript;
+        const meeting = data.pastMeetings[meetingIndex];
+
+        // Check if we need to append to previous transcript
+        if (meeting.recordingAction === 'append' && meeting.previousTranscript) {
+          console.log(`[Recall.ai] Appending ${processedTranscript.length} new utterances to ${meeting.previousTranscript.length} existing utterances`);
+          data.pastMeetings[meetingIndex].transcript = [
+            ...meeting.previousTranscript,
+            ...processedTranscript
+          ];
+          // Clean up temporary fields
+          delete data.pastMeetings[meetingIndex].previousTranscript;
+          delete data.pastMeetings[meetingIndex].recordingAction;
+        } else {
+          // Overwrite or new transcript
+          data.pastMeetings[meetingIndex].transcript = processedTranscript;
+          // Clean up temporary fields
+          delete data.pastMeetings[meetingIndex].recordingAction;
+        }
+
         data.pastMeetings[meetingIndex].transcriptComplete = true;
-        console.log(`[Recall.ai] Updated meeting with ${processedTranscript.length} utterances`);
+        console.log(`[Recall.ai] Updated meeting with ${data.pastMeetings[meetingIndex].transcript.length} total utterances`);
       }
       return data;
     });

@@ -439,6 +439,50 @@
       </div>
     </div>
 
+    <!-- Re-record Confirmation Modal -->
+    <div class="modal-overlay" id="reRecordModal" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Existing Transcript Found</h2>
+          <button class="modal-close" id="closeReRecordModal">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <p style="margin-bottom: 20px;">This meeting already has a transcript. What would you like to do?</p>
+
+          <div class="re-record-options">
+            <button class="re-record-option" data-action="append">
+              <div class="option-icon">📎</div>
+              <div class="option-content">
+                <div class="option-title">Append New Recording</div>
+                <div class="option-description">Add the new recording to the end of the existing transcript</div>
+              </div>
+            </button>
+
+            <button class="re-record-option" data-action="overwrite">
+              <div class="option-icon">⚠️</div>
+              <div class="option-content">
+                <div class="option-title">Overwrite Existing Transcript</div>
+                <div class="option-description">Replace the current transcript with the new recording (cannot be undone)</div>
+              </div>
+            </button>
+
+            <button class="re-record-option" data-action="cancel">
+              <div class="option-icon">❌</div>
+              <div class="option-content">
+                <div class="option-title">Cancel</div>
+                <div class="option-description">Keep the existing transcript and don't record</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Template Selection Modal -->
     <div class="modal-overlay" id="templateModal" style="display: none;">
       <div class="modal-content template-modal">

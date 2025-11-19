@@ -1314,6 +1314,54 @@ body {
   gap: 4px;
 }
 
+/* Re-record Confirmation Modal */
+.re-record-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.re-record-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--card-bg);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  width: 100%;
+}
+
+.re-record-option:hover {
+  border-color: var(--primary-color);
+  background: var(--card-hover);
+}
+
+.re-record-option .option-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.re-record-option .option-content {
+  flex: 1;
+}
+
+.re-record-option .option-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.re-record-option .option-description {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 /* Cost Estimate */
 .cost-estimate {
   margin-top: 24px;

@@ -2443,61 +2443,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       const stopIcon = recordButton.querySelector('.stop-icon');
 
       if (window.isRecording) {
-        try {
-          // Start recording
-          console.log('Starting manual recording for meeting:', currentEditingMeetingId);
-          recordButton.disabled = true; // Temporarily disable to prevent double-clicks
+        // Check if meeting already has a transcript
+        const meeting = [...upcomingMeetings, ...pastMeetings].find(
+          m => m.id === currentEditingMeetingId
+        );
 
-          // Change to stop mode immediately for better feedback
-          recordButton.classList.add('recording');
-          recordIcon.style.display = 'none';
-          stopIcon.style.display = 'block';
-
-          // Get transcription provider from localStorage
-          const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
-          console.log(
-            '[Recording] Transcription provider from localStorage:',
-            transcriptionProvider
-          );
-          console.log('[Recording] localStorage keys:', Object.keys(localStorage));
-          console.log(
-            '[Recording] localStorage value:',
-            localStorage.getItem('transcriptionProvider')
-          );
-          // Call the API to start recording
-          const result = await window.electronAPI.startManualRecording(
-            currentEditingMeetingId,
-            transcriptionProvider
-          );
-          recordButton.disabled = false;
-
-          if (result.success) {
-            console.log('Manual recording started with ID:', result.recordingId);
-            window.currentRecordingId = result.recordingId;
-
-            // Show a little toast message
-            window.showToast('Recording started...', 'info');
-          } else {
-            // If starting failed, revert UI
-            console.error('Failed to start recording:', result.error);
-            alert('Failed to start recording: ' + result.error);
-            window.isRecording = false;
-            recordButton.classList.remove('recording');
-            recordIcon.style.display = 'block';
-            stopIcon.style.display = 'none';
-          }
-        } catch (error) {
-          // Handle errors
-          console.error('Error starting recording:', error);
-          alert('Error starting recording: ' + (error.message || error));
-
-          // Reset UI state
-          window.isRecording = false;
-          recordButton.classList.remove('recording');
-          recordIcon.style.display = 'block';
-          stopIcon.style.display = 'none';
-          recordButton.disabled = false;
+        if (meeting && meeting.transcript && meeting.transcript.length > 0) {
+          // Show re-record confirmation modal
+          window.isRecording = false; // Reset state
+          showReRecordModal(meeting);
+          return;
         }
+
+        // No existing transcript, proceed with recording
+        await startRecording('new');
       } else {
         // Stop recording
         if (window.currentRecordingId) {
@@ -2542,6 +2501,96 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
     });
+  }
+
+  // Re-record Confirmation Modal Logic
+  // ===================================
+
+  function showReRecordModal(meeting) {
+    const modal = document.getElementById('reRecordModal');
+    const closeBtn = document.getElementById('closeReRecordModal');
+    const options = document.querySelectorAll('.re-record-option');
+
+    // Show modal
+    modal.style.display = 'flex';
+
+    // Handle close button
+    const closeModal = () => {
+      modal.style.display = 'none';
+    };
+
+    closeBtn.onclick = closeModal;
+    modal.onclick = (e) => {
+      if (e.target === modal) closeModal();
+    };
+
+    // Handle option selection
+    options.forEach(option => {
+      option.onclick = async () => {
+        const action = option.getAttribute('data-action');
+        closeModal();
+
+        if (action === 'cancel') {
+          // Do nothing, just close
+          return;
+        }
+
+        // Start recording with the selected action
+        await startRecording(action);
+      };
+    });
+  }
+
+  async function startRecording(action) {
+    const recordButton = document.getElementById('recordButton');
+    const recordIcon = recordButton.querySelector('.record-icon');
+    const stopIcon = recordButton.querySelector('.stop-icon');
+
+    try {
+      console.log(`Starting manual recording for meeting: ${currentEditingMeetingId}, action: ${action}`);
+      recordButton.disabled = true;
+
+      // Change to stop mode immediately for better feedback
+      window.isRecording = true;
+      recordButton.classList.add('recording');
+      recordIcon.style.display = 'none';
+      stopIcon.style.display = 'block';
+
+      // Get transcription provider from localStorage
+      const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
+
+      // Call the API to start recording with action
+      const result = await window.electronAPI.startManualRecording(
+        currentEditingMeetingId,
+        transcriptionProvider,
+        action
+      );
+      recordButton.disabled = false;
+
+      if (result.success) {
+        console.log('Manual recording started with ID:', result.recordingId);
+        window.currentRecordingId = result.recordingId;
+        window.showToast('Recording started...', 'info');
+      } else {
+        // If starting failed, revert UI
+        console.error('Failed to start recording:', result.error);
+        alert('Failed to start recording: ' + result.error);
+        window.isRecording = false;
+        recordButton.classList.remove('recording');
+        recordIcon.style.display = 'block';
+        stopIcon.style.display = 'none';
+      }
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      alert('Error starting recording: ' + (error.message || error));
+
+      // Reset UI state
+      window.isRecording = false;
+      recordButton.classList.remove('recording');
+      recordIcon.style.display = 'block';
+      stopIcon.style.display = 'none';
+      recordButton.disabled = false;
+    }
   }
 
   // Phase 4: Template Selection Modal Logic
