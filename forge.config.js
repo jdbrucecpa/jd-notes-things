@@ -7,7 +7,7 @@ module.exports = {
   packagerConfig: {
     executableName: 'JDNotesThings',
     asar: {
-      unpack: '**/{@recallai,@sindresorhus,@szmarczak,@types,buffer-crc32,cacheable-lookup,cacheable-request,clone-response,debug,decompress-response,defer-to-connect,end-of-stream,extract-zip,fd-slicer,get-stream,got,hpagent,http-cache-semantics,http2-wrapper,json-buffer,keyv,lodash.clonedeep,lowercase-keys,mimic-response,ms,ngrok,normalize-url,once,p-cancelable,pend,pump,quick-lru,resolve-alpn,responselike,undici-types,uuid,wrappy,yaml,yauzl}/**',
+      unpack: '**/{@recallai,@sindresorhus,@szmarczak,@types,buffer-crc32,cacheable-lookup,cacheable-request,clone-response,debug,decompress-response,defer-to-connect,end-of-stream,extract-zip,fd-slicer,get-stream,got,hpagent,http-cache-semantics,http2-wrapper,json-buffer,keytar,keyv,lodash.clonedeep,lowercase-keys,mimic-response,ms,ngrok,normalize-url,once,p-cancelable,pend,pump,quick-lru,resolve-alpn,responselike,undici-types,uuid,wrappy,yaml,yauzl}/**',
     },
     afterCopy: [(buildPath, electronVersion, platform, arch, callback) => {
       // Manually copy ngrok and its dependencies to node_modules (will be unpacked)
@@ -37,6 +37,7 @@ module.exports = {
         'http-cache-semantics',
         'http2-wrapper',
         'json-buffer',
+        'keytar',
         'keyv',
         'lodash.clonedeep',
         'lowercase-keys',

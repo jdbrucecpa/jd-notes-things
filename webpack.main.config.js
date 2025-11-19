@@ -14,6 +14,7 @@ module.exports = {
   externals: {
     '@recallai/desktop-sdk': 'commonjs @recallai/desktop-sdk',
     'ngrok': 'commonjs ngrok',
+    'keytar': 'commonjs keytar',
   },
   plugins: [
     new CopyWebpackPlugin({
