@@ -779,7 +779,7 @@ const createWindow = () => {
       nodeIntegration: false,
     },
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: '#1e1e1e', // Match dark mode to prevent flash
   };
 
   // Restore previous window position if available
@@ -3043,10 +3043,10 @@ ipcMain.handle('templates:getContent', async (event, templateId) => {
 });
 
 // Estimate cost for templates
-ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript }) => {
+ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript, provider }) => {
   try {
-    console.log('[Template IPC] Estimating cost for', templateIds.length, 'templates');
-    const estimate = templateManager.estimateCost(templateIds, transcript);
+    console.log('[Template IPC] Estimating cost for', templateIds.length, 'templates', 'with provider:', provider);
+    const estimate = templateManager.estimateCost(templateIds, transcript, provider);
     return { success: true, estimate };
   } catch (error) {
     console.error('[Template IPC] Failed to estimate cost:', error);

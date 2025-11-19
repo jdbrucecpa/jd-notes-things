@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <title>JD Notes Things</title>
     <style>
+      /* Prevent FOUC (Flash of Unstyled Content) */
+      html {
+        background-color: #1e1e1e; /* Match dark mode to prevent white flash */
+      }
+      body {
+        visibility: hidden;
+        opacity: 0;
+        background-color: #1e1e1e;
+      }
+      body.loaded {
+        visibility: visible;
+        opacity: 1;
+        transition: opacity 0.1s ease-in;
+      }
+
       @keyframes slideIn {
         from {
           transform: translateX(400px);
@@ -423,91 +438,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Debug Panel -->
-    <div class="debug-panel hidden" id="debugPanel">
-      <div class="debug-panel-header" id="debug-drag-region">
-        <h3>Debugging Tools</h3>
-        <button class="debug-panel-close" id="closeDebugPanelBtn">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
-          </svg>
-        </button>
-      </div>
-
-      <div class="debug-panel-content">
-        <!-- SDK Logger Section -->
-        <div class="debug-section" id="loggerSection">
-          <div class="debug-section-header">
-            <h4>RecallAI SDK Logger</h4>
-            <button class="debug-section-action" id="clearLoggerBtn">Clear</button>
-          </div>
-          <div class="debug-section-content" id="sdkLoggerContent">
-            <!-- Log entries will be added here dynamically -->
-          </div>
-        </div>
-
-        <!-- Transcript Section -->
-        <div class="debug-section" id="transcriptSection">
-          <div class="debug-section-header">
-            <h4>Transcript</h4>
-          </div>
-          <div class="debug-section-content" id="transcriptContent">
-            <div class="placeholder-content">
-              <p>Live transcript will appear here during recording</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Participants Section -->
-        <div class="debug-section" id="participantsSection">
-          <div class="debug-section-header">
-            <h4>Meeting Participants</h4>
-          </div>
-          <div class="debug-section-content" id="participantsContent">
-            <div class="placeholder-content">
-              <p>Detected participants will appear here</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Participant Video Debug Section -->
-        <div class="debug-section" id="videoSection">
-          <div class="debug-section-header">
-            <h4>Participant Video</h4>
-          </div>
-          <div class="debug-section-content" id="videoContent">
-            <div class="placeholder-content video-placeholder">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="#999"/>
-              </svg>
-              <p>Participant video will appear here</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Screenshare Video Debug Section -->
-        <div class="debug-section" id="screenshareSection">
-          <div class="debug-section-header">
-            <h4>Screenshare</h4>
-          </div>
-          <div class="debug-section-content" id="screenshareContent">
-            <div class="placeholder-content video-placeholder">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z" fill="#999"/>
-              </svg>
-              <p>Screenshare will appear here</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <button class="debug-panel-toggle panel-hidden" id="debugPanelToggle">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20 8h-2.81c-.45-.78-1.07-1.45-1.82-1.96L17 4.41 15.59 3l-2.17 2.17C12.96 5.06 12.49 5 12 5c-.49 0-.96.06-1.41.17L8.41 3 7 4.41l1.62 1.63C7.88 6.55 7.26 7.22 6.81 8H4v2h2.09c-.05.33-.09.66-.09 1v1H4v2h2v1c0 .34.04.67.09 1H4v2h2.81c1.04 1.79 2.97 3 5.19 3s4.15-1.21 5.19-3H20v-2h-2.09c.05-.33.09-.66.09-1v-1h2v-2h-2v-1c0-.34-.04-.67-.09-1H20V8zm-6 8h-4v-2h4v2zm0-4h-4v-2h4v2z" fill="currentColor"/>
-      </svg>
-    </button>
 
     <!-- Template Selection Modal -->
     <div class="modal-overlay" id="templateModal" style="display: none;">

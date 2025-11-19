@@ -182,13 +182,76 @@ class TemplateParser {
   }
 
   /**
+   * Pricing per million tokens
+   * Last updated: January 2025
+   * Sources: https://platform.openai.com/docs/pricing
+   *          https://docs.claude.com/en/docs/about-claude/pricing
+   *          https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/
+   *
+   * NOTE: Prices may change. Verify current pricing before major deployments.
+   */
+  static MODEL_PRICING = {
+    // OpenAI Models (verified Jan 2025)
+    'openai-gpt-4o-mini': {
+      input: 0.15,   // $0.15 per 1M tokens
+      output: 0.60,  // $0.60 per 1M tokens
+      updated: '2025-01-18',
+    },
+    'openai-gpt-4o': {
+      input: 2.50,   // $2.50 per 1M tokens
+      output: 10.00, // $10.00 per 1M tokens
+      updated: '2025-01-18',
+    },
+
+    // Azure OpenAI Models (verified Jan 2025)
+    'azure-gpt-5-mini': {
+      input: 0.25,   // $0.25 per 1M tokens
+      output: 2.00,  // $2.00 per 1M tokens
+      updated: '2025-01-18',
+    },
+    'azure-gpt-5': {
+      input: 3.00,   // $3.00 per 1M tokens (estimated)
+      output: 12.00, // $12.00 per 1M tokens (estimated)
+      updated: '2025-01-18',
+    },
+    'azure-gpt-4o-mini': {
+      input: 0.15,   // $0.15 per 1M tokens (same as OpenAI)
+      output: 0.60,  // $0.60 per 1M tokens
+      updated: '2025-01-18',
+    },
+    'azure-gpt-4o': {
+      input: 2.50,   // $2.50 per 1M tokens (same as OpenAI)
+      output: 10.00, // $10.00 per 1M tokens
+      updated: '2025-01-18',
+    },
+
+    // Anthropic Claude Models (verified Jan 2025)
+    'claude-haiku-4-5': {
+      input: 1.00,   // $1.00 per 1M tokens
+      output: 5.00,  // $5.00 per 1M tokens
+      updated: '2025-01-18',
+    },
+    'claude-sonnet-4': {
+      input: 3.00,   // $3.00 per 1M tokens
+      output: 15.00, // $15.00 per 1M tokens
+      updated: '2025-01-18',
+    },
+    'claude-opus-4': {
+      input: 15.00,  // $15.00 per 1M tokens (estimated)
+      output: 75.00, // $75.00 per 1M tokens (estimated)
+      updated: '2025-01-18',
+    },
+  };
+
+  /**
    * Estimate token count for a transcript with this template
    * Using rough estimate: 1 token ≈ 4 characters
    * @param {Object} template - Template object
    * @param {string} transcriptText - Meeting transcript
+   * @param {string} provider - Model provider (e.g., 'azure-gpt-5-mini', 'openai-gpt-4o-mini', 'claude-haiku-4-5')
    * @returns {Object} Token estimates and cost
    */
-  static estimateTokens(template, transcriptText) {
+  static estimateTokens(template, transcriptText, provider = 'openai-gpt-4o-mini') {
     // Estimate input tokens (transcript + all prompts)
     const transcriptTokens = Math.ceil(transcriptText.length / 4);
     const promptsText = template.sections.map(s => s.prompt).join(' ');
@@ -201,10 +264,12 @@ class TemplateParser {
     // Total tokens
     const totalTokens = inputTokens + outputTokens;
 
-    // Cost estimation (using gpt-4o-mini pricing)
-    // Input: $0.150 per 1M tokens, Output: $0.600 per 1M tokens
-    const inputCost = (inputTokens / 1000000) * 0.15;
-    const outputCost = (outputTokens / 1000000) * 0.6;
+    // Get pricing for the selected provider (fallback to gpt-4o-mini)
+    const pricing = this.MODEL_PRICING[provider] || this.MODEL_PRICING['openai-gpt-4o-mini'];
+
+    // Cost estimation using provider-specific pricing
+    const inputCost = (inputTokens / 1000000) * pricing.input;
+    const outputCost = (outputTokens / 1000000) * pricing.output;
     const totalCost = inputCost + outputCost;
 
     return {
@@ -214,6 +279,7 @@ class TemplateParser {
       inputCost,
       outputCost,
       totalCost,
+      provider,  // Include provider in response for transparency
     };
   }
 }
