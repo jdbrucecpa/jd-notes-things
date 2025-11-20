@@ -1118,7 +1118,7 @@ app.whenReady().then(async () => {
 
   // Initialize Unified Google Authentication (Calendar + Contacts)
   console.log('[GoogleAuth] Initializing unified Google authentication...');
-  googleAuth = new GoogleAuth();
+  googleAuth = new GoogleAuth(null, keyManagementService);
   const authInitialized = await googleAuth.initialize();
 
   if (authInitialized) {

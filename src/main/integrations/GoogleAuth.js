@@ -17,8 +17,9 @@ const crypto = require('crypto');
  * - Consistent OAuth2 client for all Google services
  */
 class GoogleAuth {
-  constructor(tokenPath = null) {
+  constructor(tokenPath = null, keyManagementService = null) {
     this.tokenPath = tokenPath || path.join(app.getPath('userData'), 'google-token.json');
+    this.keyManagementService = keyManagementService;
     this.oauth2Client = null;
     this.initialized = false;
     this.pendingState = null; // CSRF protection: stores expected state parameter
@@ -31,7 +32,7 @@ class GoogleAuth {
   }
 
   /**
-   * Initialize the OAuth2 client with credentials from environment variables
+   * Initialize the OAuth2 client with credentials from Windows Credential Manager or .env
    * Attempts to load existing token if available
    *
    * @returns {Promise<boolean>} True if token exists and is valid, false otherwise
@@ -41,17 +42,32 @@ class GoogleAuth {
       return this.isAuthenticated();
     }
 
-    const clientId = process.env.GOOGLE_CALENDAR_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
+    // Try to get credentials from keyManagementService first, then fall back to .env
+    let clientId, clientSecret;
+
+    if (this.keyManagementService) {
+      try {
+        clientId = await this.keyManagementService.getKey('GOOGLE_CALENDAR_CLIENT_ID');
+        clientSecret = await this.keyManagementService.getKey('GOOGLE_CALENDAR_CLIENT_SECRET');
+      } catch (error) {
+        console.warn('[GoogleAuth] Failed to read from Windows Credential Manager:', error.message);
+      }
+    }
+
+    // Fall back to process.env if not found in Credential Manager
+    clientId = clientId || process.env.GOOGLE_CALENDAR_CLIENT_ID;
+    clientSecret = clientSecret || process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
     const redirectUri = 'http://localhost:3000/oauth2callback';
 
     if (!clientId || !clientSecret) {
       console.error(
-        '[GoogleAuth] Missing GOOGLE_CALENDAR_CLIENT_ID or GOOGLE_CALENDAR_CLIENT_SECRET in .env'
+        '[GoogleAuth] Missing GOOGLE_CALENDAR_CLIENT_ID or GOOGLE_CALENDAR_CLIENT_SECRET',
+        'Please configure in Settings or add to Windows Credential Manager'
       );
       return false;
     }
 
+    console.log('[GoogleAuth] Loaded credentials from:', this.keyManagementService ? 'Windows Credential Manager' : '.env file');
     this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
     this.initialized = true;
