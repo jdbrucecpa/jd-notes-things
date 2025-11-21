@@ -1500,12 +1500,12 @@ const fileOperationManager = {
 // Create a desktop SDK upload token directly (no separate server needed)
 async function createDesktopSdkUpload() {
   try {
-    const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+    const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
     const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
     if (!RECALLAI_API_KEY) {
       console.error('RECALLAI_API_KEY is missing! Configure it in Settings > Security');
-      return null;
+      return { error: 'RECALLAI_API_KEY is not configured. Please add it in Settings > Security.' };
     }
 
     const url = `${RECALLAI_API_URL}/api/v1/sdk_upload/`;
@@ -1548,8 +1548,9 @@ async function createDesktopSdkUpload() {
     );
     return response.data;
   } catch (error) {
-    console.error('Error creating upload token:', error.response?.data || error.message);
-    return null;
+    const errorDetails = error.response?.data || error.message;
+    console.error('Error creating upload token:', errorDetails);
+    return { error: `API Error: ${JSON.stringify(errorDetails)}` };
   }
 }
 
@@ -4826,7 +4827,9 @@ ipcMain.handle(
         // Create a recording token
         const uploadData = await createDesktopSdkUpload();
         if (!uploadData || !uploadData.upload_token) {
-          return { success: false, error: 'Failed to create recording token' };
+          const errorMsg = uploadData?.error || 'Failed to create recording token';
+          console.error('[Recording] Upload token creation failed:', errorMsg);
+          return { success: false, error: errorMsg };
         }
 
         // Store the recording ID and upload token in the meeting

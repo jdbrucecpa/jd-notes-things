@@ -13,6 +13,7 @@ const SERVICE_NAME = 'JD Notes Things';
 // Supported API key types
 const API_KEY_TYPES = {
   RECALLAI_API_KEY: 'Recall.ai API Key',
+  RECALLAI_API_URL: 'Recall.ai API URL',
   RECALL_WEBHOOK_SECRET: 'Recall.ai Webhook Secret',
   ASSEMBLYAI_API_KEY: 'AssemblyAI API Key',
   DEEPGRAM_API_KEY: 'Deepgram API Key',
