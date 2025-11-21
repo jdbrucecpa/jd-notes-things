@@ -1277,7 +1277,7 @@ async function createNewMeeting() {
   try {
     console.log('Auto-starting recording for new note');
     // Get transcription provider from localStorage
-    const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
+    const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'assemblyai';
     console.log('[Auto-start] Transcription provider from localStorage:', transcriptionProvider);
     console.log('[Auto-start] localStorage value:', localStorage.getItem('transcriptionProvider'));
     // Start manual recording for the new note
@@ -1931,7 +1931,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (hasDetectedMeeting) {
           console.log('Found detected meeting, joining...');
           // Get transcription provider from localStorage
-          const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
+          const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'assemblyai';
           console.log('[Join Meeting] Using transcription provider:', transcriptionProvider);
           await window.electronAPI.joinDetectedMeeting(transcriptionProvider);
           // Keep button disabled as we're navigating to a different view

@@ -3117,6 +3117,13 @@ ipcMain.handle('google:openAuthWindow', async () => {
 ipcMain.handle('calendar:getUpcomingMeetings', async (event, hoursAhead = 24) => {
   try {
     console.log(`[Calendar IPC] Fetching upcoming meetings (${hoursAhead} hours ahead)`);
+
+    // Check if calendar is initialized and authenticated
+    if (!googleCalendar || !googleCalendar.isAuthenticated()) {
+      console.log('[Calendar IPC] Calendar not authenticated - returning empty array');
+      return { success: true, meetings: [] };
+    }
+
     const meetings = await googleCalendar.getUpcomingMeetings(hoursAhead);
     console.log(`[Calendar IPC] Found ${meetings.length} upcoming meetings`);
     return { success: true, meetings };
