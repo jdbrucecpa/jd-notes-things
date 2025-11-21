@@ -37,6 +37,13 @@ clients:
       - northroadic.com
     contacts:
       - marshall.mcalister@northroadic.com
+  mana-fld:
+    vault_path: clients/mana-fld
+    emails:
+      - manafld.com
+    contacts:
+      - cristina@manafld.com
+      - stephanie@manafld.com
 industry:
   liyria:
     vault_path: industry/liyria

@@ -34,7 +34,6 @@ JD Notes Things is a Windows desktop application that automatically records, tra
   - [Recall.ai](https://recall.ai) - For audio recording
   - [AssemblyAI](https://assemblyai.com) or [Deepgram](https://deepgram.com) - For transcription
   - [OpenAI](https://openai.com) - For AI summaries
-  - [ngrok](https://ngrok.com) - For webhook tunneling (free tier works)
   - Google OAuth credentials - For Calendar/Contacts integration
 
 ### Installation
@@ -90,9 +89,8 @@ OPENAI_API_KEY=your_key            # For OpenAI GPT models
 ANTHROPIC_API_KEY=your_key         # For Claude models
 AZURE_OPENAI_API_KEY=your_key      # For Azure OpenAI
 
-# ngrok (for webhook tunnel)
-NGROK_AUTHTOKEN=your_token
-NGROK_DOMAIN=your-domain.ngrok-free.dev  # Optional
+# Localtunnel (for webhook tunnel - uses dynamic/random subdomain)
+# TUNNEL_SUBDOMAIN=                # Not reliably supported, leave empty
 
 # Google OAuth
 GOOGLE_CALENDAR_CLIENT_ID=your_client_id.apps.googleusercontent.com

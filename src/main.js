@@ -23,7 +23,7 @@ const { createIpcHandler } = require('./main/utils/ipcHelpers');
 const yaml = require('js-yaml');
 // const encryptionService = require('./main/services/encryptionService'); // Not needed - Obsidian requires plain text
 const expressApp = require('./server');
-const ngrokManager = require('./main/services/ngrokManager');
+const tunnelManager = require('./main/services/tunnelManager');
 const log = require('electron-log');
 // IPC Input Validation - Phase 9 Security Hardening
 // ===================================================
@@ -1213,25 +1213,24 @@ app.whenReady().then(async () => {
     console.log('[Webhook Server] Listening on http://localhost:13373');
     console.log('[Webhook Server] Endpoint: http://localhost:13373/webhook/recall');
 
-    // Start ngrok tunnel automatically (if configured)
+    // Start tunnel automatically (if configured)
     try {
-      const webhookUrl = await ngrokManager.start(13373);
+      const webhookUrl = await tunnelManager.start(13373);
 
       // Store webhook URL globally so server.js can access it
       global.webhookUrl = `${webhookUrl}/webhook/recall`;
 
       console.log('\n' + '='.repeat(70));
-      console.log('🌐 NGROK TUNNEL ESTABLISHED');
+      console.log('🌐 TUNNEL ESTABLISHED');
       console.log('='.repeat(70));
       console.log(`Public Webhook URL: ${global.webhookUrl}`);
       console.log(`\nWebhook URL will be automatically included in upload tokens.`);
       console.log('='.repeat(70) + '\n');
     } catch (error) {
       console.log('\n' + '⚠'.repeat(35));
-      console.log('⚠️  NGROK NOT CONFIGURED');
+      console.log('⚠️  TUNNEL NOT AVAILABLE');
       console.log('⚠'.repeat(35));
-      console.log('Webhooks will not work until ngrok is configured.');
-      console.log('See docs/WEBHOOK_SETUP.md for setup instructions.');
+      console.log('Webhooks will not work until tunnel is available.');
       console.log('Error:', error.message);
       console.log('⚠'.repeat(35) + '\n');
     }
@@ -1290,8 +1289,8 @@ app.on('before-quit', async () => {
     console.log('[Meeting Monitor] Stopped meeting monitor');
   }
 
-  // Stop ngrok tunnel
-  await ngrokManager.stop();
+  // Stop tunnel
+  await tunnelManager.stop();
 
   // Close Express server
   if (expressServer) {

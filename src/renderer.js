@@ -2230,8 +2230,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Transcription Provider Selection
   const transcriptionProviderSelect = document.getElementById('transcriptionProviderSelect');
   if (transcriptionProviderSelect) {
-    // Load saved provider preference
-    const savedTranscriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
+    // Load saved provider preference (default to AssemblyAI)
+    const savedTranscriptionProvider = localStorage.getItem('transcriptionProvider') || 'assemblyai';
     transcriptionProviderSelect.value = savedTranscriptionProvider;
     console.log('Current transcription provider:', savedTranscriptionProvider);
 

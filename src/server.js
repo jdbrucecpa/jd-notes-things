@@ -20,8 +20,14 @@ app.get('/start-recording', async (req, res) => {
 
   const url = `${RECALLAI_API_URL}/api/v1/sdk_upload/`;
 
-  // Note: Webhook URL is configured in Recall.ai dashboard, not in the request
-  console.log('[Upload Token] Creating upload token (webhook configured in dashboard)');
+  // NOTE: Webhook URL MUST be configured in Recall.ai dashboard
+  // There is no API to set it per-request for SDK uploads
+  // You must manually update it in your dashboard when the tunnel URL changes
+  console.log('[Upload Token] Creating upload token (webhook must be configured in dashboard)');
+  if (global.webhookUrl) {
+    console.log('[Upload Token] Current tunnel webhook URL:', global.webhookUrl);
+    console.log('[Upload Token] ⚠️  Update this URL in your Recall.ai dashboard at: https://us-west-2.recall.ai/webhooks');
+  }
 
   try {
     const requestBody = {

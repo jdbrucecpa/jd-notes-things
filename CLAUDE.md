@@ -16,7 +16,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 - **Recording:** Recall.ai Desktop SDK 1.3.x (local audio capture)
 - **Transcription:** Multi-provider system (AssemblyAI, Deepgram, Recall.ai) with runtime switching
 - **LLM:** Multi-provider (OpenAI, Anthropic Claude, Azure OpenAI) with prompt caching
-- **Webhooks:** Express + ngrok + Svix signature verification
+- **Webhooks:** Express + localtunnel + Svix signature verification
 - **Security:** Windows DPAPI encryption, Windows Credential Manager for API keys
 - **OAuth:** Google OAuth 2.0 (unified Calendar + Contacts)
 
@@ -28,7 +28,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 - Recording Manager - Recall.ai SDK, local audio capture
 - Transcription Service - Multi-provider with runtime UI switching
 - Webhook Server - Express on port 13373 for async transcription callbacks
-- ngrok Integration - Automatic tunnel for webhook endpoints
+- Localtunnel Integration - Automatic tunnel for webhook endpoints
 - Routing Engine - Participant matching → organization folders
 - LLM Service - Template processing, summary generation with caching
 - Google Integration - Unified OAuth 2.0 for Calendar + Contacts

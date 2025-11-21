@@ -24,8 +24,7 @@ const API_KEY_TYPES = {
   AZURE_OPENAI_API_KEY: 'Azure OpenAI API Key',
   AZURE_OPENAI_ENDPOINT: 'Azure OpenAI Endpoint',
   AZURE_OPENAI_DEPLOYMENT: 'Azure OpenAI Deployment',
-  NGROK_AUTHTOKEN: 'ngrok Auth Token',
-  NGROK_DOMAIN: 'ngrok Domain',
+  TUNNEL_SUBDOMAIN: 'Localtunnel Subdomain (not recommended)',
 };
 
 class KeyManagementService {
@@ -255,12 +254,6 @@ class KeyManagementService {
       case 'AZURE_OPENAI_ENDPOINT':
         if (!value.startsWith('https://')) {
           return { valid: false, message: 'Azure endpoint should be a valid HTTPS URL' };
-        }
-        break;
-
-      case 'NGROK_DOMAIN':
-        if (!value.includes('ngrok')) {
-          return { valid: false, message: 'ngrok domain should contain "ngrok"' };
         }
         break;
     }
