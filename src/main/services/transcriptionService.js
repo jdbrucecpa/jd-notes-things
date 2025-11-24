@@ -14,6 +14,37 @@ class TranscriptionService {
       assemblyai: this.transcribeWithAssemblyAI.bind(this),
       deepgram: this.transcribeWithDeepgram.bind(this),
     };
+    this.keyManagementService = null;
+  }
+
+  /**
+   * Set the key management service for retrieving API keys from Windows Credential Manager
+   * @param {object} keyManagementService - Key management service instance
+   */
+  setKeyManagementService(keyManagementService) {
+    this.keyManagementService = keyManagementService;
+  }
+
+  /**
+   * Get API key from Windows Credential Manager with fallback to environment variable
+   * @param {string} keyName - Key name (e.g., 'ASSEMBLYAI_API_KEY')
+   * @returns {Promise<string|null>} API key or null
+   */
+  async getApiKey(keyName) {
+    // Try Windows Credential Manager first
+    if (this.keyManagementService) {
+      const key = await this.keyManagementService.getKey(keyName);
+      if (key) {
+        console.log(`[Transcription] Retrieved ${keyName} from Windows Credential Manager`);
+        return key;
+      }
+    }
+    // Fall back to environment variable (for dev mode)
+    if (process.env[keyName]) {
+      console.log(`[Transcription] Retrieved ${keyName} from environment variable`);
+      return process.env[keyName];
+    }
+    return null;
   }
 
   /**
@@ -54,10 +85,10 @@ class TranscriptionService {
    * https://www.assemblyai.com/docs
    */
   async transcribeWithAssemblyAI(audioFilePath, _options = {}) {
-    const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
+    const ASSEMBLYAI_API_KEY = await this.getApiKey('ASSEMBLYAI_API_KEY');
 
     if (!ASSEMBLYAI_API_KEY) {
-      throw new Error('ASSEMBLYAI_API_KEY not found in .env file');
+      throw new Error('ASSEMBLYAI_API_KEY not configured. Set it in Settings > Security');
     }
 
     console.log('[AssemblyAI] Step 1: Uploading audio file...');
@@ -165,10 +196,10 @@ class TranscriptionService {
    * https://developers.deepgram.com/docs
    */
   async transcribeWithDeepgram(audioFilePath, _options = {}) {
-    const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY;
+    const DEEPGRAM_API_KEY = await this.getApiKey('DEEPGRAM_API_KEY');
 
     if (!DEEPGRAM_API_KEY) {
-      throw new Error('DEEPGRAM_API_KEY not found in .env file');
+      throw new Error('DEEPGRAM_API_KEY not configured. Set it in Settings > Security');
     }
 
     console.log('[Deepgram] Uploading and transcribing...');

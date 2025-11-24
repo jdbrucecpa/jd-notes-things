@@ -19,10 +19,16 @@ const PatternConfigLoader = require('./main/import/PatternConfigLoader');
 const { createLLMServiceFromEnv, createLLMServiceFromCredentials } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
+
+// Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
+transcriptionService.setKeyManagementService(keyManagementService);
 const { createIpcHandler } = require('./main/utils/ipcHelpers');
 const yaml = require('js-yaml');
 // const encryptionService = require('./main/services/encryptionService'); // Not needed - Obsidian requires plain text
 const expressApp = require('./server');
+
+// Wire up keyManagementService to server.js for API key retrieval in packaged builds
+expressApp.setKeyManagementService(keyManagementService);
 const tunnelManager = require('./main/services/tunnelManager');
 const log = require('electron-log');
 // IPC Input Validation - Phase 9 Security Hardening
@@ -1110,7 +1116,7 @@ app.whenReady().then(async () => {
   }
 
   // Initialize the Recall.ai SDK
-  initSDK();
+  await initSDK();
 
   // Note: EncryptionService initialization removed (Phase 10.2)
   // Vault file encryption not needed - Obsidian requires plain text files
@@ -1555,12 +1561,17 @@ async function createDesktopSdkUpload() {
 }
 
 // Initialize the Recall.ai SDK
-function initSDK() {
+async function initSDK() {
   console.log('Initializing Recall.ai SDK');
+
+  // Retrieve API URL from Windows Credential Manager (with .env fallback)
+  const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+
+  console.log('[SDK] Using Recall.ai API URL:', RECALLAI_API_URL);
 
   // Log the SDK initialization
   sdkLogger.logApiCall('init', {
-    apiUrl: process.env.RECALLAI_API_URL,
+    apiUrl: RECALLAI_API_URL,
     acquirePermissionsOnStartup: ['accessibility', 'screen-capture', 'microphone'],
     restartOnError: true,
     config: {
@@ -1569,7 +1580,7 @@ function initSDK() {
   });
 
   const sdkConfig = {
-    apiUrl: process.env.RECALLAI_API_URL,
+    apiUrl: RECALLAI_API_URL,
     acquirePermissionsOnStartup: ['accessibility', 'screen-capture', 'microphone'],
     restartOnError: true,
     config: {
@@ -4783,9 +4794,8 @@ ipcMain.handle(
       console.log(`Using transcription provider: ${transcriptionProvider}`);
       console.log(`Recording action: ${action}`);
 
-      // Read current data
-      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-      const meetingsData = JSON.parse(fileData);
+      // Read current data using the file operation manager to ensure we get the latest cached data
+      const meetingsData = await fileOperationManager.readMeetingsData();
 
       // Find the meeting
       const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
@@ -4877,19 +4887,30 @@ ipcMain.handle(
           uploadToken: `${uploadData.upload_token.substring(0, 8)}...`, // Log truncated token for security
         });
 
-        RecallAiSdk.startRecording({
-          windowId: key,
-          uploadToken: uploadData.upload_token,
-        });
+        try {
+          // Await the startRecording call to catch errors (e.g., 401 authentication failures)
+          await RecallAiSdk.startRecording({
+            windowId: key,
+            uploadToken: uploadData.upload_token,
+          });
 
-        // Update recording state and tray menu (Phase 10.7)
-        isRecording = true;
-        updateSystemTrayMenu();
+          console.log('✓ RecallAI SDK startRecording succeeded');
 
-        return {
-          success: true,
-          recordingId: key,
-        };
+          // Update recording state and tray menu (Phase 10.7)
+          isRecording = true;
+          updateSystemTrayMenu();
+
+          return {
+            success: true,
+            recordingId: key,
+          };
+        } catch (startRecordingError) {
+          console.error('✗ RecallAI SDK startRecording failed:', startRecordingError);
+          return {
+            success: false,
+            error: `Failed to start recording: ${startRecordingError.message || startRecordingError}`,
+          };
+        }
       } catch (sdkError) {
         console.error('RecallAI SDK error:', sdkError);
         return {
@@ -4999,7 +5020,7 @@ global.webhookHandlers = {
     console.log(`[Webhook] Transcript ready. ID: ${transcriptId}, Recording: ${recordingId}`);
 
     try {
-      const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+      const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
       const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
       // Fetch the transcript
@@ -5082,7 +5103,7 @@ ipcMain.on('webhook-transcript-done', async (event, { transcriptId, recordingId 
   console.log(`[Webhook] Transcript ready. ID: ${transcriptId}, Recording: ${recordingId}`);
 
   try {
-    const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+    const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
     const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
     // Fetch the transcript
@@ -5860,7 +5881,7 @@ async function matchSpeakersToParticipants(meeting) {
  */
 // eslint-disable-next-line no-unused-vars
 async function pollForUploadCompletion(windowId) {
-  const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+  const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
   const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
   if (!RECALLAI_API_KEY) {
@@ -5987,7 +6008,7 @@ async function pollForUploadCompletion(windowId) {
 async function startRecallAIAsyncTranscription(recordingId, windowId) {
   console.log(`[Recall.ai] Starting async transcription for recording: ${recordingId}`);
 
-  const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+  const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
   const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
   if (!RECALLAI_API_KEY) {
@@ -6057,7 +6078,7 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
  * @param {string} meetingId - Our meeting ID
  */
 async function pollRecallAITranscript(recordingId, transcriptId, windowId, meetingId) {
-  const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+  const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
   const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
   // Poll the specific transcript endpoint

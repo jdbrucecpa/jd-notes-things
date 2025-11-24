@@ -5,20 +5,56 @@ const app = express();
 
 require('dotenv').config();
 
-// API configuration for Recall.ai
-const RECALLAI_API_URL = process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-const RECALLAI_API_KEY = process.env.RECALLAI_API_KEY;
-const RECALL_WEBHOOK_SECRET = process.env.RECALL_WEBHOOK_SECRET;
+// Key management service reference (will be set by main.js)
+let keyManagementService = null;
+
+/**
+ * Set the key management service for retrieving API keys from Windows Credential Manager
+ * @param {object} kms - Key management service instance
+ */
+function setKeyManagementService(kms) {
+  keyManagementService = kms;
+}
+
+/**
+ * Get API key from Windows Credential Manager with fallback to environment variable
+ * @param {string} keyName - Key name (e.g., 'RECALLAI_API_KEY')
+ * @returns {Promise<string|null>} API key or null
+ */
+async function getApiKey(keyName) {
+  // Try Windows Credential Manager first
+  if (keyManagementService) {
+    const key = await keyManagementService.getKey(keyName);
+    if (key) {
+      return key;
+    }
+  }
+  // Fall back to environment variable (for dev mode)
+  return process.env[keyName] || null;
+}
+
+/**
+ * Get all Recall.ai configuration values
+ * @returns {Promise<{apiUrl: string, apiKey: string|null, webhookSecret: string|null}>}
+ */
+async function getRecallConfig() {
+  return {
+    apiUrl: await getApiKey('RECALLAI_API_URL') || process.env.RECALLAI_API_URL || 'https://api.recall.ai',
+    apiKey: await getApiKey('RECALLAI_API_KEY'),
+    webhookSecret: await getApiKey('RECALL_WEBHOOK_SECRET'),
+  };
+}
 
 app.get('/start-recording', async (req, res) => {
-  console.log(`Creating upload token with API key: ${RECALLAI_API_KEY?.substring(0, 8)}...`);
+  const { apiUrl, apiKey } = await getRecallConfig();
+  console.log(`Creating upload token with API key: ${apiKey?.substring(0, 8)}...`);
 
-  if (!RECALLAI_API_KEY) {
-    console.error('RECALLAI_API_KEY is missing! Set it in .env file');
+  if (!apiKey) {
+    console.error('RECALLAI_API_KEY is missing! Set it in Settings > Security');
     return res.json({ status: 'error', message: 'RECALLAI_API_KEY is missing' });
   }
 
-  const url = `${RECALLAI_API_URL}/api/v1/sdk_upload/`;
+  const url = `${apiUrl}/api/v1/sdk_upload/`;
 
   // NOTE: Webhook URL MUST be configured in Recall.ai dashboard
   // There is no API to set it per-request for SDK uploads
@@ -53,7 +89,7 @@ app.get('/start-recording', async (req, res) => {
     console.log('[Upload Token] Request body:', JSON.stringify(requestBody, null, 2));
 
     const response = await axios.post(url, requestBody, {
-      headers: { Authorization: `Token ${RECALLAI_API_KEY}` },
+      headers: { Authorization: `Token ${apiKey}` },
       timeout: 9000,
     });
 
@@ -72,8 +108,10 @@ app.post('/webhook/recall', express.raw({ type: 'application/json' }), async (re
   console.log('[Webhook] Headers:', JSON.stringify(req.headers, null, 2));
   console.log('[Webhook] Body length:', req.body?.length || 0);
 
-  if (!RECALL_WEBHOOK_SECRET) {
-    console.error('[Webhook] RECALL_WEBHOOK_SECRET not configured in .env');
+  const { webhookSecret } = await getRecallConfig();
+
+  if (!webhookSecret) {
+    console.error('[Webhook] RECALL_WEBHOOK_SECRET not configured in Settings > Security');
     return res.status(500).json({ error: 'Webhook secret not configured' });
   }
 
@@ -92,7 +130,7 @@ app.post('/webhook/recall', express.raw({ type: 'application/json' }), async (re
     return res.status(200).json({ warning: 'Missing signature headers' });
   }
 
-  const wh = new Webhook(RECALL_WEBHOOK_SECRET);
+  const wh = new Webhook(webhookSecret);
   let event;
 
   try {
@@ -100,7 +138,7 @@ app.post('/webhook/recall', express.raw({ type: 'application/json' }), async (re
     console.log('[Webhook] ✓ Signature verified');
   } catch (err) {
     console.error('[Webhook] ✗ Signature verification failed:', err.message);
-    console.error('[Webhook] Secret (first 10 chars):', RECALL_WEBHOOK_SECRET?.substring(0, 10));
+    console.error('[Webhook] Secret (first 10 chars):', webhookSecret?.substring(0, 10));
     return res.status(400).json({ error: 'Invalid signature' });
   }
 
@@ -173,3 +211,4 @@ if (require.main === module) {
 }
 
 module.exports = app;
+module.exports.setKeyManagementService = setKeyManagementService;
