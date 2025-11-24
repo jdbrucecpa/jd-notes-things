@@ -97,7 +97,8 @@ class TemplateParser {
     const sections = [];
 
     // Match ## headers followed by <!-- Prompt: ... --> comments
-    const sectionRegex = /##\s+([^\n]+)\s*\n<!--\s*Prompt:\s*([^-]+?)-->/g;
+    // Allow optional blank lines/whitespace between header and comment
+    const sectionRegex = /##\s+([^\n]+)[\s\n]*<!--\s*Prompt:\s*([\s\S]*?)-->/g;
     let match;
 
     while ((match = sectionRegex.exec(content)) !== null) {

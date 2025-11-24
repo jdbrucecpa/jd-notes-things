@@ -9,6 +9,7 @@ module.exports = {
     asar: {
       unpack: '**/{@recallai,keytar}/**',
     },
+    extraResource: ['./config/templates'],
     osxSign: {
       continueOnError: false,
       optionsForFile: _ => {

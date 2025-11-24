@@ -51,6 +51,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onShowToast: callback => ipcRenderer.on('show-toast', (_, data) => callback(data)),
   onAuthExpired: callback => ipcRenderer.on('auth:expired', (_, data) => callback(data)),
   getActiveRecordingId: noteId => ipcRenderer.invoke('getActiveRecordingId', noteId),
+  // SDK initialization state
+  sdkIsReady: () => ipcRenderer.invoke('sdk:isReady'),
+  onSdkReady: callback => ipcRenderer.on('sdk-ready', () => callback()),
   // Unified Google Authentication (Calendar + Contacts)
   googleGetAuthUrl: () => ipcRenderer.invoke('google:getAuthUrl'),
   googleAuthenticate: code => ipcRenderer.invoke('google:authenticate', code),

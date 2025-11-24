@@ -640,12 +640,26 @@ function createMeetingCard(meeting) {
     </div>
     <div class="meeting-actions">
       <button class="delete-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Delete note">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
-        </svg>
       </button>
     </div>
   `);
+
+  // Create delete button SVG programmatically (after sanitization) to avoid DOMPurify stripping it
+  const deleteBtn = card.querySelector('.delete-meeting-btn');
+  if (deleteBtn) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z');
+    path.setAttribute('fill', 'currentColor');
+
+    svg.appendChild(path);
+    deleteBtn.appendChild(svg);
+  }
 
   // Create checkbox programmatically (after sanitization) to avoid DOMPurify stripping it
   const checkboxContainer = document.createElement('div');
@@ -1607,6 +1621,36 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
   });
+
+  // SDK initialization state - disable record button until SDK is ready
+  {
+    const sdkRecordButton = document.getElementById('recordButton');
+    if (sdkRecordButton) {
+      // Start with button disabled
+      sdkRecordButton.disabled = true;
+      sdkRecordButton.title = 'Initializing...';
+
+      // Check if SDK is already ready (in case we loaded after initialization)
+      const sdkReady = await window.electronAPI.sdkIsReady();
+      if (sdkReady) {
+        sdkRecordButton.disabled = false;
+        sdkRecordButton.title = 'Start Recording';
+        console.log('[SDK] Already initialized - recording enabled');
+      } else {
+        console.log('[SDK] Waiting for initialization to complete...');
+      }
+
+      // Listen for SDK ready event
+      window.electronAPI.onSdkReady(() => {
+        const btn = document.getElementById('recordButton');
+        if (btn) {
+          btn.disabled = false;
+          btn.title = 'Start Recording';
+        }
+        console.log('[SDK] Initialization complete - recording enabled');
+      });
+    }
+  }
 
   // Listen for toast notifications from main process
   window.electronAPI.onShowToast(data => {

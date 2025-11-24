@@ -155,6 +155,7 @@ let speakerMatcher = null;
 let mainWindow;
 let tray = null; // System tray icon (Phase 10.7)
 let isRecording = false; // Track recording state for UI updates (Phase 10.7)
+let sdkReady = false; // Track when SDK is fully initialized (after restart workaround)
 
 // Meeting monitor state
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
@@ -969,88 +970,30 @@ settings:
       logger.main.info('[Config] Created templates directory:', templatesDir);
     }
 
-    // Create default template files if they don't exist
-    const defaultTemplates = {
-      'auto-summary-prompt.txt': `You are an AI assistant helping to summarize meeting transcripts.
+    // Copy default templates from bundled source
+    // Development: config/templates in project root
+    // Production: resources/templates (via extraResource in forge.config.js)
+    const bundledTemplatesDir = app.isPackaged
+      ? path.join(process.resourcesPath, 'templates')
+      : path.join(__dirname, '..', '..', 'config', 'templates');
 
-Given the transcript below, create a concise summary that includes:
-1. Main discussion topics
-2. Key decisions made
-3. Action items and owners
-4. Important deadlines or dates mentioned
+    logger.main.info('[Config] Bundled templates source:', bundledTemplatesDir);
 
-Keep the summary clear and actionable.`,
+    // Copy each template file if it doesn't exist in user's config
+    if (fs.existsSync(bundledTemplatesDir)) {
+      const templateFiles = fs.readdirSync(bundledTemplatesDir);
+      for (const filename of templateFiles) {
+        const sourcePath = path.join(bundledTemplatesDir, filename);
+        const destPath = path.join(templatesDir, filename);
 
-      'client-meeting.yaml': `name: Client Meeting Summary
-description: Structured summary for client meetings
-
-sections:
-  - name: Executive Summary
-    prompt: Provide a brief 2-3 sentence overview of the meeting
-
-  - name: Discussion Topics
-    prompt: List the main topics discussed in bullet points
-
-  - name: Decisions Made
-    prompt: List any decisions that were made during the meeting
-
-  - name: Action Items
-    prompt: Create a list of action items with owners and deadlines if mentioned
-
-  - name: Next Steps
-    prompt: Summarize the agreed next steps and follow-up plan`,
-
-      'internal-meeting.yaml': `name: Internal Meeting Summary
-description: Summary for internal team meetings
-
-sections:
-  - name: Meeting Overview
-    prompt: Provide a brief summary of the meeting purpose and outcomes
-
-  - name: Key Topics
-    prompt: List the main topics discussed
-
-  - name: Action Items
-    prompt: List action items with assigned team members`,
-
-      'quick-notes.json': `{
-  "name": "Quick Notes",
-  "description": "Fast summary for brief meetings",
-  "sections": [
-    {
-      "name": "Summary",
-      "prompt": "Provide a brief 3-5 sentence summary of the meeting"
-    },
-    {
-      "name": "Follow-up",
-      "prompt": "List any follow-up items or action points"
-    }
-  ]
-}`,
-
-      'one-on-one.md': `# One-on-One Meeting Template
-
-## Attendees
-List the meeting participants
-
-## Topics Discussed
-Summarize the main topics covered in the one-on-one
-
-## Action Items
-- List action items with owners
-- Include deadlines if mentioned
-
-## Notes
-Any additional notes or context from the meeting`
-    };
-
-    // Create each template file if it doesn't exist
-    for (const [filename, content] of Object.entries(defaultTemplates)) {
-      const templatePath = path.join(templatesDir, filename);
-      if (!fs.existsSync(templatePath)) {
-        fs.writeFileSync(templatePath, content, 'utf8');
-        logger.main.info('[Config] Created default template:', filename);
+        // Only copy if destination doesn't exist
+        if (!fs.existsSync(destPath) && fs.statSync(sourcePath).isFile()) {
+          fs.copyFileSync(sourcePath, destPath);
+          logger.main.info('[Config] Copied default template:', filename);
+        }
       }
+    } else {
+      logger.main.warn('[Config] Bundled templates directory not found:', bundledTemplatesDir);
     }
 
     logger.main.info('[Config] Default config files initialized successfully');
@@ -1625,6 +1568,13 @@ async function initSDK() {
       // The meeting-detected event listener should fire if there are any open meetings
     } catch (error) {
       logger.main.error('[SDK] Error during SDK restart:', error);
+    } finally {
+      // Mark SDK as fully ready and notify renderer
+      sdkReady = true;
+      logger.main.info('[SDK] Initialization complete - recording enabled');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('sdk-ready');
+      }
     }
   }, 3000); // Wait 3 seconds after initial SDK init
 
@@ -2847,6 +2797,11 @@ ipcMain.handle('debugGetHandlers', async () => {
   const handlers = Object.keys(ipcMain._invokeHandlers);
   console.log('Registered handlers:', handlers);
   return handlers;
+});
+
+// Check if SDK is fully initialized (after restart workaround)
+ipcMain.handle('sdk:isReady', async () => {
+  return sdkReady;
 });
 
 // ===================================================================

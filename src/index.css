@@ -1021,6 +1021,11 @@ body {
   filter: brightness(0.9);
 }
 
+.record-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .generate-btn {
   color: var(--event-break);
   background: var(--light-green);
