@@ -1,343 +1,309 @@
+<div align="center">
+
 # JD Notes Things
 
-**AI Meeting Notetaker for Zoom, Microsoft Teams, and Google Meet**
+**AI-powered meeting notes that organize themselves**
 
-> Personal productivity tool by JD Knows Things
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://www.microsoft.com/windows)
+[![Electron](https://img.shields.io/badge/Electron-39.x-47848F?logo=electron)](https://www.electronjs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js)](https://nodejs.org/)
 
----
+[Features](#features) • [Installation](#installation) • [Configuration](#configuration) • [Usage](#usage) • [Contributing](#contributing)
 
-## Overview
-
-JD Notes Things is a Windows desktop application that automatically records, transcribes, and summarizes your meetings. It integrates with Google Calendar to detect upcoming meetings, captures high-quality audio, generates AI-powered summaries, and saves structured notes to your Obsidian vault.
-
-### Key Features
-
-- 🎙️ **Automatic Meeting Recording** - Detects Zoom, Teams, and Google Meet sessions
-- 📝 **Multi-Provider Transcription** - Choose from AssemblyAI, Deepgram, or Recall.ai
-- 🤖 **AI-Powered Summaries** - Generate structured notes with OpenAI, Claude, or Azure OpenAI
-- 📅 **Google Calendar Integration** - Auto-detect and record scheduled meetings
-- 👥 **Speaker Identification** - Match voices to contacts via Google Contacts
-- 📂 **Smart Organization** - Automatic routing to client/project folders in Obsidian
-- 🔒 **Secure & Private** - Local-first with Windows Credential Manager for API keys
-- 💰 **Cost-Optimized** - Prompt caching reduces LLM costs by 85-90%
+</div>
 
 ---
 
-## Quick Start
+## What is this?
 
-### Prerequisites
+JD Notes Things is a Windows desktop app that automatically records your Zoom, Teams, and Google Meet calls, transcribes them, generates AI summaries, and saves everything to your Obsidian vault—organized by client, project, or team.
 
-- **Windows** 10/11 (required for Recall.ai Desktop SDK)
-- **Node.js** v18+ and npm v10+
-- **Obsidian** (optional but recommended)
-- API keys for:
-  - [Recall.ai](https://recall.ai) - For audio recording
-  - [AssemblyAI](https://assemblyai.com) or [Deepgram](https://deepgram.com) - For transcription
-  - [OpenAI](https://openai.com) - For AI summaries
-  - Google OAuth credentials - For Calendar/Contacts integration
+**The problem:** Meeting notes are scattered, incomplete, or never written at all.
 
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/jdknowsthings/jd-notes-things.git
-cd jd-notes-things
-
-# Install dependencies
-npm install
-
-# Create environment file
-cp .env.example .env
-
-# Edit .env with your API keys
-notepad .env
-```
-
-### Running the App
-
-```bash
-# Development mode
-npm start
-
-# Build for production
-npm run package
-
-# Create installer
-npm run make
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-# Recall.ai Configuration
-RECALLAI_API_URL=https://us-west-2.recall.ai
-RECALLAI_API_KEY=your_api_key
-RECALL_WEBHOOK_SECRET=your_webhook_secret
-
-# Transcription Provider (choose one or more)
-ASSEMBLYAI_API_KEY=your_key       # $0.37/hr - Recommended
-DEEPGRAM_API_KEY=your_key          # $0.43/hr - Alternative
-
-# LLM Provider (choose one)
-OPENAI_API_KEY=your_key            # For OpenAI GPT models
-ANTHROPIC_API_KEY=your_key         # For Claude models
-AZURE_OPENAI_API_KEY=your_key      # For Azure OpenAI
-
-# Localtunnel (for webhook tunnel - uses dynamic/random subdomain)
-# TUNNEL_SUBDOMAIN=                # Not reliably supported, leave empty
-
-# Google OAuth
-GOOGLE_CALENDAR_CLIENT_ID=your_client_id.apps.googleusercontent.com
-GOOGLE_CALENDAR_CLIENT_SECRET=your_secret
-GOOGLE_CALENDAR_REDIRECT_URI=http://localhost:3000/oauth2callback
-
-# Obsidian Vault
-VAULT_PATH=C:\Users\YourName\Documents\ObsidianVault
-```
-
-### Obsidian Vault Structure
-
-The app automatically creates this structure in your vault:
-
-```
-vault/
-├── clients/{client-name}/meetings/
-├── industry/{contact-name}/meetings/
-├── internal/meetings/
-├── _unfiled/{YYYY-MM}/meetings/
-└── config/
-    ├── routing.yaml        # Email routing configuration
-    └── templates/          # Custom summary templates
-```
-
-Each meeting generates two files:
-- **Summary** (`YYYY-MM-DD-meeting-title.md`) - Metadata + AI summary
-- **Transcript** (`YYYY-MM-DD-meeting-title-transcript.md`) - Full conversation
-
-### Routing Configuration
-
-Edit `vault/config/routing.yaml` to control where meetings are saved:
-
-```yaml
-clients:
-  acme-corp:
-    vault_path: 'clients/acme-corp'
-    emails:
-      - 'acme.com'
-    contacts:
-      - 'john@acme.com'
-
-industry:
-  consultant-jane:
-    vault_path: 'industry/jane-smith'
-    emails:
-      - 'consulting.com'
-
-internal:
-  vault_path: 'internal/meetings'
-
-settings:
-  unfiled_path: '_unfiled'
-  duplicate_multi_org: 'all'  # 'all', 'primary', or 'unfiled'
-```
-
-See [`docs/routing-example.yaml`](./docs/routing-example.yaml) for complete examples.
+**The solution:** Hit record, forget about it, and find perfectly organized notes waiting for you.
 
 ---
 
 ## Features
 
-### Current Capabilities
+### Core Functionality
+- **One-click recording** — Capture system audio from any meeting platform
+- **Multi-provider transcription** — Choose AssemblyAI ($0.37/hr), Deepgram ($0.43/hr), or Recall.ai
+- **AI summaries** — Generate structured notes with OpenAI, Claude, or Azure OpenAI
+- **Smart organization** — Auto-route meetings to the right folder based on who's in the call
 
-#### ✅ Core Recording & Transcription
-- Manual and automatic meeting recording
-- System audio capture via Recall.ai SDK
-- Multi-provider transcription with runtime switching
-- Speaker diarization (Speaker 1, Speaker 2, etc.)
-- Upload progress tracking
+### Integrations
+- **Google Calendar** — See upcoming meetings and auto-detect when they start
+- **Google Contacts** — Match speakers to real names in your transcripts
+- **Obsidian** — Native markdown output with proper linking between summary and transcript
 
-#### ✅ Smart Organization
-- Email domain-based routing to client/project folders
-- Multi-organization meeting handling
-- Custom email overrides for personal addresses
-- Automatic unfiled folder for unknown participants
-
-#### ✅ Google Calendar Integration
-- OAuth 2.0 authentication (unified with Contacts)
-- Automatic meeting detection (Zoom, Teams, Meet)
-- Upcoming meetings display
-- Platform-specific metadata
-
-#### ✅ AI-Powered Summaries
-- Multi-provider LLM support (OpenAI, Claude, Azure)
-- Template-based summary generation
-- Prompt caching for 85-90% cost reduction
-- Parallel processing for 10x speedup
-- Custom editable templates (Markdown, YAML, JSON, or plain text)
-
-#### ✅ Speaker Recognition
-- Google Contacts integration with LRU caching
-- Heuristic speaker matching algorithms
-- Automatic speaker label replacement in transcripts
-
-#### ✅ Bulk Import
-- Import existing transcripts (.txt, .md, VTT, SRT)
-- Background processing with progress notifications
-- LLM-based title suggestions for generic filenames
-- Folder scanning with recursive search
-
-#### ✅ Security & Privacy
-- XSS protection with DOMPurify
-- Path traversal prevention
-- OAuth CSRF protection
-- Windows Credential Manager for API keys
-- Local-first data storage
-- Optional DPAPI encryption
-
-### Roadmap
-
-See [`SPECIFICATION.md`](./SPECIFICATION.md) for the complete development roadmap and current phase status.
-
-**Upcoming features:**
-- Real-time transcription during meetings
-- HubSpot CRM integration
-- Advanced routing configuration UI
-- Custom keyboard shortcuts
-- System tray controls
+### Developer-Friendly
+- **Template system** — Customize summary output with your own prompts
+- **YAML routing config** — Full control over where meetings land
+- **Cost optimized** — Prompt caching reduces LLM costs by 85-90%
 
 ---
 
-## Project Structure
+## Installation
+
+### Prerequisites
+
+- Windows 10/11
+- Node.js 18+ and npm 10+
+- API keys (see [Configuration](#configuration))
+
+### Quick Start
+
+```bash
+# Clone the repo
+git clone https://github.com/jdbrucecpa/jd-notes-things.git
+cd jd-notes-things
+
+# Install dependencies
+npm install
+
+# Copy and configure environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# Run the app
+npm start
+```
+
+### Building for Windows
+
+```bash
+# Build without installer (for testing)
+npm run package
+# Output: out/jd-notes-things-win32-x64/
+
+# Build Windows installer (.exe)
+npm run make
+# Output: out/make/squirrel.windows/x64/jd-notes-things-1.0.0 Setup.exe
+```
+
+The installer uses Squirrel for Windows, which provides automatic updates and clean install/uninstall.
+
+### Other Platforms (Experimental)
+
+This app is built with Electron and *theoretically* supports macOS and Linux. However, **these platforms have not been tested or attempted.**
+
+If you want to try building for other platforms:
+
+```bash
+# macOS (untested)
+npm run package -- --platform=darwin
+
+# Linux (untested)
+npm run package -- --platform=linux
+```
+
+**Known limitations on other platforms:**
+- The Recall.ai Desktop SDK may not be available for macOS/Linux
+- Windows Credential Manager (keytar) would need platform-specific alternatives
+- DPAPI encryption is Windows-only
+- Some file path handling assumes Windows conventions
+
+Contributions to add cross-platform support are welcome!
+
+---
+
+## Configuration
+
+### Required API Keys
+
+| Service | Purpose | Get Key |
+|---------|---------|---------|
+| Recall.ai | Audio recording | [recall.ai](https://recall.ai) |
+| AssemblyAI *or* Deepgram | Transcription | [assemblyai.com](https://assemblyai.com) / [deepgram.com](https://deepgram.com) |
+| OpenAI *or* Anthropic | AI summaries | [openai.com](https://openai.com) / [anthropic.com](https://anthropic.com) |
+| Google Cloud | Calendar & Contacts | [console.cloud.google.com](https://console.cloud.google.com) |
+
+### Environment Variables
+
+Create a `.env` file (see `.env.example` for all options):
+
+```env
+# Recording
+RECALLAI_API_KEY=your_key
+RECALLAI_API_URL=https://us-west-2.recall.ai
+
+# Transcription (pick one)
+ASSEMBLYAI_API_KEY=your_key
+
+# AI Summaries (pick one)
+OPENAI_API_KEY=your_key
+
+# Google OAuth
+GOOGLE_CALENDAR_CLIENT_ID=your_id.apps.googleusercontent.com
+GOOGLE_CALENDAR_CLIENT_SECRET=your_secret
+
+# Output
+VAULT_PATH=C:/Users/You/Documents/ObsidianVault
+```
+
+### Meeting Routing
+
+Control where meetings are saved by editing `config/routing.yaml`:
+
+```yaml
+clients:
+  acme-corp:
+    vault_path: clients/acme-corp
+    emails:
+      - acme.com
+    contacts:
+      - ceo@acme.com
+
+internal:
+  vault_path: internal/meetings
+  team_emails:
+    - yourcompany.com
+
+settings:
+  unfiled_path: _unfiled
+```
+
+**Routing priority:** Email overrides → Exact contact match → Domain match → Internal → Unfiled
+
+See [`config/routing.yaml`](config/routing.yaml) for a complete example.
+
+---
+
+## Usage
+
+### Recording a Meeting
+
+1. Open the app and connect to Google Calendar
+2. Join your Zoom/Teams/Meet call
+3. Click **Start Recording** (or let it auto-detect from calendar)
+4. When done, click **Stop Recording**
+5. Wait for transcription and summary generation
+6. Find your notes in Obsidian, organized automatically
+
+### Output Structure
+
+Each meeting creates two files:
 
 ```
-jd-notes-things/
-├── src/
-│   ├── main/                  # Electron main process
-│   │   ├── recording/         # Audio recording with Recall.ai
-│   │   ├── services/          # Transcription, LLM, encryption
-│   │   ├── routing/           # Meeting organization logic
-│   │   ├── templates/         # Template parsing and management
-│   │   ├── integrations/      # Google Calendar/Contacts
-│   │   └── storage/           # Vault structure and file operations
-│   ├── renderer/              # React UI components
-│   ├── shared/                # Validation schemas and constants
-│   └── preload.js             # IPC bridge
-├── config/
-│   └── templates/             # User-editable summary templates
-├── docs/                      # Documentation and examples
-├── tests/                     # Security tests
-├── SPECIFICATION.md           # Complete project specification
-└── README.md                  # This file
+vault/
+├── clients/acme-corp/meetings/
+│   ├── 2024-01-15-quarterly-review.md          # Summary + metadata
+│   └── 2024-01-15-quarterly-review-transcript.md  # Full transcript
+├── internal/meetings/
+└── _unfiled/2024-01/meetings/
+```
+
+### Custom Templates
+
+Add your own summary templates to `config/templates/`:
+
+```markdown
+<!-- config/templates/action-items.md -->
+# Action Items
+
+Extract all action items from this meeting transcript.
+Format as a checklist with owner and due date if mentioned.
 ```
 
 ---
 
 ## Development
 
-### Available Commands
-
 ```bash
-npm start              # Start development server with hot reload
-npm run package        # Build for current platform
-npm run make           # Create distributable installer
-npm run lint           # Run ESLint
-npm run lint:fix       # Auto-fix linting issues
-npm run format         # Format code with Prettier
-npm run format:check   # Check code formatting
+npm start          # Development with hot reload
+npm run package    # Build for current platform
+npm run make       # Create installer
+npm run lint       # Run ESLint
+npm run format     # Format with Prettier
 ```
 
-### Building for Distribution
+### Project Structure
 
-```bash
-# Windows installer (.exe)
-npm run make
-
-# Output location
-out/make/squirrel.windows/x64/
+```
+src/
+├── main/           # Electron main process
+│   ├── recording/  # Recall.ai SDK integration
+│   ├── services/   # Transcription, LLM, encryption
+│   ├── routing/    # Meeting organization logic
+│   └── integrations/  # Google Calendar/Contacts
+├── renderer/       # React UI
+└── preload.js      # IPC bridge
 ```
 
 ---
 
-## Documentation
+## Cost Estimates
 
-- **[SPECIFICATION.md](./SPECIFICATION.md)** - Complete technical specification and development roadmap
-- **[CLAUDE.md](./CLAUDE.md)** - Development guide for Claude Code
-- **[docs/security-audit-2025-01-13.md](./docs/security-audit-2025-01-13.md)** - Security audit report
-- **[docs/routing-example.yaml](./docs/routing-example.yaml)** - Routing configuration examples
-- **[Recall.ai Docs](https://docs.recall.ai)** - Recording SDK documentation
+| Component | Cost | Notes |
+|-----------|------|-------|
+| Transcription | $0.37-0.43/hr | AssemblyAI or Deepgram |
+| AI Summary | ~$0.05/meeting | With prompt caching |
+| **Total** | **~$0.50/hr** | For a typical meeting |
 
----
-
-## Technology Stack
-
-| Component | Technology | Version |
-|-----------|-----------|---------|
-| Desktop Framework | Electron | 39.x |
-| UI Framework | React | 19.x |
-| Build System | Webpack + Electron Forge | Latest |
-| Recording | Recall.ai Desktop SDK | 1.3.x |
-| Transcription | AssemblyAI / Deepgram | Latest |
-| LLM | OpenAI / Claude / Azure | Latest |
-| OAuth | Google OAuth 2.0 | Latest |
-| Security | Windows DPAPI + Credential Manager | Native |
+Prompt caching provides 85-90% cost reduction on LLM calls by reusing the transcript context across multiple summary sections.
 
 ---
 
 ## Security
 
-This application implements industry-standard security practices:
-
-- ✅ **15/15 automated security tests passing**
-- ✅ **0 critical or high-severity vulnerabilities**
-- ✅ **XSS protection** with DOMPurify sanitization
-- ✅ **Path traversal prevention** with enhanced validation
-- ✅ **OAuth CSRF protection** with state parameter validation
-- ✅ **Secure API key storage** in Windows Credential Manager
-- ✅ **Token file permission validation** with Windows icacls
-
-See [`docs/security-audit-2025-01-13.md`](./docs/security-audit-2025-01-13.md) for the comprehensive security audit report.
-
----
-
-## Cost Optimization
-
-The application is designed to minimize API costs:
-
-- **Transcription:** $0.37-$0.43/hour (AssemblyAI/Deepgram vs $0.85/hr Recall.ai)
-- **LLM Summaries:** ~$0.30/meeting with prompt caching (85-90% savings)
-- **Total Cost:** ~$0.70 per 2-hour meeting (well under $1 target)
-
-Prompt caching works by:
-1. First template section creates cache (~$0.009)
-2. Subsequent sections reuse cache (~$0.001 each)
-3. 99%+ cache hit rate on repeated sections
+- API keys stored in Windows Credential Manager (not plain text)
+- XSS protection with DOMPurify
+- Path traversal prevention
+- OAuth CSRF protection with state validation
+- All data stored locally—nothing sent to third parties except chosen API providers
 
 ---
 
 ## Contributing
 
-This is a personal project by JD Bruce for JD Knows Things. While not open for external contributions, the codebase is shared for reference and personal use.
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Areas for Contribution
+
+- macOS/Linux support
+- Additional transcription providers
+- New summary templates
+- UI/UX improvements
+- Documentation
+
+---
+
+## Roadmap
+
+- [ ] Real-time transcription during meetings
+- [ ] CRM integrations (HubSpot, Salesforce)
+- [ ] System tray controls
+- [ ] Keyboard shortcuts
+- [ ] macOS support
 
 ---
 
 ## License
 
-MIT License - Personal use only, not for resale
+MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-## Support
+## Acknowledgments
 
-For detailed development documentation and phase-by-phase implementation details, see:
-- **[SPECIFICATION.md](./SPECIFICATION.md)** - Authoritative source for project planning and status
-- **[CLAUDE.md](./CLAUDE.md)** - Technical architecture and development guide
+- [Recall.ai](https://recall.ai) for the desktop recording SDK
+- [AssemblyAI](https://assemblyai.com) and [Deepgram](https://deepgram.com) for transcription
+- [Obsidian](https://obsidian.md) for being an amazing knowledge base
 
 ---
 
-**Built with ❤️ by JD Knows Things**
+<div align="center">
+
+**[Report Bug](https://github.com/jdbrucecpa/jd-notes-things/issues) · [Request Feature](https://github.com/jdbrucecpa/jd-notes-things/issues)**
+
+Made by [JD Knows Things](https://jdknowsthings.com)
+
+</div>

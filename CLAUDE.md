@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 **JD Notes Things** is a Windows desktop application for automatically recording, transcribing, and summarizing meetings from Zoom, Microsoft Teams, and Google Meet. It integrates with Google Calendar, Google Contacts, and saves structured notes to an Obsidian vault.
 
-**For complete project specification, development phases, and current status:** See [`SPECIFICATION.md`](./SPECIFICATION.md) (authoritative source).
+See [`README.md`](./README.md) for project overview and setup instructions.
 
 ## Technology Stack
 
@@ -109,7 +109,7 @@ Each meeting generates **two markdown files**:
 
 **Priority:** email_overrides → exact contact → domain match → industry → internal → unfiled
 
-See `docs/routing-example.yaml` for structure.
+See `config/routing.yaml` for structure and examples.
 
 ### Template System
 
@@ -185,10 +185,8 @@ npm run format      # Format with Prettier
 
 ## Reference Documentation
 
-- **[SPECIFICATION.md](./SPECIFICATION.md)** - Complete specification, phase plan, and current status (authoritative source)
 - **[README.md](./README.md)** - Project overview and quick start
-- **[docs/routing-example.yaml](./docs/routing-example.yaml)** - Routing configuration example
-- **[docs/security-audit-2025-01-13.md](./docs/security-audit-2025-01-13.md)** - Comprehensive security audit
+- **[config/routing.yaml](./config/routing.yaml)** - Routing configuration example
 - **[Recall.ai SDK Docs](https://docs.recall.ai/docs/getting-started)** - Recording SDK reference
 - **[Muesli Example](https://github.com/recallai/muesli-public)** - Recall.ai reference implementation
 
@@ -200,6 +198,3 @@ npm run format      # Format with Prettier
 - **No premature optimization:** Build for clarity first
 - **User-editable configs:** Prefer file-based over hardcoded where possible
 
----
-
-**Note:** For detailed development status, phase completion, and roadmap, always refer to [`SPECIFICATION.md`](./SPECIFICATION.md).
