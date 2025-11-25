@@ -1,68 +1,103 @@
+# Routing Configuration Example
+#
+# This file controls how meetings are routed to folders in your Obsidian vault
+# based on participant email addresses.
+#
+# Priority order:
+# 1. email_overrides (exact email match)
+# 2. contacts (exact email match within organization)
+# 3. emails (domain match)
+# 4. industry contacts/domains
+# 5. internal team_emails
+# 6. unfiled (default)
+
 clients:
-  alman-partners:
-    vault_path: clients/alman-partners
+  # Example: Consulting client with AU domain
+  acme-consulting:
+    vault_path: clients/acme-consulting
     emails:
-      - almanpartners.com.au
+      - acmeconsulting.com.au
     contacts:
-      - paul@alman.com.au
-  capital-partners:
-    vault_path: clients/capital-partners
+      - john@acme.com.au
+
+  # Example: Investment firm
+  westside-capital:
+    vault_path: clients/westside-capital
     emails:
-      - capital-partners.com.au
+      - westsidecapital.com
     contacts:
-      - clamprecht@capital-partners.com.au
-  regency-invests:
-    vault_path: clients/regency-invests
+      - sarah.jones@westsidecapital.com
+      - mike.chen@westsidecapital.com
+
+  # Example: Client with no specific contacts (domain-only matching)
+  pacific-holdings:
+    vault_path: clients/pacific-holdings
     emails:
-      - regencyinvests.com
+      - pacificholdings.com
     contacts: []
-  bkfi:
-    vault_path: client/bkfi
+
+  # Example: Client with multiple team members
+  sunrise-ventures:
+    vault_path: clients/sunrise-ventures
     emails:
-      - brooklynfi.com
+      - sunrisevc.com
     contacts:
-      - john@brooklynfi.com
-      - aj@brooklynfi.com
-      - shane@brooklynfi.com
-  spp:
-    vault_path: clients/spp
+      - founder@sunrisevc.com
+      - cfo@sunrisevc.com
+      - operations@sunrisevc.com
+
+  # Example: Professional services firm
+  strategic-partners:
+    vault_path: clients/strategic-partners
     emails:
-      - spcfo.com
+      - strategicpartners.com
     contacts:
-      - shaun.erickson@spcfo.com
-      - rene.jarquin@spcfo.com
-  north-road:
-    vault_path: clients/north-road
+      - lead@strategicpartners.com
+      - associate@strategicpartners.com
+
+  # Example: Regional company
+  mountain-advisors:
+    vault_path: clients/mountain-advisors
     emails:
-      - northroadic.com
+      - mountainadvisors.com
     contacts:
-      - marshall.mcalister@northroadic.com
-  mana-fld:
-    vault_path: clients/mana-fld
+      - director@mountainadvisors.com
+
+  # Example: Family office
+  heritage-family:
+    vault_path: clients/heritage-family
     emails:
-      - manafld.com
+      - heritagefamily.com
     contacts:
-      - cristina@manafld.com
-      - stephanie@manafld.com
+      - principal@heritagefamily.com
+      - assistant@heritagefamily.com
+
+# Industry contacts (non-client business relationships)
 industry:
-  liyria:
-    vault_path: industry/liyria
+  tech-platform:
+    vault_path: industry/tech-platform
     emails:
-      - liyria.com
+      - techplatform.com
     contacts:
-      - maya@liyria.com
+      - sales@techplatform.com
+
+# Internal team configuration
 internal:
   vault_path: internal/meetings
   team_emails:
-    - jdknowsthings.com
-    - jdbrucecpa.com
-    - knowsthings.com
+    - yourcompany.com
+    - yourdomain.com
+
+# Email overrides for specific individuals
+# Use when someone's personal email should route to a client folder
 email_overrides:
-  personal@gmail.com: alman-partners
-  consultant@outlook.com: capital-partners
+  personal@gmail.com: acme-consulting
+  consultant@outlook.com: westside-capital
+
+# Global settings
 settings:
   unfiled_path: _unfiled
-  duplicate_multi_org: all
-  domain_priority: most_attendees
+  duplicate_multi_org: all           # Options: all, first, skip
+  domain_priority: most_attendees    # Options: most_attendees, first_match
   enable_email_overrides: true
   case_sensitive_emails: false
