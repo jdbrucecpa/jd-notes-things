@@ -19,6 +19,7 @@ const PatternConfigLoader = require('./main/import/PatternConfigLoader');
 const { createLLMServiceFromEnv, createLLMServiceFromCredentials } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
+const speakerMappingService = require('./main/services/speakerMappingService');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
@@ -1294,6 +1295,10 @@ app.whenReady().then(async () => {
       autoSummaryFunction: generateMeetingSummary, // Share auto-summary generation with recordings
     });
     console.log('[Import] Import manager initialized successfully');
+
+    // Initialize speaker mapping service (SM-2)
+    await speakerMappingService.initialize();
+    console.log('[SpeakerMapping] Speaker mapping service initialized');
   } catch (error) {
     console.error('[ObsidianExport] Failed to initialize:', error.message);
     console.log('[ObsidianExport] Obsidian export will be disabled');
@@ -3619,8 +3624,13 @@ ipcMain.handle(
       );
 
       // Load meeting data
-      const meetingsData = await fileOperationManager.readMeetingsData();
-      const meeting = meetingsData.meetings.find(m => m.id === meetingId);
+      const data = await fileOperationManager.readMeetingsData();
+
+      // Find meeting in either upcomingMeetings or pastMeetings
+      let meeting = data.upcomingMeetings?.find(m => m.id === meetingId);
+      if (!meeting) {
+        meeting = data.pastMeetings?.find(m => m.id === meetingId);
+      }
 
       if (!meeting) {
         throw new Error(`Meeting ${meetingId} not found`);
@@ -3660,7 +3670,7 @@ ipcMain.handle(
       }
 
       // Save updated meeting data
-      await fileOperationManager.writeMeetingsData(meetingsData);
+      await fileOperationManager.writeData(data);
 
       return { success: true, speakerMapping: meeting.speakerMapping };
     } catch (error) {
@@ -3669,6 +3679,235 @@ ipcMain.handle(
     }
   }
 );
+
+// ===================================================================
+// Speaker Mapping IPC Handlers (SM-2)
+// ===================================================================
+
+// Get all speaker mappings
+ipcMain.handle('speakerMapping:getAll', async () => {
+  try {
+    const mappings = speakerMappingService.getAllMappings();
+    return { success: true, mappings };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to get mappings:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get suggestions for speaker IDs (auto-suggest from known mappings)
+ipcMain.handle('speakerMapping:getSuggestions', async (event, { speakerIds }) => {
+  try {
+    const suggestions = speakerMappingService.getSuggestions(speakerIds);
+    return { success: true, suggestions };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to get suggestions:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Add or update a speaker mapping
+ipcMain.handle('speakerMapping:addMapping', async (event, { speakerId, contact, sourceContext }) => {
+  try {
+    const mapping = await speakerMappingService.addMapping(speakerId, contact, sourceContext);
+    return { success: true, mapping };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to add mapping:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Delete a speaker mapping
+ipcMain.handle('speakerMapping:deleteMapping', async (event, { speakerId }) => {
+  try {
+    const deleted = await speakerMappingService.deleteMapping(speakerId);
+    return { success: true, deleted };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to delete mapping:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Extract unique speaker IDs from a transcript
+ipcMain.handle('speakerMapping:extractSpeakerIds', async (event, { transcript }) => {
+  try {
+    const speakerIds = speakerMappingService.extractUniqueSpeakerIds(transcript);
+    return { success: true, speakerIds };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to extract speaker IDs:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Apply mappings to a transcript
+ipcMain.handle('speakerMapping:applyToTranscript', async (event, { transcript, mappings, options }) => {
+  try {
+    const updatedTranscript = speakerMappingService.applyMappingsToTranscript(transcript, mappings, options);
+    return { success: true, transcript: updatedTranscript };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to apply mappings:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Apply mappings to a meeting and save
+ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappings, options }) => {
+  try {
+    console.log(`[SpeakerMapping IPC] Applying mappings to meeting ${meetingId}`);
+
+    // Load meeting data
+    const data = await fileOperationManager.readMeetingsData();
+
+    // Find meeting in either upcomingMeetings or pastMeetings
+    let meeting = data.upcomingMeetings?.find(m => m.id === meetingId);
+    let meetingList = 'upcomingMeetings';
+
+    if (!meeting) {
+      meeting = data.pastMeetings?.find(m => m.id === meetingId);
+      meetingList = 'pastMeetings';
+    }
+
+    if (!meeting) {
+      throw new Error(`Meeting ${meetingId} not found`);
+    }
+
+    if (!meeting.transcript) {
+      throw new Error(`Meeting ${meetingId} has no transcript`);
+    }
+
+    // Apply mappings to transcript
+    console.log(`[SpeakerMapping IPC] Mappings to apply:`, JSON.stringify(mappings, null, 2));
+    console.log(`[SpeakerMapping IPC] Transcript before (first 2):`, meeting.transcript?.slice(0, 2));
+
+    meeting.transcript = speakerMappingService.applyMappingsToTranscript(
+      meeting.transcript,
+      mappings,
+      options
+    );
+
+    console.log(`[SpeakerMapping IPC] Transcript after (first 2):`, meeting.transcript?.slice(0, 2));
+
+    // Store the applied mappings for reference
+    meeting.appliedSpeakerMappings = mappings;
+
+    // Update participants list - replace speaker IDs with mapped contacts
+    if (mappings) {
+      // Initialize participants array if it doesn't exist
+      if (!meeting.participants) {
+        meeting.participants = [];
+      }
+      if (!meeting.participantEmails) {
+        meeting.participantEmails = [];
+      }
+
+      for (const [speakerId, mapping] of Object.entries(mappings)) {
+        const contactName = mapping.contactName;
+        const contactEmail = mapping.contactEmail;
+
+        // Find existing participant with this speaker ID as name and replace it
+        const existingIndex = meeting.participants.findIndex(
+          p => p.name === speakerId
+        );
+
+        if (existingIndex !== -1) {
+          // Replace the speaker ID participant with the contact
+          meeting.participants[existingIndex] = {
+            name: contactName,
+            email: contactEmail || null,
+            mappedFromSpeakerId: speakerId,
+          };
+          console.log(`[SpeakerMapping IPC] Replaced participant ${speakerId} with ${contactName}`);
+        } else {
+          // Check if contact already exists (by name or email)
+          const contactExists = meeting.participants.find(
+            p => p.name === contactName || (contactEmail && p.email === contactEmail)
+          );
+
+          if (!contactExists) {
+            // Add as new participant
+            meeting.participants.push({
+              name: contactName,
+              email: contactEmail || null,
+              mappedFromSpeakerId: speakerId,
+            });
+            console.log(`[SpeakerMapping IPC] Added participant: ${contactName}`);
+          }
+        }
+
+        // Add email to participantEmails if not already present
+        if (contactEmail && !meeting.participantEmails.includes(contactEmail)) {
+          meeting.participantEmails.push(contactEmail);
+        }
+      }
+    }
+
+    // Update summary content if it exists - replace speaker IDs with names
+    if (meeting.content && mappings) {
+      let updatedContent = meeting.content;
+      for (const [speakerId, mapping] of Object.entries(mappings)) {
+        // Replace speaker ID with contact name in summary
+        const regex = new RegExp(speakerId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        updatedContent = updatedContent.replace(regex, mapping.contactName);
+      }
+      meeting.content = updatedContent;
+    }
+
+    // Save updated meeting data
+    await fileOperationManager.writeData(data);
+
+    // Persist each mapping to the service for future auto-suggest
+    if (mappings) {
+      for (const [speakerId, mapping] of Object.entries(mappings)) {
+        await speakerMappingService.addMapping(speakerId, {
+          name: mapping.contactName,
+          email: mapping.contactEmail,
+        }, {
+          meetingId,
+          meetingTitle: meeting.title,
+        });
+      }
+    }
+
+    console.log(`[SpeakerMapping IPC] Applied ${Object.keys(mappings || {}).length} mappings to meeting (in ${meetingList})`);
+    return { success: true, meeting };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to apply mappings to meeting:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get statistics about speaker mappings
+ipcMain.handle('speakerMapping:getStats', async () => {
+  try {
+    const stats = speakerMappingService.getStats();
+    return { success: true, stats };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to get stats:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Export mappings for backup
+ipcMain.handle('speakerMapping:export', async () => {
+  try {
+    const data = speakerMappingService.exportMappings();
+    return { success: true, data };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to export mappings:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Import mappings from backup
+ipcMain.handle('speakerMapping:import', async (event, { data, merge }) => {
+  try {
+    await speakerMappingService.importMappings(data, merge);
+    return { success: true };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to import mappings:', error);
+    return { success: false, error: error.message };
+  }
+});
 
 // ===================================================================
 // End Google Integration IPC Handlers

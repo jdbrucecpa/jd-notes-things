@@ -4835,3 +4835,241 @@ body.dark-theme .pattern-error {
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================
+   Speaker Mapping Modal (SM-2)
+   ========================================= */
+
+.speaker-mapping-modal {
+  max-width: 700px;
+  max-height: 85vh;
+}
+
+.speaker-mapping-description {
+  color: var(--text-secondary);
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.speaker-mappings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.speaker-mapping-row {
+  display: grid;
+  grid-template-columns: 1fr 40px 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.speaker-mapping-row:hover {
+  border-color: var(--primary-color);
+}
+
+.speaker-mapping-row.mapped {
+  background: rgba(76, 175, 80, 0.1);
+  border-color: var(--status-success);
+}
+
+.speaker-id-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.speaker-id-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.speaker-id-value {
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.speaker-mapping-arrow {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.speaker-contact-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.speaker-contact-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.speaker-contact-search {
+  position: relative;
+}
+
+.speaker-contact-input {
+  width: 100%;
+  padding: 10px 12px;
+  padding-right: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.speaker-contact-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.speaker-contact-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.speaker-contact-input.mapped {
+  border-color: var(--status-success);
+  background: rgba(76, 175, 80, 0.05);
+}
+
+.speaker-contact-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.speaker-contact-search:hover .speaker-contact-clear,
+.speaker-contact-input:focus + .speaker-contact-clear {
+  opacity: 1;
+}
+
+.speaker-contact-clear:hover {
+  color: var(--color-error);
+}
+
+.speaker-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--status-success);
+}
+
+.speaker-suggestion-icon {
+  display: flex;
+}
+
+.speaker-suggestion-text {
+  font-style: italic;
+}
+
+.speaker-contact-dropdown {
+  position: fixed;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10001; /* Higher than modal overlay (1000) */
+}
+
+.speaker-contact-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.speaker-contact-option:hover {
+  background: var(--bg-secondary);
+}
+
+.speaker-contact-option .contact-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--gradient-purple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.speaker-contact-option .contact-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.speaker-contact-option .contact-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.speaker-contact-option .contact-email {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.no-speakers-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.no-speakers-message p {
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.speaker-mapping-stats {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-secondary);
+}

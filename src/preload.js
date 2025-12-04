@@ -100,6 +100,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
   speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) =>
     ipcRenderer.invoke('speakers:updateMapping', { meetingId, speakerLabel, participantEmail }),
   openExternal: url => ipcRenderer.send('open-external', url),
+  // Speaker Mapping (SM-2)
+  speakerMappingGetAll: () => ipcRenderer.invoke('speakerMapping:getAll'),
+  speakerMappingGetSuggestions: speakerIds =>
+    ipcRenderer.invoke('speakerMapping:getSuggestions', { speakerIds }),
+  speakerMappingAdd: (speakerId, contact, sourceContext) =>
+    ipcRenderer.invoke('speakerMapping:addMapping', { speakerId, contact, sourceContext }),
+  speakerMappingDelete: speakerId =>
+    ipcRenderer.invoke('speakerMapping:deleteMapping', { speakerId }),
+  speakerMappingExtractIds: transcript =>
+    ipcRenderer.invoke('speakerMapping:extractSpeakerIds', { transcript }),
+  speakerMappingApplyToTranscript: (transcript, mappings, options) =>
+    ipcRenderer.invoke('speakerMapping:applyToTranscript', { transcript, mappings, options }),
+  speakerMappingApplyToMeeting: (meetingId, mappings, options) =>
+    ipcRenderer.invoke('speakerMapping:applyToMeeting', { meetingId, mappings, options }),
+  speakerMappingGetStats: () => ipcRenderer.invoke('speakerMapping:getStats'),
+  speakerMappingExport: () => ipcRenderer.invoke('speakerMapping:export'),
+  speakerMappingImport: (data, merge) =>
+    ipcRenderer.invoke('speakerMapping:import', { data, merge }),
   // Import Transcripts (Phase 8)
   importFile: (filePath, options) => ipcRenderer.invoke('import:importFile', { filePath, options }),
   importBatch: (filePaths, options) =>

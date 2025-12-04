@@ -7,6 +7,7 @@ import { escapeHtml, markdownToSafeHtml } from './security.js';
 import { contactsService } from './services/contactsService.js';
 import { withButtonLoadingElement } from './utils/buttonHelper.js';
 import { initializeTabs } from './utils/tabHelper.js';
+import { openSpeakerMappingModal, hasCrypticSpeakerIds } from './speakerMapping.js';
 
 // Current meeting being viewed
 let currentMeeting = null;
@@ -85,6 +86,12 @@ function setupEventListeners(onBack, onUpdate) {
         searchTranscript(searchInput.value);
       }
     });
+  }
+
+  // Fix Speakers button (SM-2)
+  const fixSpeakersBtn = document.getElementById('fixSpeakersBtn');
+  if (fixSpeakersBtn) {
+    fixSpeakersBtn.onclick = () => openFixSpeakersModal(onUpdate);
   }
 
   // Generate templates button
@@ -274,9 +281,16 @@ function populateSummary(meeting) {
 /**
  * Populate transcript tab
  */
-function populateTranscript(meeting) {
+async function populateTranscript(meeting) {
   const transcriptContent = document.getElementById('meetingDetailTranscript');
+  const fixSpeakersBtn = document.getElementById('fixSpeakersBtn');
+
   if (!transcriptContent) return;
+
+  // Hide Fix Speakers button by default
+  if (fixSpeakersBtn) {
+    fixSpeakersBtn.style.display = 'none';
+  }
 
   if (!meeting.transcript || meeting.transcript.length === 0) {
     transcriptContent.innerHTML = `
@@ -322,6 +336,14 @@ function populateTranscript(meeting) {
 
     transcriptContent.appendChild(utteranceDiv);
   });
+
+  // SM-2: Check for cryptic speaker IDs and show Fix Speakers button
+  if (fixSpeakersBtn) {
+    const hasCryptic = await hasCrypticSpeakerIds(meeting.transcript);
+    if (hasCryptic) {
+      fixSpeakersBtn.style.display = 'inline-flex';
+    }
+  }
 }
 
 /**
@@ -1323,6 +1345,37 @@ export function updateMeetingDetail(meeting) {
   populateMetadata(meeting);
 
   console.log('[MeetingDetail] View updated with fresh data');
+}
+
+/**
+ * SM-2: Open Fix Speakers modal for bulk speaker mapping
+ */
+async function openFixSpeakersModal(onUpdate) {
+  if (!currentMeetingId || !currentMeeting?.transcript) {
+    console.warn('[MeetingDetail] No meeting or transcript to fix speakers');
+    return;
+  }
+
+  await openSpeakerMappingModal(currentMeetingId, currentMeeting.transcript, async (updatedMeeting) => {
+    console.log('[MeetingDetail] Speaker mappings applied, updating view');
+    console.log('[MeetingDetail] Updated meeting participants:', updatedMeeting.participants);
+    console.log('[MeetingDetail] Updated transcript sample:', updatedMeeting.transcript?.slice(0, 2));
+
+    // Update current meeting with the updated data
+    currentMeeting = updatedMeeting;
+
+    // Refresh all relevant sections
+    populateMeetingInfo(currentMeeting);
+    populateParticipants(currentMeeting);  // Important - update participants list!
+    populateSummary(currentMeeting);
+    await populateTranscript(currentMeeting);
+    populateMetadata(currentMeeting);
+
+    // Notify parent of the update
+    if (onUpdate) {
+      onUpdate(currentMeetingId, currentMeeting);
+    }
+  });
 }
 
 /**

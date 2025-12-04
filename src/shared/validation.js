@@ -7,7 +7,9 @@ const ParticipantSchema = z.object({
     .union([z.string(), z.number()])
     .optional()
     .transform(val => (val !== undefined ? String(val) : undefined)),
-});
+  email: z.string().nullable().optional(), // SM-2: Added for speaker mapping
+  mappedFromSpeakerId: z.string().optional(), // SM-2: Track which speaker ID was mapped
+}).passthrough(); // Allow additional fields for flexibility
 
 // Transcript entry schema
 // Accept both string and number timestamps for backwards compatibility
@@ -28,7 +30,12 @@ const TranscriptEntrySchema = z.object({
       }
       return val;
     }),
-});
+  // SM-2: Speaker mapping fields
+  speakerName: z.string().optional(), // Mapped contact name
+  speakerEmail: z.string().nullable().optional(), // Mapped contact email
+  speakerDisplayName: z.string().optional(), // Display name (may include wiki-links)
+  speakerMapped: z.boolean().optional(), // Flag indicating speaker was mapped
+}).passthrough(); // Allow additional fields for flexibility
 
 // Meeting schema
 const MeetingSchema = z
