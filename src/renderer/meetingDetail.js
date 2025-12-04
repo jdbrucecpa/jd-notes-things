@@ -25,7 +25,7 @@ export function initializeMeetingDetail(meetingId, meeting, onBack, onUpdate) {
     participantCount: meeting.participants?.length || 0,
     participants: meeting.participants,
     transcriptLength: meeting.transcript?.length || 0,
-    firstSpeaker: meeting.transcript?.[0]?.speaker || 'N/A'
+    firstSpeaker: meeting.transcript?.[0]?.speakerName || meeting.transcript?.[0]?.speaker || 'N/A'
   });
 
   currentMeeting = meeting;
@@ -297,7 +297,8 @@ function populateTranscript(meeting) {
     // Format timestamp
     const timestamp = formatTimestamp(utterance.start);
 
-    const speakerName = utterance.speaker || 'Unknown Speaker';
+    // SM-1: Use speakerName (matched name) if available, fall back to speaker label
+    const speakerName = utterance.speakerName || utterance.speaker || 'Unknown Speaker';
     const speakerId = `speaker-${index}`;
 
     utteranceDiv.innerHTML = `

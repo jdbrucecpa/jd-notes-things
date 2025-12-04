@@ -131,6 +131,114 @@ if (require('electron-squirrel-startup')) {
   app.quit();
 }
 
+// ===================================================================
+// Development Mode: Separate userData from Production
+// ===================================================================
+// Use a different userData folder in development to avoid conflicts with
+// the installed production app. This must be called before app.ready.
+if (process.env.NODE_ENV === 'development') {
+  const devUserDataPath = path.join(app.getPath('appData'), 'jd-notes-things-dev');
+  app.setPath('userData', devUserDataPath);
+  log.info(`[Dev Mode] Using separate userData path: ${devUserDataPath}`);
+}
+
+/**
+ * Create a red-tinted icon for development mode
+ * Makes it visually obvious when running the dev version
+ * @returns {nativeImage|null} Red dev icon or null if creation fails
+ */
+function createDevIcon() {
+  try {
+    // Create a 32x32 red icon with "DEV" indicator
+    const size = 32;
+    const canvas = Buffer.alloc(size * size * 4); // RGBA
+
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const idx = (y * size + x) * 4;
+
+        // Create a red rounded square with darker border
+        const isEdge = x < 2 || x >= size - 2 || y < 2 || y >= size - 2;
+        const isCorner = (x < 4 && y < 4) || (x < 4 && y >= size - 4) ||
+                         (x >= size - 4 && y < 4) || (x >= size - 4 && y >= size - 4);
+
+        if (isCorner) {
+          // Transparent corners for rounded effect
+          canvas[idx] = 0;     // R
+          canvas[idx + 1] = 0; // G
+          canvas[idx + 2] = 0; // B
+          canvas[idx + 3] = 0; // A (transparent)
+        } else if (isEdge) {
+          // Dark red border
+          canvas[idx] = 139;     // R
+          canvas[idx + 1] = 0;   // G
+          canvas[idx + 2] = 0;   // B
+          canvas[idx + 3] = 255; // A
+        } else {
+          // Bright red fill
+          canvas[idx] = 220;     // R
+          canvas[idx + 1] = 53;  // G
+          canvas[idx + 2] = 69;  // B
+          canvas[idx + 3] = 255; // A
+        }
+      }
+    }
+
+    return nativeImage.createFromBuffer(canvas, { width: size, height: size });
+  } catch (error) {
+    log.error('[Dev Mode] Failed to create dev icon:', error);
+    return null;
+  }
+}
+
+// ===================================================================
+// Single Instance Lock (BF-2: Prevent Multiple Instances)
+// ===================================================================
+// Ensure only one instance of the app is running at a time.
+// If a second instance is launched, focus the existing window instead.
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  // Another instance is already running - quit this one
+  log.info('[SingleInstance] Another instance is already running, quitting...');
+  app.quit();
+} else {
+  // This is the primary instance - handle second instance attempts
+  app.on('second-instance', (_event, _commandLine, _workingDirectory) => {
+    log.info('[SingleInstance] Second instance detected, focusing existing window');
+
+    if (mainWindow) {
+      // Restore window based on its current state:
+      // 1. Hidden (minimized to tray) - show and focus
+      // 2. Minimized (to taskbar) - restore and focus
+      // 3. Visible but not focused - just focus
+
+      if (!mainWindow.isVisible()) {
+        // Window is hidden (in system tray)
+        log.info('[SingleInstance] Window was hidden (tray), showing...');
+        mainWindow.show();
+      } else if (mainWindow.isMinimized()) {
+        // Window is minimized to taskbar
+        log.info('[SingleInstance] Window was minimized, restoring...');
+        mainWindow.restore();
+      }
+
+      // Windows requires extra steps to reliably bring window to front
+      // Using setAlwaysOnTop trick to force focus
+      mainWindow.setAlwaysOnTop(true);
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.setAlwaysOnTop(false);
+
+      log.info('[SingleInstance] Window should now be focused');
+    } else {
+      // Window doesn't exist (shouldn't happen, but handle gracefully)
+      log.info('[SingleInstance] No main window found, creating one...');
+      createWindow();
+    }
+  });
+}
+
 // Store detected meeting information
 let detectedMeeting = null;
 
@@ -161,6 +269,13 @@ let sdkReady = false; // Track when SDK is fully initialized (after restart work
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
 const autoStartedMeetings = new Set(); // Track meetings we've auto-started recording
 let meetingMonitorInterval = null;
+
+// ===================================================================
+// Speech Timeline Tracking (SM-1: Speaker Matching)
+// ===================================================================
+// Stores speech events from SDK to correlate with transcription speaker labels
+// Map: windowId -> { participants: Map<participantId, {name, segments: [{start, end}], currentStart}> }
+const speechTimelines = new Map();
 
 // App settings storage (Phase 10.7)
 let appSettings = {
@@ -225,76 +340,100 @@ function saveAppSettings() {
  */
 function createSystemTray() {
   try {
-    // Create tray icon - try multiple sources
-    let trayIcon = null;
+    const isDev = process.env.NODE_ENV === 'development';
 
-    // Try multiple possible locations for the icon
-    const possiblePaths = [
-      path.join(__dirname, 'assets', 'tray-icon.png'),
-      path.join(__dirname, '..', 'assets', 'tray-icon.png'),
-      path.join(__dirname, '..', 'src', 'assets', 'tray-icon.png'),
-      path.join(process.cwd(), 'src', 'assets', 'tray-icon.png'),
-      path.join(app.getAppPath(), 'src', 'assets', 'tray-icon.png'),
-    ];
+    // In dev mode, always use a red icon for easy identification
+    if (isDev) {
+      logger.main.info('[Tray] Dev mode - using red tray icon');
+      const devIcon = createDevIcon();
+      if (devIcon) {
+        tray = new Tray(devIcon);
+        tray.setToolTip('JD Notes Things Dev');
+      } else {
+        // Fallback: create simple red square
+        const canvas = Buffer.alloc(16 * 16 * 4);
+        for (let i = 0; i < canvas.length; i += 4) {
+          canvas[i] = 220;     // R
+          canvas[i + 1] = 53;  // G
+          canvas[i + 2] = 69;  // B
+          canvas[i + 3] = 255; // A
+        }
+        tray = new Tray(nativeImage.createFromBuffer(canvas, { width: 16, height: 16 }));
+        tray.setToolTip('JD Notes Things Dev');
+      }
+    } else {
+      // Production mode - use normal icon
+      let trayIcon = null;
 
-    logger.main.debug('[Tray] Searching for tray icon in multiple locations...');
-    logger.main.debug('[Tray] __dirname:', __dirname);
-    logger.main.debug('[Tray] process.cwd():', process.cwd());
-    logger.main.debug('[Tray] app.getAppPath():', app.getAppPath());
+      // Try multiple possible locations for the icon
+      const possiblePaths = [
+        path.join(__dirname, 'assets', 'tray-icon.png'),
+        path.join(__dirname, '..', 'assets', 'tray-icon.png'),
+        path.join(__dirname, '..', 'src', 'assets', 'tray-icon.png'),
+        path.join(process.cwd(), 'src', 'assets', 'tray-icon.png'),
+        path.join(app.getAppPath(), 'src', 'assets', 'tray-icon.png'),
+      ];
 
-    // Try custom tray icon from multiple locations
-    for (const iconPath of possiblePaths) {
-      logger.main.debug(`[Tray] Trying: ${iconPath}`);
-      if (fs.existsSync(iconPath)) {
-        logger.main.info(`[Tray] Found tray icon at: ${iconPath}`);
-        trayIcon = nativeImage.createFromPath(iconPath);
-        if (trayIcon && !trayIcon.isEmpty()) {
-          logger.main.info('[Tray] Successfully loaded tray icon');
-          break;
-        } else {
-          logger.main.warn(`[Tray] Icon exists but failed to load: ${iconPath}`);
+      logger.main.debug('[Tray] Searching for tray icon in multiple locations...');
+      logger.main.debug('[Tray] __dirname:', __dirname);
+      logger.main.debug('[Tray] process.cwd():', process.cwd());
+      logger.main.debug('[Tray] app.getAppPath():', app.getAppPath());
+
+      // Try custom tray icon from multiple locations
+      for (const iconPath of possiblePaths) {
+        logger.main.debug(`[Tray] Trying: ${iconPath}`);
+        if (fs.existsSync(iconPath)) {
+          logger.main.info(`[Tray] Found tray icon at: ${iconPath}`);
+          trayIcon = nativeImage.createFromPath(iconPath);
+          if (trayIcon && !trayIcon.isEmpty()) {
+            logger.main.info('[Tray] Successfully loaded tray icon');
+            break;
+          } else {
+            logger.main.warn(`[Tray] Icon exists but failed to load: ${iconPath}`);
+          }
         }
       }
-    }
 
-    // Try app icon as fallback
-    if (!trayIcon || trayIcon.isEmpty()) {
-      logger.main.warn('[Tray] Custom tray icon not found, trying app icon...');
-      const appIconPath = path.join(__dirname, 'assets', 'icon.png');
-      if (fs.existsSync(appIconPath)) {
-        trayIcon = nativeImage.createFromPath(appIconPath);
-      }
-    }
-
-    // Create a simple colored icon as final fallback
-    if (!trayIcon || trayIcon.isEmpty()) {
-      logger.main.warn('[Tray] No icon files found, using programmatic fallback icon');
-      // Create a simple 16x16 icon programmatically
-      const canvas = {
-        width: 16,
-        height: 16,
-        data: Buffer.alloc(16 * 16 * 4) // RGBA
-      };
-
-      // Fill with orange color (since user mentioned seeing orange)
-      for (let i = 0; i < canvas.data.length; i += 4) {
-        canvas.data[i] = 255;     // R
-        canvas.data[i + 1] = 140; // G
-        canvas.data[i + 2] = 0;   // B (orange color)
-        canvas.data[i + 3] = 255; // A
+      // Try app icon as fallback
+      if (!trayIcon || trayIcon.isEmpty()) {
+        logger.main.warn('[Tray] Custom tray icon not found, trying app icon...');
+        const appIconPath = path.join(__dirname, 'assets', 'icon.png');
+        if (fs.existsSync(appIconPath)) {
+          trayIcon = nativeImage.createFromPath(appIconPath);
+        }
       }
 
-      trayIcon = nativeImage.createFromBuffer(canvas.data, {
-        width: canvas.width,
-        height: canvas.height
-      });
+      // Create a simple colored icon as final fallback
+      if (!trayIcon || trayIcon.isEmpty()) {
+        logger.main.warn('[Tray] No icon files found, using programmatic fallback icon');
+        // Create a simple 16x16 icon programmatically
+        const canvas = {
+          width: 16,
+          height: 16,
+          data: Buffer.alloc(16 * 16 * 4) // RGBA
+        };
+
+        // Fill with orange color (since user mentioned seeing orange)
+        for (let i = 0; i < canvas.data.length; i += 4) {
+          canvas.data[i] = 255;     // R
+          canvas.data[i + 1] = 140; // G
+          canvas.data[i + 2] = 0;   // B (orange color)
+          canvas.data[i + 3] = 255; // A
+        }
+
+        trayIcon = nativeImage.createFromBuffer(canvas.data, {
+          width: canvas.width,
+          height: canvas.height
+        });
+      }
+
+      tray = new Tray(trayIcon);
     }
 
-    tray = new Tray(trayIcon);
-
+    const appLabel = isDev ? 'JD Notes Things Dev' : 'JD Notes Things';
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: 'Open JD Notes Things',
+        label: `Open ${appLabel}`,
         click: () => {
           if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
@@ -405,7 +544,7 @@ function createSystemTray() {
       }
     ]);
 
-    tray.setToolTip('JD Notes Things');
+    tray.setToolTip(appLabel);
     tray.setContextMenu(contextMenu);
 
     // Double-click to show/hide window
@@ -436,9 +575,11 @@ function updateSystemTrayMenu() {
   if (!tray) return;
 
   try {
+    const isDev = process.env.NODE_ENV === 'development';
+    const appLabel = isDev ? 'JD Notes Things Dev' : 'JD Notes Things';
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: 'Open JD Notes Things',
+        label: `Open ${appLabel}`,
         click: () => {
           if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
@@ -545,7 +686,7 @@ function updateSystemTrayMenu() {
     ]);
 
     tray.setContextMenu(contextMenu);
-    tray.setToolTip(isRecording ? 'JD Notes Things - Recording' : 'JD Notes Things');
+    tray.setToolTip(isRecording ? `${appLabel} - Recording` : appLabel);
     logger.main.debug('[Tray] Menu updated, recording:', isRecording);
   } catch (error) {
     logger.main.error('[Tray] Failed to update tray menu:', error);
@@ -780,18 +921,30 @@ async function autoStartRecording(meeting) {
 
 const createWindow = () => {
   // Restore window bounds from settings (Phase 10.7)
+  const isDev = process.env.NODE_ENV === 'development';
+
   const windowOptions = {
     width: 1024,
     height: 768,
     icon: path.join(__dirname, 'assets', 'jd-notes-things.ico'),
+    title: isDev ? 'JD Notes Things Dev' : 'JD Notes Things',
     webPreferences: {
       preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
       contextIsolation: true,
       nodeIntegration: false,
     },
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#1e1e1e', // Match dark mode to prevent flash
+    backgroundColor: isDev ? '#4a1a1a' : '#1e1e1e', // Red-tinted background for dev mode
   };
+
+  // Use red dev icon in development mode
+  if (isDev) {
+    // Create a red-tinted icon programmatically for dev mode
+    const devIcon = createDevIcon();
+    if (devIcon) {
+      windowOptions.icon = devIcon;
+    }
+  }
 
   // Restore previous window position if available
   if (appSettings.windowBounds) {
@@ -1066,12 +1219,13 @@ app.whenReady().then(async () => {
   // Service kept for potential future use (audio files, temp files, etc.)
 
   // Initialize Unified Google Authentication (Calendar + Contacts)
+  // Uses initializeAndValidate() to ensure stale tokens from previous installs are cleared
   console.log('[GoogleAuth] Initializing unified Google authentication...');
   googleAuth = new GoogleAuth(null, keyManagementService);
-  const authInitialized = await googleAuth.initialize();
+  const authInitialized = await googleAuth.initializeAndValidate();
 
   if (authInitialized) {
-    console.log('[GoogleAuth] Authenticated successfully - initializing services');
+    console.log('[GoogleAuth] Authenticated and validated successfully - initializing services');
     // Use centralized initialization to prevent race conditions
     await initializeGoogleServices();
   } else {
@@ -1446,6 +1600,132 @@ const fileOperationManager = {
   },
 };
 
+// ===================================================================
+// Recall.ai Storage Management
+// ===================================================================
+
+/**
+ * List all SDK uploads from Recall.ai
+ * @returns {Promise<Array>} List of SDK uploads
+ */
+async function listRecallRecordings() {
+  try {
+    const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+    const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+
+    if (!RECALLAI_API_KEY) {
+      console.error('[Recall Storage] API key not configured');
+      return { error: 'RECALLAI_API_KEY is not configured' };
+    }
+
+    const allUploads = [];
+    let nextUrl = `${RECALLAI_API_URL}/api/v1/sdk_upload/`;
+
+    // Paginate through all results
+    while (nextUrl) {
+      console.log(`[Recall Storage] Fetching: ${nextUrl}`);
+      const response = await axios.get(nextUrl, {
+        headers: { Authorization: `Token ${RECALLAI_API_KEY}` },
+        timeout: 30000,
+      });
+
+      if (response.data.results) {
+        allUploads.push(...response.data.results);
+      }
+      nextUrl = response.data.next; // Next page URL, or null if done
+    }
+
+    console.log(`[Recall Storage] Found ${allUploads.length} SDK uploads`);
+    return { success: true, uploads: allUploads };
+  } catch (error) {
+    console.error('[Recall Storage] Error listing uploads:', error.response?.data || error.message);
+    return { error: error.message };
+  }
+}
+
+/**
+ * Delete a recording from Recall.ai
+ * @param {string} recordingId - The recording ID to delete
+ * @returns {Promise<Object>} Result of deletion
+ */
+async function deleteRecallRecording(recordingId) {
+  try {
+    const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+    const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+
+    if (!RECALLAI_API_KEY) {
+      return { error: 'RECALLAI_API_KEY is not configured' };
+    }
+
+    const url = `${RECALLAI_API_URL}/api/v1/recording/${recordingId}/`;
+    console.log(`[Recall Storage] Deleting recording: ${recordingId}`);
+
+    await axios.delete(url, {
+      headers: { Authorization: `Token ${RECALLAI_API_KEY}` },
+      timeout: 30000,
+    });
+
+    console.log(`[Recall Storage] ✓ Deleted recording: ${recordingId}`);
+    return { success: true, recordingId };
+  } catch (error) {
+    // 404 means already deleted, which is fine
+    if (error.response?.status === 404) {
+      console.log(`[Recall Storage] Recording ${recordingId} already deleted or not found`);
+      return { success: true, recordingId, alreadyDeleted: true };
+    }
+    console.error(`[Recall Storage] Error deleting ${recordingId}:`, error.response?.data || error.message);
+    return { error: error.message, recordingId };
+  }
+}
+
+/**
+ * Delete all recordings from Recall.ai to avoid storage charges
+ * @returns {Promise<Object>} Summary of deletion results
+ */
+async function deleteAllRecallRecordings() {
+  console.log('[Recall Storage] Starting cleanup of all recordings...');
+
+  const listResult = await listRecallRecordings();
+  if (listResult.error) {
+    return listResult;
+  }
+
+  const uploads = listResult.uploads || [];
+  if (uploads.length === 0) {
+    console.log('[Recall Storage] No recordings found to delete');
+    return { success: true, deleted: 0, total: 0 };
+  }
+
+  console.log(`[Recall Storage] Found ${uploads.length} recordings to delete`);
+
+  let deleted = 0;
+  let failed = 0;
+  const errors = [];
+
+  for (const upload of uploads) {
+    // SDK uploads have recording_id field
+    const recordingId = upload.recording_id;
+    if (!recordingId) {
+      console.log(`[Recall Storage] Skipping upload ${upload.id} - no recording_id`);
+      continue;
+    }
+
+    const result = await deleteRecallRecording(recordingId);
+    if (result.success) {
+      deleted++;
+    } else {
+      failed++;
+      errors.push({ recordingId, error: result.error });
+    }
+
+    // Small delay to avoid rate limiting (300 req/min = 5 req/sec)
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+
+  console.log(`[Recall Storage] Cleanup complete: ${deleted} deleted, ${failed} failed`);
+  return { success: true, deleted, failed, total: uploads.length, errors };
+}
+
 // Create a desktop SDK upload token directly (no separate server needed)
 async function createDesktopSdkUpload() {
   try {
@@ -1470,13 +1750,22 @@ async function createDesktopSdkUpload() {
         video_mixed_mp4: null, // ← THIS IS REQUIRED to disable video
         audio_mixed_mp3: {},
 
+        // Retention policy: 7 days (168 hours) - free tier, then auto-delete
+        // This prevents storage charges ($0.05/hr for recordings kept > 7 days)
+        retention: {
+          type: 'timed',
+          hours: 168, // 7 days
+        },
+
         // No real-time transcription - we'll use Recall.ai async API after recording
         // This gives us better quality and proper speaker diarization
         realtime_endpoints: [
           {
             type: 'desktop_sdk_callback',
             events: [
-              'participant_events.join', // Only track participant info
+              'participant_events.join',     // Track participant info
+              'participant_events.speech_on',  // Track when participants start speaking (SM-1)
+              'participant_events.speech_off', // Track when participants stop speaking (SM-1)
             ],
           },
         ],
@@ -1850,6 +2139,77 @@ async function initSDK() {
               await fileOperationManager.writeData(meetingsData);
               console.log(`[Transcription] ✓ Transcript saved with ${meetingsData.pastMeetings[meetingIndex].transcript.length} total entries`);
 
+              // SM-1: Apply speaker matching immediately after transcription
+              const meetingForMatching = meetingsData.pastMeetings[meetingIndex];
+              if (speakerMatcher && meetingForMatching.transcript && meetingForMatching.transcript.length > 0) {
+                try {
+                  console.log('[Transcription] SM-1: Starting speaker matching...');
+
+                  // Get participants from meeting data (prefer email, fall back to name)
+                  const participants = meetingForMatching.participants || [];
+                  const participantEmails = participants
+                    .map(p => p.email)
+                    .filter(email => email);
+                  const participantNames = participants
+                    .map(p => p.name)
+                    .filter(name => name);
+
+                  console.log(`[Transcription] SM-1: Found ${participantEmails.length} participant emails, ${participantNames.length} participant names`);
+                  console.log('[Transcription] SM-1: Participants:', JSON.stringify(participants, null, 2));
+
+                  // Get speech timeline if available
+                  const speechTimeline = windowId ? getSpeechTimeline(windowId) : null;
+                  if (speechTimeline) {
+                    console.log(`[Transcription] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`);
+                  } else {
+                    console.log('[Transcription] SM-1: No speech timeline available, using heuristics only');
+                  }
+
+                  // Use emails if available, otherwise use names for matching
+                  const matchIdentifiers = participantEmails.length > 0 ? participantEmails : participantNames;
+
+                  if (matchIdentifiers.length > 0) {
+                    // Match speakers to participants
+                    const speakerMapping = await speakerMatcher.matchSpeakers(
+                      meetingForMatching.transcript,
+                      matchIdentifiers,
+                      {
+                        includeOrganizer: true,
+                        useWordCount: true,
+                        speechTimeline,
+                        participantData: participants // Pass full participant data for name-based matching
+                      }
+                    );
+
+                    // Apply mapping to transcript
+                    if (Object.keys(speakerMapping).length > 0) {
+                      meetingsData.pastMeetings[meetingIndex].transcript = speakerMatcher.applyMappingToTranscript(
+                        meetingForMatching.transcript,
+                        speakerMapping
+                      );
+
+                      // Save the speaker mapping for future reference
+                      meetingsData.pastMeetings[meetingIndex].speakerMapping = speakerMapping;
+
+                      // Write updated data with speaker names
+                      await fileOperationManager.writeData(meetingsData);
+                      console.log('[Transcription] SM-1: ✓ Speaker matching complete, transcript updated with names');
+                    } else {
+                      console.log('[Transcription] SM-1: No speaker matches found');
+                    }
+                  } else {
+                    console.log('[Transcription] SM-1: No participant identifiers available for matching');
+                  }
+
+                  // Clean up speech timeline
+                  if (windowId) {
+                    cleanupSpeechTimeline(windowId);
+                  }
+                } catch (matchError) {
+                  console.error('[Transcription] SM-1: Speaker matching failed:', matchError.message);
+                }
+              }
+
               // Notify renderer of completion
               if (mainWindow && !mainWindow.isDestroyed()) {
                 console.log('[Transcription] Notifying renderer of completion...');
@@ -2005,6 +2365,12 @@ async function initSDK() {
     // Handle participant join events (needed for speaker matching later)
     if (evt.event === 'participant_events.join' && evt.data && evt.data.data) {
       await processParticipantJoin(evt);
+    } else if (evt.event === 'participant_events.speech_on' && evt.data && evt.data.data) {
+      // SM-1: Track when participants start speaking
+      processSpeechOn(evt);
+    } else if (evt.event === 'participant_events.speech_off' && evt.data && evt.data.data) {
+      // SM-1: Track when participants stop speaking
+      processSpeechOff(evt);
     } else if (evt.event === 'video_separate_png.data' && evt.data && evt.data.data) {
       await processVideoFrame(evt);
     }
@@ -2154,11 +2520,17 @@ async function exportMeetingToObsidian(meeting) {
       try {
         console.log('[ObsidianExport] Attempting speaker matching...');
 
+        // SM-1: Get speech timeline for high-confidence matching
+        const speechTimeline = meeting.recordingId ? getSpeechTimeline(meeting.recordingId) : null;
+        if (speechTimeline) {
+          console.log(`[ObsidianExport] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`);
+        }
+
         // Match speakers to participants
         const speakerMapping = await speakerMatcher.matchSpeakers(
           meeting.transcript,
           participantEmails,
-          { includeOrganizer: true, useWordCount: true }
+          { includeOrganizer: true, useWordCount: true, speechTimeline }
         );
 
         // Apply mapping to transcript
@@ -2174,16 +2546,29 @@ async function exportMeetingToObsidian(meeting) {
         await populateParticipantsFromSpeakerMapping(meeting, participantEmails, speakerMapping);
 
         console.log('[ObsidianExport] Speaker matching completed successfully');
+
+        // SM-1: Clean up speech timeline after speaker matching is done
+        if (meeting.recordingId) {
+          cleanupSpeechTimeline(meeting.recordingId);
+        }
       } catch (error) {
         console.warn(
           '[ObsidianExport] Speaker matching failed, continuing without:',
           error.message
         );
+        // SM-1: Still clean up the speech timeline on error
+        if (meeting.recordingId) {
+          cleanupSpeechTimeline(meeting.recordingId);
+        }
       }
     } else if (meeting.transcript && meeting.transcript.length > 0) {
       console.log(
         '[ObsidianExport] Speaker matching skipped - speaker matcher not available or no participants'
       );
+      // SM-1: Clean up speech timeline even if speaker matching was skipped
+      if (meeting.recordingId) {
+        cleanupSpeechTimeline(meeting.recordingId);
+      }
     }
 
     // Deduplicate participants if they exist
@@ -2805,6 +3190,28 @@ ipcMain.handle('sdk:isReady', async () => {
 });
 
 // ===================================================================
+// Recall.ai Storage Management IPC Handlers
+// ===================================================================
+
+// List all recordings stored on Recall.ai
+ipcMain.handle('recall:listRecordings', async () => {
+  console.log('[Recall IPC] Listing all recordings...');
+  return await listRecallRecordings();
+});
+
+// Delete all recordings to avoid storage charges
+ipcMain.handle('recall:deleteAllRecordings', async () => {
+  console.log('[Recall IPC] Deleting all recordings...');
+  return await deleteAllRecallRecordings();
+});
+
+// Delete a specific recording
+ipcMain.handle('recall:deleteRecording', async (_event, recordingId) => {
+  console.log(`[Recall IPC] Deleting recording: ${recordingId}`);
+  return await deleteRecallRecording(recordingId);
+});
+
+// ===================================================================
 // Centralized Google Services Initialization
 // ===================================================================
 
@@ -3162,18 +3569,24 @@ ipcMain.handle('contacts:searchContacts', async (event, query) => {
 // Match speakers to participants
 ipcMain.handle(
   'speakers:matchSpeakers',
-  async (event, { transcript, participantEmails, options }) => {
+  async (event, { transcript, participantEmails, options, recordingId }) => {
     try {
       console.log('[Speakers IPC] Matching speakers to participants');
       if (!speakerMatcher) {
         throw new Error('Speaker matcher not initialized');
       }
 
+      // SM-1: Get speech timeline for high-confidence matching if recordingId provided
+      const speechTimeline = recordingId ? getSpeechTimeline(recordingId) : null;
+      if (speechTimeline) {
+        console.log(`[Speakers IPC] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`);
+      }
+
       // Perform speaker matching
       const speakerMapping = await speakerMatcher.matchSpeakers(
         transcript,
         participantEmails,
-        options
+        { ...options, speechTimeline }
       );
 
       // Apply mapping to transcript
@@ -4851,6 +5264,9 @@ ipcMain.handle(
 
           console.log('✓ RecallAI SDK startRecording succeeded');
 
+          // SM-1: Initialize speech timeline for speaker matching
+          initializeSpeechTimeline(key, Date.now());
+
           // Update recording state and tray menu (Phase 10.7)
           isRecording = true;
           updateSystemTrayMenu();
@@ -5659,8 +6075,11 @@ async function processParticipantJoin(evt) {
     const participantId = participantData.id;
     const isHost = participantData.is_host;
     const platform = participantData.platform;
+    const participantEmail = participantData.email || null;
 
-    console.log(`Participant joined: ${participantName} (ID: ${participantId}, Host: ${isHost})`);
+    // SM-1: Log full participant data to see what SDK provides
+    console.log(`Participant joined: ${participantName} (ID: ${participantId}, Host: ${isHost}, Email: ${participantEmail || 'none'})`)
+    console.log('[SM-1 Debug] Full participant data:', JSON.stringify(participantData, null, 2));
 
     // Skip "Host" and "Guest" generic names
     if (
@@ -5696,6 +6115,7 @@ async function processParticipantJoin(evt) {
         meeting.participants[existingParticipantIndex] = {
           id: participantId,
           name: participantName,
+          email: participantEmail,
           isHost: isHost,
           platform: platform,
           joinTime: new Date().toISOString(),
@@ -5706,6 +6126,7 @@ async function processParticipantJoin(evt) {
         meeting.participants.push({
           id: participantId,
           name: participantName,
+          email: participantEmail,
           isHost: isHost,
           platform: platform,
           joinTime: new Date().toISOString(),
@@ -5727,6 +6148,167 @@ async function processParticipantJoin(evt) {
     console.log(`Processed participant join event for meeting: ${noteId}`);
   } catch (error) {
     console.error('Error processing participant join event:', error);
+  }
+}
+
+// ===================================================================
+// Speech Timeline Event Handlers (SM-1: Speaker Matching)
+// ===================================================================
+
+/**
+ * Initialize speech timeline for a new recording
+ * @param {string} windowId - SDK window ID
+ * @param {number} recordingStartTime - Timestamp when recording started
+ */
+function initializeSpeechTimeline(windowId, recordingStartTime) {
+  speechTimelines.set(windowId, {
+    recordingStartTime,
+    participants: new Map(),
+  });
+  console.log(`[SpeechTimeline] Initialized for window: ${windowId}`);
+}
+
+/**
+ * Process speech_on event - participant started speaking
+ * @param {Object} evt - SDK realtime event
+ */
+function processSpeechOn(evt) {
+  try {
+    const windowId = evt.window?.id;
+    if (!windowId) return;
+
+    const participantData = evt.data?.data?.participant;
+    if (!participantData) {
+      console.log('[SpeechTimeline] No participant data in speech_on event');
+      return;
+    }
+
+    const participantId = participantData.id;
+    const participantName = participantData.name || 'Unknown';
+    const timestamp = Date.now();
+
+    // Get or create timeline for this window
+    let timeline = speechTimelines.get(windowId);
+    if (!timeline) {
+      // Recording might have started before we could initialize
+      initializeSpeechTimeline(windowId, timestamp);
+      timeline = speechTimelines.get(windowId);
+    }
+
+    // Get or create participant entry
+    if (!timeline.participants.has(participantId)) {
+      timeline.participants.set(participantId, {
+        id: participantId,
+        name: participantName,
+        segments: [],
+        currentStart: null,
+      });
+    }
+
+    const participant = timeline.participants.get(participantId);
+
+    // Update name if we have a better one
+    if (participantName !== 'Unknown' && participant.name === 'Unknown') {
+      participant.name = participantName;
+    }
+
+    // Record speech start (relative to recording start)
+    const relativeTime = timestamp - timeline.recordingStartTime;
+    participant.currentStart = relativeTime;
+
+    console.log(`[SpeechTimeline] ${participantName} started speaking at ${relativeTime}ms`);
+  } catch (error) {
+    console.error('[SpeechTimeline] Error processing speech_on:', error);
+  }
+}
+
+/**
+ * Process speech_off event - participant stopped speaking
+ * @param {Object} evt - SDK realtime event
+ */
+function processSpeechOff(evt) {
+  try {
+    const windowId = evt.window?.id;
+    if (!windowId) return;
+
+    const participantData = evt.data?.data?.participant;
+    if (!participantData) {
+      console.log('[SpeechTimeline] No participant data in speech_off event');
+      return;
+    }
+
+    const participantId = participantData.id;
+    const timestamp = Date.now();
+
+    const timeline = speechTimelines.get(windowId);
+    if (!timeline) {
+      console.log(`[SpeechTimeline] No timeline found for window: ${windowId}`);
+      return;
+    }
+
+    const participant = timeline.participants.get(participantId);
+    if (!participant || participant.currentStart === null) {
+      console.log(`[SpeechTimeline] No active speech segment for participant: ${participantId}`);
+      return;
+    }
+
+    // Record completed speech segment
+    const relativeTime = timestamp - timeline.recordingStartTime;
+    participant.segments.push({
+      start: participant.currentStart,
+      end: relativeTime,
+    });
+    participant.currentStart = null;
+
+    console.log(`[SpeechTimeline] ${participant.name} stopped speaking at ${relativeTime}ms (segment: ${participant.segments.length})`);
+  } catch (error) {
+    console.error('[SpeechTimeline] Error processing speech_off:', error);
+  }
+}
+
+/**
+ * Get speech timeline for a recording window
+ * @param {string} windowId - SDK window ID
+ * @returns {Object|null} Speech timeline data or null if not found
+ */
+function getSpeechTimeline(windowId) {
+  const timeline = speechTimelines.get(windowId);
+  if (!timeline) return null;
+
+  // Convert to array format for easier processing
+  const participants = [];
+  for (const [participantId, data] of timeline.participants) {
+    // Close any open speech segments
+    if (data.currentStart !== null) {
+      data.segments.push({
+        start: data.currentStart,
+        end: Date.now() - timeline.recordingStartTime,
+      });
+      data.currentStart = null;
+    }
+
+    participants.push({
+      id: participantId,
+      name: data.name,
+      segments: data.segments,
+      totalSpeakingTime: data.segments.reduce((sum, seg) => sum + (seg.end - seg.start), 0),
+    });
+  }
+
+  return {
+    recordingStartTime: timeline.recordingStartTime,
+    participants,
+  };
+}
+
+/**
+ * Clean up speech timeline when recording ends
+ * @param {string} windowId - SDK window ID
+ */
+function cleanupSpeechTimeline(windowId) {
+  if (speechTimelines.has(windowId)) {
+    console.log(`[SpeechTimeline] Cleaned up timeline for window: ${windowId}`);
+    speechTimelines.delete(windowId);
   }
 }
 

@@ -1,0 +1,7 @@
+  // List all recordings first
+  const list = await window.electronAPI.recallListRecordings();
+  console.log('Found recordings:', list);
+
+  // Delete all recordings
+  const result = await window.electronAPI.recallDeleteAllRecordings();
+  console.log('Deletion result:', result);

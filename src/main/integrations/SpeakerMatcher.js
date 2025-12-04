@@ -1,6 +1,7 @@
 /**
  * SpeakerMatcher - Matches diarized speakers to meeting participants
  * Phase 6: Speaker Recognition & Contact Matching
+ * SM-1: Enhanced with SDK speech timeline correlation for high-confidence matching
  */
 
 class SpeakerMatcher {
@@ -13,10 +14,16 @@ class SpeakerMatcher {
    * @param {Array} transcript - Array of transcript utterances with speaker labels
    * @param {Array} participantEmails - Array of participant email addresses
    * @param {Object} options - Matching options
+   * @param {Object} options.speechTimeline - Optional SDK speech timeline for high-confidence matching
    * @returns {Object} Speaker mapping (speakerLabel -> participant info)
    */
   async matchSpeakers(transcript, participantEmails, options = {}) {
-    const { includeOrganizer: _includeOrganizer = true, useWordCount: _useWordCount = true, useTimingHeuristics: _useTimingHeuristics = true } = options;
+    const {
+      includeOrganizer: _includeOrganizer = true,
+      useWordCount: _useWordCount = true,
+      useTimingHeuristics: _useTimingHeuristics = true,
+      speechTimeline = null, // SM-1: SDK speech events for high-confidence matching
+    } = options;
 
     if (!transcript || transcript.length === 0) {
       console.log('[SpeakerMatcher] Empty transcript - no speakers to match');
@@ -41,16 +48,166 @@ class SpeakerMatcher {
     // Step 2: Analyze speakers in transcript
     const speakerStats = this.analyzeSpeakers(transcript);
 
-    // Step 3: Match speakers to participants using heuristics
-    const speakerMapping = this.createSpeakerMapping(
-      speakerStats,
-      participantEmails,
-      contacts,
-      options
+    // Step 3: SM-1 - Try high-confidence matching using SDK speech timeline first
+    let speakerMapping = {};
+    if (speechTimeline && speechTimeline.participants && speechTimeline.participants.length > 0) {
+      console.log('[SpeakerMatcher] SM-1: Using SDK speech timeline for high-confidence matching');
+      speakerMapping = this.matchUsingTimeline(transcript, speechTimeline, participantEmails, contacts);
+    }
+
+    // Step 4: Fall back to heuristics for unmatched speakers
+    const matchedSpeakers = new Set(Object.keys(speakerMapping));
+    const unmatchedStats = new Map(
+      Array.from(speakerStats.entries()).filter(([label]) => !matchedSpeakers.has(label))
     );
+
+    if (unmatchedStats.size > 0) {
+      console.log(`[SpeakerMatcher] Using heuristics for ${unmatchedStats.size} unmatched speakers`);
+      const heuristicMapping = this.createSpeakerMapping(
+        unmatchedStats,
+        participantEmails,
+        contacts,
+        options,
+        speakerMapping // Pass existing mapping to avoid duplicate assignments
+      );
+
+      // Merge heuristic matches with timeline matches
+      speakerMapping = { ...speakerMapping, ...heuristicMapping };
+    }
 
     console.log('[SpeakerMatcher] Speaker matching complete:', speakerMapping);
     return speakerMapping;
+  }
+
+  /**
+   * SM-1: Match speakers using SDK speech timeline correlation
+   * Correlates AssemblyAI utterance timestamps with SDK speech events
+   * @param {Array} transcript - Transcript utterances with timestamps
+   * @param {Object} speechTimeline - SDK speech timeline data
+   * @param {Array} participantEmails - Participant emails for validation
+   * @param {Map} contacts - Contact information
+   * @returns {Object} High-confidence speaker mapping
+   */
+  matchUsingTimeline(transcript, speechTimeline, participantEmails, contacts) {
+    const mapping = {};
+    const speakerMatchCounts = new Map(); // speakerLabel -> Map<participantName, count>
+    const toleranceMs = 2000; // 2 second tolerance window for timestamp matching
+
+    console.log(`[SpeakerMatcher] SM-1: Timeline has ${speechTimeline.participants.length} SDK participants`);
+
+    // Debug: log speech timeline segments
+    for (const participant of speechTimeline.participants) {
+      console.log(`[SpeakerMatcher] SM-1: ${participant.name} has ${participant.segments.length} speech segments`);
+      for (const seg of participant.segments.slice(0, 3)) {
+        console.log(`[SpeakerMatcher] SM-1:   - segment: ${seg.start}ms to ${seg.end}ms`);
+      }
+    }
+
+    // For each utterance, find which SDK participant was speaking at that time
+    for (const utterance of transcript) {
+      if (!utterance.speaker) continue;
+
+      // Transcript entries use 'timestamp' for start time (already in milliseconds)
+      // Calculate end time from words array if available, otherwise estimate
+      const utteranceStartMs = utterance.timestamp || 0;
+      let utteranceEndMs = utteranceStartMs;
+      if (utterance.words && utterance.words.length > 0) {
+        const lastWord = utterance.words[utterance.words.length - 1];
+        utteranceEndMs = lastWord.end || utteranceStartMs;
+      }
+
+      console.log(`[SpeakerMatcher] SM-1: Utterance "${utterance.text?.substring(0, 30)}..." at ${utteranceStartMs}-${utteranceEndMs}ms`);
+
+      // Find SDK participant speaking at this time
+      for (const sdkParticipant of speechTimeline.participants) {
+        for (const segment of sdkParticipant.segments) {
+          // Check if utterance overlaps with speech segment (with tolerance)
+          const segStart = segment.start - toleranceMs;
+          const segEnd = segment.end + toleranceMs;
+
+          if (utteranceStartMs >= segStart && utteranceStartMs <= segEnd ||
+              utteranceEndMs >= segStart && utteranceEndMs <= segEnd) {
+            // Found a match - track it
+            if (!speakerMatchCounts.has(utterance.speaker)) {
+              speakerMatchCounts.set(utterance.speaker, new Map());
+            }
+
+            const participantCounts = speakerMatchCounts.get(utterance.speaker);
+            const currentCount = participantCounts.get(sdkParticipant.name) || 0;
+            participantCounts.set(sdkParticipant.name, currentCount + 1);
+            break; // One match per segment is enough
+          }
+        }
+      }
+    }
+
+    // Assign each speaker to their most frequently matched participant
+    const assignedParticipants = new Set();
+
+    for (const [speakerLabel, participantCounts] of speakerMatchCounts) {
+      let bestParticipant = null;
+      let bestCount = 0;
+
+      for (const [participantName, count] of participantCounts) {
+        if (count > bestCount && !assignedParticipants.has(participantName)) {
+          bestCount = count;
+          bestParticipant = participantName;
+        }
+      }
+
+      if (bestParticipant && bestCount >= 2) { // Require at least 2 matches for confidence
+        // Find the email for this participant if available
+        const participantEmail = this.findEmailForParticipant(bestParticipant, participantEmails, contacts);
+
+        mapping[speakerLabel] = {
+          email: participantEmail,
+          name: bestParticipant,
+          confidence: bestCount >= 5 ? 'high' : 'medium',
+          method: 'speech-timeline',
+          matchCount: bestCount,
+        };
+
+        assignedParticipants.add(bestParticipant);
+        console.log(
+          `[SpeakerMatcher] SM-1: Matched ${speakerLabel} -> ${bestParticipant} (${bestCount} matches, ${mapping[speakerLabel].confidence} confidence)`
+        );
+      }
+    }
+
+    return mapping;
+  }
+
+  /**
+   * SM-1: Find email address for a participant by name
+   * @param {string} participantName - Name from SDK
+   * @param {Array} participantEmails - Available participant emails
+   * @param {Map} contacts - Contact information
+   * @returns {string|null} Email if found
+   */
+  findEmailForParticipant(participantName, participantEmails, contacts) {
+    if (!participantName) return null;
+
+    const nameLower = participantName.toLowerCase();
+
+    // Try to find by contact name
+    for (const [email, contact] of contacts) {
+      if (contact.name && contact.name.toLowerCase() === nameLower) {
+        return email;
+      }
+      if (contact.givenName && contact.givenName.toLowerCase() === nameLower.split(' ')[0]) {
+        return email;
+      }
+    }
+
+    // Try to find by extracting name from email
+    for (const email of participantEmails) {
+      const extractedName = this.extractNameFromEmail(email);
+      if (extractedName.toLowerCase() === nameLower) {
+        return email;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -111,28 +268,87 @@ class SpeakerMatcher {
   /**
    * Create speaker to participant mapping using heuristics
    * @param {Map} speakerStats - Speaker statistics
-   * @param {Array} participantEmails - Participant emails
+   * @param {Array} participantIdentifiers - Participant emails or names
    * @param {Map} contacts - Contact information
    * @param {Object} options - Matching options
+   * @param {Object} existingMapping - Optional existing mapping to avoid duplicate assignments (SM-1)
    * @returns {Object} Speaker mapping
    */
-  createSpeakerMapping(speakerStats, participantEmails, contacts, options) {
+  createSpeakerMapping(speakerStats, participantIdentifiers, contacts, options, existingMapping = {}) {
     const mapping = {};
+
+    // SM-1: Track participants already assigned via speech timeline
+    const alreadyAssignedParticipants = new Set(
+      Object.values(existingMapping)
+        .filter(m => m.email)
+        .map(m => m.email)
+    );
+    const alreadyAssignedNames = new Set(
+      Object.values(existingMapping)
+        .filter(m => m.name)
+        .map(m => m.name)
+    );
 
     // Convert speaker stats to array and sort by word count (most talkative first)
     const speakers = Array.from(speakerStats.values()).sort((a, b) => b.wordCount - a.wordCount);
 
-    // Create participant list with contact info
-    const participants = participantEmails.map(email => {
-      const contact = contacts.get(email);
-      return {
-        email,
-        name: contact?.name || this.extractNameFromEmail(email),
-        givenName: contact?.givenName || '',
-        familyName: contact?.familyName || '',
-        contact: contact,
-      };
-    });
+    // SM-1: Use participantData from options if available, otherwise build from identifiers
+    let participants;
+    if (options.participantData && options.participantData.length > 0) {
+      // Use full participant objects directly
+      participants = options.participantData
+        .filter(p => !alreadyAssignedParticipants.has(p.email) && !alreadyAssignedNames.has(p.name))
+        .map(p => ({
+          email: p.email || null,
+          name: p.name || 'Unknown',
+          givenName: p.givenName || '',
+          familyName: p.familyName || '',
+          contact: contacts.get(p.email) || null,
+        }));
+      console.log(`[SpeakerMatcher] Using ${participants.length} participants from participantData`);
+    } else {
+      // Build from identifiers (emails or names)
+      participants = participantIdentifiers
+        .filter(id => !alreadyAssignedParticipants.has(id) && !alreadyAssignedNames.has(id))
+        .map(identifier => {
+          // Check if identifier is an email (contains @) or a name
+          const isEmail = identifier.includes('@');
+          if (isEmail) {
+            const contact = contacts.get(identifier);
+            const name = contact?.name || this.extractNameFromEmail(identifier);
+            return {
+              email: identifier,
+              name,
+              givenName: contact?.givenName || '',
+              familyName: contact?.familyName || '',
+              contact: contact,
+            };
+          } else {
+            // It's a name, not an email
+            return {
+              email: null,
+              name: identifier,
+              givenName: identifier.split(' ')[0] || '',
+              familyName: identifier.split(' ').slice(1).join(' ') || '',
+              contact: null,
+            };
+          }
+        });
+      console.log(`[SpeakerMatcher] Built ${participants.length} participants from identifiers`);
+    }
+
+    if (participants.length === 0) {
+      // All participants assigned via speech timeline, mark remaining as unmatched
+      for (const speaker of speakers) {
+        mapping[speaker.label] = {
+          email: null,
+          name: `Unknown Speaker (${speaker.label})`,
+          confidence: 'none',
+          method: 'unmatched',
+        };
+      }
+      return mapping;
+    }
 
     // Heuristic 1: If number of speakers equals participants, do simple 1:1 matching
     if (speakers.length === participants.length) {

@@ -783,8 +783,11 @@ let contactsCount = 0;
 async function initializeGoogle() {
   try {
     console.log('Initializing Google integration...');
-    const isAuthenticated = await window.electronAPI.googleIsAuthenticated();
+    const authResult = await window.electronAPI.googleIsAuthenticated();
     const statusResult = await window.electronAPI.googleGetStatus();
+
+    // BF-1 Fix: Check authResult.authenticated, not the object itself
+    const isAuthenticated = authResult && authResult.success && authResult.authenticated;
 
     if (isAuthenticated && statusResult.success) {
       console.log('Google already authenticated');
@@ -1005,8 +1008,8 @@ function showEditorView(meetingId) {
     participantCount: meeting.participants?.length || 0,
     participants: meeting.participants,
     transcriptLength: meeting.transcript?.length || 0,
-    firstSpeaker: meeting.transcript?.[0]?.speaker || 'N/A',
-    allSpeakers: meeting.transcript?.map(t => t.speaker) || []
+    firstSpeaker: meeting.transcript?.[0]?.speakerName || meeting.transcript?.[0]?.speaker || 'N/A',
+    allSpeakers: meeting.transcript?.map(t => t.speakerName || t.speaker) || []
   });
 
   // Show floating controls section for meeting detail view

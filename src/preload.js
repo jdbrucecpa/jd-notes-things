@@ -54,6 +54,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // SDK initialization state
   sdkIsReady: () => ipcRenderer.invoke('sdk:isReady'),
   onSdkReady: callback => ipcRenderer.on('sdk-ready', () => callback()),
+  // Recall.ai Storage Management
+  recallListRecordings: () => ipcRenderer.invoke('recall:listRecordings'),
+  recallDeleteAllRecordings: () => ipcRenderer.invoke('recall:deleteAllRecordings'),
+  recallDeleteRecording: (recordingId) => ipcRenderer.invoke('recall:deleteRecording', recordingId),
   // Unified Google Authentication (Calendar + Contacts)
   googleGetAuthUrl: () => ipcRenderer.invoke('google:getAuthUrl'),
   googleAuthenticate: code => ipcRenderer.invoke('google:authenticate', code),

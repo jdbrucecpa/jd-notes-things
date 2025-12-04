@@ -255,6 +255,97 @@ class GoogleAuth {
   }
 
   /**
+   * Validate that stored tokens actually work by making a test API call.
+   * This catches stale tokens from previous installations.
+   *
+   * @returns {Promise<boolean>} True if tokens are valid, false otherwise
+   */
+  async validateTokens() {
+    if (!this.oauth2Client || !this.isAuthenticated()) {
+      return false;
+    }
+
+    try {
+      // Try to refresh the token - this validates the refresh_token works
+      await this.refreshTokenIfNeeded();
+
+      // Make a lightweight API call to validate the access token
+      // Using tokeninfo endpoint which doesn't count against quota
+      const credentials = this.oauth2Client.credentials;
+      if (credentials.access_token) {
+        const response = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?access_token=${credentials.access_token}`
+        );
+
+        if (!response.ok) {
+          console.log('[GoogleAuth] Token validation failed - token rejected by Google');
+          return false;
+        }
+
+        const tokenInfo = await response.json();
+        console.log('[GoogleAuth] Token validated successfully, expires in:', tokenInfo.expires_in, 'seconds');
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.log('[GoogleAuth] Token validation failed:', error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Initialize and validate authentication state.
+   * Clears invalid tokens to ensure accurate "connected" status.
+   *
+   * @returns {Promise<boolean>} True if authenticated with valid tokens
+   */
+  async initializeAndValidate() {
+    const initialized = await this.initialize();
+
+    if (!initialized) {
+      return false;
+    }
+
+    // If we loaded a token, validate it actually works
+    if (this.isAuthenticated()) {
+      console.log('[GoogleAuth] Validating stored tokens...');
+      const isValid = await this.validateTokens();
+
+      if (!isValid) {
+        console.log('[GoogleAuth] Stored tokens are invalid - clearing auth state');
+        await this.clearInvalidTokens();
+        return false;
+      }
+
+      console.log('[GoogleAuth] Authentication validated successfully');
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Clear invalid tokens without revoking (tokens may already be invalid)
+   */
+  async clearInvalidTokens() {
+    // Delete local token file
+    try {
+      await fs.unlink(this.tokenPath);
+      console.log('[GoogleAuth] Deleted invalid token file');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        console.error('[GoogleAuth] Error deleting token:', error.message);
+      }
+    }
+
+    // Reset OAuth2 client credentials
+    if (this.oauth2Client) {
+      this.oauth2Client.setCredentials({});
+    }
+  }
+
+  /**
    * Get the authenticated OAuth2 client for use with Google APIs
    *
    * @returns {OAuth2Client} Authenticated OAuth2 client
