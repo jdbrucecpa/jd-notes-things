@@ -707,7 +707,11 @@ function setupModalEventListeners(onComplete) {
         console.log('[SpeakerMapping] Mappings applied successfully');
         console.log('[SpeakerMapping] Updated meeting:', result.meeting);
         console.log('[SpeakerMapping] Updated transcript sample:', result.meeting?.transcript?.slice(0, 2));
-        window.showToast(`Applied ${Object.keys(allMappings).length} speaker mappings`, 'success');
+
+        // SM-3.6: Show appropriate message based on whether Obsidian files were updated
+        const mappingCount = Object.keys(allMappings).length;
+        const obsidianMsg = result.obsidianUpdated ? ' (Obsidian files updated)' : '';
+        window.showToast(`Applied ${mappingCount} speaker mappings${obsidianMsg}`, 'success');
 
         // Call completion callback and wait for it
         if (onComplete) {

@@ -4429,7 +4429,46 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
     }
 
     console.log(`[SpeakerMapping IPC] Applied ${Object.keys(mappings || {}).length} mappings to meeting (in ${meetingList})`);
-    return { success: true, meeting };
+
+    // SM-3.5/SM-3.6: Update Obsidian files if meeting was already exported
+    let obsidianUpdated = false;
+    if (meeting.obsidianLink && vaultStructure) {
+      try {
+        const vaultBasePath = vaultStructure.getAbsolutePath('');
+
+        // Derive file paths from obsidianLink
+        // obsidianLink is vault-relative path to summary file (e.g., "clients/acme/meetings/2024-01-15-meeting.md")
+        const summaryPath = path.join(vaultBasePath, meeting.obsidianLink);
+        const transcriptPath = summaryPath.replace(/\.md$/, '-transcript.md');
+
+        // Extract base filename for markdown generation
+        const baseFilename = path.basename(meeting.obsidianLink, '.md');
+
+        // Check if files exist before updating
+        if (fs.existsSync(summaryPath)) {
+          console.log(`[SpeakerMapping IPC] Updating Obsidian summary: ${summaryPath}`);
+          const summaryContent = generateSummaryMarkdown(meeting, baseFilename);
+          fs.writeFileSync(summaryPath, summaryContent, 'utf8');
+          obsidianUpdated = true;
+        }
+
+        if (fs.existsSync(transcriptPath)) {
+          console.log(`[SpeakerMapping IPC] Updating Obsidian transcript: ${transcriptPath}`);
+          const transcriptContent = generateTranscriptMarkdown(meeting, baseFilename);
+          fs.writeFileSync(transcriptPath, transcriptContent, 'utf8');
+          obsidianUpdated = true;
+        }
+
+        if (obsidianUpdated) {
+          console.log(`[SpeakerMapping IPC] Successfully updated Obsidian files for meeting ${meetingId}`);
+        }
+      } catch (obsidianError) {
+        // Log error but don't fail the whole operation - meeting data was already saved
+        console.error('[SpeakerMapping IPC] Failed to update Obsidian files:', obsidianError);
+      }
+    }
+
+    return { success: true, meeting, obsidianUpdated };
   } catch (error) {
     console.error('[SpeakerMapping IPC] Failed to apply mappings to meeting:', error);
     return { success: false, error: error.message };
