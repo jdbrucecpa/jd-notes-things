@@ -520,9 +520,74 @@
                 <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2zm0 11.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
               </svg>
               <span>Save Location</span>
+              <button class="routing-change-btn" id="routingChangeBtn" type="button" title="Change destination">Change</button>
             </div>
             <div class="routing-preview-content" id="routingPreviewContent">
               <div class="routing-preview-loading">Loading...</div>
+            </div>
+            <!-- CS-4.4: Destination picker (hidden by default) -->
+            <div class="routing-destination-picker" id="routingDestinationPicker" style="display: none;">
+              <select id="routingDestinationSelect" class="routing-destination-select">
+                <option value="">Loading destinations...</option>
+              </select>
+              <div class="routing-destination-actions">
+                <button type="button" class="routing-destination-apply" id="routingDestinationApply">Apply</button>
+                <button type="button" class="routing-destination-cancel" id="routingDestinationCancel">Cancel</button>
+              </div>
+            </div>
+            <!-- CS-4.6: New organization form (hidden by default) -->
+            <div class="routing-new-org-form" id="routingNewOrgForm" style="display: none;">
+              <div class="routing-new-org-header">
+                <span>Create New Organization</span>
+                <button type="button" class="routing-new-org-close" id="routingNewOrgClose">&times;</button>
+              </div>
+              <div class="routing-new-org-fields">
+                <div class="routing-new-org-field">
+                  <label for="routingNewOrgType">Type</label>
+                  <select id="routingNewOrgType" class="routing-new-org-select">
+                    <option value="client">Client</option>
+                    <option value="industry">Industry</option>
+                  </select>
+                </div>
+                <div class="routing-new-org-field">
+                  <label for="routingNewOrgName">Name</label>
+                  <input type="text" id="routingNewOrgName" class="routing-new-org-input" placeholder="e.g., Acme Corporation">
+                </div>
+                <div class="routing-new-org-field">
+                  <label for="routingNewOrgSlug">Folder Name (slug)</label>
+                  <input type="text" id="routingNewOrgSlug" class="routing-new-org-input" placeholder="e.g., acme-corp">
+                </div>
+                <div class="routing-new-org-field">
+                  <label>Email Domains</label>
+                  <div class="routing-new-org-domains" id="routingNewOrgDomains">
+                    <!-- Domain chips populated dynamically -->
+                  </div>
+                </div>
+              </div>
+              <div class="routing-new-org-actions">
+                <button type="button" class="routing-new-org-create" id="routingNewOrgCreate">Create & Select</button>
+                <button type="button" class="routing-new-org-cancel" id="routingNewOrgCancel">Cancel</button>
+              </div>
+            </div>
+            <!-- CS-4.5: Create routing rule prompt (hidden by default) -->
+            <div class="routing-create-rule" id="routingCreateRule" style="display: none;">
+              <div class="routing-create-rule-prompt">
+                <span class="routing-create-rule-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                  </svg>
+                </span>
+                <span class="routing-create-rule-text">
+                  Create a routing rule so future meetings with these participants go here automatically?
+                </span>
+              </div>
+              <div class="routing-create-rule-domains" id="routingCreateRuleDomains">
+                <!-- Domains will be populated dynamically -->
+              </div>
+              <div class="routing-create-rule-actions">
+                <button type="button" class="routing-create-rule-btn" id="routingCreateRuleBtn">Create Rule</button>
+                <button type="button" class="routing-create-rule-dismiss" id="routingCreateRuleDismiss">Dismiss</button>
+              </div>
             </div>
           </div>
 

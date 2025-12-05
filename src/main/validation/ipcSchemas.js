@@ -102,9 +102,19 @@ const templatesEstimateCostSchema = z.object({
 });
 
 // templates:generateSummaries
+// CS-4.4: Added optional routingOverride for manual destination selection
+const routingOverrideSchema = z.object({
+  type: z.enum(['client', 'industry', 'internal', 'unfiled']),
+  slug: z.string().min(1),
+  path: z.string().min(1),
+  organization: z.string().optional(),
+  reason: z.string().optional(),
+}).nullable().optional();
+
 const templatesGenerateSummariesSchema = z.object({
   meetingId: meetingIdSchema,
   templateIds: z.array(templateIdSchema),
+  routingOverride: routingOverrideSchema,
 });
 
 // llm:switchProvider

@@ -2719,6 +2719,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let availableTemplates = [];
   let selectedTemplateIds = [];
+  let routingOverride = null; // CS-4.4: Manual routing override
+  let originalRoutes = null; // Store original routes for reference
 
   // Load templates on page load
   async function loadTemplates() {
@@ -2800,17 +2802,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
 
-      const html = preview.routes.map(route => {
+      // Store original routes for reference
+      originalRoutes = preview.routes;
+
+      // CS-4.4: Display override if set, otherwise show original routes
+      const routesToDisplay = routingOverride ? [routingOverride] : preview.routes;
+
+      const html = routesToDisplay.map(route => {
         const iconSvg = getRouteTypeIcon(route.type);
+        const isOverride = routingOverride && route === routingOverride;
 
         return `
-          <div class="routing-preview-path">
+          <div class="routing-preview-path${isOverride ? ' override' : ''}">
+            ${isOverride ? '<span class="routing-override-badge">Manual</span>' : ''}
             <div class="routing-preview-icon ${route.type}">
               ${iconSvg}
             </div>
             <div class="routing-preview-info">
               <div class="routing-preview-folder">${escapeHtml(route.path)}</div>
-              <div class="routing-preview-reason">${escapeHtml(route.reason)}</div>
+              <div class="routing-preview-reason">${escapeHtml(route.reason || 'Manually selected destination')}</div>
             </div>
             <span class="routing-preview-type-badge">${route.type}</span>
           </div>
@@ -2823,6 +2833,546 @@ document.addEventListener('DOMContentLoaded', async () => {
       previewContent.innerHTML = `<div class="routing-preview-error">Error: ${escapeHtml(error.message)}</div>`;
     }
   }
+
+  // CS-4.4: Show destination picker
+  async function showDestinationPicker() {
+    const picker = document.getElementById('routingDestinationPicker');
+    const select = document.getElementById('routingDestinationSelect');
+
+    if (!picker || !select) return;
+
+    // Load destinations
+    select.innerHTML = '<option value="">Loading destinations...</option>';
+    picker.style.display = 'block';
+
+    try {
+      const result = await window.electronAPI.routingGetAllDestinations();
+
+      // Group by type
+      const clients = result.destinations?.filter(d => d.type === 'client') || [];
+      const industry = result.destinations?.filter(d => d.type === 'industry') || [];
+      const other = result.destinations?.filter(d => d.type !== 'client' && d.type !== 'industry') || [];
+
+      let html = '';
+
+      // CS-4.6: Add "Create New Organization" option at the top
+      html += '<option value="__create_new__">+ Create New Organization...</option>';
+
+      if (clients.length > 0) {
+        html += '<optgroup label="Clients">';
+        clients.forEach(d => {
+          html += `<option value="${d.type}:${d.slug}" data-path="${escapeHtml(d.path)}" data-name="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`;
+        });
+        html += '</optgroup>';
+      }
+
+      if (industry.length > 0) {
+        html += '<optgroup label="Industry">';
+        industry.forEach(d => {
+          html += `<option value="${d.type}:${d.slug}" data-path="${escapeHtml(d.path)}" data-name="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`;
+        });
+        html += '</optgroup>';
+      }
+
+      if (other.length > 0) {
+        html += '<optgroup label="Other">';
+        other.forEach(d => {
+          html += `<option value="${d.type}:${d.slug}" data-path="${escapeHtml(d.path)}" data-name="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`;
+        });
+        html += '</optgroup>';
+      }
+
+      select.innerHTML = '<option value="">Select a destination...</option>' + html;
+    } catch (error) {
+      console.error('[Templates] Error loading destinations:', error);
+      select.innerHTML = '<option value="">Error loading destinations</option>';
+    }
+  }
+
+  // CS-4.4: Hide destination picker
+  function hideDestinationPicker() {
+    const picker = document.getElementById('routingDestinationPicker');
+    if (picker) picker.style.display = 'none';
+  }
+
+  // CS-4.4: Apply selected destination
+  async function applyDestinationOverride() {
+    const select = document.getElementById('routingDestinationSelect');
+    if (!select || !select.value) return;
+
+    // CS-4.6: Check if "Create New Organization" was selected
+    if (select.value === '__create_new__') {
+      hideDestinationPicker();
+      showNewOrgForm();
+      return;
+    }
+
+    const selectedOption = select.options[select.selectedIndex];
+    const [type, slug] = select.value.split(':');
+    const path = selectedOption.dataset.path;
+    const name = selectedOption.dataset.name;
+
+    routingOverride = {
+      type,
+      slug,
+      path,
+      organization: name,
+      reason: `Manually selected: ${name}`,
+    };
+
+    hideDestinationPicker();
+    // Re-render preview with override
+    await loadRoutingPreview();
+
+    // CS-4.5: Show create rule prompt if applicable
+    await showCreateRulePrompt();
+  }
+
+  // CS-4.4: Initialize destination picker event listeners
+  function initDestinationPicker() {
+    const changeBtn = document.getElementById('routingChangeBtn');
+    const applyBtn = document.getElementById('routingDestinationApply');
+    const cancelBtn = document.getElementById('routingDestinationCancel');
+    const select = document.getElementById('routingDestinationSelect');
+
+    if (changeBtn) {
+      changeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        showDestinationPicker();
+      });
+    }
+
+    // CS-4.6: Auto-show new org form when "Create New" is selected
+    if (select) {
+      select.addEventListener('change', (e) => {
+        if (e.target.value === '__create_new__') {
+          hideDestinationPicker();
+          showNewOrgForm();
+        }
+      });
+    }
+
+    if (applyBtn) {
+      applyBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        applyDestinationOverride();
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        hideDestinationPicker();
+      });
+    }
+  }
+
+  // Initialize destination picker on load
+  initDestinationPicker();
+
+  // CS-4.6: New organization form state
+  let newOrgDomains = [];
+  let selectedNewOrgDomains = new Set();
+
+  // CS-4.6: Get participant domains from meeting (excluding user's own domain)
+  async function getMeetingParticipantDomains() {
+    if (!currentEditingMeetingId) return [];
+
+    const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
+    if (!meeting) return [];
+
+    // Get user's domain to exclude it
+    let userDomain = null;
+    try {
+      const result = await window.electronAPI.getUserProfile();
+      if (result.success && result.profile && result.profile.email) {
+        userDomain = result.profile.email.split('@')[1]?.toLowerCase();
+        console.log('[Templates] Excluding user domain:', userDomain);
+      }
+    } catch (error) {
+      console.warn('[Templates] Could not get user profile:', error);
+    }
+
+    const emails = new Set();
+    if (meeting.participantEmails) {
+      meeting.participantEmails.forEach(e => emails.add(e));
+    }
+    if (meeting.participants) {
+      meeting.participants.forEach(p => p.email && emails.add(p.email));
+    }
+    if (meeting.attendees) {
+      meeting.attendees.forEach(a => a.email && emails.add(a.email));
+    }
+
+    const domains = new Set();
+    const personalDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'live.com'];
+    emails.forEach(email => {
+      const domain = email.split('@')[1]?.toLowerCase();
+      if (domain &&
+          !personalDomains.includes(domain) &&
+          domain !== userDomain) {
+        domains.add(domain);
+      }
+    });
+
+    return [...domains];
+  }
+
+  // CS-4.6: Generate slug from name
+  function generateSlug(name) {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  // CS-4.6: Show new organization form
+  async function showNewOrgForm() {
+    const form = document.getElementById('routingNewOrgForm');
+    const nameInput = document.getElementById('routingNewOrgName');
+    const slugInput = document.getElementById('routingNewOrgSlug');
+    const typeSelect = document.getElementById('routingNewOrgType');
+    const domainsDiv = document.getElementById('routingNewOrgDomains');
+
+    if (!form) return;
+
+    // Reset form
+    nameInput.value = '';
+    slugInput.value = '';
+    typeSelect.value = 'client';
+
+    // Get domains from meeting participants (excludes user's domain)
+    newOrgDomains = await getMeetingParticipantDomains();
+    selectedNewOrgDomains = new Set(newOrgDomains);
+
+    // Build domain chips
+    if (newOrgDomains.length > 0) {
+      domainsDiv.innerHTML = newOrgDomains.map(domain => `
+        <label class="routing-domain-chip selected">
+          <input type="checkbox" value="${escapeHtml(domain)}" checked>
+          <span>${escapeHtml(domain)}</span>
+        </label>
+      `).join('');
+
+      // Add change listeners
+      domainsDiv.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+          const domain = e.target.value;
+          const chip = e.target.closest('.routing-domain-chip');
+          if (e.target.checked) {
+            selectedNewOrgDomains.add(domain);
+            chip.classList.add('selected');
+          } else {
+            selectedNewOrgDomains.delete(domain);
+            chip.classList.remove('selected');
+          }
+        });
+      });
+    } else {
+      domainsDiv.innerHTML = '<span style="color: var(--text-secondary); font-size: 12px;">No domains detected from meeting participants</span>';
+    }
+
+    form.style.display = 'block';
+
+    // Auto-generate slug when name changes
+    nameInput.addEventListener('input', () => {
+      slugInput.value = generateSlug(nameInput.value);
+    });
+  }
+
+  // CS-4.6: Hide new organization form
+  function hideNewOrgForm() {
+    const form = document.getElementById('routingNewOrgForm');
+    if (form) form.style.display = 'none';
+    newOrgDomains = [];
+    selectedNewOrgDomains = new Set();
+  }
+
+  // CS-4.6: Create new organization
+  async function createNewOrganization() {
+    const nameInput = document.getElementById('routingNewOrgName');
+    const slugInput = document.getElementById('routingNewOrgSlug');
+    const typeSelect = document.getElementById('routingNewOrgType');
+    const createBtn = document.getElementById('routingNewOrgCreate');
+
+    const name = nameInput.value.trim();
+    const slug = slugInput.value.trim() || generateSlug(name);
+    const type = typeSelect.value;
+    const emails = [...selectedNewOrgDomains];
+
+    if (!name) {
+      window.showToast('Please enter an organization name', 'error');
+      return;
+    }
+
+    if (!slug) {
+      window.showToast('Please enter a folder name', 'error');
+      return;
+    }
+
+    const originalText = createBtn.textContent;
+    createBtn.disabled = true;
+    createBtn.textContent = 'Creating...';
+
+    try {
+      // Generate vault path based on type
+      const vaultPath = type === 'client' ? `clients/${slug}` : `industry/${slug}`;
+      // Convert route type to YAML section name for API call
+      const yamlSectionType = type === 'client' ? 'clients' : 'industry';
+
+      const result = await window.electronAPI.routingAddOrganization(
+        yamlSectionType,
+        slug,
+        vaultPath,
+        emails,
+        [] // No specific contacts
+      );
+
+      if (result.success) {
+        window.showToast(`Created ${name} and added ${emails.length} domain(s)`, 'success');
+
+        // Set as routing override
+        routingOverride = {
+          type,
+          slug,
+          path: vaultPath,
+          organization: name,
+          reason: `Newly created: ${name}`,
+        };
+
+        hideNewOrgForm();
+        // Re-render preview with new override
+        await loadRoutingPreview();
+
+        // Note: No need to show create rule prompt since domains were already added
+      } else {
+        window.showToast(`Failed to create organization: ${result.error || 'Unknown error'}`, 'error');
+      }
+    } catch (error) {
+      console.error('[Templates] Error creating organization:', error);
+      window.showToast(`Error: ${error.message}`, 'error');
+    } finally {
+      createBtn.disabled = false;
+      createBtn.textContent = originalText;
+    }
+  }
+
+  // CS-4.6: Initialize new org form event listeners
+  function initNewOrgForm() {
+    const closeBtn = document.getElementById('routingNewOrgClose');
+    const createBtn = document.getElementById('routingNewOrgCreate');
+    const cancelBtn = document.getElementById('routingNewOrgCancel');
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        hideNewOrgForm();
+      });
+    }
+
+    if (createBtn) {
+      createBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        createNewOrganization();
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        hideNewOrgForm();
+      });
+    }
+  }
+
+  // Initialize new org form on load
+  initNewOrgForm();
+
+  // CS-4.5: Variables for create rule feature
+  let unmatchedDomains = []; // Domains that don't match the selected destination
+  let selectedDomainsForRule = new Set();
+
+  // CS-4.5: Show create rule prompt after applying override
+  async function showCreateRulePrompt() {
+    const createRuleDiv = document.getElementById('routingCreateRule');
+    const domainsDiv = document.getElementById('routingCreateRuleDomains');
+
+    if (!createRuleDiv || !domainsDiv || !routingOverride || !currentEditingMeetingId) return;
+
+    // Only show for client/industry destinations (not internal/unfiled)
+    if (routingOverride.type === 'internal' || routingOverride.type === 'unfiled') {
+      createRuleDiv.style.display = 'none';
+      return;
+    }
+
+    // Get meeting participants to extract domains
+    const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
+    if (!meeting) {
+      createRuleDiv.style.display = 'none';
+      return;
+    }
+
+    // Get user's domain to exclude it
+    let userDomain = null;
+    try {
+      const result = await window.electronAPI.getUserProfile();
+      if (result.success && result.profile && result.profile.email) {
+        userDomain = result.profile.email.split('@')[1]?.toLowerCase();
+      }
+    } catch (error) {
+      console.warn('[Templates] Could not get user profile for domain exclusion:', error);
+    }
+
+    // Collect all participant emails
+    const emails = new Set();
+    if (meeting.participantEmails) {
+      meeting.participantEmails.forEach(e => emails.add(e));
+    }
+    if (meeting.participants) {
+      meeting.participants.forEach(p => p.email && emails.add(p.email));
+    }
+    if (meeting.attendees) {
+      meeting.attendees.forEach(a => a.email && emails.add(a.email));
+    }
+
+    // Extract unique domains (exclude personal domains and user's own domain)
+    const personalDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'live.com'];
+    const domains = new Set();
+    emails.forEach(email => {
+      const domain = email.split('@')[1]?.toLowerCase();
+      if (domain &&
+          !personalDomains.includes(domain) &&
+          domain !== userDomain) {
+        domains.add(domain);
+      }
+    });
+
+    // Get current routing config to find which domains are already mapped
+    try {
+      const { config } = await window.electronAPI.routingGetConfig();
+      const existingDomains = new Set();
+
+      // Collect all already-mapped domains
+      if (config.clients) {
+        Object.values(config.clients).forEach(client => {
+          (client.emails || []).forEach(d => existingDomains.add(d.toLowerCase()));
+        });
+      }
+      if (config.industry) {
+        Object.values(config.industry).forEach(ind => {
+          (ind.emails || []).forEach(d => existingDomains.add(d.toLowerCase()));
+        });
+      }
+      if (config.internal && config.internal.team_emails) {
+        config.internal.team_emails.forEach(d => existingDomains.add(d.toLowerCase()));
+      }
+
+      // Find domains not already mapped
+      unmatchedDomains = [...domains].filter(d => !existingDomains.has(d));
+    } catch (error) {
+      console.error('[Templates] Error getting routing config:', error);
+      unmatchedDomains = [...domains];
+    }
+
+    // If no unmatched domains, don't show the prompt
+    if (unmatchedDomains.length === 0) {
+      createRuleDiv.style.display = 'none';
+      return;
+    }
+
+    // Reset selected domains
+    selectedDomainsForRule = new Set(unmatchedDomains); // Default all selected
+
+    // Build domain chips HTML
+    domainsDiv.innerHTML = unmatchedDomains.map(domain => `
+      <label class="routing-domain-chip selected">
+        <input type="checkbox" value="${escapeHtml(domain)}" checked>
+        <span>${escapeHtml(domain)}</span>
+      </label>
+    `).join('');
+
+    // Add change listeners to checkboxes
+    domainsDiv.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+      checkbox.addEventListener('change', (e) => {
+        const domain = e.target.value;
+        const chip = e.target.closest('.routing-domain-chip');
+        if (e.target.checked) {
+          selectedDomainsForRule.add(domain);
+          chip.classList.add('selected');
+        } else {
+          selectedDomainsForRule.delete(domain);
+          chip.classList.remove('selected');
+        }
+        // Update create button state
+        document.getElementById('routingCreateRuleBtn').disabled = selectedDomainsForRule.size === 0;
+      });
+    });
+
+    createRuleDiv.style.display = 'block';
+  }
+
+  // CS-4.5: Hide create rule prompt
+  function hideCreateRulePrompt() {
+    const createRuleDiv = document.getElementById('routingCreateRule');
+    if (createRuleDiv) createRuleDiv.style.display = 'none';
+    unmatchedDomains = [];
+    selectedDomainsForRule = new Set();
+  }
+
+  // CS-4.5: Create routing rule
+  async function createRoutingRule() {
+    if (!routingOverride || selectedDomainsForRule.size === 0) return;
+
+    const createBtn = document.getElementById('routingCreateRuleBtn');
+    const originalText = createBtn.textContent;
+    createBtn.disabled = true;
+    createBtn.textContent = 'Creating...';
+
+    try {
+      const result = await window.electronAPI.routingAddEmailsToOrganization(
+        routingOverride.type,
+        routingOverride.slug,
+        [...selectedDomainsForRule],
+        [] // No specific contacts to add
+      );
+
+      if (result.success) {
+        window.showToast(`Added ${selectedDomainsForRule.size} domain(s) to ${routingOverride.organization}`, 'success');
+        hideCreateRulePrompt();
+      } else {
+        window.showToast('Failed to create routing rule', 'error');
+      }
+    } catch (error) {
+      console.error('[Templates] Error creating routing rule:', error);
+      window.showToast(`Error: ${error.message}`, 'error');
+    } finally {
+      createBtn.disabled = false;
+      createBtn.textContent = originalText;
+    }
+  }
+
+  // CS-4.5: Initialize create rule event listeners
+  function initCreateRulePrompt() {
+    const createBtn = document.getElementById('routingCreateRuleBtn');
+    const dismissBtn = document.getElementById('routingCreateRuleDismiss');
+
+    if (createBtn) {
+      createBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        createRoutingRule();
+      });
+    }
+
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        hideCreateRulePrompt();
+      });
+    }
+  }
+
+  // Initialize create rule prompt on load
+  initCreateRulePrompt();
 
   // Get icon SVG for route type
   function getRouteTypeIcon(type) {
@@ -2855,6 +3405,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     const modal = document.getElementById('templateModal');
     modal.style.display = 'none';
     selectedTemplateIds = [];
+    routingOverride = null; // CS-4.4: Reset routing override
+    originalRoutes = null;
+    // Hide destination picker if open
+    const picker = document.getElementById('routingDestinationPicker');
+    if (picker) picker.style.display = 'none';
+    // CS-4.5: Hide create rule prompt
+    const createRule = document.getElementById('routingCreateRule');
+    if (createRule) createRule.style.display = 'none';
+    // CS-4.6: Hide new org form if open
+    const newOrgForm = document.getElementById('routingNewOrgForm');
+    if (newOrgForm) newOrgForm.style.display = 'none';
     updateConfirmButton();
   }
 
@@ -2932,6 +3493,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Save selected templates before closing modal (closeTemplateModal clears the array!)
     const templatesToGenerate = [...selectedTemplateIds];
+    // CS-4.4: Save routing override before closing modal
+    const savedRoutingOverride = routingOverride ? { ...routingOverride } : null;
 
     const generateButton = document.getElementById('generateButton');
     const originalHTML = generateButton.innerHTML;
@@ -2946,10 +3509,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       generateButton.textContent = 'Generating';
 
       console.log('Generating summaries with templates:', templatesToGenerate);
+      if (savedRoutingOverride) {
+        console.log('Using routing override:', savedRoutingOverride);
+      }
 
       const result = await window.electronAPI.templatesGenerateSummaries(
         currentEditingMeetingId,
-        templatesToGenerate
+        templatesToGenerate,
+        savedRoutingOverride
       );
 
       if (result.success) {

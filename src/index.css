@@ -1501,6 +1501,339 @@ body {
   border-radius: 4px;
 }
 
+/* CS-4.4: Change button and destination picker */
+.routing-change-btn {
+  margin-left: auto;
+  padding: 4px 12px;
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.routing-change-btn:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--primary-color);
+}
+
+.routing-destination-picker {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  border: 1px solid var(--primary-color);
+}
+
+.routing-destination-select {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.routing-destination-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.routing-destination-select optgroup {
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.routing-destination-select option {
+  padding: 8px;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.routing-destination-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+.routing-destination-apply {
+  padding: 6px 16px;
+  font-size: 13px;
+  background: var(--primary-color);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.routing-destination-apply:hover {
+  background: var(--primary-hover);
+}
+
+.routing-destination-cancel {
+  padding: 6px 16px;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.routing-destination-cancel:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Override indicator styling */
+.routing-preview-path.override {
+  border: 2px solid var(--primary-color);
+  position: relative;
+}
+
+.routing-override-badge {
+  position: absolute;
+  top: -8px;
+  right: 12px;
+  font-size: 10px;
+  padding: 2px 8px;
+  background: var(--primary-color);
+  color: white;
+  border-radius: 10px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* CS-4.5: Create routing rule prompt */
+.routing-create-rule {
+  margin-top: 12px;
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+}
+
+.routing-create-rule-prompt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.routing-create-rule-icon {
+  color: var(--primary-color);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.routing-create-rule-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.routing-create-rule-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.routing-domain-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.routing-domain-chip input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.routing-domain-chip.selected {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--primary-color);
+}
+
+.routing-create-rule-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.routing-create-rule-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  background: var(--primary-color);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.routing-create-rule-btn:hover {
+  background: var(--primary-hover);
+}
+
+.routing-create-rule-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.routing-create-rule-dismiss {
+  padding: 6px 14px;
+  font-size: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.routing-create-rule-dismiss:hover {
+  color: var(--text-primary);
+}
+
+/* CS-4.6: New Organization Form */
+.routing-new-org-form {
+  margin-top: 12px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.routing-new-org-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.routing-new-org-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.routing-new-org-close:hover {
+  color: var(--text-primary);
+}
+
+.routing-new-org-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.routing-new-org-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.routing-new-org-field label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.routing-new-org-select,
+.routing-new-org-input {
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+}
+
+.routing-new-org-select:focus,
+.routing-new-org-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.routing-new-org-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  min-height: 40px;
+}
+
+.routing-new-org-domains .routing-domain-chip {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--primary-color);
+}
+
+.routing-new-org-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.routing-new-org-create {
+  padding: 8px 16px;
+  font-size: 13px;
+  background: var(--primary-color);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.routing-new-org-create:hover {
+  background: var(--primary-hover);
+}
+
+.routing-new-org-create:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.routing-new-org-cancel {
+  padding: 8px 16px;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.routing-new-org-cancel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 /* Cost Estimate */
 .cost-estimate {
   margin-top: 24px;

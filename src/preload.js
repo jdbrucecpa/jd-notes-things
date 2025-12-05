@@ -73,8 +73,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   templatesGetContent: templateId => ipcRenderer.invoke('templates:getContent', templateId),
   templatesEstimateCost: (templateIds, transcript, provider) =>
     ipcRenderer.invoke('templates:estimateCost', { templateIds, transcript, provider }),
-  templatesGenerateSummaries: (meetingId, templateIds) =>
-    ipcRenderer.invoke('templates:generateSummaries', { meetingId, templateIds }),
+  templatesGenerateSummaries: (meetingId, templateIds, routingOverride = null) =>
+    ipcRenderer.invoke('templates:generateSummaries', { meetingId, templateIds, routingOverride }),
   templatesReload: () => ipcRenderer.invoke('templates:reload'),
   // Routing Configuration (Phase 10.4)
   routingGetConfig: () => ipcRenderer.invoke('routing:getConfig'),
@@ -82,8 +82,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   routingValidateConfig: content => ipcRenderer.invoke('routing:validateConfig', content),
   routingTestEmails: emails => ipcRenderer.invoke('routing:testEmails', emails),
   routingPreviewMeetingRoute: meetingId => ipcRenderer.invoke('routing:previewMeetingRoute', meetingId),
+  routingGetAllDestinations: () => ipcRenderer.invoke('routing:getAllDestinations'),
   routingAddOrganization: (type, id, vaultPath, emails, contacts) =>
     ipcRenderer.invoke('routing:addOrganization', { type, id, vaultPath, emails, contacts }),
+  routingAddEmailsToOrganization: (type, slug, emails, contacts) =>
+    ipcRenderer.invoke('routing:addEmailsToOrganization', { type, slug, emails, contacts }),
   routingDeleteOrganization: (type, id) =>
     ipcRenderer.invoke('routing:deleteOrganization', { type, id }),
   routingRestoreBackup: () => ipcRenderer.invoke('routing:restoreBackup'),

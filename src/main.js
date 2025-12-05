@@ -2581,9 +2581,10 @@ function deduplicateParticipants(participants) {
 /**
  * Export a meeting to Obsidian vault with two-file structure
  * @param {Object} meeting - Meeting object with transcript and summaries
+ * @param {Object|null} routingOverride - CS-4.4: Optional manual routing override
  * @returns {Promise<Object>} Export result with paths created
  */
-async function exportMeetingToObsidian(meeting) {
+async function exportMeetingToObsidian(meeting, routingOverride = null) {
   if (!vaultStructure || !routingEngine) {
     console.log('[ObsidianExport] Export system not initialized - skipping export');
     return { success: false, error: 'Export system not initialized' };
@@ -2671,7 +2672,27 @@ async function exportMeetingToObsidian(meeting) {
 
     // Get routing decisions (or use manual override)
     let routes;
-    if (meeting.obsidianLink) {
+    if (routingOverride) {
+      // CS-4.4: Use manual routing override from template modal
+      // Build proper fullPath with /meetings/ subfolder like the routing engine does
+      const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
+      const dateStr = meetingDate.toISOString().split('T')[0];
+      const titleSlug = meeting.title
+        ? meeting.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        : 'meeting';
+      const folderName = `${dateStr}-${titleSlug}`;
+      const fullPath = path.join(routingOverride.path, 'meetings', folderName);
+
+      routes = [
+        {
+          fullPath,
+          organizationName: routingOverride.organization || 'Manual Override',
+          type: routingOverride.type,
+          slug: routingOverride.slug,
+        },
+      ];
+      console.log(`[ObsidianExport] CS-4.4: Using routing override: ${fullPath} (${routingOverride.type})`);
+    } else if (meeting.obsidianLink) {
       // Manual override - use existing path
       // Extract folder path from obsidianLink (remove filename)
       const linkPath = meeting.obsidianLink.replace(/[^/]+\.md$/, '');
@@ -4518,7 +4539,7 @@ ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript
 // Generate summaries using multiple templates
 ipcMain.handle(
   'templates:generateSummaries',
-  withValidation(templatesGenerateSummariesSchema, async (event, { meetingId, templateIds }) => {
+  withValidation(templatesGenerateSummariesSchema, async (event, { meetingId, templateIds, routingOverride }) => {
     try {
       console.log(
         '[Template IPC] Generating summaries for meeting:',
@@ -4527,6 +4548,9 @@ ipcMain.handle(
         templateIds.length,
         'templates'
       );
+      if (routingOverride) {
+        console.log('[Template IPC] Using routing override:', routingOverride);
+      }
 
     // Load meeting data
     const data = await fileOperationManager.readMeetingsData();
@@ -4551,7 +4575,7 @@ ipcMain.handle(
 
     // Auto-trigger export to Obsidian after template generation
     console.log('[Template IPC] Auto-triggering Obsidian export...');
-    const exportResult = await exportMeetingToObsidian(meeting);
+    const exportResult = await exportMeetingToObsidian(meeting, routingOverride);
 
     if (exportResult.success && exportResult.obsidianLink) {
       meeting.obsidianLink = exportResult.obsidianLink;
@@ -4884,6 +4908,77 @@ ipcMain.handle('routing:previewMeetingRoute', async (event, meetingId) => {
   }
 });
 
+// CS-4.4: Get all available destinations for manual override
+ipcMain.handle('routing:getAllDestinations', async () => {
+  try {
+    console.log('[Routing IPC] Getting all destinations');
+
+    if (!routingEngine) {
+      console.error('[Routing IPC] Routing engine not initialized');
+      return { destinations: [] };
+    }
+
+    const config = routingEngine.getConfig();
+    const destinations = [];
+
+    // Add clients
+    if (config.clients) {
+      Object.entries(config.clients).forEach(([slug, data]) => {
+        destinations.push({
+          type: 'client',
+          slug,
+          name: data.name || slug,
+          path: data.vault_path || `clients/${slug}`,
+        });
+      });
+    }
+
+    // Add industry
+    if (config.industry) {
+      Object.entries(config.industry).forEach(([slug, data]) => {
+        destinations.push({
+          type: 'industry',
+          slug,
+          name: data.name || slug,
+          path: data.vault_path || `industry/${slug}`,
+        });
+      });
+    }
+
+    // Add internal
+    if (config.internal) {
+      destinations.push({
+        type: 'internal',
+        slug: 'internal',
+        name: 'Internal',
+        path: config.internal.vault_path || 'internal/meetings',
+      });
+    }
+
+    // Add unfiled
+    destinations.push({
+      type: 'unfiled',
+      slug: 'unfiled',
+      name: 'Unfiled',
+      path: config.settings?.unfiled_path || '_unfiled',
+    });
+
+    // Sort: clients first, then industry, then internal, then unfiled
+    const typeOrder = { client: 0, industry: 1, internal: 2, unfiled: 3 };
+    destinations.sort((a, b) => {
+      if (typeOrder[a.type] !== typeOrder[b.type]) {
+        return typeOrder[a.type] - typeOrder[b.type];
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+    return { destinations };
+  } catch (error) {
+    console.error('[Routing IPC] Error getting destinations:', error);
+    return { destinations: [], error: error.message };
+  }
+});
+
 // Helper function to build human-readable routing reason
 function buildRoutingReason(route, matchResults, participantEmails, orgName) {
   switch (route.type) {
@@ -4967,6 +5062,71 @@ ipcMain.handle('routing:addOrganization', createIpcHandler(async (event, { type,
   }
 
   return { content: newContent };
+}));
+
+// CS-4.5: Add emails/domains to existing organization
+ipcMain.handle('routing:addEmailsToOrganization', createIpcHandler(async (event, { type, slug, emails, contacts }) => {
+  console.log('[Routing IPC] Adding emails to organization:', type, slug);
+
+  const routingPath = getRoutingConfigPath();
+
+  if (!fs.existsSync(routingPath)) {
+    throw new Error('Routing configuration file not found');
+  }
+
+  const content = fs.readFileSync(routingPath, 'utf8');
+  const config = yaml.load(content);
+
+  // Validate inputs
+  if (!type || !slug) {
+    throw new Error('Type and slug are required');
+  }
+
+  // Map type names (handle both singular and plural)
+  const typeKey = type === 'client' ? 'clients' : type === 'industry' ? 'industry' : type;
+
+  // Check if organization exists
+  if (!config[typeKey] || !config[typeKey][slug]) {
+    throw new Error(`Organization "${slug}" not found in ${typeKey}`);
+  }
+
+  const org = config[typeKey][slug];
+
+  // Add new emails (deduplicate)
+  if (emails && emails.length > 0) {
+    const existingEmails = org.emails || [];
+    const newEmails = emails.filter(e => !existingEmails.includes(e));
+    org.emails = [...existingEmails, ...newEmails];
+    console.log(`[Routing IPC] Added ${newEmails.length} new email domains:`, newEmails);
+  }
+
+  // Add new contacts (deduplicate)
+  if (contacts && contacts.length > 0) {
+    const existingContacts = org.contacts || [];
+    const newContacts = contacts.filter(c => !existingContacts.includes(c));
+    org.contacts = [...existingContacts, ...newContacts];
+    console.log(`[Routing IPC] Added ${newContacts.length} new contacts:`, newContacts);
+  }
+
+  // Create backup before saving
+  const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+  if (fs.existsSync(routingPath)) {
+    fs.copyFileSync(routingPath, backupPath);
+    console.log('[Routing IPC] Created backup at:', backupPath);
+  }
+
+  // Convert back to YAML and save
+  const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
+  fs.writeFileSync(routingPath, newContent, 'utf8');
+  console.log('[Routing IPC] Emails added successfully');
+
+  // Reload routing engine
+  if (routingEngine) {
+    routingEngine.reloadConfig();
+    console.log('[Routing IPC] Routing engine reloaded');
+  }
+
+  return { success: true, content: newContent };
 }));
 
 // Delete organization from routing config
