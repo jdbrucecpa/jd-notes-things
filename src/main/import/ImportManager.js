@@ -22,6 +22,7 @@ class ImportManager {
     exportFunction,
     summaryFunction,
     autoSummaryFunction,
+    autoLabelFunction, // v1.1: Auto-label single speakers as user
   }) {
     this.parser = new TranscriptParser();
     this.extractor = new MetadataExtractor();
@@ -33,6 +34,7 @@ class ImportManager {
     this.exportFunction = exportFunction;
     this.summaryFunction = summaryFunction;
     this.autoSummaryFunction = autoSummaryFunction;
+    this.autoLabelFunction = autoLabelFunction;
   }
 
   /**
@@ -67,6 +69,28 @@ class ImportManager {
       // Step 4: Create meeting object
       if (onProgress) onProgress({ step: 'creating-meeting', file: path.basename(filePath) });
       const meeting = await this.createMeeting(parsedData, metadata);
+
+      // Step 4.5: v1.1 - Auto-label single speakers as user (before summary generation)
+      if (this.autoLabelFunction && meeting.transcript && meeting.transcript.length > 0) {
+        try {
+          const labelResult = await this.autoLabelFunction(meeting);
+          if (labelResult?.applied) {
+            meeting.transcript = labelResult.transcript;
+            // Replace participants with user (single-speaker = user)
+            // This replaces generic "Speaker A" with actual user info
+            if (labelResult.userProfile) {
+              meeting.participants = [{
+                name: labelResult.userProfile.name,
+                email: labelResult.userProfile.email || null,
+                isHost: true,
+              }];
+            }
+            console.log('[Import] Auto-labeled single speaker as:', labelResult.userProfile?.name);
+          }
+        } catch (labelError) {
+          console.warn('[Import] Auto-label failed:', labelError.message);
+        }
+      }
 
       // Step 5: Generate auto-summary (optional)
       if (generateAutoSummary && meeting.transcript && meeting.transcript.length > 0) {
@@ -190,6 +214,8 @@ class ImportManager {
       source: 'import',
       importedFrom: metadata.importedFrom,
       importedAt: new Date().toISOString(),
+      // Add status for review queue (IM-2.5)
+      status: metadata.status || 'needs_verification',
       metadata: {
         originalFormat: parsedData.format,
         hasSpeakers: parsedData.hasSpeakers,

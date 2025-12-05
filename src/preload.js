@@ -81,6 +81,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   routingSaveConfig: content => ipcRenderer.invoke('routing:saveConfig', content),
   routingValidateConfig: content => ipcRenderer.invoke('routing:validateConfig', content),
   routingTestEmails: emails => ipcRenderer.invoke('routing:testEmails', emails),
+  routingPreviewMeetingRoute: meetingId => ipcRenderer.invoke('routing:previewMeetingRoute', meetingId),
   routingAddOrganization: (type, id, vaultPath, emails, contacts) =>
     ipcRenderer.invoke('routing:addOrganization', { type, id, vaultPath, emails, contacts }),
   routingDeleteOrganization: (type, id) =>
@@ -95,6 +96,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Google Contacts & Speaker Matching (Phase 6)
   contactsFetchContacts: forceRefresh => ipcRenderer.invoke('contacts:fetchContacts', forceRefresh),
   contactsSearchContacts: query => ipcRenderer.invoke('contacts:searchContacts', query),
+  // CS-1: Contacts Page
+  contactsGetAllContacts: forceRefresh => ipcRenderer.invoke('contacts:getAllContacts', forceRefresh),
+  contactsGetMeetingsForContact: email => ipcRenderer.invoke('contacts:getMeetingsForContact', email),
+  // CS-3: Contact/Company Page Management
+  contactsCreateContactPage: (contact, options) =>
+    ipcRenderer.invoke('contacts:createContactPage', contact, options),
+  contactsContactPageExists: contactName =>
+    ipcRenderer.invoke('contacts:contactPageExists', contactName),
+  contactsCreateCompanyPage: (company, options) =>
+    ipcRenderer.invoke('contacts:createCompanyPage', company, options),
+  contactsCompanyPageExists: companyName =>
+    ipcRenderer.invoke('contacts:companyPageExists', companyName),
   speakersMatchSpeakers: (transcript, participantEmails, options) =>
     ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),
   speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) =>
@@ -110,6 +123,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('speakerMapping:deleteMapping', { speakerId }),
   speakerMappingExtractIds: transcript =>
     ipcRenderer.invoke('speakerMapping:extractSpeakerIds', { transcript }),
+  speakerMappingDetectDuplicates: speakers =>
+    ipcRenderer.invoke('speakerMapping:detectDuplicates', { speakers }),
   speakerMappingApplyToTranscript: (transcript, mappings, options) =>
     ipcRenderer.invoke('speakerMapping:applyToTranscript', { transcript, mappings, options }),
   speakerMappingApplyToMeeting: (meetingId, mappings, options) =>
@@ -138,6 +153,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVaultPath: () => ipcRenderer.invoke('settings:getVaultPath'),
   chooseVaultPath: () => ipcRenderer.invoke('settings:chooseVaultPath'),
   getProviderPreferences: () => ipcRenderer.invoke('settings:getProviderPreferences'),
+  // User Profile (v1.1)
+  getUserProfile: () => ipcRenderer.invoke('settings:getUserProfile'),
+  saveUserProfile: profile => ipcRenderer.invoke('settings:saveUserProfile', profile),
   // Key Management (Phase 10.2)
   keysListAll: () => ipcRenderer.invoke('keys:list'),
   keysGet: keyName => ipcRenderer.invoke('keys:get', keyName),
@@ -151,6 +169,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   appGetLogs: options => ipcRenderer.invoke('app:getLogs', options),
   appClearLogs: () => ipcRenderer.invoke('app:clearLogs'),
   appOpenLogFile: () => ipcRenderer.invoke('app:openLogFile'),
+  // Settings Export/Import (SE-1, SE-2)
+  settingsExportPreview: () => ipcRenderer.invoke('settings:exportPreview'),
+  settingsExport: () => ipcRenderer.invoke('settings:export'),
+  settingsImportValidate: zipPath => ipcRenderer.invoke('settings:importValidate', zipPath),
+  settingsImport: options => ipcRenderer.invoke('settings:import', options),
   // Phase 10.7: Event listeners for tray/shortcuts
   onQuickRecordRequested: callback =>
     ipcRenderer.on('quick-record-requested', (_, data) => callback(data)),

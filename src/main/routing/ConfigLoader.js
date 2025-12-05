@@ -8,9 +8,12 @@ const path = require('path');
 const yaml = require('js-yaml');
 
 class ConfigLoader {
-  constructor(configPath = null) {
-    // Default config path: config/routing.yaml in project root
-    this.configPath = configPath || path.join(__dirname, '../../../config/routing.yaml');
+  constructor(configPath) {
+    // Config path must be provided - should be userData/config/routing.yaml
+    if (!configPath) {
+      throw new Error('ConfigLoader requires a configPath argument');
+    }
+    this.configPath = configPath;
     this.config = null;
     this.lastLoaded = null;
   }

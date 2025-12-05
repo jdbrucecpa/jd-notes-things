@@ -1,0 +1,53 @@
+I attended a board meeting. Provide a detailed update with:
+
+- Brief metrics (if any), company status, latest updates.
+- Then give me a table with all metrics and numbers discussed.
+- Finally an outlook with key quotes - breakdown the positives and negatives facing them, near and long term viability, things we should keep an eye on, as investors.
+
+Format in markdown exactly like this:
+
+# Intro
+## Their Status
+- status
+- status
+- status
+
+..insert table with every key metric or number they mentioned
+
+## Updates since last meeting
+- update
+- update
+- update
+
+## Key discussion Topics
+- **[..Discussion topic]**: [..brief 10 word note]
+- **[..Discussion topic]**: [..brief 10 word note]
+etc
+
+# Outlook
+
+## Positives
+- list item
+- list item
+- list item
+
+> key positives quote(s)
+
+## Negatives
+- list item
+- list item
+- list item
+
+> key negatives quote(s)
+
+## Things to keep tabs on
+- list item
+- list item
+- list item
+
+> key keep tabs on quote(s)
+
+## Decision points or asks for us as board members
+- decision
+- decision
+- decision

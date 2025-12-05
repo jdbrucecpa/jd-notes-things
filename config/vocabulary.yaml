@@ -1,0 +1,60 @@
+# Custom Vocabulary Configuration
+# ================================
+# This file configures custom vocabulary to improve transcription accuracy.
+#
+# Two types of vocabulary are supported:
+#
+# 1. spelling_corrections (AssemblyAI)
+#    - Maps common mishearings to correct spellings
+#    - Format: { from: [variants], to: "correct" }
+#    - Applied during transcription
+#
+# 2. keyword_boosts (Deepgram)
+#    - Increases probability of recognizing specific words
+#    - Format: { word: "Term", intensifier: 1-10 }
+#    - Higher intensifier = stronger boost
+#
+# Vocabulary is applied in this order:
+# 1. Global vocabulary (applied to all meetings)
+# 2. Client-specific vocabulary (merged with global for matched clients)
+
+# Global vocabulary - applied to all transcriptions
+global:
+  # Spelling corrections for common technical terms
+  spelling_corrections:
+    # Example: AI/ML terms
+    # - from: ["ai", "A.I."]
+    #   to: "AI"
+    # - from: ["gpt4", "gpt 4", "gee pee tee four"]
+    #   to: "GPT-4"
+    # - from: ["claude", "claud"]
+    #   to: "Claude"
+
+  # Keyword boosts for technical terms and proper nouns
+  keyword_boosts:
+    # Example: Common industry terms
+    # - word: "Anthropic"
+    #   intensifier: 5
+    # - word: "OpenAI"
+    #   intensifier: 5
+
+# Client-specific vocabulary
+# Keys should match client slugs from routing.yaml
+clients:
+  # Example client vocabulary:
+  # acme-corp:
+  #   spelling_corrections:
+  #     - from: ["akme", "acme corp"]
+  #       to: "ACME"
+  #   keyword_boosts:
+  #     - word: "ACME"
+  #       intensifier: 5
+  #     - word: "RoadRunner"
+  #       intensifier: 3
+  #
+  # tech-startup:
+  #   keyword_boosts:
+  #     - word: "TechStartup"
+  #       intensifier: 5
+  #     - word: "InnovatePlatform"
+  #       intensifier: 4

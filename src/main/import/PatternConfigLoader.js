@@ -62,28 +62,18 @@ class PatternConfigLoader {
 
   /**
    * Get the configuration file path
-   * Checks both development (./config) and production (user data) locations
+   * Always uses userData/config/ (both dev and prod)
+   * Default files are copied there on app initialization
    */
   getConfigPath() {
     if (this.configPath) {
       return this.configPath;
     }
 
-    // Try user data path first (where UI saves patterns)
+    // Always use userData/config/ - defaults are copied there on app init
     const { app } = require('electron');
-    const userPath = path.join(app.getPath('userData'), 'config', 'transcript-patterns.yaml');
-
-    // Development fallback path
-    const devPath = path.join(process.cwd(), 'config', 'transcript-patterns.yaml');
-
-    // Check if user config exists, otherwise use default
-    if (fsSync.existsSync(userPath)) {
-      console.log('[PatternConfigLoader] Using user config:', userPath);
-      this.configPath = userPath;
-    } else {
-      console.log('[PatternConfigLoader] Using default config:', devPath);
-      this.configPath = devPath;
-    }
+    this.configPath = path.join(app.getPath('userData'), 'config', 'transcript-patterns.yaml');
+    console.log('[PatternConfigLoader] Using config:', this.configPath);
 
     return this.configPath;
   }

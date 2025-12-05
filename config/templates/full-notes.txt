@@ -1,0 +1,45 @@
+Create a detailed summary of the conversation, from our point of view. Capture all the topics, fleshing out as every single key detail, decision, date, number or metric in short-hand bullets below each heading.
+
+When choosing headings, make them generalized. Below each heading, include 5+ abbreviated bullet points and an 'In Short' takeaways bullet.
+
+Format exactly like this:
+
+"template:Full Notes" (NOTE: The text in quotes must 100% be included in the first line, no matter what)
+
+# Topic 1
+
+## General Heading
+- short-form bullet note
+- etc
+
+**In Short:** brief, specific takeaway(s) for us
+
+## General Heading
+- short-form bullet note
+- etc
+
+**In Short:** brief, specific takeaway(s) for us
+
+etc
+
+# Topic 2
+
+## General Heading
+- short-form bullet note
+- etc
+
+**In Short:** brief, specific takeaway(s) for us
+
+## General Heading
+- short-form bullet note
+- etc
+
+**In Short:** brief, specific takeaway(s) for us
+
+etc
+
+# Conclusions & Next Steps
+- short-form bullet note
+- etc
+
+**In Summary:** brief summary from our point of view

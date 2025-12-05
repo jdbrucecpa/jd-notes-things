@@ -43,16 +43,35 @@ class RoutingEngine {
       },
     };
 
-    // Determine routing based on multi-org settings
-    if (orgCount === 0 || matchResults.unfiled.length === participantEmails.length) {
-      // All unfiled - route to unfiled path
+    // Check if ALL attendees are internal (only then route to internal)
+    const hasExternalAttendees =
+      Object.keys(matchResults.clients).length > 0 ||
+      Object.keys(matchResults.industry).length > 0 ||
+      matchResults.unfiled.length > 0;
+
+    const allInternal = !hasExternalAttendees && matchResults.internal.length > 0;
+
+    // For routing purposes, don't count internal as an "org" - only count external orgs
+    const externalOrgCount =
+      Object.keys(matchResults.clients).length +
+      Object.keys(matchResults.industry).length;
+
+    // Determine routing based on attendees
+    if (allInternal) {
+      // 100% internal attendees - route to internal
+      decision.routes.push(this._buildRoute('internal', null, meetingTitle, meetingDate));
+    } else if (externalOrgCount === 0 && matchResults.unfiled.length > 0) {
+      // No known external orgs, only unfiled - route to unfiled
       decision.routes.push(this._buildRoute('unfiled', null, meetingTitle, meetingDate));
-    } else if (orgCount === 1) {
-      // Single organization - route to that organization
+    } else if (externalOrgCount === 1) {
+      // Single external organization - route to that organization
       decision.routes.push(this._routeSingleOrg(matchResults, meetingTitle, meetingDate));
-    } else {
-      // Multiple organizations
+    } else if (externalOrgCount > 1) {
+      // Multiple external organizations
       decision.routes = this._routeMultiOrg(matchResults, meetingTitle, meetingDate, settings);
+    } else {
+      // Fallback to unfiled
+      decision.routes.push(this._buildRoute('unfiled', null, meetingTitle, meetingDate));
     }
 
     console.log(`[RoutingEngine] Meeting routed to ${decision.routes.length} location(s)`);
@@ -60,19 +79,18 @@ class RoutingEngine {
   }
 
   /**
-   * Route meeting to a single organization
+   * Route meeting to a single external organization
+   * Note: Internal routing is handled separately - this only handles client/industry
    * @private
    */
   _routeSingleOrg(matchResults, meetingTitle, meetingDate) {
-    // Determine which type (client, industry, or internal)
+    // Determine which type (client or industry) - internal handled separately
     if (Object.keys(matchResults.clients).length > 0) {
       const slug = Object.keys(matchResults.clients)[0];
       return this._buildRoute('client', slug, meetingTitle, meetingDate);
     } else if (Object.keys(matchResults.industry).length > 0) {
       const slug = Object.keys(matchResults.industry)[0];
       return this._buildRoute('industry', slug, meetingTitle, meetingDate);
-    } else if (matchResults.internal.length > 0) {
-      return this._buildRoute('internal', null, meetingTitle, meetingDate);
     }
 
     // Shouldn't reach here, but fallback to unfiled
@@ -80,26 +98,25 @@ class RoutingEngine {
   }
 
   /**
-   * Route meeting with multiple organizations
+   * Route meeting with multiple external organizations
+   * Note: Internal is NOT included here - meetings with external attendees are never "internal"
    * @private
    */
   _routeMultiOrg(matchResults, meetingTitle, meetingDate, settings) {
     const routes = [];
 
     if (settings.duplicate_multi_org === 'all') {
-      // Create duplicate notes in all organization folders
+      // Create duplicate notes in all external organization folders
+      // Internal is NOT included - if there are external attendees, it's not an internal meeting
       for (const slug of Object.keys(matchResults.clients)) {
         routes.push(this._buildRoute('client', slug, meetingTitle, meetingDate));
       }
       for (const slug of Object.keys(matchResults.industry)) {
         routes.push(this._buildRoute('industry', slug, meetingTitle, meetingDate));
       }
-      if (matchResults.internal.length > 0) {
-        routes.push(this._buildRoute('internal', null, meetingTitle, meetingDate));
-      }
     } else if (settings.duplicate_multi_org === 'primary') {
-      // Route to organization with most attendees
-      const primary = this.emailMatcher.determinePrimary(matchResults);
+      // Route to external organization with most attendees
+      const primary = this._determinePrimaryExternal(matchResults);
       if (primary) {
         routes.push(this._buildRoute(primary.type, primary.slug, meetingTitle, meetingDate));
       } else {
@@ -111,6 +128,33 @@ class RoutingEngine {
     }
 
     return routes;
+  }
+
+  /**
+   * Determine primary external organization (excludes internal)
+   * @private
+   */
+  _determinePrimaryExternal(matchResults) {
+    let maxCount = 0;
+    let primary = null;
+
+    // Count clients
+    for (const [slug, emails] of Object.entries(matchResults.clients)) {
+      if (emails.length > maxCount) {
+        maxCount = emails.length;
+        primary = { type: 'client', slug };
+      }
+    }
+
+    // Count industry
+    for (const [slug, emails] of Object.entries(matchResults.industry)) {
+      if (emails.length > maxCount) {
+        maxCount = emails.length;
+        primary = { type: 'industry', slug };
+      }
+    }
+
+    return primary;
   }
 
   /**

@@ -1,0 +1,13 @@
+Provide a detailed summary of the most important details & actions of the meeting meeting in the format below. Include the 5-10 most important insights and details relevant to us. Below include the 3-5 most important decisions & next steps as markdown todos.
+
+Format exactly like this:
+
+"template:Decisions and Actions" (NOTE: The text in quotes must 100% be included in the first line, no matter what)
+
+# Key Details
+- **Appropriate Title:** Specific insight, detail, date or number. Short & concise please (up to 12 words)
+etc
+
+# Decisions / Next Steps
+[ ] Brief decision & explicit next step (up to 7 words)
+etc

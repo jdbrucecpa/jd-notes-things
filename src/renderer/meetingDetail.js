@@ -337,10 +337,12 @@ async function populateTranscript(meeting) {
     transcriptContent.appendChild(utteranceDiv);
   });
 
-  // SM-2: Check for cryptic speaker IDs and show Fix Speakers button
-  if (fixSpeakersBtn) {
-    const hasCryptic = await hasCrypticSpeakerIds(meeting.transcript);
-    if (hasCryptic) {
+  // SM-2: Always show Fix Speakers button when there's a transcript with speakers
+  // User should always be able to remap speakers to contacts, not just for "cryptic" IDs
+  if (fixSpeakersBtn && meeting.transcript && meeting.transcript.length > 0) {
+    // Check if there are any speakers to map
+    const hasSpeakers = meeting.transcript.some(u => u.speaker || u.speakerName);
+    if (hasSpeakers) {
       fixSpeakersBtn.style.display = 'inline-flex';
     }
   }

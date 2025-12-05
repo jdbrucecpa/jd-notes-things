@@ -293,8 +293,19 @@ let appSettings = {
   windowBounds: null, // Will store {x, y, width, height, displayId}
 };
 
-// Settings file path (Phase 10.7)
-const SETTINGS_FILE_PATH = () => path.join(app.getPath('userData'), 'app-settings.json');
+// Settings file path (Phase 10.7) - stored in config/ directory
+const SETTINGS_FILE_PATH = () => path.join(app.getPath('userData'), 'config', 'app-settings.json');
+
+// User profile storage (v1.1)
+let userProfile = {
+  name: '',
+  email: '',
+  title: '',
+  organization: '',
+  context: '', // Additional context for LLM summaries
+};
+
+const USER_PROFILE_PATH = () => path.join(app.getPath('userData'), 'config', 'user-profile.json');
 
 /**
  * Load app settings from disk (Phase 10.7)
@@ -333,6 +344,44 @@ function saveAppSettings() {
     logger.main.debug('App settings saved successfully');
   } catch (error) {
     logger.main.error('Failed to save app settings:', error);
+  }
+}
+
+/**
+ * Load user profile from disk (v1.1)
+ */
+function loadUserProfile() {
+  try {
+    const profilePath = USER_PROFILE_PATH();
+    if (fs.existsSync(profilePath)) {
+      const data = fs.readFileSync(profilePath, 'utf8');
+      const savedProfile = JSON.parse(data);
+      // Merge with defaults to handle new fields added in updates
+      userProfile = {
+        ...userProfile,
+        ...savedProfile,
+      };
+      logger.main.info('User profile loaded successfully');
+    }
+  } catch (error) {
+    logger.main.error('Failed to load user profile:', error);
+  }
+}
+
+/**
+ * Save user profile to disk (v1.1)
+ */
+function saveUserProfile() {
+  try {
+    const profilePath = USER_PROFILE_PATH();
+    const dir = path.dirname(profilePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(profilePath, JSON.stringify(userProfile, null, 2), 'utf8');
+    logger.main.debug('User profile saved successfully');
+  } catch (error) {
+    logger.main.error('Failed to save user profile:', error);
   }
 }
 
@@ -1057,14 +1106,28 @@ const createWindow = () => {
 };
 
 /**
- * Initialize default config files on first launch (production only)
- * Creates routing.yaml and default templates if they don't exist
+ * Initialize default config files on first launch (both dev and prod)
+ * Copies missing config files from bundled defaults, never overwrites existing files
+ *
+ * Config location: userData/config/
+ * - Dev: AppData/Roaming/jd-notes-things-dev/config/
+ * - Prod: AppData/Roaming/jd-notes-things/config/
  */
 async function initializeDefaultConfigFiles() {
   const userDataPath = app.getPath('userData');
   const configDir = path.join(userDataPath, 'config');
   const templatesDir = path.join(configDir, 'templates');
-  const routingPath = path.join(configDir, 'routing.yaml');
+
+  // Bundled config source location
+  // Development: config/ in project root
+  // Production: resources/config/ (via extraResource in forge.config.js)
+  const bundledConfigDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'config')
+    : path.join(__dirname, '..', '..', 'config');
+
+  logger.main.info('[Config] Initializing config files...');
+  logger.main.info('[Config] User config directory:', configDir);
+  logger.main.info('[Config] Bundled config source:', bundledConfigDir);
 
   try {
     // Create config directory if it doesn't exist
@@ -1073,74 +1136,59 @@ async function initializeDefaultConfigFiles() {
       logger.main.info('[Config] Created config directory:', configDir);
     }
 
-    // Create routing.yaml if it doesn't exist
-    if (!fs.existsSync(routingPath)) {
-      const defaultRouting = `# JD Notes Things - Routing Configuration
-# This file controls how meetings are organized in your Obsidian vault
-# See documentation for full configuration options
-
-clients: {}
-  # Example:
-  # acme-corp:
-  #   vault_path: clients/acme-corp
-  #   emails:
-  #     - acmecorp.com
-  #   contacts:
-  #     - john@acmecorp.com
-
-industry: {}
-  # Example:
-  # consultant-jane:
-  #   vault_path: industry/consultant-jane
-  #   emails:
-  #     - janeconsulting.com
-  #   contacts:
-  #     - jane@janeconsulting.com
-
-internal:
-  vault_path: internal/meetings
-  team_emails: []
-    # Add your company domain(s) here
-    # - yourcompany.com
-
-email_overrides: {}
-  # Override specific email addresses to route to specific clients
-  # personal@gmail.com: acme-corp
-
-settings:
-  unfiled_path: _unfiled
-  duplicate_multi_org: all
-  domain_priority: most_attendees
-  enable_email_overrides: true
-  case_sensitive_emails: false
-`;
-      fs.writeFileSync(routingPath, defaultRouting, 'utf8');
-      logger.main.info('[Config] Created default routing.yaml');
-    }
-
     // Create templates directory if it doesn't exist
     if (!fs.existsSync(templatesDir)) {
       fs.mkdirSync(templatesDir, { recursive: true });
       logger.main.info('[Config] Created templates directory:', templatesDir);
     }
 
+    // Migrate files from root to config/ (one-time migration for existing installs)
+    const filesToMigrate = ['app-settings.json', 'speaker-mappings.json'];
+    for (const filename of filesToMigrate) {
+      const oldPath = path.join(userDataPath, filename);
+      const newPath = path.join(configDir, filename);
+
+      // Only migrate if old location exists and new location doesn't
+      if (fs.existsSync(oldPath) && !fs.existsSync(newPath)) {
+        fs.renameSync(oldPath, newPath);
+        logger.main.info('[Config] Migrated to config/:', filename);
+      }
+    }
+
+    // List of config files to copy (if missing)
+    const configFiles = [
+      'routing.yaml',
+      'transcript-patterns.yaml',
+      'vocabulary.yaml',
+    ];
+
+    // Copy each config file if it doesn't exist
+    for (const filename of configFiles) {
+      const sourcePath = path.join(bundledConfigDir, filename);
+      const destPath = path.join(configDir, filename);
+
+      if (!fs.existsSync(destPath)) {
+        if (fs.existsSync(sourcePath)) {
+          fs.copyFileSync(sourcePath, destPath);
+          logger.main.info('[Config] Copied default config:', filename);
+        } else {
+          logger.main.warn('[Config] Bundled config not found:', filename);
+        }
+      } else {
+        logger.main.debug('[Config] Config already exists (not overwriting):', filename);
+      }
+    }
+
     // Copy default templates from bundled source
-    // Development: config/templates in project root
-    // Production: resources/templates (via extraResource in forge.config.js)
-    const bundledTemplatesDir = app.isPackaged
-      ? path.join(process.resourcesPath, 'templates')
-      : path.join(__dirname, '..', '..', 'config', 'templates');
+    const bundledTemplatesDir = path.join(bundledConfigDir, 'templates');
 
-    logger.main.info('[Config] Bundled templates source:', bundledTemplatesDir);
-
-    // Copy each template file if it doesn't exist in user's config
     if (fs.existsSync(bundledTemplatesDir)) {
       const templateFiles = fs.readdirSync(bundledTemplatesDir);
       for (const filename of templateFiles) {
         const sourcePath = path.join(bundledTemplatesDir, filename);
         const destPath = path.join(templatesDir, filename);
 
-        // Only copy if destination doesn't exist
+        // Only copy if destination doesn't exist and source is a file
         if (!fs.existsSync(destPath) && fs.statSync(sourcePath).isFile()) {
           fs.copyFileSync(sourcePath, destPath);
           logger.main.info('[Config] Copied default template:', filename);
@@ -1150,7 +1198,7 @@ settings:
       logger.main.warn('[Config] Bundled templates directory not found:', bundledTemplatesDir);
     }
 
-    logger.main.info('[Config] Default config files initialized successfully');
+    logger.main.info('[Config] Config initialization complete');
   } catch (error) {
     logger.main.error('[Config] Error initializing default config files:', error);
   }
@@ -1203,6 +1251,9 @@ app.whenReady().then(async () => {
   // Load app settings from disk (Phase 10.7)
   loadAppSettings();
 
+  // Load user profile (v1.1)
+  loadUserProfile();
+
   // Initialize LLM service from Windows Credential Manager (with .env fallback)
   try {
     llmService = await createLLMServiceFromCredentials(keyManagementService);
@@ -1238,12 +1289,9 @@ app.whenReady().then(async () => {
   console.log('[TemplateManager] Initializing template system...');
   templateManager = new TemplateManager();
 
-  // Use project root config/templates during development
-  if (process.env.NODE_ENV === 'development') {
-    const projectRoot = path.join(__dirname, '..', '..');
-    templateManager.templatesPath = path.join(projectRoot, 'config', 'templates');
-    console.log('[TemplateManager] Development mode - using:', templateManager.templatesPath);
-  }
+  // Always use userData/config/templates (both dev and prod)
+  templateManager.templatesPath = path.join(app.getPath('userData'), 'config', 'templates');
+  console.log('[TemplateManager] Using templates path:', templateManager.templatesPath);
 
   const templateCount = templateManager.scanTemplates();
   console.log(`[TemplateManager] Loaded ${templateCount} templates`);
@@ -1263,17 +1311,14 @@ app.whenReady().then(async () => {
   console.log('[ObsidianExport] Vault path:', vaultPath);
   vaultStructure = new VaultStructure(vaultPath);
 
-  // Use project root config/routing.yaml during development
-  let configPath;
-  if (process.env.NODE_ENV === 'development') {
-    const projectRoot = path.join(__dirname, '..', '..');
-    configPath = path.join(projectRoot, 'config', 'routing.yaml');
-    console.log('[ObsidianExport] Development mode - using routing config:', configPath);
-  } else {
-    configPath = path.join(app.getPath('userData'), 'config', 'routing.yaml');
-    // Initialize default config files on first launch (production only)
-    await initializeDefaultConfigFiles();
-  }
+  // Always use userData/config for routing config (both dev and prod)
+  // Dev uses jd-notes-things-dev, prod uses jd-notes-things
+  const configPath = path.join(app.getPath('userData'), 'config', 'routing.yaml');
+
+  // Initialize default config files on first launch (copies missing files, never overwrites)
+  await initializeDefaultConfigFiles();
+
+  console.log('[ObsidianExport] Using routing config:', configPath);
 
   try {
     routingEngine = new RoutingEngine(configPath);
@@ -1293,6 +1338,24 @@ app.whenReady().then(async () => {
       exportFunction: exportMeetingToObsidian, // Share export logic with recordings
       summaryFunction: generateTemplateSummaries, // Share template generation with recordings
       autoSummaryFunction: generateMeetingSummary, // Share auto-summary generation with recordings
+      // v1.1: Auto-label single speakers as user before summary generation
+      autoLabelFunction: async (meeting) => {
+        if (!userProfile?.name || !meeting.transcript) {
+          return { applied: false };
+        }
+        const result = speakerMappingService.autoApplyUserProfileMapping(
+          meeting.transcript,
+          userProfile
+        );
+        if (result.applied) {
+          return {
+            applied: true,
+            transcript: result.transcript,
+            userProfile: userProfile,
+          };
+        }
+        return { applied: false };
+      },
     });
     console.log('[Import] Import manager initialized successfully');
 
@@ -1348,6 +1411,10 @@ app.whenReady().then(async () => {
   // Load app settings from disk
   loadAppSettings();
   logger.main.info('[Phase 10.7] App settings loaded');
+
+  // v1.1: Load user profile
+  loadUserProfile();
+  logger.main.info('[v1.1] User profile loaded');
 
   // Make mainWindow available to server.js for IPC communication
   // This allows server.js to send webhook events to the main process
@@ -2215,6 +2282,27 @@ async function initSDK() {
                 }
               }
 
+              // v1.1: Auto-apply user profile mapping for single-speaker transcripts
+              const transcriptForAutoLabel = meetingsData.pastMeetings[meetingIndex].transcript;
+              if (transcriptForAutoLabel && userProfile?.name) {
+                const autoResult = speakerMappingService.autoApplyUserProfileMapping(
+                  transcriptForAutoLabel,
+                  userProfile
+                );
+                if (autoResult.applied) {
+                  meetingsData.pastMeetings[meetingIndex].transcript = autoResult.transcript;
+                  // Replace participants with user (single-speaker = user)
+                  // This replaces generic "Speaker A" with actual user info
+                  meetingsData.pastMeetings[meetingIndex].participants = [{
+                    name: userProfile.name,
+                    email: userProfile.email || null,
+                    isHost: true,
+                  }];
+                  await fileOperationManager.writeData(meetingsData);
+                  logger.main.info('[Transcription] Auto-labeled single speaker as user:', userProfile.name);
+                }
+              }
+
               // Notify renderer of completion
               if (mainWindow && !mainWindow.isDestroyed()) {
                 console.log('[Transcription] Notifying renderer of completion...');
@@ -2669,6 +2757,9 @@ async function exportMeetingToObsidian(meeting) {
       `[ObsidianExport] Successfully exported meeting to ${createdPaths.length} location(s)`
     );
 
+    // CS-3.5/CS-3.6: Auto-create contact and company pages for participants
+    await autoCreateContactAndCompanyPages(meeting, routes);
+
     // Generate obsidianLink from first created path (relative to vault)
     const obsidianLink =
       createdPaths.length > 0
@@ -2701,75 +2792,49 @@ function generateSummaryMarkdown(meeting, baseFilename) {
   const dateStr = meetingDate.toISOString().split('T')[0];
   const title = meeting.title || 'Untitled Meeting';
 
-  // Build participants array for frontmatter with speaker mapping (Phase 6)
-  let participantsYaml = '';
+  // Build participants as simple list of wiki-links for clean Obsidian display
+  // Obsidian Properties view displays simple string lists as nice pills/tags
+  const participantNames = [];
+  const participantEmails = [];
 
   // Use meeting.participants (from participant join events) if available
   if (meeting.participants && meeting.participants.length > 0) {
-    participantsYaml = meeting.participants
-      .map(participant => {
-        let participantLine = `  - name: "${participant.name}"`;
-
-        // Include email if available
-        if (participant.email) {
-          participantLine += `\n    email: "${participant.email}"`;
-        }
-
-        // Include host status
-        if (participant.isHost) {
-          participantLine += `\n    role: "host"`;
-        }
-
-        // If we have speaker mapping, include which speaker label(s) map to this participant
-        if (meeting.speakerMapping) {
-          const speakerLabels = Object.entries(meeting.speakerMapping)
-            .filter(([_label, info]) => info.name === participant.name)
-            .map(([label, _info]) => label);
-
-          if (speakerLabels.length > 0) {
-            participantLine += `\n    speaker_labels: [${speakerLabels.join(', ')}]`;
-          }
-        }
-
-        return participantLine;
-      })
-      .join('\n');
+    for (const participant of meeting.participants) {
+      if (participant.name) {
+        // Use wiki-link format so participants link to contact pages
+        participantNames.push(`"[[${participant.name}]]"`);
+      }
+      if (participant.email) {
+        participantEmails.push(`"${participant.email}"`);
+      }
+    }
   }
   // Fallback to participantEmails if participants array doesn't exist
   else if (meeting.participantEmails && meeting.participantEmails.length > 0) {
-    participantsYaml = meeting.participantEmails
-      .map(email => {
-        let participantLine = `  - email: "${email}"`;
-
-        // If we have speaker mapping, include which speaker label(s) map to this participant
-        if (meeting.speakerMapping) {
-          const speakerLabels = Object.entries(meeting.speakerMapping)
-            .filter(([_label, info]) => info.email === email)
-            .map(([label, _info]) => label);
-
-          if (speakerLabels.length > 0) {
-            participantLine += `\n    name: "${meeting.speakerMapping[speakerLabels[0]].name}"`;
-            participantLine += `\n    speaker_labels: [${speakerLabels.join(', ')}]`;
-          }
+    for (const email of meeting.participantEmails) {
+      participantEmails.push(`"${email}"`);
+      // Try to get name from speaker mapping
+      if (meeting.speakerMapping) {
+        const mapping = Object.values(meeting.speakerMapping).find(m => m.email === email);
+        if (mapping && mapping.name) {
+          participantNames.push(`"[[${mapping.name}]]"`);
         }
-
-        return participantLine;
-      })
-      .join('\n');
+      }
+    }
   }
 
   // Extract tags from meeting metadata
   const tags = ['meeting'];
   if (meeting.platform) tags.push(meeting.platform.toLowerCase());
 
-  // Build frontmatter
+  // Build frontmatter with simple lists that Obsidian displays nicely
   let markdown = `---
 title: "${title}"
 date: ${dateStr}
 platform: "${meeting.platform || 'unknown'}"
 transcript_file: "${baseFilename}-transcript.md"
-participants:
-${participantsYaml || '  []'}
+participants: [${participantNames.join(', ')}]
+participant_emails: [${participantEmails.join(', ')}]
 tags: [${tags.join(', ')}]
 meeting_type: "external"
 ---
@@ -2833,12 +2898,15 @@ summary_file: "${baseFilename}.md"
 `;
 
   // Add speaker directory if we have participants with emails
+  // CS-3.7: Use wiki-links for participant names to enable Obsidian backlinks
   if (meeting.participants && meeting.participants.length > 0) {
     const participantsWithEmail = meeting.participants.filter(p => p.email);
     if (participantsWithEmail.length > 0) {
       markdown += `## Participants\n\n`;
       participantsWithEmail.forEach(participant => {
-        markdown += `- **${participant.name}**: ${participant.email}\n`;
+        // Use wiki-link for participant name
+        const nameLink = participant.name ? `[[${participant.name}]]` : 'Unknown';
+        markdown += `- **${nameLink}**: ${participant.email}\n`;
       });
       markdown += `\n---\n\n`;
     }
@@ -2853,9 +2921,16 @@ summary_file: "${baseFilename}.md"
       for (const segment of meeting.transcript) {
         if (typeof segment === 'object') {
           // Use speaker name from Phase 6 matching if available, otherwise fall back to raw label
-          const speaker = segment.speakerName || segment.speaker || 'Speaker';
+          let speaker = segment.speakerName || segment.speaker || 'Speaker';
           const timestamp = segment.timestamp || '';
           const text = segment.text || '';
+
+          // CS-3.7: Use wiki-link for speaker name if it's a real name (not a speaker label)
+          // This enables Obsidian backlinks - meetings will show up on contact pages
+          const isRealName = segment.speakerName && !segment.speakerName.match(/^(Speaker\s*[A-Z0-9]|SPK[-_]|spk_|SPEAKER_)/i);
+          if (isRealName) {
+            speaker = `[[${segment.speakerName}]]`;
+          }
 
           // Add confidence indicator for low-confidence matches (optional)
           const confidenceNote =
@@ -2880,6 +2955,205 @@ summary_file: "${baseFilename}.md"
   markdown += `*Generated by jd-notes-things*\n`;
 
   return markdown;
+}
+
+/**
+ * CS-3.5/CS-3.6: Auto-create contact and company pages in Obsidian vault
+ * Called after exporting a meeting to automatically create People and Companies pages
+ * @param {Object} meeting - Meeting object with participants
+ * @param {Array} routes - Routing decisions (contains organization info)
+ */
+async function autoCreateContactAndCompanyPages(meeting, routes) {
+  if (!vaultStructure) {
+    console.log('[AutoCreate] Vault structure not initialized, skipping page creation');
+    return;
+  }
+
+  const createdPages = { contacts: [], companies: [] };
+
+  try {
+    // CS-3.5: Auto-create contact pages for participants
+    // ONLY create pages for validated Google Contacts (must have email)
+    if (meeting.participants && meeting.participants.length > 0) {
+      console.log(`[AutoCreate] Checking ${meeting.participants.length} participants for contact pages`);
+
+      for (const participant of meeting.participants) {
+        if (!participant.name) continue;
+
+        // Only auto-create for validated contacts with email
+        // Skip unknown speakers, single names without email, and header content
+        if (!participant.email) {
+          console.log(`[AutoCreate] Skipping (no email): ${participant.name}`);
+          continue;
+        }
+
+        // Skip "Unknown Speaker" variants
+        if (participant.name.toLowerCase().includes('unknown')) {
+          console.log(`[AutoCreate] Skipping (unknown speaker): ${participant.name}`);
+          continue;
+        }
+
+        // Skip header content like "Summary", "Notes", etc.
+        const headerPatterns = ['summary', 'notes', 'agenda', 'introduction', 'conclusion', 'action items'];
+        if (headerPatterns.some(h => participant.name.toLowerCase().includes(h))) {
+          console.log(`[AutoCreate] Skipping (header content): ${participant.name}`);
+          continue;
+        }
+
+        // Skip if contact page already exists
+        if (vaultStructure.contactPageExists(participant.name)) {
+          console.log(`[AutoCreate] Contact page exists: ${participant.name}`);
+          continue;
+        }
+
+        // Create contact page
+        const contactData = {
+          name: participant.name,
+          emails: [participant.email],
+          phones: [],
+          organization: participant.organization || '',
+          title: participant.title || '',
+          resourceName: participant.googleContactId || '',
+        };
+
+        const result = vaultStructure.createContactPage(contactData, {
+          linkedCompany: participant.organization || null,
+        });
+
+        if (result.created) {
+          createdPages.contacts.push(participant.name);
+          console.log(`[AutoCreate] Created contact page: ${participant.name}`);
+        }
+      }
+    }
+
+    // Also check speaker mapping for additional contacts - same validation rules
+    if (meeting.speakerMapping) {
+      for (const [_speakerId, mapping] of Object.entries(meeting.speakerMapping)) {
+        if (!mapping.name) continue;
+
+        // Only auto-create for validated contacts with email
+        if (!mapping.email) {
+          console.log(`[AutoCreate] Skipping speaker mapping (no email): ${mapping.name}`);
+          continue;
+        }
+
+        // Skip "Unknown Speaker" variants
+        if (mapping.name.toLowerCase().includes('unknown')) {
+          continue;
+        }
+
+        // Skip if already processed or page exists
+        if (vaultStructure.contactPageExists(mapping.name)) {
+          continue;
+        }
+
+        const contactData = {
+          name: mapping.name,
+          emails: [mapping.email],
+          phones: [],
+          organization: mapping.organization || '',
+        };
+
+        const result = vaultStructure.createContactPage(contactData);
+
+        if (result.created) {
+          createdPages.contacts.push(mapping.name);
+          console.log(`[AutoCreate] Created contact page from speaker mapping: ${mapping.name}`);
+        }
+      }
+    }
+
+    // CS-3.6: Auto-create company pages for organizations in routes
+    for (const route of routes) {
+      if (route.type !== 'client' && route.type !== 'industry') continue;
+
+      // Get organization name from routing config
+      const config = routingEngine ? routingEngine.getConfig() : null;
+      if (!config) continue;
+
+      let orgConfig, orgName;
+      if (route.type === 'client' && config.clients && config.clients[route.slug]) {
+        orgConfig = config.clients[route.slug];
+        orgName = orgConfig.name || route.slug;
+      } else if (route.type === 'industry' && config.industry && config.industry[route.slug]) {
+        orgConfig = config.industry[route.slug];
+        orgName = orgConfig.name || route.slug;
+      }
+
+      if (!orgName) continue;
+
+      // Skip if company page already exists
+      if (vaultStructure.companyPageExists(orgName)) {
+        console.log(`[AutoCreate] Company page exists: ${orgName}`);
+        continue;
+      }
+
+      // Create company page
+      // Find contacts associated with this organization by checking email domains
+      const orgDomains = orgConfig?.domains || [];
+      const associatedContacts = [];
+
+      if (meeting.participants && meeting.participants.length > 0) {
+        for (const participant of meeting.participants) {
+          if (!participant.name) continue;
+
+          // Check if participant's email matches any org domain
+          const email = participant.email || '';
+          const emailDomain = email.split('@')[1]?.toLowerCase() || '';
+
+          const matchesDomain = orgDomains.some(d => emailDomain === d.toLowerCase());
+          const matchesOrg = participant.organization?.toLowerCase() === orgName.toLowerCase();
+
+          if (matchesDomain || matchesOrg) {
+            associatedContacts.push(participant.name);
+          }
+        }
+      }
+
+      // Also check speaker mappings for contacts
+      if (meeting.speakerMapping) {
+        for (const [_speakerId, mapping] of Object.entries(meeting.speakerMapping)) {
+          if (!mapping.name || associatedContacts.includes(mapping.name)) continue;
+
+          const email = mapping.email || '';
+          const emailDomain = email.split('@')[1]?.toLowerCase() || '';
+
+          const matchesDomain = orgDomains.some(d => emailDomain === d.toLowerCase());
+          if (matchesDomain) {
+            associatedContacts.push(mapping.name);
+          }
+        }
+      }
+
+      const companyData = {
+        name: orgName,
+        domain: orgConfig?.domains?.[0] || '',
+        industry: route.type === 'industry' ? orgName : '',
+        routingFolder: route.fullPath,
+        contacts: associatedContacts,
+      };
+
+      console.log(`[AutoCreate] Creating company page ${orgName} with contacts:`, associatedContacts);
+      const result = vaultStructure.createCompanyPage(companyData);
+
+      if (result.created) {
+        createdPages.companies.push(orgName);
+        console.log(`[AutoCreate] Created company page: ${orgName}`);
+      }
+    }
+
+    // Log summary
+    if (createdPages.contacts.length > 0 || createdPages.companies.length > 0) {
+      console.log(`[AutoCreate] Created ${createdPages.contacts.length} contact page(s) and ${createdPages.companies.length} company page(s)`);
+    }
+
+  } catch (error) {
+    console.error('[AutoCreate] Error creating pages:', error.message);
+    // Don't throw - this is a non-critical operation
+  }
+
+  return createdPages;
 }
 
 /**
@@ -2956,7 +3230,9 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
       transcriptText = meeting.transcript
         .map(segment => {
         if (typeof segment === 'object') {
-          return `${segment.speaker || 'Speaker'}: ${segment.text}`;
+          // Use mapped speaker name if available (v1.1), fall back to original speaker
+          const speakerName = segment.speakerName || segment.speakerDisplayName || segment.speaker || 'Speaker';
+          return `${speakerName}: ${segment.text}`;
         }
         return String(segment);
       })
@@ -2968,6 +3244,24 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
     }
 
     console.log(`[TemplateSummary] Transcript length: ${transcriptText.length} characters`);
+
+    // v1.1: Add user profile context to transcript for personalized summaries
+    if (userProfile?.name) {
+      const contextParts = [];
+      contextParts.push(`The person reading this summary is ${userProfile.name}.`);
+      if (userProfile.title) {
+        contextParts.push(`Their role is ${userProfile.title}.`);
+      }
+      if (userProfile.organization) {
+        contextParts.push(`They work at ${userProfile.organization}.`);
+      }
+      if (userProfile.context) {
+        contextParts.push(userProfile.context);
+      }
+      const userContextText = 'User Context: ' + contextParts.join(' ');
+      transcriptText = userContextText + '\n\n' + transcriptText;
+      logger.main.debug('[TemplateSummary] Including user profile context');
+    }
 
     // Collect section metadata only - NO FUNCTIONS to avoid memory issues
     const sectionTasks = [];
@@ -3571,6 +3865,169 @@ ipcMain.handle('contacts:searchContacts', async (event, query) => {
   }
 });
 
+// Get all contacts with full data (CS-1)
+ipcMain.handle('contacts:getAllContacts', async (event, forceRefresh = false) => {
+  try {
+    console.log('[Contacts IPC] Getting all contacts (forceRefresh:', forceRefresh, ')');
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
+    }
+
+    const allContacts = await googleContacts.fetchAllContacts(forceRefresh);
+
+    // Sort by name
+    allContacts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    console.log(`[Contacts IPC] Returning ${allContacts.length} contacts`);
+    return {
+      success: true,
+      contacts: allContacts,
+      lastFetch: googleContacts.lastFetch,
+    };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to get all contacts:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get meetings for a specific contact (CS-1)
+ipcMain.handle('contacts:getMeetingsForContact', async (event, contactEmail) => {
+  try {
+    console.log('[Contacts IPC] Getting meetings for contact:', contactEmail);
+
+    if (!contactEmail) {
+      return { success: true, meetings: [] };
+    }
+
+    // Load meetings from storage
+    const meetingsPath = require('path').join(app.getPath('userData'), 'meetings.json');
+    let meetings = [];
+
+    if (require('fs').existsSync(meetingsPath)) {
+      const data = require('fs').readFileSync(meetingsPath, 'utf8');
+      const parsed = JSON.parse(data);
+      // Meetings file stores { upcomingMeetings: [...], pastMeetings: [...] }
+      const upcomingMeetings = parsed.upcomingMeetings || [];
+      const pastMeetings = parsed.pastMeetings || [];
+      meetings = [...upcomingMeetings, ...pastMeetings];
+    }
+
+    const normalizedEmail = contactEmail.toLowerCase().trim();
+    console.log(`[Contacts IPC] Searching ${meetings.length} meetings for email: ${normalizedEmail}`);
+
+    // Filter meetings where contact participated
+    const contactMeetings = meetings.filter(meeting => {
+      // Check participantEmails
+      if (meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+        const hasEmail = meeting.participantEmails.some(
+          email => email && email.toLowerCase().trim() === normalizedEmail
+        );
+        if (hasEmail) return true;
+      }
+
+      // Check participants array
+      if (meeting.participants && Array.isArray(meeting.participants)) {
+        const hasParticipant = meeting.participants.some(
+          p => p && p.email && p.email.toLowerCase().trim() === normalizedEmail
+        );
+        if (hasParticipant) return true;
+      }
+
+      // Check attendees array (from calendar events)
+      if (meeting.attendees && Array.isArray(meeting.attendees)) {
+        const hasAttendee = meeting.attendees.some(
+          a => a && a.email && a.email.toLowerCase().trim() === normalizedEmail
+        );
+        if (hasAttendee) return true;
+      }
+
+      return false;
+    });
+
+    // Sort by date descending
+    contactMeetings.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    console.log(`[Contacts IPC] Found ${contactMeetings.length} meetings for ${contactEmail}`);
+    return {
+      success: true,
+      meetings: contactMeetings.map(m => ({
+        id: m.id,
+        title: m.title,
+        date: m.date,
+        platform: m.platform,
+        obsidianLink: m.obsidianLink,
+      })),
+    };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to get meetings for contact:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// CS-3: Create contact page in Obsidian
+ipcMain.handle('contacts:createContactPage', async (event, contact, options = {}) => {
+  try {
+    console.log('[Contacts IPC] Creating contact page for:', contact.name);
+
+    if (!vaultStructure || !vaultStructure.vaultBasePath) {
+      return { success: false, error: 'Vault path not configured' };
+    }
+
+    const result = vaultStructure.createContactPage(contact, options);
+    return result;
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to create contact page:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// CS-3: Check if contact page exists
+ipcMain.handle('contacts:contactPageExists', async (event, contactName) => {
+  try {
+    if (!vaultStructure || !vaultStructure.vaultBasePath) {
+      return { success: false, exists: false, error: 'Vault path not configured' };
+    }
+
+    const exists = vaultStructure.contactPageExists(contactName);
+    return { success: true, exists };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to check contact page:', error);
+    return { success: false, exists: false, error: error.message };
+  }
+});
+
+// CS-3: Create company page in Obsidian
+ipcMain.handle('contacts:createCompanyPage', async (event, company, options = {}) => {
+  try {
+    console.log('[Contacts IPC] Creating company page for:', company.name);
+
+    if (!vaultStructure || !vaultStructure.vaultBasePath) {
+      return { success: false, error: 'Vault path not configured' };
+    }
+
+    const result = vaultStructure.createCompanyPage(company, options);
+    return result;
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to create company page:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// CS-3: Check if company page exists
+ipcMain.handle('contacts:companyPageExists', async (event, companyName) => {
+  try {
+    if (!vaultStructure || !vaultStructure.vaultBasePath) {
+      return { success: false, exists: false, error: 'Vault path not configured' };
+    }
+
+    const exists = vaultStructure.companyPageExists(companyName);
+    return { success: true, exists };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to check company page:', error);
+    return { success: false, exists: false, error: error.message };
+  }
+});
+
 // Match speakers to participants
 ipcMain.handle(
   'speakers:matchSpeakers',
@@ -3732,9 +4189,28 @@ ipcMain.handle('speakerMapping:deleteMapping', async (event, { speakerId }) => {
 ipcMain.handle('speakerMapping:extractSpeakerIds', async (event, { transcript }) => {
   try {
     const speakerIds = speakerMappingService.extractUniqueSpeakerIds(transcript);
-    return { success: true, speakerIds };
+
+    // v1.1: Get auto-suggestions from user profile (single speaker = user)
+    const profileSuggestions = speakerMappingService.getAutoSuggestionsFromProfile(speakerIds, userProfile);
+
+    return {
+      success: true,
+      speakerIds,
+      profileSuggestions, // New: suggestions based on user profile
+    };
   } catch (error) {
     console.error('[SpeakerMapping IPC] Failed to extract speaker IDs:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Detect duplicate speakers
+ipcMain.handle('speakerMapping:detectDuplicates', async (event, { speakers }) => {
+  try {
+    const duplicates = speakerMappingService.detectDuplicateSpeakers(speakers);
+    return { success: true, ...duplicates };
+  } catch (error) {
+    console.error('[SpeakerMapping IPC] Failed to detect duplicates:', error);
     return { success: false, error: error.message };
   }
 });
@@ -3790,7 +4266,7 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
     // Store the applied mappings for reference
     meeting.appliedSpeakerMappings = mappings;
 
-    // Update participants list - replace speaker IDs with mapped contacts
+    // Update participants list - replace speaker IDs with mapped contacts and deduplicate
     if (mappings) {
       // Initialize participants array if it doesn't exist
       if (!meeting.participants) {
@@ -3800,9 +4276,36 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
         meeting.participantEmails = [];
       }
 
+      // First pass: Collect all "from" speakers that should be removed (merged into others)
+      const speakersToRemove = new Set();
+      for (const [speakerId, mapping] of Object.entries(mappings)) {
+        // If this is a merge (speakerId maps to another speaker name that's different),
+        // mark the speakerId for removal
+        if (mapping.merged || mapping.autoMerged) {
+          speakersToRemove.add(speakerId);
+        }
+      }
+
+      // Second pass: Remove merged speakers from participants
+      if (speakersToRemove.size > 0) {
+        meeting.participants = meeting.participants.filter(p => {
+          if (speakersToRemove.has(p.name)) {
+            console.log(`[SpeakerMapping IPC] Removing merged participant: ${p.name}`);
+            return false;
+          }
+          return true;
+        });
+      }
+
+      // Third pass: Update/add participants based on mappings
       for (const [speakerId, mapping] of Object.entries(mappings)) {
         const contactName = mapping.contactName;
         const contactEmail = mapping.contactEmail;
+
+        // Skip if this speaker was merged into another (already removed)
+        if (speakersToRemove.has(speakerId)) {
+          continue;
+        }
 
         // Find existing participant with this speaker ID as name and replace it
         const existingIndex = meeting.participants.findIndex(
@@ -3813,7 +4316,7 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
           // Replace the speaker ID participant with the contact
           meeting.participants[existingIndex] = {
             name: contactName,
-            email: contactEmail || null,
+            email: contactEmail || meeting.participants[existingIndex].email || null,
             mappedFromSpeakerId: speakerId,
           };
           console.log(`[SpeakerMapping IPC] Replaced participant ${speakerId} with ${contactName}`);
@@ -3838,6 +4341,42 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
         if (contactEmail && !meeting.participantEmails.includes(contactEmail)) {
           meeting.participantEmails.push(contactEmail);
         }
+      }
+
+      // Final pass: Deduplicate participants by name (case-insensitive)
+      // Keep the entry with the most information (email, longer name)
+      const seenNames = new Map();
+      const deduped = [];
+
+      for (const p of meeting.participants) {
+        const normalizedName = p.name?.toLowerCase().trim();
+        if (!normalizedName) continue;
+
+        if (seenNames.has(normalizedName)) {
+          const existingIdx = seenNames.get(normalizedName);
+          const existing = deduped[existingIdx];
+          // Prefer entry with email, or longer original name
+          if ((!existing.email && p.email) ||
+              (p.name.length > existing.name.length && !existing.email)) {
+            deduped[existingIdx] = p;
+            console.log(`[SpeakerMapping IPC] Dedup: replaced "${existing.name}" with "${p.name}"`);
+          } else {
+            console.log(`[SpeakerMapping IPC] Dedup: skipping duplicate "${p.name}"`);
+          }
+        } else {
+          seenNames.set(normalizedName, deduped.length);
+          deduped.push(p);
+        }
+      }
+
+      meeting.participants = deduped;
+      console.log(`[SpeakerMapping IPC] Final participant count: ${meeting.participants.length}`);
+
+      // Deduplicate participantEmails
+      if (meeting.participantEmails?.length > 0) {
+        meeting.participantEmails = [...new Set(
+          meeting.participantEmails.map(e => e?.toLowerCase().trim()).filter(Boolean)
+        )];
       }
     }
 
@@ -4058,14 +4597,9 @@ ipcMain.handle('templates:reload', async () => {
 // Routing Configuration IPC Handlers (Phase 10.4)
 // ===================================================================
 
-// Helper function to get routing config path (same logic as RoutingEngine initialization)
+// Helper function to get routing config path - always uses userData/config/
 function getRoutingConfigPath() {
-  if (process.env.NODE_ENV === 'development') {
-    const projectRoot = path.join(__dirname, '..', '..');
-    return path.join(projectRoot, 'config', 'routing.yaml');
-  } else {
-    return path.join(app.getPath('userData'), 'config', 'routing.yaml');
-  }
+  return path.join(app.getPath('userData'), 'config', 'routing.yaml');
 }
 
 // Get routing configuration
@@ -4197,6 +4731,183 @@ ipcMain.handle('routing:testEmails', createIpcHandler(async (event, emails) => {
     }),
   };
 }));
+
+// CS-4: Preview routing for a meeting (used in template modal)
+ipcMain.handle('routing:previewMeetingRoute', async (event, meetingId) => {
+  try {
+    console.log('[Routing IPC] Preview routing for meeting:', meetingId);
+
+    if (!routingEngine) {
+      console.error('[Routing IPC] Routing engine not initialized');
+      // Return a fallback unfiled route instead of throwing
+      return {
+        routes: [{
+          path: '_unfiled/',
+          type: 'unfiled',
+          organization: null,
+          reason: 'Routing engine not initialized - defaulting to unfiled',
+        }],
+        multiOrg: false,
+        orgCount: 0,
+        participantEmails: [],
+        matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
+      };
+    }
+
+    // Load meeting from storage
+    const meetingsPath = require('path').join(app.getPath('userData'), 'meetings.json');
+    let meetings = [];
+
+    if (fs.existsSync(meetingsPath)) {
+      const data = fs.readFileSync(meetingsPath, 'utf8');
+      const parsed = JSON.parse(data);
+      // Meetings file stores { upcomingMeetings: [...], pastMeetings: [...] }
+      const upcomingMeetings = parsed.upcomingMeetings || [];
+      const pastMeetings = parsed.pastMeetings || [];
+      meetings = [...upcomingMeetings, ...pastMeetings];
+    }
+
+    const meeting = meetings.find(m => m.id === meetingId);
+    if (!meeting) {
+      console.error('[Routing IPC] Meeting not found:', meetingId);
+      return {
+        routes: [{
+          path: '_unfiled/',
+          type: 'unfiled',
+          organization: null,
+          reason: 'Meeting not found - defaulting to unfiled',
+        }],
+        multiOrg: false,
+        orgCount: 0,
+        participantEmails: [],
+        matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
+      };
+    }
+
+    // Get participant emails from various possible sources
+    const participantEmails = [];
+
+    // Check participantEmails array
+    if (meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+      meeting.participantEmails.forEach(email => {
+        if (email && !participantEmails.includes(email)) {
+          participantEmails.push(email);
+        }
+      });
+    }
+
+    // Check participants array
+    if (meeting.participants && Array.isArray(meeting.participants)) {
+      meeting.participants.forEach(p => {
+        if (p && p.email && !participantEmails.includes(p.email)) {
+          participantEmails.push(p.email);
+        }
+      });
+    }
+
+    // Check attendees array (from calendar events)
+    if (meeting.attendees && Array.isArray(meeting.attendees)) {
+      meeting.attendees.forEach(a => {
+        if (a && a.email && !participantEmails.includes(a.email)) {
+          participantEmails.push(a.email);
+        }
+      });
+    }
+
+    console.log('[Routing IPC] Found participant emails:', participantEmails);
+
+    // Create meeting data for routing
+    const routingData = {
+      participantEmails,
+      meetingTitle: meeting.title,
+      meetingDate: new Date(meeting.date),
+    };
+
+    // Get routing decision
+    const decision = routingEngine.route(routingData);
+
+    // Get config to look up organization names
+    const routingConfig = routingEngine.getConfig();
+
+    // Helper to get organization name from config
+    const getOrgName = (route) => {
+      if (route.type === 'client' && route.slug && routingConfig.clients?.[route.slug]) {
+        return routingConfig.clients[route.slug].name || route.slug;
+      }
+      if (route.type === 'industry' && route.slug && routingConfig.industry?.[route.slug]) {
+        return routingConfig.industry[route.slug].name || route.slug;
+      }
+      if (route.type === 'internal') {
+        return 'Internal';
+      }
+      return null;
+    };
+
+    // Build preview info
+    const preview = {
+      routes: decision.routes.map(r => {
+        const orgName = getOrgName(r);
+        return {
+          path: r.fullPath || r.folderPath,
+          type: r.type,
+          organization: orgName,
+          reason: buildRoutingReason(r, decision.matchResults, participantEmails, orgName),
+        };
+      }),
+      multiOrg: decision.multiOrg,
+      orgCount: decision.orgCount,
+      participantEmails,
+      matchResults: {
+        clients: Object.keys(decision.matchResults.clients || {}),
+        industry: Object.keys(decision.matchResults.industry || {}),
+        internal: decision.matchResults.internal?.length || 0,
+        unfiled: decision.matchResults.unfiled?.length || 0,
+      },
+    };
+
+    return preview;
+  } catch (error) {
+    console.error('[Routing IPC] Error previewing route:', error);
+    // Return a fallback unfiled route on any error
+    return {
+      routes: [{
+        path: '_unfiled/',
+        type: 'unfiled',
+        organization: null,
+        reason: `Error: ${error.message || 'Unknown error'} - defaulting to unfiled`,
+      }],
+      multiOrg: false,
+      orgCount: 0,
+      participantEmails: [],
+      matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
+    };
+  }
+});
+
+// Helper function to build human-readable routing reason
+function buildRoutingReason(route, matchResults, participantEmails, orgName) {
+  switch (route.type) {
+    case 'client': {
+      const clientEmails = matchResults.clients[route.slug] || [];
+      return `Client match: ${clientEmails.join(', ')} matched "${orgName || route.slug}"`;
+    }
+    case 'industry': {
+      const industryEmails = matchResults.industry[route.slug] || [];
+      return `Industry match: ${industryEmails.join(', ')} matched "${orgName || route.slug}"`;
+    }
+    case 'internal': {
+      const internalEmails = matchResults.internal || [];
+      return `Internal meeting: ${internalEmails.join(', ')} are internal team members`;
+    }
+    case 'unfiled':
+      if (participantEmails.length === 0) {
+        return 'No participants found - routing to unfiled';
+      }
+      return `No matching routing rules for: ${participantEmails.join(', ')}`;
+    default:
+      return 'Unknown routing type';
+  }
+}
 
 // Add new organization to routing config
 ipcMain.handle('routing:addOrganization', createIpcHandler(async (event, { type, id, vaultPath, emails, contacts }) => {
@@ -4469,6 +5180,8 @@ ipcMain.handle('import:importFile', async (event, { filePath, options }) => {
     });
 
     // If successful, add meeting to meetings.json
+    // Note: Auto-labeling of single speakers is now handled inside ImportManager
+    // before summary generation (v1.1)
     if (result.success) {
       const data = await fileOperationManager.readMeetingsData();
       data.pastMeetings.unshift(result.meeting);
@@ -4509,6 +5222,8 @@ ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
         });
 
         // Add all successful meetings to meetings.json
+        // Note: Auto-labeling of single speakers is now handled inside ImportManager
+        // before summary generation (v1.1)
         if (result.meetings.length > 0) {
           const data = await fileOperationManager.readMeetingsData();
           result.meetings.forEach(meeting => {
@@ -4543,6 +5258,8 @@ ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
       });
 
       // Add all successful meetings to meetings.json
+      // Note: Auto-labeling of single speakers is now handled inside ImportManager
+      // before summary generation (v1.1)
       if (result.meetings.length > 0) {
         const data = await fileOperationManager.readMeetingsData();
         result.meetings.forEach(meeting => {
@@ -4960,6 +5677,51 @@ ipcMain.handle('settings:getProviderPreferences', async (event) => {
   return preferences;
 });
 
+// Get user profile (v1.1)
+ipcMain.handle('settings:getUserProfile', async () => {
+  try {
+    return { success: true, profile: userProfile };
+  } catch (error) {
+    logger.ipc.error('[IPC] settings:getUserProfile failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Save user profile (v1.1)
+ipcMain.handle('settings:saveUserProfile', async (event, profile) => {
+  try {
+    // Validate input
+    if (!profile || typeof profile !== 'object') {
+      return { success: false, error: 'Invalid profile data' };
+    }
+
+    // Update profile with validated fields
+    userProfile = {
+      name: String(profile.name || '').trim(),
+      email: String(profile.email || '').trim(),
+      title: String(profile.title || '').trim(),
+      organization: String(profile.organization || '').trim(),
+      context: String(profile.context || '').trim(),
+    };
+
+    // Save to disk
+    saveUserProfile();
+
+    logger.main.info('[v1.1] User profile saved:', {
+      name: userProfile.name,
+      email: userProfile.email,
+      title: userProfile.title,
+      organization: userProfile.organization,
+      hasContext: !!userProfile.context,
+    });
+
+    return { success: true, profile: userProfile };
+  } catch (error) {
+    logger.ipc.error('[IPC] settings:saveUserProfile failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // ===================================================================
 // Phase 10.7: Desktop App Polish IPC Handlers
 // ===================================================================
@@ -5070,6 +5832,95 @@ ipcMain.handle('app:openLogFile', async () => {
     return { success: true };
   } catch (error) {
     logger.ipc.error('[IPC] app:openLogFile failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Settings Export - SE-1
+ipcMain.handle('settings:exportPreview', async () => {
+  try {
+    const settingsExportService = require('./main/services/settingsExportService');
+    const preview = await settingsExportService.getExportPreview();
+    return { success: true, data: preview };
+  } catch (error) {
+    logger.ipc.error('[IPC] settings:exportPreview failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('settings:export', async () => {
+  try {
+    const { dialog } = require('electron');
+    const settingsExportService = require('./main/services/settingsExportService');
+
+    // Generate default filename
+    const defaultFilename = settingsExportService.generateExportFilename();
+
+    // Show save dialog
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Settings',
+      defaultPath: defaultFilename,
+      filters: [
+        { name: 'ZIP Archive', extensions: ['zip'] },
+      ],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, canceled: true };
+    }
+
+    // Export to the selected path
+    const exportResult = await settingsExportService.exportToZip(result.filePath);
+    return exportResult;
+  } catch (error) {
+    logger.ipc.error('[IPC] settings:export failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Settings Import - SE-2
+ipcMain.handle('settings:importValidate', async (event, zipPath) => {
+  try {
+    const settingsExportService = require('./main/services/settingsExportService');
+    const validation = await settingsExportService.validateImportFile(zipPath);
+    return { success: true, data: validation };
+  } catch (error) {
+    logger.ipc.error('[IPC] settings:importValidate failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('settings:import', async (event, options = {}) => {
+  try {
+    const { dialog } = require('electron');
+    const settingsExportService = require('./main/services/settingsExportService');
+
+    // Show open dialog
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Import Settings',
+      filters: [
+        { name: 'ZIP Archive', extensions: ['zip'] },
+      ],
+      properties: ['openFile'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, canceled: true };
+    }
+
+    const zipPath = result.filePaths[0];
+
+    // Validate before import
+    const validation = await settingsExportService.validateImportFile(zipPath);
+    if (!validation.valid) {
+      return { success: false, error: `Invalid settings file: ${validation.error}` };
+    }
+
+    // Import with provided options
+    const importResult = await settingsExportService.importFromZip(zipPath, options);
+    return importResult;
+  } catch (error) {
+    logger.ipc.error('[IPC] settings:import failed:', error);
     return { success: false, error: error.message };
   }
 });
@@ -7400,9 +8251,9 @@ async function generateAndSaveAutoSummary(meetingId, logPrefix = '[Auto-Summary]
  */
 function loadAutoSummaryPrompt(needsTitleSuggestion) {
   try {
-    // Try to load template file from config/templates
+    // Try to load template file from userData/config/templates
     const templatePath = path.join(
-      templateManager ? templateManager.templatesPath : path.join(__dirname, '..', 'config', 'templates'),
+      templateManager ? templateManager.templatesPath : path.join(app.getPath('userData'), 'config', 'templates'),
       'auto-summary-prompt.txt'
     );
 
@@ -7507,8 +8358,9 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
     }
 
     // Format the transcript into a single text for the AI to process
+    // Use mapped speaker name if available (v1.1), fall back to original speaker
     const transcriptText = meeting.transcript
-      .map(entry => `${entry.speaker}: ${entry.text}`)
+      .map(entry => `${entry.speakerName || entry.speakerDisplayName || entry.speaker}: ${entry.text}`)
       .join('\n');
 
     // Format detected participants if available
@@ -7519,12 +8371,30 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
         meeting.participants.map(p => `- ${p.name}${p.isHost ? ' (Host)' : ''}`).join('\n');
     }
 
+    // v1.1: Add user profile context for personalized summaries
+    let userContextText = '';
+    if (userProfile?.name) {
+      const contextParts = [];
+      contextParts.push(`The person reading this summary is ${userProfile.name}.`);
+      if (userProfile.title) {
+        contextParts.push(`Their role is ${userProfile.title}.`);
+      }
+      if (userProfile.organization) {
+        contextParts.push(`They work at ${userProfile.organization}.`);
+      }
+      if (userProfile.context) {
+        contextParts.push(userProfile.context);
+      }
+      userContextText = '\nUser Context:\n' + contextParts.join(' ');
+      logger.main.debug('[AutoSummary] Including user profile context:', userContextText);
+    }
+
     // Load system prompt from template file or use hardcoded fallback (Phase 10.3)
     const systemMessage = loadAutoSummaryPrompt(needsTitleSuggestion);
 
     // Prepare the user prompt
     const userPrompt = `Summarize the following meeting transcript with the EXACT format specified in your instructions:
-${participantsText ? participantsText + '\n\n' : ''}
+${participantsText ? participantsText + '\n\n' : ''}${userContextText ? userContextText + '\n\n' : ''}
 Transcript:
 ${transcriptText}`;
 

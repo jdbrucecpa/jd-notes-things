@@ -133,6 +133,10 @@ export function importSettings(file) {
 export function openSettingsTab(tabName) {
   const settingsView = document.getElementById('settingsView');
   const mainView = document.getElementById('mainView');
+  const contactsView = document.getElementById('contactsView');
+
+  // Close contacts view if open
+  if (contactsView) contactsView.style.display = 'none';
 
   // Show settings view
   if (mainView) mainView.style.display = 'none';
@@ -177,6 +181,9 @@ export function initializeSettingsUI() {
   const exportSettingsBtn = document.getElementById('exportSettingsBtn');
   const importSettingsBtn = document.getElementById('importSettingsBtn');
   const importSettingsFile = document.getElementById('importSettingsFile');
+  const exportAllSettingsBtn = document.getElementById('exportAllSettingsBtn');
+  const importAllSettingsBtn = document.getElementById('importAllSettingsBtn');
+  const exportStatus = document.getElementById('exportStatus');
 
   // Version information
   const electronVersion = document.getElementById('electronVersion');
@@ -186,6 +193,10 @@ export function initializeSettingsUI() {
   // Open settings (full-page view)
   if (settingsBtn) {
     settingsBtn.addEventListener('click', async () => {
+      // Close contacts view if open
+      const contactsView = document.getElementById('contactsView');
+      if (contactsView) contactsView.style.display = 'none';
+
       mainView.style.display = 'none';
       settingsView.style.display = 'block';
       loadSettingsIntoUI();
@@ -209,6 +220,7 @@ export function initializeSettingsUI() {
 
   // Tab switching
   initializeTabs([
+    { buttonId: 'profileSettingsTab', contentId: 'profilePanel' },
     { buttonId: 'generalSettingsTab', contentId: 'generalPanel' },
     { buttonId: 'securitySettingsTab', contentId: 'securityPanel' },
     { buttonId: 'routingSettingsTab', contentId: 'routingPanel' },
@@ -221,7 +233,10 @@ export function initializeSettingsUI() {
     { buttonId: 'aboutSettingsTab', contentId: 'aboutPanel' }
   ], (buttonId) => {
     // Trigger panel-specific actions based on which tab was activated
-    if (buttonId === 'templatesSettingsTab' && window.loadTemplates) {
+    if (buttonId === 'profileSettingsTab') {
+      console.log('[Settings] Profile tab clicked, loading profile');
+      loadUserProfile();
+    } else if (buttonId === 'templatesSettingsTab' && window.loadTemplates) {
       console.log('[Settings] Templates tab clicked, calling loadTemplates()');
       window.loadTemplates();
     } else if (buttonId === 'routingSettingsTab' && window.loadRouting) {
@@ -351,6 +366,108 @@ export function initializeSettingsUI() {
     });
   }
 
+  // Comprehensive Export All Settings (SE-1)
+  if (exportAllSettingsBtn) {
+    exportAllSettingsBtn.addEventListener('click', async () => {
+      try {
+        exportAllSettingsBtn.disabled = true;
+        exportAllSettingsBtn.querySelector('span').textContent = 'Exporting...';
+
+        if (exportStatus) {
+          exportStatus.style.display = 'block';
+          exportStatus.textContent = 'Preparing export...';
+        }
+
+        const result = await window.electronAPI.settingsExport();
+
+        if (result.canceled) {
+          if (exportStatus) exportStatus.style.display = 'none';
+          return;
+        }
+
+        if (result.success) {
+          const sizeKB = (result.size / 1024).toFixed(1);
+          window.showToast(`Settings exported successfully (${sizeKB} KB)`, 'success');
+
+          if (exportStatus) {
+            exportStatus.innerHTML = `<span style="color: #27ae60;">Export complete:</span> ${result.manifest.included.length} files exported`;
+            if (result.manifest.warnings.length > 0) {
+              exportStatus.innerHTML += `<br><span style="color: #e67e22;">Warnings:</span> ${result.manifest.warnings.join(', ')}`;
+            }
+          }
+        } else {
+          window.showToast('Export failed: ' + result.error, 'error');
+          if (exportStatus) {
+            exportStatus.innerHTML = `<span style="color: #e74c3c;">Export failed:</span> ${result.error}`;
+          }
+        }
+      } catch (error) {
+        console.error('Error exporting settings:', error);
+        window.showToast('Export failed: ' + error.message, 'error');
+        if (exportStatus) {
+          exportStatus.innerHTML = `<span style="color: #e74c3c;">Export failed:</span> ${error.message}`;
+        }
+      } finally {
+        exportAllSettingsBtn.disabled = false;
+        exportAllSettingsBtn.querySelector('span').textContent = 'Export All Settings';
+      }
+    });
+  }
+
+  // Comprehensive Import All Settings (SE-2)
+  if (importAllSettingsBtn) {
+    importAllSettingsBtn.addEventListener('click', async () => {
+      try {
+        importAllSettingsBtn.disabled = true;
+        importAllSettingsBtn.querySelector('span').textContent = 'Importing...';
+
+        if (exportStatus) {
+          exportStatus.style.display = 'block';
+          exportStatus.textContent = 'Selecting file...';
+        }
+
+        const result = await window.electronAPI.settingsImport({ overwrite: false });
+
+        if (result.canceled) {
+          if (exportStatus) exportStatus.style.display = 'none';
+          return;
+        }
+
+        if (result.success) {
+          window.showToast(`Settings imported: ${result.imported.length} files`, 'success');
+
+          if (exportStatus) {
+            let statusHtml = `<span style="color: #27ae60;">Import complete:</span> ${result.imported.length} files imported`;
+            if (result.skipped.length > 0) {
+              statusHtml += `<br><span style="color: #e67e22;">Skipped:</span> ${result.skipped.length} files (already exist)`;
+            }
+            if (result.errors.length > 0) {
+              statusHtml += `<br><span style="color: #e74c3c;">Errors:</span> ${result.errors.map(e => e.file).join(', ')}`;
+            }
+            exportStatus.innerHTML = statusHtml;
+          }
+
+          // Reload UI to reflect imported settings
+          loadSettingsIntoUI();
+        } else {
+          window.showToast('Import failed: ' + result.error, 'error');
+          if (exportStatus) {
+            exportStatus.innerHTML = `<span style="color: #e74c3c;">Import failed:</span> ${result.error}`;
+          }
+        }
+      } catch (error) {
+        console.error('Error importing settings:', error);
+        window.showToast('Import failed: ' + error.message, 'error');
+        if (exportStatus) {
+          exportStatus.innerHTML = `<span style="color: #e74c3c;">Import failed:</span> ${error.message}`;
+        }
+      } finally {
+        importAllSettingsBtn.disabled = false;
+        importAllSettingsBtn.querySelector('span').textContent = 'Import Settings';
+      }
+    });
+  }
+
   // Load version information
   if (electronVersion && window.electronAPI) {
     window.electronAPI.getAppVersion().then(version => {
@@ -422,4 +539,86 @@ export function initializeSettingsUI() {
 
   // Initial load
   loadSettingsIntoUI();
+
+  // Initialize profile save button
+  const saveProfileBtn = document.getElementById('saveProfileBtn');
+  if (saveProfileBtn) {
+    saveProfileBtn.addEventListener('click', saveUserProfile);
+  }
+}
+
+/**
+ * Load user profile from main process
+ */
+async function loadUserProfile() {
+  try {
+    if (!window.electronAPI?.getUserProfile) {
+      console.warn('[Settings] getUserProfile API not available');
+      return;
+    }
+
+    const result = await window.electronAPI.getUserProfile();
+    if (result.success && result.profile) {
+      const profile = result.profile;
+
+      // Populate form fields
+      const nameInput = document.getElementById('profileName');
+      const emailInput = document.getElementById('profileEmail');
+      const titleInput = document.getElementById('profileTitle');
+      const orgInput = document.getElementById('profileOrganization');
+      const contextInput = document.getElementById('profileContext');
+
+      if (nameInput) nameInput.value = profile.name || '';
+      if (emailInput) emailInput.value = profile.email || '';
+      if (titleInput) titleInput.value = profile.title || '';
+      if (orgInput) orgInput.value = profile.organization || '';
+      if (contextInput) contextInput.value = profile.context || '';
+
+      console.log('[Settings] Loaded user profile:', profile.name);
+    }
+  } catch (error) {
+    console.error('[Settings] Failed to load user profile:', error);
+  }
+}
+
+/**
+ * Save user profile to main process
+ */
+async function saveUserProfile() {
+  const statusEl = document.getElementById('profileSaveStatus');
+
+  try {
+    const profile = {
+      name: document.getElementById('profileName')?.value?.trim() || '',
+      email: document.getElementById('profileEmail')?.value?.trim() || '',
+      title: document.getElementById('profileTitle')?.value?.trim() || '',
+      organization: document.getElementById('profileOrganization')?.value?.trim() || '',
+      context: document.getElementById('profileContext')?.value?.trim() || '',
+    };
+
+    if (!window.electronAPI?.saveUserProfile) {
+      throw new Error('saveUserProfile API not available');
+    }
+
+    const result = await window.electronAPI.saveUserProfile(profile);
+
+    if (result.success) {
+      if (statusEl) {
+        statusEl.textContent = 'Saved!';
+        statusEl.style.color = 'var(--status-success)';
+        setTimeout(() => { statusEl.textContent = ''; }, 2000);
+      }
+      window.showToast?.('Profile saved successfully', 'success');
+      console.log('[Settings] Saved user profile');
+    } else {
+      throw new Error(result.error || 'Failed to save profile');
+    }
+  } catch (error) {
+    console.error('[Settings] Failed to save user profile:', error);
+    if (statusEl) {
+      statusEl.textContent = 'Error saving';
+      statusEl.style.color = 'var(--status-error)';
+    }
+    window.showToast?.('Failed to save profile: ' + error.message, 'error');
+  }
 }

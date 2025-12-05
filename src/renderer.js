@@ -13,6 +13,8 @@ import { initializeTemplateEditor } from './renderer/templates.js';
 import { initializeRoutingEditor } from './renderer/routing.js';
 import { initializeMeetingDetail, clearMeetingDetail, updateMeetingDetail } from './renderer/meetingDetail.js';
 import { initAppSettingsUI } from './renderer/appSettings.js';
+import { initContactsPage, openContactsView } from './renderer/contacts.js';
+import { initQuickSearch } from './renderer/quickSearch.js';
 
 // Create empty meetings data structure to be filled from the file
 const meetingsData = {
@@ -920,9 +922,14 @@ async function fetchCalendarMeetings() {
 function showHomeView() {
   document.getElementById('homeView').style.display = 'block';
   document.getElementById('editorView').style.display = 'none';
-  document.getElementById('backButton').style.display = 'none';
   document.getElementById('newNoteBtn').style.display = 'block';
   document.getElementById('toggleSidebar').style.display = 'none';
+
+  // Hide navigation buttons when on home
+  const homeButton = document.getElementById('homeButton');
+  const backButton = document.getElementById('backButton');
+  if (homeButton) homeButton.style.display = 'none';
+  if (backButton) backButton.style.display = 'none';
 
   // Hide the entire floating controls section on home page
   const floatingControls = document.querySelector('.floating-controls');
@@ -983,9 +990,26 @@ function showEditorView(meetingId) {
   // Make the views visible/hidden
   document.getElementById('homeView').style.display = 'none';
   document.getElementById('editorView').style.display = 'block';
-  document.getElementById('backButton').style.display = 'block';
   document.getElementById('newNoteBtn').style.display = 'none';
   document.getElementById('toggleSidebar').style.display = 'none'; // Hide the sidebar toggle
+
+  // Show Home button (always visible when not on home)
+  const homeButton = document.getElementById('homeButton');
+  if (homeButton) {
+    homeButton.style.display = 'block';
+  }
+
+  // Show Back button only if there's a navigation context (e.g., coming from contacts)
+  const backButton = document.getElementById('backButton');
+  const backButtonText = document.getElementById('backButtonText');
+  const contactContext = window.getContactNavigationContext ? window.getContactNavigationContext() : null;
+
+  if (contactContext && contactContext.type === 'contact' && contactContext.contact) {
+    if (backButton) backButton.style.display = 'flex';
+    if (backButtonText) backButtonText.textContent = contactContext.contact.name || 'Contact';
+  } else {
+    if (backButton) backButton.style.display = 'none';
+  }
 
   // Always hide the join meeting button when in editor view
   const joinMeetingBtn = document.getElementById('joinMeetingBtn');
@@ -1586,6 +1610,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize App Settings UI (Phase 10.7)
   await initAppSettingsUI();
+
+  // Initialize Contacts Page (CS-1)
+  initContactsPage();
+
+  // Expose functions for cross-module navigation
+  window.openContactsView = openContactsView;
+  window.showMeetingDetail = showEditorView;
+
+  // Initialize Quick Search (CS-2)
+  initQuickSearch();
 
   // Initialize Google integration (Calendar + Contacts)
   await initializeGoogle();
@@ -2196,19 +2230,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   const backButton = document.getElementById('backButton');
   console.log('[EventListeners] backButton element:', backButton);
 
-  if (backButton) {
-    console.log('[EventListeners] Adding click listener to backButton');
-    backButton.addEventListener('click', async () => {
-      console.log('>>> Back button clicked! <<<');
+  // Home button - always goes to main meeting list
+  const homeButton = document.getElementById('homeButton');
+  if (homeButton) {
+    console.log('[EventListeners] Adding click listener to homeButton');
+    homeButton.addEventListener('click', async () => {
+      console.log('>>> Home button clicked! <<<');
       try {
-        // Only save with legacy editor if it exists (not in meeting detail view)
-        // Meeting detail view handles its own saves through the onUpdate callback
-        const simpleEditor = document.getElementById('simple-editor');
-        if (simpleEditor) {
-          await saveCurrentNote();
-          console.log('Note saved, returning to home view');
-        } else {
-          console.log('In meeting detail view, skipping legacy save (handled by onUpdate callback)');
+        // Clear navigation context
+        if (window.clearContactNavigationContext) {
+          window.clearContactNavigationContext();
         }
 
         // Clear current editing state
@@ -2226,7 +2257,45 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         console.log('Returned to home view');
       } catch (error) {
-        console.error('Error navigating back to home:', error);
+        console.error('Error navigating home:', error);
+        showHomeView();
+        renderMeetings();
+      }
+    });
+  }
+
+  if (backButton) {
+    console.log('[EventListeners] Adding click listener to backButton');
+    backButton.addEventListener('click', async () => {
+      console.log('>>> Back button clicked! <<<');
+      try {
+        // Clear current editing state
+        currentEditingMeetingId = null;
+
+        // Clear meeting detail view if active
+        clearMeetingDetail();
+
+        // Back button only shows when there's a contact context - return to contact
+        const contactContext = window.getContactNavigationContext ? window.getContactNavigationContext() : null;
+        if (contactContext && contactContext.type === 'contact') {
+          console.log('Returning to contact:', contactContext.contact?.name);
+          if (window.returnToContact) {
+            window.returnToContact();
+          } else {
+            showHomeView();
+          }
+        } else {
+          // Fallback to home view (shouldn't happen since back button is hidden without context)
+          showHomeView();
+        }
+
+        // Refresh the meeting list
+        await loadMeetingsDataFromFile();
+        renderMeetings();
+
+        console.log('Returned to previous view');
+      } catch (error) {
+        console.error('Error navigating back:', error);
         // Still try to show home view even if save failed
         showHomeView();
         renderMeetings();
@@ -2711,6 +2780,74 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Show modal
     modal.style.display = 'flex';
     updateCostEstimate();
+
+    // Load routing preview (CS-4)
+    loadRoutingPreview();
+  }
+
+  // CS-4: Load and display routing preview
+  async function loadRoutingPreview() {
+    const previewContent = document.getElementById('routingPreviewContent');
+    if (!previewContent || !currentEditingMeetingId) return;
+
+    previewContent.innerHTML = '<div class="routing-preview-loading">Loading...</div>';
+
+    try {
+      const preview = await window.electronAPI.routingPreviewMeetingRoute(currentEditingMeetingId);
+
+      if (!preview || !preview.routes || preview.routes.length === 0) {
+        previewContent.innerHTML = '<div class="routing-preview-error">Unable to determine save location</div>';
+        return;
+      }
+
+      const html = preview.routes.map(route => {
+        const iconSvg = getRouteTypeIcon(route.type);
+
+        return `
+          <div class="routing-preview-path">
+            <div class="routing-preview-icon ${route.type}">
+              ${iconSvg}
+            </div>
+            <div class="routing-preview-info">
+              <div class="routing-preview-folder">${escapeHtml(route.path)}</div>
+              <div class="routing-preview-reason">${escapeHtml(route.reason)}</div>
+            </div>
+            <span class="routing-preview-type-badge">${route.type}</span>
+          </div>
+        `;
+      }).join('');
+
+      previewContent.innerHTML = html;
+    } catch (error) {
+      console.error('[Templates] Error loading routing preview:', error);
+      previewContent.innerHTML = `<div class="routing-preview-error">Error: ${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  // Get icon SVG for route type
+  function getRouteTypeIcon(type) {
+    switch (type) {
+      case 'client':
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/>
+        </svg>`;
+      case 'industry':
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M2 22h20V8L14 4v4l-8-4v18zm2-2v-4h4v4H4zm0-6v-4h4v4H4zm6 6v-4h4v4h-4zm0-6v-4h4v4h-4zm6 6v-4h4v4h-4zm0-6V9.95l4 2V14h-4z"/>
+        </svg>`;
+      case 'internal':
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+        </svg>`;
+      case 'unfiled':
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-1 12H5c-.55 0-1-.45-1-1V9c0-.55.45-1 1-1h14c.55 0 1 .45 1 1v8c0 .55-.45 1-1 1z"/>
+        </svg>`;
+      default:
+        return `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+        </svg>`;
+    }
   }
 
   // Close template modal
@@ -2910,7 +3047,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const label = document.createElement('label');
         label.className = 'checkbox-label';
         label.innerHTML = `
-          <input type="checkbox" class="template-checkbox" data-template-id="${template.id}" checked />
+          <input type="checkbox" class="template-checkbox" data-template-id="${template.id}" />
           <span>${template.name}</span>
         `;
         templateCheckboxesContainer.appendChild(label);

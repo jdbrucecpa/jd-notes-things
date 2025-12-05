@@ -79,7 +79,17 @@ class GoogleContacts {
     // Check cache
     if (!forceRefresh && this.lastFetch && Date.now() - this.lastFetch < this.cacheExpiry) {
       console.log('[GoogleContacts] Using cached contacts');
-      return Array.from(this.contactsCache.values());
+      // Deduplicate by resourceName since same contact may be indexed by multiple emails
+      const seen = new Set();
+      const uniqueContacts = [];
+      for (const contact of this.contactsCache.values()) {
+        if (!seen.has(contact.resourceName)) {
+          seen.add(contact.resourceName);
+          uniqueContacts.push(contact);
+        }
+      }
+      console.log(`[GoogleContacts] Returning ${uniqueContacts.length} unique contacts from cache`);
+      return uniqueContacts;
     }
 
     // Refresh token if needed

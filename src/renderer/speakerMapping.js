@@ -1,6 +1,6 @@
 /**
  * Speaker Mapping Module (SM-2)
- * Handles the speaker mapping modal for bulk replacement of cryptic speaker IDs
+ * Handles the speaker mapping modal for mapping any speaker to contacts
  */
 
 import { escapeHtml } from './security.js';
@@ -10,6 +10,8 @@ let currentMeetingId = null;
 let currentMappings = {};
 let searchTimeouts = {};
 let documentClickHandler = null; // Single delegated click handler
+let mergeMode = false; // Whether merge selection mode is active
+let selectedForMerge = new Set(); // Speakers selected for merging
 
 /**
  * Open the speaker mapping modal for a meeting
@@ -45,10 +47,14 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
   const extractStart = performance.now();
   const result = await window.electronAPI.speakerMappingExtractIds(transcript);
   const speakerIds = result.success ? result.speakerIds : [];
+  const profileSuggestions = result.success ? (result.profileSuggestions || {}) : {};
   console.log(`[SpeakerMapping] Extract IDs took ${(performance.now() - extractStart).toFixed(0)}ms, found ${speakerIds.length} IDs`);
+  if (Object.keys(profileSuggestions).length > 0) {
+    console.log(`[SpeakerMapping] Profile suggestions:`, profileSuggestions);
+  }
 
   if (speakerIds.length === 0) {
-    // No cryptic IDs found
+    // No speakers found in transcript
     speakersList.style.display = 'none';
     noSpeakersMessage.style.display = 'flex';
     applyBtn.disabled = true;
@@ -57,16 +63,66 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
     speakersList.style.display = 'flex';
     noSpeakersMessage.style.display = 'none';
 
+    // Detect duplicate speakers
+    const dupStart = performance.now();
+    const dupResult = await window.electronAPI.speakerMappingDetectDuplicates(speakerIds);
+    console.log(`[SpeakerMapping] Detect duplicates took ${(performance.now() - dupStart).toFixed(0)}ms`);
+    console.log('[SpeakerMapping] Duplicates:', dupResult);
+
+    // Apply auto-merges and filter speaker list
+    let filteredSpeakerIds = [...speakerIds];
+    const autoMergedMappings = {};
+
+    if (dupResult.success && dupResult.autoMerge?.length > 0) {
+      for (const merge of dupResult.autoMerge) {
+        console.log(`[SpeakerMapping] Auto-merging "${merge.from}" → "${merge.to}"`);
+        // Remove the "from" speaker from the list
+        filteredSpeakerIds = filteredSpeakerIds.filter(id => id !== merge.from);
+        // Add to auto-merged mappings (will be applied when user saves)
+        autoMergedMappings[merge.from] = {
+          contactName: merge.to,
+          contactEmail: null,
+          obsidianLink: `[[${merge.to}]]`,
+          autoMerged: true,
+          reason: merge.reason
+        };
+      }
+      if (dupResult.autoMerge.length > 0) {
+        window.showToast?.(`Auto-merged ${dupResult.autoMerge.length} duplicate speaker(s)`, 'info');
+      }
+    }
+
+    // Store auto-merged mappings for later application
+    window._autoMergedMappings = autoMergedMappings;
+
+    // Store suggestions for merge UI
+    window._duplicateSuggestions = dupResult.success ? dupResult.suggestions : [];
+
     // Get suggestions from known mappings
     const suggestStart = performance.now();
-    const suggestionsResult = await window.electronAPI.speakerMappingGetSuggestions(speakerIds);
-    const suggestions = suggestionsResult.success ? suggestionsResult.suggestions : {};
+    const suggestionsResult = await window.electronAPI.speakerMappingGetSuggestions(filteredSpeakerIds);
+    const storedSuggestions = suggestionsResult.success ? suggestionsResult.suggestions : {};
     console.log(`[SpeakerMapping] Get suggestions took ${(performance.now() - suggestStart).toFixed(0)}ms`);
+
+    // Merge profile suggestions with stored suggestions (profile takes precedence for single speaker)
+    const suggestions = { ...storedSuggestions };
+    for (const [speakerId, profileSuggestion] of Object.entries(profileSuggestions)) {
+      // Profile suggestion (single speaker = user) takes precedence
+      suggestions[speakerId] = {
+        ...profileSuggestion,
+        isProfileSuggestion: true,
+      };
+    }
 
     // Render speaker mapping rows
     const renderStart = performance.now();
-    await renderSpeakerRows(speakersList, speakerIds, suggestions);
+    await renderSpeakerRows(speakersList, filteredSpeakerIds, suggestions);
     console.log(`[SpeakerMapping] Render rows took ${(performance.now() - renderStart).toFixed(0)}ms`);
+
+    // Render duplicate suggestions section if any
+    if (window._duplicateSuggestions?.length > 0) {
+      renderDuplicateSuggestions(speakersList, window._duplicateSuggestions);
+    }
 
     // Update stats
     updateMappingStats();
@@ -103,6 +159,99 @@ async function renderSpeakerRows(container, speakerIds, suggestions) {
 }
 
 /**
+ * Render duplicate suggestions section
+ */
+function renderDuplicateSuggestions(container, suggestions) {
+  if (!suggestions || suggestions.length === 0) return;
+
+  const section = document.createElement('div');
+  section.className = 'duplicate-suggestions-section';
+  section.innerHTML = `
+    <div class="duplicate-suggestions-header">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="currentColor"/>
+      </svg>
+      <span>Potential Duplicates (click to merge)</span>
+    </div>
+    <div class="duplicate-suggestions-list"></div>
+  `;
+
+  const list = section.querySelector('.duplicate-suggestions-list');
+
+  for (const suggestion of suggestions) {
+    const item = document.createElement('div');
+    item.className = 'duplicate-suggestion-item';
+    item.innerHTML = `
+      <div class="duplicate-speakers">
+        <span class="duplicate-speaker">${escapeHtml(suggestion.speakers[0])}</span>
+        <span class="duplicate-separator">↔</span>
+        <span class="duplicate-speaker">${escapeHtml(suggestion.speakers[1])}</span>
+      </div>
+      <div class="duplicate-reason">${escapeHtml(suggestion.reason)}</div>
+      <div class="duplicate-actions">
+        <button class="btn btn-sm merge-btn" data-merge-to="0" title="Keep ${escapeHtml(suggestion.speakers[0])}">
+          Keep "${escapeHtml(suggestion.speakers[0])}"
+        </button>
+        <button class="btn btn-sm merge-btn" data-merge-to="1" title="Keep ${escapeHtml(suggestion.speakers[1])}">
+          Keep "${escapeHtml(suggestion.speakers[1])}"
+        </button>
+      </div>
+    `;
+
+    // Set up merge button handlers
+    const mergeBtns = item.querySelectorAll('.merge-btn');
+    mergeBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const keepIndex = parseInt(btn.dataset.mergeTo, 10);
+        const keepSpeaker = suggestion.speakers[keepIndex];
+        const mergeSpeaker = suggestion.speakers[1 - keepIndex];
+        mergeSpeakers(mergeSpeaker, keepSpeaker, item);
+      });
+    });
+
+    list.appendChild(item);
+  }
+
+  container.appendChild(section);
+}
+
+/**
+ * Merge one speaker into another
+ */
+function mergeSpeakers(fromSpeaker, toSpeaker, suggestionItem) {
+  console.log(`[SpeakerMapping] Merging "${fromSpeaker}" → "${toSpeaker}"`);
+
+  // Add to current mappings
+  currentMappings[fromSpeaker] = {
+    contactName: toSpeaker,
+    contactEmail: null,
+    obsidianLink: `[[${toSpeaker}]]`,
+    merged: true
+  };
+
+  // Remove the "from" speaker row from the list
+  const fromRow = document.querySelector(`.speaker-mapping-row[data-speaker-id="${CSS.escape(fromSpeaker)}"]`);
+  if (fromRow) {
+    fromRow.remove();
+  }
+
+  // Mark suggestion as resolved
+  suggestionItem.classList.add('resolved');
+  suggestionItem.innerHTML = `
+    <div class="duplicate-resolved">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#4caf50"/>
+      </svg>
+      <span>Merged "${escapeHtml(fromSpeaker)}" → "${escapeHtml(toSpeaker)}"</span>
+    </div>
+  `;
+
+  // Update stats
+  updateMappingStats();
+  window.showToast?.(`Merged "${fromSpeaker}" → "${toSpeaker}"`, 'success');
+}
+
+/**
  * Create a speaker mapping row
  */
 function createSpeakerRow(speakerId, suggestion) {
@@ -119,6 +268,9 @@ function createSpeakerRow(speakerId, suggestion) {
   </svg>`;
 
   row.innerHTML = `
+    <div class="speaker-merge-checkbox">
+      <input type="checkbox" class="merge-checkbox" data-speaker-id="${escapeHtml(speakerId)}" />
+    </div>
     <div class="speaker-id-box">
       <span class="speaker-id-label">Original Speaker</span>
       <span class="speaker-id-value">${escapeHtml(speakerId)}</span>
@@ -143,13 +295,17 @@ function createSpeakerRow(speakerId, suggestion) {
         </button>
       </div>
       ${suggestion ? `
-        <div class="speaker-suggestion">
+        <div class="speaker-suggestion ${suggestion.isProfileSuggestion ? 'profile-suggestion' : ''}">
           <span class="speaker-suggestion-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>
+              ${suggestion.isProfileSuggestion
+                ? '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/>'
+                : '<path d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>'}
             </svg>
           </span>
-          <span class="speaker-suggestion-text">Auto-suggested from previous mapping</span>
+          <span class="speaker-suggestion-text">${suggestion.isProfileSuggestion
+            ? 'Single speaker auto-labeled as you (from profile)'
+            : 'Auto-suggested from previous mapping'}</span>
         </div>
       ` : ''}
     </div>
@@ -167,6 +323,21 @@ function createSpeakerRow(speakerId, suggestion) {
 function setupRowEventListeners(row, speakerId) {
   const input = row.querySelector('.speaker-contact-input');
   const clearBtn = row.querySelector('.speaker-contact-clear');
+  const checkbox = row.querySelector('.merge-checkbox');
+
+  // Merge checkbox
+  if (checkbox) {
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) {
+        selectedForMerge.add(speakerId);
+        row.classList.add('selected-for-merge');
+      } else {
+        selectedForMerge.delete(speakerId);
+        row.classList.remove('selected-for-merge');
+      }
+      updateMergeConfirmButton();
+    });
+  }
 
   // Contact search
   input.addEventListener('input', e => {
@@ -205,6 +376,91 @@ function setupRowEventListeners(row, speakerId) {
     input.value = '';
     input.focus();
   });
+}
+
+/**
+ * Toggle merge selection mode
+ */
+function toggleMergeMode() {
+  mergeMode = !mergeMode;
+  selectedForMerge.clear();
+
+  const mergeBtn = document.getElementById('mergeSpeakersBtn');
+  const confirmMergeBtn = document.getElementById('confirmMergeBtn');
+  const checkboxes = document.querySelectorAll('.speaker-merge-checkbox');
+  const rows = document.querySelectorAll('.speaker-mapping-row');
+
+  if (mergeMode) {
+    // Enter merge mode
+    mergeBtn.textContent = 'Cancel Merge';
+    mergeBtn.classList.add('active');
+    checkboxes.forEach(cb => cb.classList.add('visible'));
+    confirmMergeBtn.style.display = 'inline-flex';
+    confirmMergeBtn.disabled = true;
+  } else {
+    // Exit merge mode
+    mergeBtn.textContent = 'Merge Speakers';
+    mergeBtn.classList.remove('active');
+    checkboxes.forEach(cb => {
+      cb.classList.remove('visible');
+      cb.querySelector('input').checked = false;
+    });
+    rows.forEach(r => r.classList.remove('selected-for-merge'));
+    confirmMergeBtn.style.display = 'none';
+  }
+}
+
+/**
+ * Update confirm merge button state
+ */
+function updateMergeConfirmButton() {
+  const confirmBtn = document.getElementById('confirmMergeBtn');
+  if (confirmBtn) {
+    confirmBtn.disabled = selectedForMerge.size < 2;
+    confirmBtn.textContent = selectedForMerge.size >= 2
+      ? `Merge ${selectedForMerge.size} Speakers`
+      : 'Select 2+ Speakers';
+  }
+}
+
+/**
+ * Execute merge of selected speakers
+ */
+function confirmMergeSelected() {
+  if (selectedForMerge.size < 2) return;
+
+  const speakers = Array.from(selectedForMerge);
+
+  // Sort by name length (longest first) to pick the most complete name as target
+  speakers.sort((a, b) => b.length - a.length);
+
+  const targetSpeaker = speakers[0]; // Keep the longest/most complete name
+  const speakersToMerge = speakers.slice(1);
+
+  console.log(`[SpeakerMapping] Merging ${speakersToMerge.join(', ')} → ${targetSpeaker}`);
+
+  // Add mappings for all merged speakers
+  for (const speaker of speakersToMerge) {
+    currentMappings[speaker] = {
+      contactName: targetSpeaker,
+      contactEmail: null,
+      obsidianLink: `[[${targetSpeaker}]]`,
+      merged: true
+    };
+
+    // Remove the merged speaker's row
+    const row = document.querySelector(`.speaker-mapping-row[data-speaker-id="${CSS.escape(speaker)}"]`);
+    if (row) {
+      row.remove();
+    }
+  }
+
+  // Exit merge mode
+  toggleMergeMode();
+
+  // Update stats
+  updateMappingStats();
+  window.showToast?.(`Merged ${speakersToMerge.length} speaker(s) → "${targetSpeaker}"`, 'success');
 }
 
 /**
@@ -365,6 +621,8 @@ function setupModalEventListeners(onComplete) {
   const closeBtn = document.getElementById('closeSpeakerMappingModal');
   const cancelBtn = document.getElementById('cancelSpeakerMapping');
   const applyBtn = document.getElementById('applySpeakerMappings');
+  const mergeBtn = document.getElementById('mergeSpeakersBtn');
+  const confirmMergeBtn = document.getElementById('confirmMergeBtn');
 
   // Set up single delegated click handler for closing dropdowns
   if (documentClickHandler) {
@@ -387,6 +645,16 @@ function setupModalEventListeners(onComplete) {
     currentMeetingId = null;
     currentMappings = {};
     searchTimeouts = {};
+    // Reset merge mode
+    mergeMode = false;
+    selectedForMerge.clear();
+    if (mergeBtn) {
+      mergeBtn.textContent = 'Merge Speakers';
+      mergeBtn.classList.remove('active');
+    }
+    if (confirmMergeBtn) {
+      confirmMergeBtn.style.display = 'none';
+    }
     // Clean up the delegated click handler
     if (documentClickHandler) {
       document.removeEventListener('click', documentClickHandler);
@@ -397,6 +665,14 @@ function setupModalEventListeners(onComplete) {
   closeBtn.onclick = closeModal;
   cancelBtn.onclick = closeModal;
 
+  // Merge mode buttons
+  if (mergeBtn) {
+    mergeBtn.onclick = toggleMergeMode;
+  }
+  if (confirmMergeBtn) {
+    confirmMergeBtn.onclick = confirmMergeSelected;
+  }
+
   // Click outside to close
   modal.onclick = e => {
     if (e.target === modal) {
@@ -406,7 +682,13 @@ function setupModalEventListeners(onComplete) {
 
   // Apply mappings
   applyBtn.onclick = async () => {
-    if (Object.keys(currentMappings).length === 0) {
+    // Merge auto-merged mappings with user mappings
+    const allMappings = {
+      ...(window._autoMergedMappings || {}),
+      ...currentMappings
+    };
+
+    if (Object.keys(allMappings).length === 0) {
       return;
     }
 
@@ -417,7 +699,7 @@ function setupModalEventListeners(onComplete) {
       // Apply mappings to meeting
       const result = await window.electronAPI.speakerMappingApplyToMeeting(
         currentMeetingId,
-        currentMappings,
+        allMappings,
         { useWikiLinks: false }
       );
 
@@ -425,7 +707,7 @@ function setupModalEventListeners(onComplete) {
         console.log('[SpeakerMapping] Mappings applied successfully');
         console.log('[SpeakerMapping] Updated meeting:', result.meeting);
         console.log('[SpeakerMapping] Updated transcript sample:', result.meeting?.transcript?.slice(0, 2));
-        window.showToast(`Applied ${Object.keys(currentMappings).length} speaker mappings`, 'success');
+        window.showToast(`Applied ${Object.keys(allMappings).length} speaker mappings`, 'success');
 
         // Call completion callback and wait for it
         if (onComplete) {

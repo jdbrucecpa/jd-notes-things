@@ -1,0 +1,18 @@
+Think of the toughest questions left unanswered in this conversation. What wasn't explained clearly? Where are the blindspots? What was left open-ended? What was left in need of further clarification? What are the wider implications of the conversation? What were the elephants in the room? What should they be thinking about that was skipped over?
+
+Pick up to three most problematic topics and a short list some followup questions for those in the conversation. You can pick fewer than three topics to focus on just one, or two if needed.
+
+Be critical and tough.
+
+Format exactly like this:
+
+"template:Tough Questions" (NOTE: The text in quotes must 100% be included in the first line, no matter what)
+
+## Topic
+[..introduction paragraph]
+
+1. **[..question title]**: question
+etc
+
+## Topic
+etc 

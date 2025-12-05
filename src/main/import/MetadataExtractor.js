@@ -5,9 +5,11 @@
  * filenames and transcript content.
  *
  * Phase 8 - Import Prior Transcripts
+ * Enhanced for v1.1 (IM-2): Added file modification time fallback
  */
 
 const path = require('path');
+const fs = require('fs');
 
 class MetadataExtractor {
   /**
@@ -31,8 +33,26 @@ class MetadataExtractor {
     const platform = this.detectPlatform(parsedData);
     const duration = this.estimateDuration(parsedData);
 
-    // Prioritize filename over content for date and title
-    const finalDate = dateFromFilename || dateFromContent || new Date();
+    // Get file modification time as fallback (IM-2.3)
+    const dateFromFile = this.extractDateFromFileStats(filePath);
+
+    // Prioritize: filename > content > file modification time > today
+    let finalDate;
+    let dateConfidence;
+    if (dateFromFilename) {
+      finalDate = dateFromFilename;
+      dateConfidence = 'high';
+    } else if (dateFromContent) {
+      finalDate = dateFromContent;
+      dateConfidence = 'medium';
+    } else if (dateFromFile) {
+      finalDate = dateFromFile;
+      dateConfidence = 'low'; // File modification time is least reliable
+    } else {
+      finalDate = new Date();
+      dateConfidence = 'none'; // Using today's date as last resort
+    }
+
     const finalTitle = titleFromFilename || titleFromContent || 'Imported Meeting';
 
     return {
@@ -44,12 +64,35 @@ class MetadataExtractor {
       duration,
       source: 'import',
       importedFrom: path.basename(filePath),
+      // Add status for review queue (IM-2.5)
+      status: 'needs_verification',
       confidence: {
-        date: dateFromFilename ? 'high' : dateFromContent ? 'medium' : 'low',
+        date: dateConfidence,
+        dateSource: dateFromFilename ? 'filename' : dateFromContent ? 'content' : dateFromFile ? 'file_mtime' : 'default',
         title: titleFromFilename ? 'high' : titleFromContent ? 'medium' : 'low',
+        titleSource: titleFromFilename ? 'filename' : titleFromContent ? 'content' : 'default',
         participants: participants.length > 0 ? 'high' : 'low',
       },
     };
+  }
+
+  /**
+   * Extract date from file modification time (IM-2.3)
+   * Used as fallback when date cannot be extracted from filename or content
+   * @param {string} filePath - Path to the file
+   * @returns {Date|null} File modification date or null
+   */
+  extractDateFromFileStats(filePath) {
+    try {
+      const stats = fs.statSync(filePath);
+      if (stats && stats.mtime) {
+        // Use modification time, not creation time (more reliable across OS)
+        return stats.mtime;
+      }
+    } catch (error) {
+      console.warn(`[MetadataExtractor] Could not read file stats for ${filePath}:`, error.message);
+    }
+    return null;
   }
 
   /**

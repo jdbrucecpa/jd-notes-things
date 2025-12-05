@@ -404,6 +404,158 @@ Comprehensive meeting notes covering all discussion topics.
       return [];
     }
   }
+
+  // =================================================================
+  // CS-3: Contact/Company Page Management
+  // =================================================================
+
+  /**
+   * Check if a contact page exists
+   * @param {string} contactName - Contact name
+   * @returns {boolean} True if contact page exists
+   */
+  contactPageExists(contactName) {
+    const { generateContactFilename } = require('../templates/contactTemplate.js');
+    const filename = generateContactFilename(contactName);
+    const relativePath = `People/${filename}.md`;
+    return this.fileExists(relativePath);
+  }
+
+  /**
+   * Create a contact page in the vault
+   * @param {Object} contact - Contact data from Google Contacts
+   * @param {Object} options - Additional options
+   * @returns {Object} Result with path and created flag
+   */
+  createContactPage(contact, options = {}) {
+    const { generateContactPage, generateContactFilename } = require('../templates/contactTemplate.js');
+
+    const filename = generateContactFilename(contact.name);
+    const relativePath = `People/${filename}.md`;
+
+    // Check if page already exists
+    if (this.fileExists(relativePath) && !options.overwrite) {
+      console.log(`[VaultStructure] Contact page already exists: ${relativePath}`);
+      return {
+        success: true,
+        path: relativePath,
+        created: false,
+        message: 'Contact page already exists',
+      };
+    }
+
+    try {
+      // Ensure People folder exists
+      this.ensureDirectory('People');
+
+      // Generate page content
+      const content = generateContactPage(contact, options);
+
+      // Save the file
+      const absolutePath = this.saveFile(relativePath, content);
+
+      console.log(`[VaultStructure] Created contact page: ${relativePath}`);
+
+      return {
+        success: true,
+        path: relativePath,
+        absolutePath: absolutePath,
+        created: true,
+        message: 'Contact page created successfully',
+      };
+    } catch (error) {
+      console.error(`[VaultStructure] Error creating contact page:`, error.message);
+      return {
+        success: false,
+        path: relativePath,
+        created: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Check if a company page exists
+   * @param {string} companyName - Company name
+   * @returns {boolean} True if company page exists
+   */
+  companyPageExists(companyName) {
+    const { generateCompanyFilename } = require('../templates/companyTemplate.js');
+    const filename = generateCompanyFilename(companyName);
+    const relativePath = `Companies/${filename}.md`;
+    return this.fileExists(relativePath);
+  }
+
+  /**
+   * Create a company page in the vault
+   * @param {Object} company - Company data
+   * @param {Object} options - Additional options
+   * @returns {Object} Result with path and created flag
+   */
+  createCompanyPage(company, options = {}) {
+    const { generateCompanyPage, generateCompanyFilename } = require('../templates/companyTemplate.js');
+
+    const filename = generateCompanyFilename(company.name);
+    const relativePath = `Companies/${filename}.md`;
+
+    // Check if page already exists
+    if (this.fileExists(relativePath) && !options.overwrite) {
+      console.log(`[VaultStructure] Company page already exists: ${relativePath}`);
+      return {
+        success: true,
+        path: relativePath,
+        created: false,
+        message: 'Company page already exists',
+      };
+    }
+
+    try {
+      // Ensure Companies folder exists
+      this.ensureDirectory('Companies');
+
+      // Generate page content
+      const content = generateCompanyPage(company, options);
+
+      // Save the file
+      const absolutePath = this.saveFile(relativePath, content);
+
+      console.log(`[VaultStructure] Created company page: ${relativePath}`);
+
+      return {
+        success: true,
+        path: relativePath,
+        absolutePath: absolutePath,
+        created: true,
+        message: 'Company page created successfully',
+      };
+    } catch (error) {
+      console.error(`[VaultStructure] Error creating company page:`, error.message);
+      return {
+        success: false,
+        path: relativePath,
+        created: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Get the wiki-link for a contact
+   * @param {string} contactName - Contact name
+   * @returns {string} Wiki-link syntax
+   */
+  getContactWikiLink(contactName) {
+    return `[[${contactName}]]`;
+  }
+
+  /**
+   * Get the wiki-link for a company
+   * @param {string} companyName - Company name
+   * @returns {string} Wiki-link syntax
+   */
+  getCompanyWikiLink(companyName) {
+    return `[[${companyName}]]`;
+  }
 }
 
 module.exports = VaultStructure;

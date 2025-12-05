@@ -87,3 +87,11 @@ CRM stays updated without manual data entry.
 - View email threads with contacts from within the app
 - Link to Gmail conversations from contact pages in Obsidian
 - Show recent emails in contact detail view
+
+---
+
+#### Transition to SQLite for meeting data
+
+- eventually the meetings.json file will get too large
+- can do interim feature to archive old meetings to a separate file. 
+- SQLite will solve the problem, but adds complexity.
