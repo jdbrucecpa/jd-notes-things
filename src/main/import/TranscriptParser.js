@@ -82,6 +82,14 @@ class TranscriptParser {
           const speakerGroup = pattern.captureGroups.speaker;
           if (speakerGroup && match[speakerGroup]) {
             currentSpeaker = match[speakerGroup].trim();
+
+            // Extract timestamp if pattern has one
+            const timestampGroup = pattern.captureGroups.timestamp;
+            const headerTimestamp =
+              timestampGroup && match[timestampGroup]
+                ? this.parseTimestamp(match[timestampGroup])
+                : null;
+
             i++;
 
             // Collect text lines for this speaker
@@ -152,7 +160,7 @@ class TranscriptParser {
               entries.push({
                 speaker: currentSpeaker,
                 text: combinedText,
-                timestamp: null,
+                timestamp: headerTimestamp,
               });
               rawText += `${currentSpeaker}: ${combinedText}\n`;
             }
@@ -330,6 +338,14 @@ class TranscriptParser {
           const speakerGroup = pattern.captureGroups.speaker;
           if (speakerGroup && match[speakerGroup]) {
             currentSpeaker = match[speakerGroup].trim();
+
+            // Extract timestamp if pattern has one
+            const timestampGroup = pattern.captureGroups.timestamp;
+            const headerTimestamp =
+              timestampGroup && match[timestampGroup]
+                ? this.parseTimestamp(match[timestampGroup])
+                : null;
+
             i++;
 
             // For markdown headings (##), just set speaker and continue
@@ -411,7 +427,7 @@ class TranscriptParser {
               entries.push({
                 speaker: currentSpeaker,
                 text: combinedText,
-                timestamp: null,
+                timestamp: headerTimestamp,
               });
               rawText += `${currentSpeaker}: ${combinedText}\n`;
             }
@@ -742,8 +758,11 @@ class TranscriptParser {
   getSpeakers(parsedData) {
     const speakers = new Set();
 
+    // Non-dialogue labels that should not be treated as speakers/participants
+    const nonDialogueLabels = ['Unknown', 'Speaker', 'Transcript', 'Meeting', 'Note', 'Summary'];
+
     for (const entry of parsedData.entries) {
-      if (entry.speaker && entry.speaker !== 'Unknown') {
+      if (entry.speaker && !nonDialogueLabels.includes(entry.speaker)) {
         speakers.add(entry.speaker);
       }
     }

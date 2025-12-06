@@ -1367,6 +1367,8 @@ app.whenReady().then(async () => {
         }
         return { applied: false };
       },
+      // v1.1: Google Contacts for participant name lookup
+      googleContacts,
     });
     console.log('[Import] Import manager initialized successfully');
 
@@ -2617,9 +2619,15 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
       meeting.participants = [];
     }
 
+    // Initialize participantEmails if it doesn't exist
+    if (!meeting.participantEmails) {
+      meeting.participantEmails = [...participantEmails];
+    }
+
     // Create participants from speaker mapping
     for (const [_speakerLabel, speakerInfo] of Object.entries(speakerMapping)) {
       if (speakerInfo.email) {
+        // Speaker has email - look up contact by email
         const contact = contactsMap.get(speakerInfo.email);
 
         // Check if participant already exists
@@ -2641,6 +2649,51 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
         } else {
           // Add new participant
           meeting.participants.push(participantData);
+        }
+      } else if (speakerInfo.name && typeof googleContacts.findContactByName === 'function') {
+        // v1.1: Speaker has name but no email - try name-based contact lookup
+        try {
+          const contact = await googleContacts.findContactByName(speakerInfo.name);
+          if (contact && contact.emails && contact.emails.length > 0) {
+            const email = contact.emails[0];
+
+            // Check if participant already exists by email
+            const existingIndex = meeting.participants.findIndex(
+              p => p.email && p.email.toLowerCase() === email.toLowerCase()
+            );
+
+            const participantData = {
+              name: contact.name || speakerInfo.name,
+              email: email,
+              organization: contact.organization || null,
+              matchedByName: true,
+            };
+
+            if (existingIndex !== -1) {
+              // Update existing participant
+              meeting.participants[existingIndex] = {
+                ...meeting.participants[existingIndex],
+                ...participantData,
+              };
+            } else {
+              // Add new participant
+              meeting.participants.push(participantData);
+            }
+
+            // Add email to participantEmails for routing if not present
+            if (!meeting.participantEmails.includes(email)) {
+              meeting.participantEmails.push(email);
+            }
+
+            console.log(
+              `[ParticipantPopulation] Matched "${speakerInfo.name}" to contact "${contact.name}" (${email})`
+            );
+          }
+        } catch (nameError) {
+          console.warn(
+            `[ParticipantPopulation] Failed to lookup contact by name "${speakerInfo.name}":`,
+            nameError.message
+          );
         }
       }
     }
@@ -8162,7 +8215,9 @@ async function processParticipantJoin(evt) {
     const participantId = participantData.id;
     const isHost = participantData.is_host;
     const platform = participantData.platform;
-    const participantEmail = participantData.email || null;
+    let participantEmail = participantData.email || null;
+    let contactMatched = false;
+    let organization = null;
 
     // SM-1: Log full participant data to see what SDK provides
     console.log(
@@ -8179,6 +8234,32 @@ async function processParticipantJoin(evt) {
     ) {
       console.log(`Skipping generic participant name: ${participantName}`);
       return;
+    }
+
+    // v1.1: If no email from SDK, try to look up contact by name
+    if (
+      !participantEmail &&
+      participantName &&
+      participantName !== 'Unknown Participant' &&
+      googleContacts &&
+      typeof googleContacts.findContactByName === 'function'
+    ) {
+      try {
+        const contact = await googleContacts.findContactByName(participantName);
+        if (contact && contact.emails && contact.emails.length > 0) {
+          participantEmail = contact.emails[0];
+          organization = contact.organization || null;
+          contactMatched = true;
+          console.log(
+            `[ParticipantJoin] Matched "${participantName}" to contact "${contact.name}" (${participantEmail})`
+          );
+        }
+      } catch (contactError) {
+        console.warn(
+          `[ParticipantJoin] Contact lookup failed for "${participantName}":`,
+          contactError.message
+        );
+      }
     }
 
     // Use the file operation manager to safely update the meetings data
@@ -8199,28 +8280,35 @@ async function processParticipantJoin(evt) {
       // Check if participant already exists (based on ID)
       const existingParticipantIndex = meeting.participants.findIndex(p => p.id === participantId);
 
+      const participantObj = {
+        id: participantId,
+        name: participantName,
+        email: participantEmail,
+        isHost: isHost,
+        platform: platform,
+        joinTime: new Date().toISOString(),
+        status: 'active',
+        ...(organization && { organization }),
+        ...(contactMatched && { matchedByName: true }),
+      };
+
       if (existingParticipantIndex !== -1) {
         // Update existing participant
-        meeting.participants[existingParticipantIndex] = {
-          id: participantId,
-          name: participantName,
-          email: participantEmail,
-          isHost: isHost,
-          platform: platform,
-          joinTime: new Date().toISOString(),
-          status: 'active',
-        };
+        meeting.participants[existingParticipantIndex] = participantObj;
       } else {
         // Add new participant
-        meeting.participants.push({
-          id: participantId,
-          name: participantName,
-          email: participantEmail,
-          isHost: isHost,
-          platform: platform,
-          joinTime: new Date().toISOString(),
-          status: 'active',
-        });
+        meeting.participants.push(participantObj);
+      }
+
+      // v1.1: Add email to participantEmails for routing if matched from contact
+      if (participantEmail && contactMatched) {
+        if (!meeting.participantEmails) {
+          meeting.participantEmails = [];
+        }
+        if (!meeting.participantEmails.includes(participantEmail)) {
+          meeting.participantEmails.push(participantEmail);
+          console.log(`[ParticipantJoin] Added ${participantEmail} to participantEmails for routing`);
+        }
       }
 
       console.log(`Added/updated participant data for meeting: ${noteId}`);

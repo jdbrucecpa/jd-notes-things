@@ -237,6 +237,106 @@ class GoogleContacts {
   }
 
   /**
+   * Find contact by name (searches displayName, givenName, familyName)
+   * @param {string} name - Name to search for
+   * @param {boolean} exactMatch - If true, requires exact match; if false, uses substring match
+   * @returns {Object|null} Best matching contact or null
+   */
+  async findContactByName(name, exactMatch = false) {
+    if (!name) return null;
+
+    // Ensure contacts are cached
+    if (this.contactsCache.size === 0) {
+      await this.fetchAllContacts();
+    }
+
+    const normalizedName = name.toLowerCase().trim();
+    let bestMatch = null;
+    let bestScore = 0;
+
+    // Iterate through cached contacts
+    for (const contact of this.contactsCache.values()) {
+      const contactName = (contact.name || '').toLowerCase();
+      const givenName = (contact.givenName || '').toLowerCase();
+      const familyName = (contact.familyName || '').toLowerCase();
+
+      if (exactMatch) {
+        // Exact match on full name
+        if (contactName === normalizedName) {
+          return contact;
+        }
+      } else {
+        // Score-based matching
+        let score = 0;
+
+        // Exact full name match is highest
+        if (contactName === normalizedName) {
+          score = 100;
+        }
+        // Full name contains search term
+        else if (contactName.includes(normalizedName)) {
+          score = 80;
+        }
+        // Search term contains full name (e.g., "J.D. Bruce" contains "JD Bruce")
+        else if (normalizedName.includes(contactName)) {
+          score = 75;
+        }
+        // Given name + family name match
+        else if (`${givenName} ${familyName}` === normalizedName) {
+          score = 90;
+        }
+        // First name match
+        else if (givenName === normalizedName.split(' ')[0]) {
+          score = 50;
+        }
+        // Last name match
+        else if (familyName === normalizedName.split(' ').pop()) {
+          score = 40;
+        }
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestMatch = contact;
+        }
+      }
+    }
+
+    if (bestMatch && bestScore >= 40) {
+      console.log(
+        `[GoogleContacts] Found contact "${bestMatch.name}" for name "${name}" (score: ${bestScore})`
+      );
+      return bestMatch;
+    }
+
+    return null;
+  }
+
+  /**
+   * Find contacts for multiple names
+   * @param {Array<string>} names - Array of names to search
+   * @returns {Map<string, Object>} Map of name -> contact info
+   */
+  async findContactsByNames(names) {
+    if (!names || names.length === 0) return new Map();
+
+    // Ensure contacts are cached
+    if (this.contactsCache.size === 0) {
+      await this.fetchAllContacts();
+    }
+
+    const results = new Map();
+    for (const name of names) {
+      const contact = await this.findContactByName(name, false);
+      if (contact) {
+        results.set(name, contact);
+      }
+    }
+
+    console.log(`[GoogleContacts] Matched ${results.size}/${names.length} names to contacts`);
+    return results;
+  }
+
+  /**
    * Clear cached contacts
    */
   clearCache() {

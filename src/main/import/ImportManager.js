@@ -23,6 +23,7 @@ class ImportManager {
     summaryFunction,
     autoSummaryFunction,
     autoLabelFunction, // v1.1: Auto-label single speakers as user
+    googleContacts, // v1.1: Contact lookup for participant name matching
   }) {
     this.parser = new TranscriptParser();
     this.extractor = new MetadataExtractor();
@@ -35,6 +36,7 @@ class ImportManager {
     this.summaryFunction = summaryFunction;
     this.autoSummaryFunction = autoSummaryFunction;
     this.autoLabelFunction = autoLabelFunction;
+    this.googleContacts = googleContacts;
   }
 
   /**
@@ -203,17 +205,53 @@ class ImportManager {
     const content = this.createBasicContent(metadata, parsedData);
 
     // Extract participant emails for routing
-    const participantEmails = metadata.participantEmails || [];
+    let participantEmails = metadata.participantEmails || [];
+
+    // v1.1: Look up contacts by name to get emails
+    let contactMatches = new Map();
+    if (
+      this.googleContacts &&
+      metadata.participants.length > 0 &&
+      typeof this.googleContacts.findContactsByNames === 'function'
+    ) {
+      try {
+        contactMatches = await this.googleContacts.findContactsByNames(metadata.participants);
+        console.log(
+          `[ImportManager] Matched ${contactMatches.size}/${metadata.participants.length} participants to contacts`
+        );
+      } catch (error) {
+        console.warn('[ImportManager] Contact lookup failed:', error.message);
+      }
+    }
+
+    // Build participants array with contact info
+    const participants = metadata.participants.map(name => {
+      const contact = contactMatches.get(name);
+      if (contact) {
+        const email = contact.emails && contact.emails.length > 0 ? contact.emails[0] : null;
+        // Add email to participantEmails for routing if not already present
+        if (email && !participantEmails.includes(email)) {
+          participantEmails.push(email);
+        }
+        return {
+          name: contact.name || name,
+          email: email,
+          organization: contact.organization || null,
+          matchedFromContact: true,
+        };
+      }
+      return {
+        name,
+        email: null,
+      };
+    });
 
     const meeting = {
       id: meetingId,
       type: 'document', // Changed from 'imported' to match Zod schema
       title: metadata.title,
       date: metadata.date.toISOString(),
-      participants: metadata.participants.map(name => ({
-        name,
-        email: null, // Will be populated if found in content
-      })),
+      participants,
       participantEmails,
       transcript,
       content,
@@ -229,15 +267,16 @@ class ImportManager {
         hasSpeakers: parsedData.hasSpeakers,
         hasTimestamps: parsedData.hasTimestamps,
         confidence: metadata.confidence,
+        contactMatchCount: contactMatches.size,
       },
     };
 
-    // Match emails to participants if available
-    if (participantEmails.length > 0 && metadata.participants.length > 0) {
+    // Match emails to participants if available (legacy fallback)
+    if (participantEmails.length > 0 && participants.length > 0) {
       // Simple heuristic: if number of emails matches participants, associate them
-      if (participantEmails.length === metadata.participants.length) {
+      if (participantEmails.length === participants.length) {
         meeting.participants.forEach((p, idx) => {
-          if (participantEmails[idx]) {
+          if (!p.email && participantEmails[idx]) {
             p.email = participantEmails[idx];
           }
         });

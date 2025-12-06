@@ -9,6 +9,24 @@
 
 # Pattern definitions
 patterns:
+
+  # Quill Export
+
+  - id: "timestamp-speaker-header"
+    name: "Timestamped Speaker Header (Bracketed)"
+    description: "Bracketed timestamp followed by speaker name with colon. Example: [00:00] JD Bruce:"
+    type: "header"
+    regex: "^\\[(\\d{1,2}:\\d{2}(?::\\d{2})?)\\]\\s+([A-Za-z0-9\\s.'-]+):$"
+    captureGroups:
+      timestamp: 1
+      speaker: 2
+    enabled: true
+    priority: 1
+    examples:
+      - "[00:00] Unknown:"
+      - "[02:19] JD Bruce:"
+      - "[02:41] SPK-97u3vkknxxt:"
+  
   # ===== SPEAKER HEADER PATTERNS =====
   # Speaker name on its own line, followed by text on next line(s)
 
@@ -42,9 +60,9 @@ patterns:
 
   - id: "header-no-colon"
     name: "Speaker Header No Colon (Krisp style)"
-    description: "Speaker name without colon on own line, followed by timestamp - text. Example: Speaker 1"
+    description: "Speaker name without colon on own line. Example: Speaker 1"
     type: "header"
-    regex: "^(Speaker \\d+|You|[A-Za-z][A-Za-z\\s]+)$"
+    regex: "^(Speaker \\d+|You)$"
     captureGroups:
       speaker: 1
     enabled: true
@@ -53,8 +71,7 @@ patterns:
       - "Speaker 1"
       - "Speaker 23"
       - "You"
-      - "John Smith"
-
+  
   # ===== INLINE PATTERNS =====
   # Speaker and text on the same line
 
@@ -62,7 +79,7 @@ patterns:
     name: "Inline Speaker with Text (Basic)"
     description: "Speaker: text on same line. Example: John: Hello there"
     type: "inline"
-    regex: "^([A-Za-z\\s]+):\\s+(.+)"
+    regex: "^(?!(?:Meeting|Date|Time|ID|Email|Bio|Participants)\\b)([A-Za-z\\s]+):\\s+(.+)"
     captureGroups:
       speaker: 1
       text: 2
@@ -76,7 +93,7 @@ patterns:
     name: "Inline Speaker with Text (Extended)"
     description: "Supports numbers, hyphens, apostrophes, periods in names"
     type: "inline"
-    regex: "^([A-Za-z0-9\\s.'-]+):\\s+(.+)"
+    regex: "^(?!(?:Meeting|Date|Time|ID|Email|Bio|Participants)\\b)([A-Za-z0-9\\s.'-]+):\\s+(.+)"
     captureGroups:
       speaker: 1
       text: 2
@@ -178,6 +195,21 @@ patterns:
       - "## John Smith"
       - "## Dr. Smith"
 
+  - id: "markdown-bold-speaker-timestamp"
+    name: "Markdown Bold Speaker with Timestamp (Header)"
+    description: "Bold speaker with pipe-separated timestamp. Example: **JD Bruce | 01:43**"
+    type: "header"
+    regex: "^\\*\\*([^|*]+)\\s*\\|\\s*(\\d{1,2}:\\d{2}(?::\\d{2})?)\\*\\*$"
+    captureGroups:
+      speaker: 1
+      timestamp: 2
+    enabled: true
+    priority: 1
+    examples:
+      - "**Speaker 2 | 01:42**"
+      - "**JD Bruce | 01:43**"
+      - "**Dr. Smith | 10:23:45**"
+
   - id: "markdown-bold-inline"
     name: "Markdown Bold Inline Speaker"
     description: "Speaker in bold with text. Example: **John**: Hello there"
@@ -260,6 +292,7 @@ patterns:
     examples:
       - "12/04/24, 10:21 AM - Alex: Hey all, quick reminder the deliverables are due today."
       - "12/04/24, 10:23 AM - Priya: I'm still cleaning up the footnotes. Should be done in 20."
+
 
 # Settings for pattern matching behavior
 settings:

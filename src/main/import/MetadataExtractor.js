@@ -24,14 +24,21 @@ class MetadataExtractor {
     // Extract from filename first
     const dateFromFilename = this.extractDateFromFilename(filename);
     const titleFromFilename = this.extractTitleFromFilename(filename, dateFromFilename);
+    const titleFromFolder = this.extractTitleFromFolderName(filePath);
 
     // Extract from content
     const dateFromContent = this.extractDateFromContent(parsedData);
     const titleFromContent = this.extractTitleFromContent(parsedData);
-    const participants = this.extractParticipants(parsedData);
+    const participantsFromContent = this.extractParticipants(parsedData);
+    const participantsFromFolder = this.extractParticipantsFromFolderName(filePath);
     const emails = this.extractEmails(parsedData);
     const platform = this.detectPlatform(parsedData);
     const duration = this.estimateDuration(parsedData);
+
+    // Merge participants: folder names take priority (more reliable for Krisp exports)
+    // Use Set to deduplicate
+    const allParticipants = new Set([...participantsFromFolder, ...participantsFromContent]);
+    const participants = Array.from(allParticipants);
 
     // Get file modification time as fallback (IM-2.3)
     const dateFromFile = this.extractDateFromFileStats(filePath);
@@ -53,7 +60,7 @@ class MetadataExtractor {
       dateConfidence = 'none'; // Using today's date as last resort
     }
 
-    const finalTitle = titleFromFilename || titleFromContent || 'Imported Meeting';
+    const finalTitle = titleFromFilename || titleFromFolder || titleFromContent || 'Imported Meeting';
 
     return {
       date: finalDate,
@@ -75,9 +82,21 @@ class MetadataExtractor {
             : dateFromFile
               ? 'file_mtime'
               : 'default',
-        title: titleFromFilename ? 'high' : titleFromContent ? 'medium' : 'low',
-        titleSource: titleFromFilename ? 'filename' : titleFromContent ? 'content' : 'default',
+        title: titleFromFilename ? 'high' : titleFromFolder ? 'high' : titleFromContent ? 'medium' : 'low',
+        titleSource: titleFromFilename
+          ? 'filename'
+          : titleFromFolder
+            ? 'folder'
+            : titleFromContent
+              ? 'content'
+              : 'default',
         participants: participants.length > 0 ? 'high' : 'low',
+        participantsSource:
+          participantsFromFolder.length > 0
+            ? 'folder'
+            : participantsFromContent.length > 0
+              ? 'content'
+              : 'none',
       },
     };
   }
@@ -167,6 +186,50 @@ class MetadataExtractor {
     }
 
     return title;
+  }
+
+  /**
+   * Extract title from parent folder name
+   * Supports Krisp format: "Name1 and Name2-<hash>" -> "Name1 and Name2"
+   * @param {string} filePath - Path to the transcript file
+   * @returns {string|null} Title from folder name or null
+   */
+  extractTitleFromFolderName(filePath) {
+    try {
+      const parentDir = path.dirname(filePath);
+      const folderName = path.basename(parentDir);
+
+      // Skip generic folder names
+      if (
+        folderName === 'transcript-to-import' ||
+        folderName === 'imports' ||
+        folderName === '.' ||
+        folderName.toLowerCase() === 'transcripts'
+      ) {
+        return null;
+      }
+
+      // Remove Krisp-style hash suffix: "Name1 and Name2-<hash>"
+      const krispPattern = /^(.+)-[a-f0-9]{20,}$/i;
+      const match = folderName.match(krispPattern);
+
+      if (match) {
+        const title = match[1].trim();
+        if (title.length >= 3) {
+          console.log(`[MetadataExtractor] Extracted title from folder name: ${title}`);
+          return title;
+        }
+      }
+
+      // Use folder name as-is if it's not a generic name
+      if (folderName.length >= 3) {
+        return folderName;
+      }
+    } catch (error) {
+      console.warn('[MetadataExtractor] Error extracting title from folder:', error.message);
+    }
+
+    return null;
   }
 
   /**
@@ -260,9 +323,12 @@ class MetadataExtractor {
   extractParticipants(parsedData) {
     const participants = new Set();
 
+    // Non-dialogue labels that should not be treated as participants
+    const nonDialogueLabels = ['Unknown', 'Speaker', 'Transcript', 'Meeting', 'Note', 'Summary'];
+
     // Get speakers from entries
     for (const entry of parsedData.entries) {
-      if (entry.speaker && entry.speaker !== 'Unknown') {
+      if (entry.speaker && !nonDialogueLabels.includes(entry.speaker)) {
         participants.add(entry.speaker);
       }
     }
@@ -309,6 +375,78 @@ class MetadataExtractor {
     }
 
     return Array.from(participants);
+  }
+
+  /**
+   * Extract participant names from parent folder name
+   * Supports Krisp export format: "Name1 and Name2-<hash>"
+   * @param {string} filePath - Path to the transcript file
+   * @returns {Array<string>} Array of participant names from folder
+   */
+  extractParticipantsFromFolderName(filePath) {
+    const participants = [];
+
+    try {
+      // Get the parent folder name
+      const parentDir = path.dirname(filePath);
+      const folderName = path.basename(parentDir);
+
+      // Skip if it's a root-level import folder
+      if (
+        folderName === 'transcript-to-import' ||
+        folderName === 'imports' ||
+        folderName === '.'
+      ) {
+        return participants;
+      }
+
+      // Pattern for Krisp format: "Name1 and Name2-<hash>"
+      // Hash is typically 32 hex characters at the end
+      const krispPattern = /^(.+)-[a-f0-9]{20,}$/i;
+      const match = folderName.match(krispPattern);
+
+      if (match) {
+        const namesSection = match[1];
+
+        // Split by " and " to get individual names
+        // Handle multiple participants: "Name1 and Name2 and Name3"
+        const names = namesSection.split(/\s+and\s+/i);
+
+        for (const name of names) {
+          const trimmedName = name.trim();
+          if (trimmedName.length > 1) {
+            participants.push(trimmedName);
+          }
+        }
+
+        if (participants.length > 0) {
+          console.log(
+            `[MetadataExtractor] Extracted ${participants.length} participants from folder name: ${participants.join(', ')}`
+          );
+        }
+      } else {
+        // Try simpler pattern without hash: "Name1 and Name2"
+        if (folderName.includes(' and ')) {
+          const names = folderName.split(/\s+and\s+/i);
+          for (const name of names) {
+            const trimmedName = name.trim();
+            if (trimmedName.length > 1) {
+              participants.push(trimmedName);
+            }
+          }
+
+          if (participants.length > 0) {
+            console.log(
+              `[MetadataExtractor] Extracted ${participants.length} participants from folder name (no hash): ${participants.join(', ')}`
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[MetadataExtractor] Error extracting participants from folder:', error.message);
+    }
+
+    return participants;
   }
 
   /**
