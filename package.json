@@ -51,7 +51,12 @@
   "overrides": {
     "@electron/packager": {
       "@electron/osx-sign": "github:recallai/osx-sign"
-    }
+    },
+    "localtunnel": {
+      "axios": "^1.9.0"
+    },
+    "tmp": "^0.2.5",
+    "webpack-dev-server": "^5.2.2"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
@@ -65,7 +70,7 @@
     "electron-log": "^5.4.3",
     "electron-squirrel-startup": "^1.0.1",
     "express": "^5.1.0",
-    "googleapis": "^165.0.0",
+    "googleapis": "^167.0.0",
     "js-yaml": "^4.1.0",
     "keytar": "^7.9.0",
     "localtunnel": "^2.0.2",
