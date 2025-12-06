@@ -225,6 +225,7 @@ export function initializeSettingsUI() {
     { buttonId: 'securitySettingsTab', contentId: 'securityPanel' },
     { buttonId: 'routingSettingsTab', contentId: 'routingPanel' },
     { buttonId: 'templatesSettingsTab', contentId: 'templatesPanel' },
+    { buttonId: 'vocabularySettingsTab', contentId: 'vocabularyPanel' },
     { buttonId: 'patternsSettingsTab', contentId: 'patternsPanel' },
     { buttonId: 'notificationsSettingsTab', contentId: 'notificationsPanel' },
     { buttonId: 'shortcutsSettingsTab', contentId: 'shortcutsPanel' },
@@ -250,6 +251,9 @@ export function initializeSettingsUI() {
     } else if (buttonId === 'logsSettingsTab' && window.refreshLogs) {
       console.log('[Settings] Logs tab clicked, auto-loading logs');
       window.refreshLogs();
+    } else if (buttonId === 'vocabularySettingsTab') {
+      console.log('[Settings] Vocabulary tab clicked, loading vocabulary');
+      loadVocabulary();
     }
   });
 
@@ -622,3 +626,456 @@ async function saveUserProfile() {
     window.showToast?.('Failed to save profile: ' + error.message, 'error');
   }
 }
+
+// ===================================================================
+// VC-2: Vocabulary Management
+// ===================================================================
+
+let vocabularyScope = 'global'; // 'global' or 'client'
+let selectedClientSlug = '';
+let vocabularyConfig = null;
+
+/**
+ * Load vocabulary configuration and update UI
+ */
+async function loadVocabulary() {
+  try {
+    if (!window.electronAPI?.vocabularyGetConfig) {
+      console.warn('[Vocabulary] API not available');
+      return;
+    }
+
+    const result = await window.electronAPI.vocabularyGetConfig();
+    if (result.success) {
+      vocabularyConfig = result.data;
+      renderVocabularyUI();
+      await loadClientSlugs();
+    } else {
+      console.error('[Vocabulary] Failed to load config:', result.error);
+      window.showToast?.('Failed to load vocabulary: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('[Vocabulary] Error loading vocabulary:', error);
+    window.showToast?.('Error loading vocabulary', 'error');
+  }
+}
+
+/**
+ * Load client slugs from routing config for the client selector
+ */
+async function loadClientSlugs() {
+  try {
+    const result = await window.electronAPI.vocabularyGetClientSlugs();
+    if (result.success) {
+      const clientSelect = document.getElementById('vocabularyClientSelect');
+      if (clientSelect) {
+        // Clear existing options except the default
+        clientSelect.innerHTML = '<option value="">-- Select a client --</option>';
+
+        // Add client slugs from routing config
+        for (const slug of result.data) {
+          const option = document.createElement('option');
+          option.value = slug;
+          option.textContent = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+          clientSelect.appendChild(option);
+        }
+
+        // Add client slugs from vocabulary config that aren't in routing
+        for (const slug of Object.keys(vocabularyConfig?.clients || {})) {
+          if (!result.data.includes(slug)) {
+            const option = document.createElement('option');
+            option.value = slug;
+            option.textContent = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' (vocabulary only)';
+            clientSelect.appendChild(option);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[Vocabulary] Error loading client slugs:', error);
+  }
+}
+
+/**
+ * Render the vocabulary UI based on current state
+ */
+function renderVocabularyUI() {
+  const vocab = getActiveVocabulary();
+
+  renderSpellingList(vocab.spelling_corrections || []);
+  renderKeywordList(vocab.keyword_boosts || []);
+
+  // Update counts
+  document.getElementById('spellingCount').textContent = (vocab.spelling_corrections || []).length;
+  document.getElementById('keywordCount').textContent = (vocab.keyword_boosts || []).length;
+}
+
+/**
+ * Get the currently active vocabulary (global or client-specific)
+ */
+function getActiveVocabulary() {
+  if (!vocabularyConfig) return { spelling_corrections: [], keyword_boosts: [] };
+
+  if (vocabularyScope === 'client' && selectedClientSlug) {
+    return vocabularyConfig.clients?.[selectedClientSlug] || { spelling_corrections: [], keyword_boosts: [] };
+  }
+  return vocabularyConfig.global || { spelling_corrections: [], keyword_boosts: [] };
+}
+
+/**
+ * Render the spelling corrections list
+ */
+function renderSpellingList(corrections) {
+  const list = document.getElementById('spellingList');
+  if (!list) return;
+
+  if (corrections.length === 0) {
+    list.innerHTML = '<div class="vocabulary-empty">No spelling corrections defined</div>';
+    return;
+  }
+
+  list.innerHTML = corrections.map((sc, index) => `
+    <div class="vocabulary-item" data-index="${index}">
+      <div class="vocabulary-item-content">
+        <span class="vocabulary-item-from">${Array.isArray(sc.from) ? sc.from.join(', ') : sc.from}</span>
+        <span class="vocabulary-arrow">→</span>
+        <span class="vocabulary-item-to">${sc.to}</span>
+      </div>
+      <button class="vocabulary-item-delete" onclick="deleteSpelling('${sc.to}')" title="Delete">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 6l12 12M6 18L18 6"/>
+        </svg>
+      </button>
+    </div>
+  `).join('');
+}
+
+/**
+ * Render the keyword boosts list
+ */
+function renderKeywordList(keywords) {
+  const list = document.getElementById('keywordList');
+  if (!list) return;
+
+  if (keywords.length === 0) {
+    list.innerHTML = '<div class="vocabulary-empty">No keyword boosts defined</div>';
+    return;
+  }
+
+  list.innerHTML = keywords.map((kb, index) => `
+    <div class="vocabulary-item" data-index="${index}">
+      <div class="vocabulary-item-content">
+        <span class="vocabulary-item-word">${kb.word}</span>
+        <span class="vocabulary-item-intensifier">${kb.intensifier || 5}</span>
+      </div>
+      <button class="vocabulary-item-delete" onclick="deleteKeyword('${kb.word}')" title="Delete">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 6l12 12M6 18L18 6"/>
+        </svg>
+      </button>
+    </div>
+  `).join('');
+}
+
+/**
+ * Add a spelling correction
+ */
+async function addSpelling() {
+  const fromInput = document.getElementById('spellingFrom');
+  const toInput = document.getElementById('spellingTo');
+
+  const fromValue = fromInput?.value?.trim();
+  const toValue = toInput?.value?.trim();
+
+  if (!fromValue || !toValue) {
+    window.showToast?.('Please enter both incorrect and correct spellings', 'error');
+    return;
+  }
+
+  const fromArray = fromValue.split(',').map(s => s.trim()).filter(s => s);
+
+  try {
+    let result;
+    if (vocabularyScope === 'client' && selectedClientSlug) {
+      result = await window.electronAPI.vocabularyAddClientSpelling(selectedClientSlug, fromArray, toValue);
+    } else {
+      result = await window.electronAPI.vocabularyAddGlobalSpelling(fromArray, toValue);
+    }
+
+    if (result.success) {
+      fromInput.value = '';
+      toInput.value = '';
+      await loadVocabulary();
+      window.showToast?.('Spelling correction added', 'success');
+    } else {
+      window.showToast?.('Failed to add spelling: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('[Vocabulary] Error adding spelling:', error);
+    window.showToast?.('Error adding spelling correction', 'error');
+  }
+}
+
+/**
+ * Add a keyword boost
+ */
+async function addKeyword() {
+  const wordInput = document.getElementById('keywordWord');
+  const intensifierInput = document.getElementById('keywordIntensifier');
+
+  const word = wordInput?.value?.trim();
+  const intensifier = parseInt(intensifierInput?.value) || 5;
+
+  if (!word) {
+    window.showToast?.('Please enter a word', 'error');
+    return;
+  }
+
+  try {
+    let result;
+    if (vocabularyScope === 'client' && selectedClientSlug) {
+      result = await window.electronAPI.vocabularyAddClientKeyword(selectedClientSlug, word, intensifier);
+    } else {
+      result = await window.electronAPI.vocabularyAddGlobalKeyword(word, intensifier);
+    }
+
+    if (result.success) {
+      wordInput.value = '';
+      intensifierInput.value = '5';
+      await loadVocabulary();
+      window.showToast?.('Keyword boost added', 'success');
+    } else {
+      window.showToast?.('Failed to add keyword: ' + result.error, 'error');
+    }
+  } catch (error) {
+    console.error('[Vocabulary] Error adding keyword:', error);
+    window.showToast?.('Error adding keyword boost', 'error');
+  }
+}
+
+/**
+ * Delete a spelling correction
+ */
+async function deleteSpelling(to) {
+  try {
+    // For now, only global deletions are supported via the API
+    // Client deletions would need a separate API or direct config manipulation
+    if (vocabularyScope === 'client') {
+      // Remove from client config manually
+      if (vocabularyConfig.clients?.[selectedClientSlug]) {
+        vocabularyConfig.clients[selectedClientSlug].spelling_corrections =
+          vocabularyConfig.clients[selectedClientSlug].spelling_corrections.filter(sc => sc.to !== to);
+        await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
+        await loadVocabulary();
+        window.showToast?.('Spelling correction removed', 'success');
+      }
+    } else {
+      const result = await window.electronAPI.vocabularyRemoveGlobalSpelling(to);
+      if (result.success) {
+        await loadVocabulary();
+        window.showToast?.('Spelling correction removed', 'success');
+      } else {
+        window.showToast?.('Failed to remove spelling: ' + result.error, 'error');
+      }
+    }
+  } catch (error) {
+    console.error('[Vocabulary] Error deleting spelling:', error);
+    window.showToast?.('Error removing spelling correction', 'error');
+  }
+}
+
+/**
+ * Delete a keyword boost
+ */
+async function deleteKeyword(word) {
+  try {
+    if (vocabularyScope === 'client') {
+      // Remove from client config manually
+      if (vocabularyConfig.clients?.[selectedClientSlug]) {
+        vocabularyConfig.clients[selectedClientSlug].keyword_boosts =
+          vocabularyConfig.clients[selectedClientSlug].keyword_boosts.filter(kb => kb.word !== word);
+        await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
+        await loadVocabulary();
+        window.showToast?.('Keyword boost removed', 'success');
+      }
+    } else {
+      const result = await window.electronAPI.vocabularyRemoveGlobalKeyword(word);
+      if (result.success) {
+        await loadVocabulary();
+        window.showToast?.('Keyword boost removed', 'success');
+      } else {
+        window.showToast?.('Failed to remove keyword: ' + result.error, 'error');
+      }
+    }
+  } catch (error) {
+    console.error('[Vocabulary] Error deleting keyword:', error);
+    window.showToast?.('Error removing keyword boost', 'error');
+  }
+}
+
+/**
+ * Initialize vocabulary UI event listeners
+ */
+function initializeVocabularyUI() {
+  // Scope tab switching
+  document.querySelectorAll('.vocabulary-scope-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.vocabulary-scope-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      vocabularyScope = tab.dataset.scope;
+      const clientSelector = document.getElementById('vocabularyClientSelector');
+
+      if (vocabularyScope === 'client') {
+        clientSelector.style.display = 'flex';
+      } else {
+        clientSelector.style.display = 'none';
+        selectedClientSlug = '';
+      }
+
+      renderVocabularyUI();
+    });
+  });
+
+  // Client selector
+  const clientSelect = document.getElementById('vocabularyClientSelect');
+  if (clientSelect) {
+    clientSelect.addEventListener('change', (e) => {
+      selectedClientSlug = e.target.value;
+      renderVocabularyUI();
+    });
+  }
+
+  // Add new client vocabulary
+  const addNewClientBtn = document.getElementById('addNewClientVocab');
+  if (addNewClientBtn) {
+    addNewClientBtn.addEventListener('click', async () => {
+      const slug = prompt('Enter client slug (e.g., "acme-corp"):');
+      if (slug) {
+        const normalizedSlug = slug.toLowerCase().replace(/\s+/g, '-');
+        if (!vocabularyConfig.clients) vocabularyConfig.clients = {};
+        if (!vocabularyConfig.clients[normalizedSlug]) {
+          vocabularyConfig.clients[normalizedSlug] = {
+            spelling_corrections: [],
+            keyword_boosts: []
+          };
+          await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
+          await loadClientSlugs();
+          document.getElementById('vocabularyClientSelect').value = normalizedSlug;
+          selectedClientSlug = normalizedSlug;
+          renderVocabularyUI();
+          window.showToast?.(`Created vocabulary for "${normalizedSlug}"`, 'success');
+        } else {
+          document.getElementById('vocabularyClientSelect').value = normalizedSlug;
+          selectedClientSlug = normalizedSlug;
+          renderVocabularyUI();
+        }
+      }
+    });
+  }
+
+  // Add spelling button
+  const addSpellingBtn = document.getElementById('addSpellingBtn');
+  if (addSpellingBtn) {
+    addSpellingBtn.addEventListener('click', addSpelling);
+  }
+
+  // Add keyword button
+  const addKeywordBtn = document.getElementById('addKeywordBtn');
+  if (addKeywordBtn) {
+    addKeywordBtn.addEventListener('click', addKeyword);
+  }
+
+  // Enter key support for spelling form
+  document.getElementById('spellingTo')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') addSpelling();
+  });
+
+  // Enter key support for keyword form
+  document.getElementById('keywordWord')?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') addKeyword();
+  });
+
+  // Reload button
+  const reloadBtn = document.getElementById('vocabularyReloadBtn');
+  if (reloadBtn) {
+    reloadBtn.addEventListener('click', async () => {
+      await window.electronAPI.vocabularyReload();
+      await loadVocabulary();
+      window.showToast?.('Vocabulary reloaded from disk', 'success');
+    });
+  }
+
+  // Export button (placeholder - would need file dialog)
+  const exportBtn = document.getElementById('vocabularyExportBtn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      if (vocabularyConfig) {
+        const dataStr = JSON.stringify(vocabularyConfig, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `vocabulary-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        window.showToast?.('Vocabulary exported', 'success');
+      }
+    });
+  }
+
+  // Import button (placeholder)
+  const importBtn = document.getElementById('vocabularyImportBtn');
+  if (importBtn) {
+    importBtn.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,.yaml,.yml';
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+            try {
+              const imported = JSON.parse(event.target.result);
+              // Merge with existing
+              if (imported.global) {
+                vocabularyConfig.global.spelling_corrections.push(...(imported.global.spelling_corrections || []));
+                vocabularyConfig.global.keyword_boosts.push(...(imported.global.keyword_boosts || []));
+              }
+              if (imported.clients) {
+                for (const [slug, clientVocab] of Object.entries(imported.clients)) {
+                  if (!vocabularyConfig.clients[slug]) {
+                    vocabularyConfig.clients[slug] = clientVocab;
+                  } else {
+                    vocabularyConfig.clients[slug].spelling_corrections.push(...(clientVocab.spelling_corrections || []));
+                    vocabularyConfig.clients[slug].keyword_boosts.push(...(clientVocab.keyword_boosts || []));
+                  }
+                }
+              }
+              await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
+              await loadVocabulary();
+              window.showToast?.('Vocabulary imported and merged', 'success');
+            } catch (error) {
+              console.error('[Vocabulary] Import error:', error);
+              window.showToast?.('Failed to import vocabulary: ' + error.message, 'error');
+            }
+          };
+          reader.readAsText(file);
+        }
+      };
+      input.click();
+    });
+  }
+}
+
+// Expose delete functions globally for onclick handlers
+window.deleteSpelling = deleteSpelling;
+window.deleteKeyword = deleteKeyword;
+
+// Initialize vocabulary UI when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  initializeVocabularyUI();
+});

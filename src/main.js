@@ -20,6 +20,7 @@ const { createLLMServiceFromEnv, createLLMServiceFromCredentials } = require('./
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
 const speakerMappingService = require('./main/services/speakerMappingService');
+const vocabularyService = require('./main/services/vocabularyService');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
@@ -2079,9 +2080,10 @@ async function initSDK() {
       await updateNoteWithRecordingInfo(windowId);
       console.log('Recording processing complete - preparing for transcription');
 
-      // Get the meeting ID and transcription provider
+      // Get the meeting ID, transcription provider, and participant emails for vocabulary
       let transcriptionProvider = 'recallai'; // Default
       let meetingId = null;
+      let participantEmails = [];
       try {
         const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
         const meetingsData = JSON.parse(fileData);
@@ -2092,6 +2094,9 @@ async function initSDK() {
             transcriptionProvider = meeting.transcriptionProvider;
             console.log(`[Transcription] Using provider: ${transcriptionProvider}`);
           }
+          // VC-3.5: Capture participant emails for vocabulary lookup
+          participantEmails = meeting.participantEmails || [];
+          console.log(`[Transcription] VC-3: Found ${participantEmails.length} participant emails for vocabulary lookup`);
         }
       } catch (error) {
         console.error(
@@ -2160,10 +2165,36 @@ async function initSDK() {
               });
             }
 
+            // VC-3.5 & VC-3.6: Determine client vocabulary from participants
+            let vocabularyOptions = {};
+            try {
+              let clientSlug = null;
+              if (participantEmails.length > 0 && routingEngine) {
+                const routingDecision = routingEngine.route({
+                  participantEmails,
+                  meetingTitle: 'Vocabulary Lookup', // Title not used for vocabulary
+                  meetingDate: new Date(),
+                });
+                // Get client slug from first route if it's a client type
+                const clientRoute = routingDecision.routes.find(r => r.type === 'client');
+                if (clientRoute) {
+                  clientSlug = clientRoute.slug;
+                  console.log(`[Transcription] VC-3: Matched client "${clientSlug}" from participants`);
+                }
+              }
+              // Get vocabulary formatted for the provider (includes global + client-specific)
+              vocabularyOptions = vocabularyService.getVocabularyForProvider(transcriptionProvider, clientSlug);
+              const vocabCount = vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
+              console.log(`[Transcription] VC-3: Using ${vocabCount} vocabulary entries for ${transcriptionProvider}`);
+            } catch (vocabError) {
+              console.warn('[Transcription] VC-3: Failed to load vocabulary, continuing without:', vocabError.message);
+            }
+
             console.log(`[Transcription] Calling transcriptionService.transcribe()...`);
             const transcript = await transcriptionService.transcribe(
               transcriptionProvider,
-              recordingPath
+              recordingPath,
+              vocabularyOptions
             );
 
             console.log(`[Transcription] ✓ ${transcriptionProvider} transcription complete`);
@@ -3464,6 +3495,8 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
                 currentMeeting.transcriptProvider || rendererMeeting.transcriptProvider,
               transcriptConfidence:
                 currentMeeting.transcriptConfidence || rendererMeeting.transcriptConfidence,
+              // UI-1: Preserve platform (can be set by SDK or updateMeetingField IPC)
+              platform: currentMeeting.platform || rendererMeeting.platform,
             };
           }
 
@@ -3492,6 +3525,40 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
       };
     }
     console.error('[IPC] Non-Zod error:', error.message, error.stack);
+    return { success: false, error: error.message };
+  }
+});
+
+// Update a single field on a meeting (UI-1: Platform changes in metadata tab)
+ipcMain.handle('updateMeetingField', async (event, meetingId, field, value) => {
+  console.log(`[IPC] updateMeetingField called: meetingId=${meetingId}, field=${field}, value=${value}`);
+
+  // Allowlist of fields that can be updated via this handler
+  const allowedFields = ['platform', 'title', 'status'];
+  if (!allowedFields.includes(field)) {
+    console.error(`[IPC] Field '${field}' is not allowed to be updated via updateMeetingField`);
+    return { success: false, error: `Field '${field}' is not allowed` };
+  }
+
+  try {
+    await fileOperationManager.scheduleOperation(async currentData => {
+      // Find and update the meeting in pastMeetings
+      const meetingIndex = currentData.pastMeetings.findIndex(m => m.id === meetingId);
+      if (meetingIndex === -1) {
+        console.warn(`[IPC] Meeting ${meetingId} not found in pastMeetings`);
+        return currentData; // Return unchanged
+      }
+
+      // Update the field
+      currentData.pastMeetings[meetingIndex][field] = value;
+      console.log(`[IPC] Updated meeting ${meetingId} field '${field}' to '${value}'`);
+
+      return currentData;
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('[IPC] Error updating meeting field:', error);
     return { success: false, error: error.message };
   }
 });
@@ -5262,6 +5329,142 @@ ipcMain.handle('routing:restoreBackup', createIpcHandler(async () => {
 // ===================================================================
 
 // ===================================================================
+// Vocabulary Management IPC Handlers (VC-2)
+// ===================================================================
+
+// Get vocabulary configuration
+ipcMain.handle('vocabulary:getConfig', async () => {
+  try {
+    const config = vocabularyService.getConfig(true); // Force reload
+    return { success: true, data: config };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error getting config:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get vocabulary statistics
+ipcMain.handle('vocabulary:getStats', async () => {
+  try {
+    const stats = vocabularyService.getStats();
+    return { success: true, data: stats };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error getting stats:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get client slugs from routing config (for client selector)
+ipcMain.handle('vocabulary:getClientSlugs', async () => {
+  try {
+    // Get client slugs from routing config
+    const routingPath = getRoutingConfigPath();
+    if (fs.existsSync(routingPath)) {
+      const content = fs.readFileSync(routingPath, 'utf8');
+      const config = yaml.load(content);
+      const clientSlugs = Object.keys(config?.clients || {});
+      return { success: true, data: clientSlugs };
+    }
+    return { success: true, data: [] };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error getting client slugs:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Add global spelling correction
+ipcMain.handle('vocabulary:addGlobalSpelling', async (event, { from, to }) => {
+  try {
+    vocabularyService.addGlobalSpellingCorrection(from, to);
+    return { success: true };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error adding global spelling:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Add global keyword boost
+ipcMain.handle('vocabulary:addGlobalKeyword', async (event, { word, intensifier }) => {
+  try {
+    vocabularyService.addGlobalKeywordBoost(word, intensifier || 5);
+    return { success: true };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error adding global keyword:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Add client spelling correction
+ipcMain.handle('vocabulary:addClientSpelling', async (event, { clientSlug, from, to }) => {
+  try {
+    vocabularyService.addClientSpellingCorrection(clientSlug, from, to);
+    return { success: true };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error adding client spelling:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Add client keyword boost
+ipcMain.handle('vocabulary:addClientKeyword', async (event, { clientSlug, word, intensifier }) => {
+  try {
+    vocabularyService.addClientKeywordBoost(clientSlug, word, intensifier || 5);
+    return { success: true };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error adding client keyword:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Remove global spelling correction
+ipcMain.handle('vocabulary:removeGlobalSpelling', async (event, { to }) => {
+  try {
+    const removed = vocabularyService.removeGlobalSpellingCorrection(to);
+    return { success: true, removed };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error removing global spelling:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Remove global keyword boost
+ipcMain.handle('vocabulary:removeGlobalKeyword', async (event, { word }) => {
+  try {
+    const removed = vocabularyService.removeGlobalKeywordBoost(word);
+    return { success: true, removed };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error removing global keyword:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Save full vocabulary configuration (for bulk updates)
+ipcMain.handle('vocabulary:saveConfig', async (event, config) => {
+  try {
+    vocabularyService.save(config);
+    return { success: true };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error saving config:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Reload vocabulary from disk
+ipcMain.handle('vocabulary:reload', async () => {
+  try {
+    vocabularyService.reload();
+    return { success: true };
+  } catch (error) {
+    console.error('[Vocabulary IPC] Error reloading:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// End Vocabulary IPC Handlers
+// ===================================================================
+
+// ===================================================================
 // LLM Provider Management
 // ===================================================================
 
@@ -5483,24 +5686,314 @@ ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
   }
 });
 
-// Get import manager status
+// Get import manager status (IM-1: updated to include audio formats)
 ipcMain.handle('import:getStatus', async () => {
   return {
     initialized: !!importManager,
     supportedFormats: ['.txt', '.md', '.vtt', '.srt'],
+    audioFormats: ['.mp3', '.wav', '.m4a', '.ogg', '.webm', '.flac', '.aac'],
   };
 });
 
-// Select files for import using Electron dialog
+// IM-1.4: Transcribe audio file using selected provider
+ipcMain.handle('import:transcribeAudio', async (event, { filePath, provider, options = {} }) => {
+  console.log(`[Import] Transcribing audio file: ${filePath} with provider: ${provider}`);
+
+  if (!transcriptionService) {
+    return { success: false, error: 'Transcription service not initialized' };
+  }
+
+  // Validate provider
+  const validProviders = ['assemblyai', 'deepgram'];
+  if (!validProviders.includes(provider)) {
+    return { success: false, error: `Invalid provider: ${provider}. Use one of: ${validProviders.join(', ')}` };
+  }
+
+  // Validate file exists
+  if (!fs.existsSync(filePath)) {
+    return { success: false, error: `File not found: ${filePath}` };
+  }
+
+  try {
+    // Send progress update
+    event.sender.send('import:progress', { step: 'transcribing', file: path.basename(filePath), provider });
+
+    // VC-3: Get vocabulary for transcription (user can specify clientSlug in options)
+    let vocabularyOptions = {};
+    try {
+      const clientSlug = options.clientSlug || null;
+      vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
+      const vocabCount = vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
+      if (vocabCount > 0) {
+        console.log(`[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`);
+      }
+    } catch (vocabError) {
+      console.warn('[Import] VC-3: Failed to load vocabulary:', vocabError.message);
+    }
+
+    // Transcribe the audio file with vocabulary
+    const transcribeOptions = { ...options, ...vocabularyOptions };
+    const transcript = await transcriptionService.transcribe(provider, filePath, transcribeOptions);
+
+    console.log(`[Import] Transcription complete. Got ${transcript.utterances?.length || 0} utterances`);
+
+    return {
+      success: true,
+      transcript: transcript.utterances || [],
+      metadata: {
+        provider,
+        duration: transcript.audio_duration || null,
+        confidence: transcript.confidence || null,
+        words: transcript.words?.length || 0,
+      },
+    };
+  } catch (error) {
+    console.error('[Import] Audio transcription failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// IM-1.5: Import audio file (transcribe then import as meeting)
+ipcMain.handle('import:importAudioFile', async (event, { filePath, provider, options = {} }) => {
+  console.log(`[Import] Importing audio file: ${filePath}`);
+
+  if (!importManager) {
+    return { success: false, error: 'Import manager not initialized' };
+  }
+
+  if (!transcriptionService) {
+    return { success: false, error: 'Transcription service not initialized' };
+  }
+
+  const {
+    generateAutoSummary = false,
+    templateIds = null,
+    autoExport = false,
+    clientSlug = null, // VC-3: Optional client for vocabulary
+    platform = 'unknown', // UI-1.6: Meeting platform
+  } = options;
+
+  try {
+    // Step 1: Transcribe the audio file
+    event.sender.send('import:progress', { step: 'transcribing', file: path.basename(filePath), provider });
+
+    // VC-3: Get vocabulary for transcription
+    let vocabularyOptions = {};
+    try {
+      vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
+      const vocabCount = vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
+      if (vocabCount > 0) {
+        console.log(`[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`);
+      }
+    } catch (vocabError) {
+      console.warn('[Import] VC-3: Failed to load vocabulary:', vocabError.message);
+    }
+
+    const transcriptResult = await transcriptionService.transcribe(provider, filePath, vocabularyOptions);
+
+    // Transcription service returns 'entries' not 'utterances'
+    const entries = transcriptResult.entries || transcriptResult.utterances || [];
+    if (entries.length === 0) {
+      return { success: false, error: 'Transcription returned no content' };
+    }
+
+    console.log(`[Import] Transcription complete. Got ${entries.length} entries`);
+
+    // Step 2: Create a meeting object from the transcription
+    event.sender.send('import:progress', { step: 'creating-meeting', file: path.basename(filePath) });
+
+    const meetingId = 'imported-audio-' + Date.now();
+    const fileName = path.basename(filePath, path.extname(filePath));
+    const fileStats = fs.statSync(filePath);
+
+    // Extract metadata from filename (basic parsing)
+    const dateMatch = fileName.match(/(\d{4}[-_]\d{2}[-_]\d{2})/);
+    const meetingDate = dateMatch ? new Date(dateMatch[1].replace(/_/g, '-')) : fileStats.mtime;
+
+    // Detect UUID-like filenames (e.g., windows-desktop-032c0723-9059-4218-956e-68b6654d3ebd)
+    const isUuidFilename = /^[a-z-]+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileName) ||
+                           /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(fileName);
+
+    // Generate a friendly title
+    const dateStr = meetingDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = meetingDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const friendlyTitle = isUuidFilename
+      ? `Imported Recording - ${dateStr} ${timeStr}`
+      : fileName.replace(/[-_]/g, ' ').trim() || 'Imported Audio';
+
+    // Convert entries to transcript format
+    const transcript = entries.map(u => ({
+      speaker: u.speaker || 'Speaker',
+      speakerName: u.speaker || 'Speaker',
+      text: u.text || '',
+      timestamp: formatTimestamp(u.timestamp || u.start || 0),
+      start: u.timestamp || u.start || 0,
+      end: u.end || 0,
+      confidence: u.confidence || null,
+    }));
+
+    // Build participants list from unique speakers
+    const uniqueSpeakers = [...new Set(transcript.map(t => t.speaker))];
+    const participants = uniqueSpeakers.map(speaker => ({
+      name: speaker,
+      email: null,
+    }));
+
+    const meeting = {
+      id: meetingId,
+      type: 'document',
+      title: friendlyTitle,
+      date: meetingDate.toISOString(),
+      participants,
+      participantEmails: [],
+      transcript,
+      content: `# ${friendlyTitle}\n\n**Source:** Imported from audio file\n**Duration:** ${formatDuration(transcriptResult.audio_duration || 0)}\n`,
+      platform, // UI-1.6: Use selected platform from options
+      duration: transcriptResult.audio_duration || null,
+      source: 'audio-import',
+      importedFrom: path.basename(filePath),
+      importedAt: new Date().toISOString(),
+      status: 'needs_verification',
+      metadata: {
+        originalFormat: 'audio',
+        hasSpeakers: true,
+        hasTimestamps: true,
+        transcriptionProvider: provider,
+        audioConfidence: transcriptResult.confidence || null,
+      },
+    };
+
+    // Step 3: Auto-label single speakers as user
+    if (importManager.autoLabelFunction && meeting.transcript && meeting.transcript.length > 0) {
+      try {
+        const labelResult = await importManager.autoLabelFunction(meeting);
+        if (labelResult?.applied) {
+          meeting.transcript = labelResult.transcript;
+          if (labelResult.userProfile) {
+            meeting.participants = [{
+              name: labelResult.userProfile.name,
+              email: labelResult.userProfile.email || null,
+              isHost: true,
+            }];
+          }
+          console.log('[Import] Auto-labeled single speaker as:', labelResult.userProfile?.name);
+        }
+      } catch (labelError) {
+        console.warn('[Import] Auto-label failed:', labelError.message);
+      }
+    }
+
+    // Step 4: Generate auto-summary if requested
+    if (generateAutoSummary && meeting.transcript.length > 0) {
+      event.sender.send('import:progress', { step: 'generating-auto-summary', file: path.basename(filePath) });
+      try {
+        await importManager.generateSummary(meeting);
+      } catch (err) {
+        console.warn('[Import] Auto-summary generation failed:', err.message);
+      }
+    }
+
+    // Step 5: Generate template summaries if requested
+    if (templateIds && templateIds.length > 0 && meeting.transcript.length > 0) {
+      event.sender.send('import:progress', { step: 'generating-template-summaries', file: path.basename(filePath) });
+      try {
+        await importManager.generateTemplateSummaries(meeting, templateIds);
+      } catch (err) {
+        console.warn('[Import] Template summary generation failed:', err.message);
+      }
+    }
+
+    // Step 6: Export to Obsidian if requested
+    if (autoExport) {
+      event.sender.send('import:progress', { step: 'exporting', file: path.basename(filePath) });
+      try {
+        await importManager.exportToObsidian(meeting);
+      } catch (err) {
+        console.warn('[Import] Export to Obsidian failed:', err.message);
+      }
+    }
+
+    // Step 7: Save to meetings.json
+    event.sender.send('import:progress', { step: 'saving', file: path.basename(filePath) });
+    const data = await fileOperationManager.readMeetingsData();
+    data.pastMeetings.unshift(meeting);
+    await fileOperationManager.writeData(data);
+
+    return {
+      success: true,
+      meeting,
+      metadata: {
+        provider,
+        duration: transcriptResult.audio_duration,
+        utteranceCount: entries.length,
+      },
+    };
+  } catch (error) {
+    console.error('[Import] Audio import failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+/**
+ * Format seconds to HH:MM:SS timestamp
+ */
+function formatTimestamp(seconds) {
+  if (!seconds && seconds !== 0) return '00:00:00';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Format duration in seconds to human-readable string
+ */
+function formatDuration(seconds) {
+  if (!seconds) return 'Unknown';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hrs > 0) {
+    return `${hrs}h ${mins}m`;
+  }
+  return `${mins} minutes`;
+}
+
+// IM-1: Audio file extensions for import
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'flac', 'aac'];
+const TRANSCRIPT_EXTENSIONS = ['txt', 'md', 'vtt', 'srt'];
+
+/**
+ * Check if a file is an audio file based on extension
+ * @param {string} filePath - Path to the file
+ * @returns {boolean} True if audio file
+ */
+function isAudioFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase().slice(1);
+  return AUDIO_EXTENSIONS.includes(ext);
+}
+
+/**
+ * Check if a file is a transcript file based on extension
+ * @param {string} filePath - Path to the file
+ * @returns {boolean} True if transcript file
+ */
+function isTranscriptFile(filePath) {
+  const ext = path.extname(filePath).toLowerCase().slice(1);
+  return TRANSCRIPT_EXTENSIONS.includes(ext);
+}
+
+// Select files for import using Electron dialog (IM-1: now includes audio files)
 ipcMain.handle('import:selectFiles', async () => {
   const { dialog } = require('electron');
   const fs = require('fs').promises;
 
   const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Select Transcript Files',
+    title: 'Select Files to Import',
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'Transcript Files', extensions: ['txt', 'md', 'vtt', 'srt'] },
+      { name: 'All Supported Files', extensions: [...TRANSCRIPT_EXTENSIONS, ...AUDIO_EXTENSIONS] },
+      { name: 'Transcript Files', extensions: TRANSCRIPT_EXTENSIONS },
+      { name: 'Audio Files', extensions: AUDIO_EXTENSIONS },
       { name: 'All Files', extensions: ['*'] },
     ],
   });
@@ -5509,15 +6002,18 @@ ipcMain.handle('import:selectFiles', async () => {
     return [];
   }
 
-  // Get file stats to include file sizes
+  // Get file stats to include file sizes and detect file type
   const filesWithStats = await Promise.all(
     result.filePaths.map(async filePath => {
       try {
         const stats = await fs.stat(filePath);
+        const isAudio = isAudioFile(filePath);
         return {
           path: filePath,
           name: path.basename(filePath),
           size: stats.size,
+          type: isAudio ? 'audio' : 'transcript',
+          isAudio,
         };
       } catch (error) {
         console.error(`Error getting stats for ${filePath}:`, error);
@@ -5525,6 +6021,8 @@ ipcMain.handle('import:selectFiles', async () => {
           path: filePath,
           name: path.basename(filePath),
           size: 0,
+          type: isAudioFile(filePath) ? 'audio' : 'transcript',
+          isAudio: isAudioFile(filePath),
         };
       }
     })
@@ -6517,6 +7015,17 @@ ipcMain.handle(
           meeting.transcript = [];
         }
 
+        // UI-1: Set platform from detected meeting if available, otherwise default to in-person
+        if (!meeting.platform) {
+          if (detectedMeeting?.window?.platform) {
+            meeting.platform = detectedMeeting.window.platform;
+            console.log(`[Recording] UI-1: Setting platform from detected meeting: ${meeting.platform}`);
+          } else {
+            meeting.platform = 'in-person';
+            console.log('[Recording] UI-1: No detected meeting, defaulting to in-person');
+          }
+        }
+
         // Store tracking info for the recording
         global.activeMeetingIds = global.activeMeetingIds || {};
         global.activeMeetingIds[key] = {
@@ -7048,8 +7557,10 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
     const template = `# ${platformName} Meeting Notes\nRecording: In Progress...`;
 
     // Create a new meeting object
+    // UI-1: Use SDK platform code (e.g., "zoom") not display name (e.g., "Zoom") for icon matching
+    const sdkPlatform = detectedMeeting.window.platform || 'unknown';
     console.log(
-      `[Meeting Creation] Creating meeting for detected ${platformName}, windowId: ${detectedMeeting.window.id}`
+      `[Meeting Creation] Creating meeting for detected ${platformName}, windowId: ${detectedMeeting.window.id}, sdkPlatform: ${sdkPlatform}`
     );
     const newMeeting = {
       id: id,
@@ -7061,7 +7572,7 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
       participants: [],
       content: template,
       recordingId: detectedMeeting.window.id,
-      platform: platformName,
+      platform: sdkPlatform, // UI-1: Use SDK platform code for icon matching
       transcript: [], // Initialize an empty array for transcript data
       transcriptionProvider: transcriptionProvider, // Save the transcription provider
     };

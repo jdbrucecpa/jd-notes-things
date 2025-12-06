@@ -13,6 +13,44 @@ import { openSpeakerMappingModal, hasCrypticSpeakerIds } from './speakerMapping.
 let currentMeeting = null;
 let currentMeetingId = null;
 
+// Platform display configuration
+const PLATFORM_NAMES = {
+  zoom: 'Zoom',
+  teams: 'Teams',
+  'google-meet': 'Google Meet',
+  webex: 'Webex',
+  whereby: 'Whereby',
+  'in-person': 'In-Person',
+  unknown: 'Meeting',
+};
+
+const PLATFORM_COLORS = {
+  zoom: '#2D8CFF',
+  teams: '#6264A7',
+  'google-meet': '#0F9D58',
+  webex: '#00BCEB',
+  whereby: '#6366F1',
+  'in-person': '#8B5CF6',
+  unknown: '#999999',
+};
+
+/**
+ * Update the platform display in the meeting header (UI-1)
+ * @param {object} meeting - The meeting data object
+ */
+function updatePlatformDisplay(meeting) {
+  const platformEl = document.getElementById('meetingDetailPlatform');
+  const platformTextEl = document.getElementById('meetingDetailPlatformText');
+  if (platformEl && platformTextEl) {
+    // Normalize platform to lowercase for matching
+    const platform = (meeting.platform || 'unknown').toLowerCase();
+    const platformName = PLATFORM_NAMES[platform] || PLATFORM_NAMES.unknown;
+    const platformColor = PLATFORM_COLORS[platform] || PLATFORM_COLORS.unknown;
+    platformTextEl.textContent = platformName;
+    platformEl.style.color = platformColor;
+  }
+}
+
 /**
  * Initialize the meeting detail view
  * @param {string} meetingId - The ID of the meeting to display
@@ -175,6 +213,9 @@ function populateMeetingInfo(meeting) {
     const count = meeting.participants ? meeting.participants.length : 0;
     countEl.textContent = `${count} participant${count !== 1 ? 's' : ''}`;
   }
+
+  // UI-1: Platform indicator
+  updatePlatformDisplay(meeting);
 
   // Obsidian sync status
   const obsidianStatusEl = document.getElementById('meetingDetailObsidianStatus');
@@ -459,6 +500,51 @@ function populateMetadata(meeting) {
   const recordingIdEl = document.getElementById('metadataRecordingId');
   if (recordingIdEl) {
     recordingIdEl.value = meeting.recordingId || 'N/A';
+  }
+
+  // Platform dropdown (UI-1)
+  const platformEl = document.getElementById('metadataPlatform');
+  if (platformEl) {
+    // Normalize platform to lowercase for matching dropdown options
+    const normalizedPlatform = (meeting.platform || 'unknown').toLowerCase();
+
+    // Remove existing listener to avoid duplicates
+    const newPlatformEl = platformEl.cloneNode(true);
+    platformEl.parentNode.replaceChild(newPlatformEl, platformEl);
+
+    // Set value AFTER cloning (value property doesn't survive clone)
+    newPlatformEl.value = normalizedPlatform;
+
+    // Add change listener to save platform
+    newPlatformEl.addEventListener('change', async (e) => {
+      const newPlatform = e.target.value;
+      console.log(`[Metadata] Platform change event fired: ${meeting.platform} -> ${newPlatform}, meetingId: ${meeting.id}`);
+      meeting.platform = newPlatform;
+
+      // Update meeting via IPC
+      try {
+        console.log('[Metadata] Calling updateMeetingField IPC...');
+        const result = await window.electronAPI.updateMeetingField(meeting.id, 'platform', newPlatform);
+        console.log('[Metadata] IPC result:', result);
+        if (result.success) {
+          console.log(`[Metadata] Platform updated to: ${newPlatform}`);
+
+          // Trigger UI update callback to sync local arrays
+          if (window._meetingDetailUpdateCallback) {
+            window._meetingDetailUpdateCallback(meeting.id, meeting);
+          }
+
+          // Update platform display in header
+          updatePlatformDisplay(meeting);
+        } else {
+          console.error('[Metadata] Failed to update platform:', result.error);
+          // Revert dropdown on failure
+          newPlatformEl.value = meeting.platform;
+        }
+      } catch (err) {
+        console.error('[Metadata] Failed to update platform:', err);
+      }
+    });
   }
 
   // Created date

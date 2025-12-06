@@ -49,6 +49,7 @@ class ImportManager {
       templateIds = null,
       autoExport = false,
       onProgress = null,
+      platform = null, // UI-1.6: Optional platform override
     } = options;
 
     try {
@@ -69,6 +70,11 @@ class ImportManager {
       // Step 4: Create meeting object
       if (onProgress) onProgress({ step: 'creating-meeting', file: path.basename(filePath) });
       const meeting = await this.createMeeting(parsedData, metadata);
+
+      // UI-1.6: Apply platform override if provided
+      if (platform) {
+        meeting.platform = platform;
+      }
 
       // Step 4.5: v1.1 - Auto-label single speakers as user (before summary generation)
       if (this.autoLabelFunction && meeting.transcript && meeting.transcript.length > 0) {

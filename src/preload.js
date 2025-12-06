@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   navigate: page => ipcRenderer.send('navigate', page),
   saveMeetingsData: data => ipcRenderer.invoke('saveMeetingsData', data),
   loadMeetingsData: () => ipcRenderer.invoke('loadMeetingsData'),
+  updateMeetingField: (meetingId, field, value) =>
+    ipcRenderer.invoke('updateMeetingField', meetingId, field, value),
   deleteMeeting: meetingId => ipcRenderer.invoke('deleteMeeting', meetingId),
   generateMeetingSummary: meetingId => ipcRenderer.invoke('generateMeetingSummary', meetingId),
   generateMeetingSummaryStreaming: meetingId =>
@@ -90,6 +92,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   routingDeleteOrganization: (type, id) =>
     ipcRenderer.invoke('routing:deleteOrganization', { type, id }),
   routingRestoreBackup: () => ipcRenderer.invoke('routing:restoreBackup'),
+  // Vocabulary Management (VC-2)
+  vocabularyGetConfig: () => ipcRenderer.invoke('vocabulary:getConfig'),
+  vocabularyGetStats: () => ipcRenderer.invoke('vocabulary:getStats'),
+  vocabularyGetClientSlugs: () => ipcRenderer.invoke('vocabulary:getClientSlugs'),
+  vocabularyAddGlobalSpelling: (from, to) => ipcRenderer.invoke('vocabulary:addGlobalSpelling', { from, to }),
+  vocabularyAddGlobalKeyword: (word, intensifier) => ipcRenderer.invoke('vocabulary:addGlobalKeyword', { word, intensifier }),
+  vocabularyAddClientSpelling: (clientSlug, from, to) => ipcRenderer.invoke('vocabulary:addClientSpelling', { clientSlug, from, to }),
+  vocabularyAddClientKeyword: (clientSlug, word, intensifier) => ipcRenderer.invoke('vocabulary:addClientKeyword', { clientSlug, word, intensifier }),
+  vocabularyRemoveGlobalSpelling: to => ipcRenderer.invoke('vocabulary:removeGlobalSpelling', { to }),
+  vocabularyRemoveGlobalKeyword: word => ipcRenderer.invoke('vocabulary:removeGlobalKeyword', { word }),
+  vocabularySaveConfig: config => ipcRenderer.invoke('vocabulary:saveConfig', config),
+  vocabularyReload: () => ipcRenderer.invoke('vocabulary:reload'),
   // LLM Provider Management
   getLLMProvider: () => ipcRenderer.invoke('llm:getProvider'),
   switchLLMProvider: provider => ipcRenderer.invoke('llm:switchProvider', provider),
@@ -144,6 +158,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectImportFiles: () => ipcRenderer.invoke('import:selectFiles'),
   selectImportFolder: () => ipcRenderer.invoke('import:selectFolder'),
   onImportProgress: callback => ipcRenderer.on('import:progress', (_, data) => callback(data)),
+  // IM-1: Audio File Import
+  importAudioFile: (filePath, provider, options) =>
+    ipcRenderer.invoke('import:importAudioFile', { filePath, provider, options }),
+  transcribeAudio: (filePath, provider, options) =>
+    ipcRenderer.invoke('import:transcribeAudio', { filePath, provider, options }),
   // Pattern Testing (Phase 10.8.2)
   readTranscriptFile: filePath => ipcRenderer.invoke('patterns:readFile', filePath),
   patternsTestParse: (content, filePath) =>

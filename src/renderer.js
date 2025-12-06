@@ -51,6 +51,98 @@ const bulkSelectionState = {
   selectedMeetings: new Set(),
 };
 
+// Platform configuration for meeting type icons (UI-1)
+const platformConfig = {
+  zoom: {
+    name: 'Zoom',
+    color: '#2D8CFF',
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M4 6.5C4 5.67 4.67 5 5.5 5h9c.83 0 1.5.67 1.5 1.5v6c0 .83-.67 1.5-1.5 1.5h-9c-.83 0-1.5-.67-1.5-1.5v-6zM17 8l3.5-2.5v8L17 11V8z" fill="currentColor"/>
+    </svg>`,
+  },
+  teams: {
+    name: 'Teams',
+    color: '#6264A7',
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M19.2 6H16V5c0-.55-.45-1-1-1h-4c-.55 0-1 .45-1 1v1H6.8c-.99 0-1.8.81-1.8 1.8v8.4c0 .99.81 1.8 1.8 1.8h12.4c.99 0 1.8-.81 1.8-1.8V7.8c0-.99-.81-1.8-1.8-1.8zM12 6h2v1h-2V6zm1.5 9h-5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5h5c.28 0 .5.22.5.5s-.22.5-.5.5zm2-3h-7c-.28 0-.5-.22-.5-.5s.22-.5.5-.5h7c.28 0 .5.22.5.5s-.22.5-.5.5z" fill="currentColor"/>
+    </svg>`,
+  },
+  'google-meet': {
+    name: 'Google Meet',
+    color: '#0F9D58',
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 6c-3.87 0-7 3.13-7 7s3.13 7 7 7 7-3.13 7-7-3.13-7-7-7zm3.5 9.5l-4.5-2.5V9l4.5 2.5v4z" fill="currentColor"/>
+      <path d="M19 10l2-2v8l-2-2v-4z" fill="currentColor"/>
+    </svg>`,
+  },
+  webex: {
+    name: 'Webex',
+    color: '#00BCEB',
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-2-6h4v2h-4v-2zm0-6h4v4h-4V8z" fill="currentColor"/>
+    </svg>`,
+  },
+  whereby: {
+    name: 'Whereby',
+    color: '#6366F1',
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+    </svg>`,
+  },
+  'in-person': {
+    name: 'In-Person',
+    color: '#8B5CF6',
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor"/>
+    </svg>`,
+  },
+  unknown: {
+    name: 'Meeting',
+    color: '#999999',
+    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+    </svg>`,
+  },
+};
+
+/**
+ * Get platform icon HTML for a given platform type
+ * @param {string} platform - Platform identifier (zoom, teams, google-meet, etc.)
+ * @returns {string} HTML string for the platform icon
+ */
+function getPlatformIconHtml(platform) {
+  // Normalize platform to lowercase for matching config keys
+  const normalizedPlatform = (platform || 'unknown').toLowerCase();
+  const config = platformConfig[normalizedPlatform] || platformConfig.unknown;
+  return `
+    <div class="meeting-icon platform-icon" style="background-color: ${config.color}20;" title="${config.name}">
+      <span style="color: ${config.color};">${config.icon}</span>
+    </div>
+  `;
+}
+
+/**
+ * Get platform name for display
+ * @param {string} platform - Platform identifier
+ * @returns {string} Human-readable platform name
+ */
+function getPlatformName(platform) {
+  // Normalize platform to lowercase for matching config keys
+  const normalizedPlatform = (platform || 'unknown').toLowerCase();
+  return platformConfig[normalizedPlatform]?.name || platformConfig.unknown.name;
+}
+
+/**
+ * Get platform color
+ * @param {string} platform - Platform identifier
+ * @returns {string} Platform color hex
+ */
+function getPlatformColor(platform) {
+  // Normalize platform to lowercase for matching config keys
+  const normalizedPlatform = (platform || 'unknown').toLowerCase();
+  return platformConfig[normalizedPlatform]?.color || platformConfig.unknown.color;
+}
+
 // Function to toggle bulk selection mode
 function toggleBulkSelectionMode() {
   console.log('[Bulk] Toggling selection mode. Current:', bulkSelectionState.enabled);
@@ -567,7 +659,10 @@ function createMeetingCard(meeting) {
 
   let iconHtml = '';
 
-  if (meeting.type === 'profile') {
+  // UI-1: Use platform-specific icons if platform is available
+  if (meeting.platform && meeting.platform !== 'unknown') {
+    iconHtml = getPlatformIconHtml(meeting.platform);
+  } else if (meeting.type === 'profile') {
     iconHtml = `
       <div class="profile-pic">
         <img src="https://via.placeholder.com/40" alt="Profile">
@@ -589,6 +684,9 @@ function createMeetingCard(meeting) {
         </svg>
       </div>
     `;
+  } else {
+    // Default to unknown platform icon for meetings without specific type
+    iconHtml = getPlatformIconHtml('unknown');
   }
 
   // Format date and time
@@ -714,41 +812,17 @@ function createCalendarMeetingCard(meeting) {
   card.className = 'meeting-card calendar-meeting';
   card.dataset.id = meeting.id;
 
-  // Platform icon colors
-  const platformColors = {
-    zoom: '#2D8CFF',
-    teams: '#6264A7',
-    'google-meet': '#0F9D58',
-    webex: '#00BCEB',
-    whereby: '#6366F1',
-    unknown: '#999',
-  };
-
-  const platformColor = platformColors[meeting.platform] || platformColors['unknown'];
+  // UI-1: Use platform-specific icon from global config
+  const platformName = getPlatformName(meeting.platform);
 
   // Format the meeting time
   const startTime = new Date(meeting.startTime);
   const endTime = new Date(meeting.endTime);
   const timeString = `${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-  // Platform display name
-  const platformNames = {
-    zoom: 'Zoom',
-    teams: 'Teams',
-    'google-meet': 'Google Meet',
-    webex: 'Webex',
-    whereby: 'Whereby',
-    unknown: 'Meeting',
-  };
-  const platformName = platformNames[meeting.platform] || 'Meeting';
-
   // Sanitize calendar meeting title and IDs to prevent XSS
   card.innerHTML = sanitizeHtml(`
-    <div class="meeting-icon calendar" style="background-color: ${platformColor}20;">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M19 4H18V2H16V4H8V2H6V4H5C3.89 4 3.01 4.9 3.01 6L3 20C3 21.1 3.89 22 5 22H19C20.1 22 21 21.1 21 20V6C21 4.9 20.1 4 19 4ZM19 20H5V10H19V20ZM19 8H5V6H19V8Z" fill="${platformColor}"/>
-      </svg>
-    </div>
+    ${getPlatformIconHtml(meeting.platform)}
     <div class="meeting-content">
       <div class="meeting-title">${escapeHtml(meeting.title)}</div>
       <div class="meeting-time">${escapeHtml(timeString)} • ${escapeHtml(platformName)}</div>
@@ -3633,7 +3707,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Update background import indicator
-  function updateBackgroundImportIndicator(current = 0, total = 0) {
+  function updateBackgroundImportIndicator(current = 0, total = 0, customMessage = null) {
     const indicator = document.getElementById('backgroundImportIndicator');
     if (!indicator) {
       // Create indicator if it doesn't exist
@@ -3660,8 +3734,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const ind = document.getElementById('backgroundImportIndicator');
     if (backgroundImportRunning) {
       ind.style.display = 'block';
-      if (total > 0) {
-        ind.textContent = `Importing transcripts... (${current}/${total})`;
+      if (customMessage) {
+        ind.textContent = customMessage;
+      } else if (total > 0) {
+        ind.textContent = `Importing files... (${current}/${total})`;
       } else {
         ind.textContent = 'Starting import...';
       }
@@ -3678,12 +3754,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     const startImportBtn = document.getElementById('startImport');
     const fileCount = document.getElementById('fileCount');
     const filesListContainer = document.getElementById('filesListContainer');
+    const audioProviderGroup = document.getElementById('audioProviderGroup');
+    const audioProviderSpacer = document.getElementById('audioProviderSpacer');
+    const audioFileCountEl = document.getElementById('audioFileCount');
 
     if (selectedFiles.length === 0) {
       dropZone.style.display = 'block';
       filesList.style.display = 'none';
       importOptions.style.display = 'none';
       startImportBtn.disabled = true;
+      // Hide audio provider when no files
+      if (audioProviderGroup) audioProviderGroup.style.display = 'none';
+      if (audioProviderSpacer) audioProviderSpacer.style.display = 'none';
     } else {
       dropZone.style.display = 'none';
       filesList.style.display = 'block';
@@ -3692,19 +3774,40 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       fileCount.textContent = selectedFiles.length;
 
+      // IM-1.3: Count audio files and show provider selector if needed
+      const audioFiles = selectedFiles.filter(
+        f => f.isAudio || f.type === 'audio' || isAudioFileByExtension(f.name)
+      );
+      const hasAudioFiles = audioFiles.length > 0;
+
+      if (audioProviderGroup) {
+        audioProviderGroup.style.display = hasAudioFiles ? 'block' : 'none';
+      }
+      if (audioProviderSpacer) {
+        audioProviderSpacer.style.display = hasAudioFiles ? 'block' : 'none';
+      }
+      if (audioFileCountEl) {
+        audioFileCountEl.textContent = audioFiles.length;
+      }
+
       // Render file list
       filesListContainer.innerHTML = selectedFiles
         .map((file, index) => {
           const ext = file.name.split('.').pop().toUpperCase();
           const sizeKB = (file.size / 1024).toFixed(1);
+          const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+          const sizeDisplay = file.size > 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
+          const isAudio = file.isAudio || file.type === 'audio' || isAudioFileByExtension(file.name);
+          const fileIconClass = isAudio ? 'file-icon audio-file' : 'file-icon';
+          const typeLabel = isAudio ? 'Audio' : ext;
 
           return `
-          <div class="file-item" data-index="${index}">
+          <div class="file-item ${isAudio ? 'audio-file-item' : ''}" data-index="${index}">
             <div class="file-item-info">
-              <div class="file-icon">${ext}</div>
+              <div class="${fileIconClass}">${isAudio ? '🎵' : ext}</div>
               <div class="file-details">
                 <div class="file-name">${file.name}</div>
-                <div class="file-size">${sizeKB} KB</div>
+                <div class="file-size">${sizeDisplay}${isAudio ? ' • Will transcribe' : ''}</div>
               </div>
             </div>
             <button class="file-remove" data-index="${index}" title="Remove file">
@@ -3755,15 +3858,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateImportUI();
   }
 
+  // IM-1: Valid file extensions for import
+  const TRANSCRIPT_EXTENSIONS = ['.txt', '.md', '.vtt', '.srt'];
+  const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.ogg', '.webm', '.flac', '.aac'];
+  const ALL_VALID_EXTENSIONS = [...TRANSCRIPT_EXTENSIONS, ...AUDIO_EXTENSIONS];
+
   // Handle file paths from Electron dialog or drag-and-drop
   function handleFilePaths(fileObjects) {
     console.log('[Import] handleFilePaths called with', fileObjects.length, 'files');
 
-    const validExtensions = ['.txt', '.md', '.vtt', '.srt'];
-
     const validFiles = fileObjects.filter(file => {
       const ext = '.' + file.name.split('.').pop().toLowerCase();
-      const isValid = validExtensions.includes(ext);
+      const isValid = ALL_VALID_EXTENSIONS.includes(ext);
+      const isAudio = AUDIO_EXTENSIONS.includes(ext);
       console.log(
         '[Import] File validation:',
         file.name,
@@ -3771,15 +3878,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         ext,
         'valid:',
         isValid,
+        'audio:',
+        isAudio,
         'has path:',
         !!file.path
       );
+      // Tag the file with its type if not already tagged by main process
+      if (isValid && !file.type) {
+        file.type = isAudio ? 'audio' : 'transcript';
+        file.isAudio = isAudio;
+      }
       return isValid;
     });
 
     if (validFiles.length === 0) {
       console.warn('[Import] No valid files selected');
-      alert('No valid files selected. Please choose .txt, .md, .vtt, or .srt files.');
+      alert('No valid files selected. Please choose transcript files (.txt, .md, .vtt, .srt) or audio files (.mp3, .wav, .m4a).');
       return;
     }
 
@@ -3787,7 +3901,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     validFiles.forEach(file => {
       const exists = selectedFiles.some(f => f.path === file.path);
       if (!exists) {
-        console.log('[Import] Adding file to selection:', file.name, 'path:', file.path);
+        console.log('[Import] Adding file to selection:', file.name, 'path:', file.path, 'type:', file.type);
         selectedFiles.push(file);
       } else {
         console.log('[Import] Skipping duplicate:', file.name);
@@ -4011,50 +4125,131 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   /**
-   * Perform the actual batch import
+   * Check if a file is an audio file based on extension
+   */
+  function isAudioFileByExtension(fileName) {
+    const ext = '.' + fileName.split('.').pop().toLowerCase();
+    return AUDIO_EXTENSIONS.includes(ext);
+  }
+
+  /**
+   * Perform the actual batch import (IM-1: supports both transcripts and audio files)
    */
   async function performBatchImport(options) {
     const { generateAutoSummary, selectedTemplateIds, autoExport } = options;
 
-    // Extract file paths BEFORE closing modal (closeImportModal clears selectedFiles!)
-    const filePaths = selectedFiles.map(file => file.path);
+    // IM-1.6: Separate audio files from transcript files BEFORE closing modal
+    // Use multiple checks for robustness: isAudio flag, type property, or extension check
+    const audioFiles = selectedFiles.filter(f =>
+      f.isAudio === true || f.type === 'audio' || isAudioFileByExtension(f.name)
+    );
+    const transcriptFiles = selectedFiles.filter(f =>
+      f.isAudio !== true && f.type !== 'audio' && !isAudioFileByExtension(f.name)
+    );
+    const transcriptPaths = transcriptFiles.map(file => file.path);
+
+    console.log('[Import] File separation:', {
+      total: selectedFiles.length,
+      audio: audioFiles.map(f => f.name),
+      transcripts: transcriptFiles.map(f => f.name),
+    });
+
+    // Get selected audio provider
+    const audioProviderSelect = document.getElementById('audioProviderSelect');
+    const audioProvider = audioProviderSelect?.value || 'assemblyai';
+
+    // UI-1.6: Get selected platform
+    const platformSelect = document.getElementById('importPlatformSelect');
+    const selectedPlatform = platformSelect?.value || 'unknown';
 
     // Close modal immediately and run in background
     closeImportModal();
     backgroundImportRunning = true;
     updateBackgroundImportIndicator();
 
-    // Show starting notification
-    showToast(`Importing ${filePaths.length} transcript${filePaths.length > 1 ? 's' : ''}...`);
+    // Calculate total files for progress
+    const totalFiles = audioFiles.length + transcriptFiles.length;
+    let processedFiles = 0;
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
 
-    // Track progress
-    let currentFile = 0;
-    const total = filePaths.length;
+    // Show starting notification
+    const fileTypes = [];
+    if (audioFiles.length > 0) fileTypes.push(`${audioFiles.length} audio`);
+    if (transcriptFiles.length > 0) fileTypes.push(`${transcriptFiles.length} transcript`);
+    showToast(`Importing ${fileTypes.join(' and ')} file${totalFiles > 1 ? 's' : ''}...`);
 
     // Listen for progress updates
     window.electronAPI.onImportProgress(progress => {
-      if (progress.step === 'batch-progress') {
-        currentFile = progress.current;
-        updateBackgroundImportIndicator(currentFile, total);
+      if (progress.step === 'transcribing') {
+        updateBackgroundImportIndicator(processedFiles + 1, totalFiles, 'Transcribing...');
+      } else if (progress.step === 'batch-progress') {
+        updateBackgroundImportIndicator(audioFiles.length + progress.current, totalFiles);
       }
     });
 
     try {
-      // Start batch import (runs in background)
-      const result = await window.electronAPI.importBatch(filePaths, {
-        generateAutoSummary: generateAutoSummary,
-        templateIds: selectedTemplateIds,
-        autoExport: autoExport,
-      });
+      // IM-1.4/1.5: Process audio files first (transcribe then import)
+      if (audioFiles.length > 0) {
+        console.log(`[Import] Processing ${audioFiles.length} audio files with provider: ${audioProvider}`);
+
+        for (const audioFile of audioFiles) {
+          try {
+            console.log(`[Import] Transcribing audio file: ${audioFile.name}`);
+            updateBackgroundImportIndicator(processedFiles + 1, totalFiles, `Transcribing ${audioFile.name}...`);
+
+            const result = await window.electronAPI.importAudioFile(audioFile.path, audioProvider, {
+              generateAutoSummary,
+              templateIds: selectedTemplateIds,
+              autoExport,
+              platform: selectedPlatform, // UI-1.6
+            });
+
+            if (result.success) {
+              successCount++;
+              console.log(`[Import] Audio import successful: ${audioFile.name}`);
+            } else {
+              failCount++;
+              errors.push({ file: audioFile.path, error: result.error });
+              console.error(`[Import] Audio import failed: ${audioFile.name}`, result.error);
+            }
+          } catch (err) {
+            failCount++;
+            errors.push({ file: audioFile.path, error: err.message });
+            console.error(`[Import] Audio import error: ${audioFile.name}`, err);
+          }
+          processedFiles++;
+          updateBackgroundImportIndicator(processedFiles, totalFiles);
+        }
+      }
+
+      // Process transcript files using existing batch import
+      if (transcriptPaths.length > 0) {
+        console.log(`[Import] Processing ${transcriptPaths.length} transcript files`);
+
+        const result = await window.electronAPI.importBatch(transcriptPaths, {
+          generateAutoSummary,
+          templateIds: selectedTemplateIds,
+          autoExport,
+          platform: selectedPlatform, // UI-1.6
+        });
+
+        successCount += result.successful || 0;
+        failCount += result.failed || 0;
+        if (result.errors) {
+          errors.push(...result.errors);
+        }
+      }
 
       // Show completion notification
-      if (result.successful > 0) {
-        const message = `Successfully imported ${result.successful} of ${result.total} transcript${result.total > 1 ? 's' : ''}!`;
+      if (successCount > 0) {
+        const message = `Successfully imported ${successCount} of ${totalFiles} file${totalFiles > 1 ? 's' : ''}!`;
 
-        if (result.failed > 0) {
-          showToast(`${message} (${result.failed} failed)`, 'warning');
-          if (result.errors && result.errors.length > 0) {
-            console.error('Import errors:', result.errors);
+        if (failCount > 0) {
+          showToast(`${message} (${failCount} failed)`, 'warning');
+          if (errors.length > 0) {
+            console.error('Import errors:', errors);
           }
         } else {
           showToast(message, 'success');
@@ -4063,12 +4258,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Reload meetings data to show imported meetings
         await loadMeetingsDataFromFile();
         renderMeetings();
+
       } else {
-        showToast(`Import failed: ${result.error || 'All files failed'}`, 'error');
-        if (result.errors && result.errors.length > 0) {
-          console.error('Import errors:', result.errors);
-        } else if (result.error) {
-          console.error('Import error:', result.error);
+        showToast(`Import failed: All ${totalFiles} file(s) failed`, 'error');
+        if (errors.length > 0) {
+          console.error('Import errors:', errors);
         }
       }
     } catch (error) {

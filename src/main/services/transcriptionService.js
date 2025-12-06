@@ -83,8 +83,11 @@ class TranscriptionService {
   /**
    * AssemblyAI Transcription
    * https://www.assemblyai.com/docs
+   * @param {string} audioFilePath - Path to audio file
+   * @param {object} options - Transcription options
+   * @param {Array} options.custom_spelling - Custom spelling corrections [{from: [], to: ""}]
    */
-  async transcribeWithAssemblyAI(audioFilePath, _options = {}) {
+  async transcribeWithAssemblyAI(audioFilePath, options = {}) {
     const ASSEMBLYAI_API_KEY = await this.getApiKey('ASSEMBLYAI_API_KEY');
 
     if (!ASSEMBLYAI_API_KEY) {
@@ -99,7 +102,7 @@ class TranscriptionService {
 
     // Step 2: Request transcription with speaker diarization
     console.log('[AssemblyAI] Step 2: Requesting transcription...');
-    const transcriptId = await this.requestAssemblyAITranscription(uploadUrl, ASSEMBLYAI_API_KEY);
+    const transcriptId = await this.requestAssemblyAITranscription(uploadUrl, ASSEMBLYAI_API_KEY, options);
     console.log(`[AssemblyAI] Transcription started, ID: ${transcriptId}`);
 
     // Step 3: Poll for completion
@@ -123,13 +126,21 @@ class TranscriptionService {
     return response.data.upload_url;
   }
 
-  async requestAssemblyAITranscription(uploadUrl, apiKey) {
+  async requestAssemblyAITranscription(uploadUrl, apiKey, options = {}) {
+    const requestBody = {
+      audio_url: uploadUrl,
+      speaker_labels: true, // Enable speaker diarization
+    };
+
+    // Add custom spelling if vocabulary is provided (VC-3.2)
+    if (options.custom_spelling && options.custom_spelling.length > 0) {
+      requestBody.custom_spelling = options.custom_spelling;
+      console.log(`[AssemblyAI] Using ${options.custom_spelling.length} custom spelling corrections`);
+    }
+
     const response = await axios.post(
       'https://api.assemblyai.com/v2/transcript',
-      {
-        audio_url: uploadUrl,
-        speaker_labels: true, // Enable speaker diarization
-      },
+      requestBody,
       {
         headers: {
           authorization: apiKey,
@@ -194,8 +205,11 @@ class TranscriptionService {
   /**
    * Deepgram Transcription
    * https://developers.deepgram.com/docs
+   * @param {string} audioFilePath - Path to audio file
+   * @param {object} options - Transcription options
+   * @param {Array} options.keywords - Keyword boosts ["word:intensifier", ...]
    */
-  async transcribeWithDeepgram(audioFilePath, _options = {}) {
+  async transcribeWithDeepgram(audioFilePath, options = {}) {
     const DEEPGRAM_API_KEY = await this.getApiKey('DEEPGRAM_API_KEY');
 
     if (!DEEPGRAM_API_KEY) {
@@ -206,16 +220,25 @@ class TranscriptionService {
 
     const audioData = fs.readFileSync(audioFilePath);
 
-    const response = await axios.post(
-      'https://api.deepgram.com/v1/listen?diarize=true&punctuate=true&utterances=true',
-      audioData,
-      {
-        headers: {
-          Authorization: `Token ${DEEPGRAM_API_KEY}`,
-          'Content-Type': 'audio/mpeg',
-        },
-      }
-    );
+    // Build URL with base parameters
+    let url = 'https://api.deepgram.com/v1/listen?diarize=true&punctuate=true&utterances=true';
+
+    // Add keywords if vocabulary is provided (VC-3.3)
+    if (options.keywords && options.keywords.length > 0) {
+      // Deepgram accepts multiple keywords params: &keywords=word1:3&keywords=word2:5
+      const keywordsParams = options.keywords
+        .map(kw => `keywords=${encodeURIComponent(kw)}`)
+        .join('&');
+      url += '&' + keywordsParams;
+      console.log(`[Deepgram] Using ${options.keywords.length} keyword boosts`);
+    }
+
+    const response = await axios.post(url, audioData, {
+      headers: {
+        Authorization: `Token ${DEEPGRAM_API_KEY}`,
+        'Content-Type': 'audio/mpeg',
+      },
+    });
 
     console.log('[Deepgram] ✓ Transcription complete');
     return this.formatDeepgramTranscript(response.data);
