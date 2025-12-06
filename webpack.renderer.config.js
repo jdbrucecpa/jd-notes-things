@@ -1,5 +1,7 @@
 const rules = require('./webpack.rules');
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const path = require('path');
 
 rules.push({
   test: /\.css$/,
@@ -9,6 +11,12 @@ rules.push({
 // Add rule for Monaco Editor TTF files
 rules.push({
   test: /\.ttf$/,
+  type: 'asset/resource',
+});
+
+// Add rule for image files
+rules.push({
+  test: /\.(png|jpg|jpeg|gif|svg)$/,
   type: 'asset/resource',
 });
 
@@ -26,6 +34,14 @@ module.exports = {
       // Available languages: https://github.com/microsoft/monaco-editor/tree/main/src/basic-languages
       languages: ['yaml', 'json', 'markdown', 'plaintext'],
       features: ['coreCommands', 'find'],
+    }),
+    new CopyWebpackPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, 'src', 'assets'),
+          to: path.resolve(__dirname, '.webpack', 'renderer', 'assets'),
+        },
+      ],
     }),
   ],
 };

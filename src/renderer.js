@@ -16,6 +16,11 @@ import { initAppSettingsUI } from './renderer/appSettings.js';
 import { initContactsPage, openContactsView } from './renderer/contacts.js';
 import { initQuickSearch } from './renderer/quickSearch.js';
 
+// Import platform logo images
+import zoomLogo from './assets/zoom.png';
+import teamsLogo from './assets/teams.png';
+import meetLogo from './assets/meet.png';
+
 // Create empty meetings data structure to be filled from the file
 const meetingsData = {
   upcomingMeetings: [],
@@ -55,25 +60,21 @@ const bulkSelectionState = {
 const platformConfig = {
   zoom: {
     name: 'Zoom',
-    color: '#2D8CFF',
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M4 6.5C4 5.67 4.67 5 5.5 5h9c.83 0 1.5.67 1.5 1.5v6c0 .83-.67 1.5-1.5 1.5h-9c-.83 0-1.5-.67-1.5-1.5v-6zM17 8l3.5-2.5v8L17 11V8z" fill="currentColor"/>
-    </svg>`,
+    color: '#0B5CFF',
+    iconType: 'image',
+    icon: zoomLogo,
   },
   teams: {
     name: 'Teams',
     color: '#6264A7',
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M19.2 6H16V5c0-.55-.45-1-1-1h-4c-.55 0-1 .45-1 1v1H6.8c-.99 0-1.8.81-1.8 1.8v8.4c0 .99.81 1.8 1.8 1.8h12.4c.99 0 1.8-.81 1.8-1.8V7.8c0-.99-.81-1.8-1.8-1.8zM12 6h2v1h-2V6zm1.5 9h-5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5h5c.28 0 .5.22.5.5s-.22.5-.5.5zm2-3h-7c-.28 0-.5-.22-.5-.5s.22-.5.5-.5h7c.28 0 .5.22.5.5s-.22.5-.5.5z" fill="currentColor"/>
-    </svg>`,
+    iconType: 'image',
+    icon: teamsLogo,
   },
   'google-meet': {
     name: 'Google Meet',
-    color: '#0F9D58',
-    icon: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 6c-3.87 0-7 3.13-7 7s3.13 7 7 7 7-3.13 7-7-3.13-7-7-7zm3.5 9.5l-4.5-2.5V9l4.5 2.5v4z" fill="currentColor"/>
-      <path d="M19 10l2-2v8l-2-2v-4z" fill="currentColor"/>
-    </svg>`,
+    color: '#00897B',
+    iconType: 'image',
+    icon: meetLogo,
   },
   webex: {
     name: 'Webex',
@@ -729,10 +730,9 @@ function createMeetingCard(meeting) {
     </div>
   `;
 
-  // Set card HTML (without checkbox - we'll add it programmatically)
+  // Set card HTML (without checkbox or icon - we'll add them programmatically)
   card.innerHTML = sanitizeHtml(`
     <div class="meeting-icon-container">
-      ${iconHtml}
     </div>
     <div class="meeting-content">
       <div class="meeting-title">${escapeHtml(meeting.title)}</div>
@@ -743,6 +743,47 @@ function createMeetingCard(meeting) {
       </button>
     </div>
   `);
+
+  // Create platform icon programmatically (after sanitization) to avoid DOMPurify stripping SVGs
+  const iconContainer = card.querySelector('.meeting-icon-container');
+  if (iconContainer) {
+    // Get platform config
+    const normalizedPlatform = (meeting.platform || 'unknown').toLowerCase();
+    const config = platformConfig[normalizedPlatform] || platformConfig.unknown;
+
+    // Create the icon wrapper div
+    const iconWrapper = document.createElement('div');
+    iconWrapper.className = 'meeting-icon platform-icon';
+    iconWrapper.title = config.name;
+
+    // Check if this is an image or SVG icon
+    if (config.iconType === 'image') {
+      // Use actual image file
+      const img = document.createElement('img');
+      img.src = config.icon;
+      img.alt = config.name;
+      img.style.width = '24px';
+      img.style.height = '24px';
+      img.style.objectFit = 'contain';
+      iconWrapper.appendChild(img);
+    } else {
+      // Use SVG icon
+      iconWrapper.style.backgroundColor = `${config.color}20`;
+      const iconSpan = document.createElement('span');
+      iconSpan.style.color = config.color;
+
+      // Parse and insert the SVG
+      const svgParser = new DOMParser();
+      const svgDoc = svgParser.parseFromString(config.icon, 'image/svg+xml');
+      const svgElement = svgDoc.documentElement;
+      if (svgElement && svgElement.tagName === 'svg') {
+        iconSpan.appendChild(svgElement);
+      }
+      iconWrapper.appendChild(iconSpan);
+    }
+
+    iconContainer.appendChild(iconWrapper);
+  }
 
   // Create delete button SVG programmatically (after sanitization) to avoid DOMPurify stripping it
   const deleteBtn = card.querySelector('.delete-meeting-btn');
@@ -821,8 +862,9 @@ function createCalendarMeetingCard(meeting) {
   const timeString = `${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
   // Sanitize calendar meeting title and IDs to prevent XSS
+  // Use placeholder for icon, will be added programmatically after sanitization
   card.innerHTML = sanitizeHtml(`
-    ${getPlatformIconHtml(meeting.platform)}
+    <div class="meeting-icon-container"></div>
     <div class="meeting-content">
       <div class="meeting-title">${escapeHtml(meeting.title)}</div>
       <div class="meeting-time">${escapeHtml(timeString)} • ${escapeHtml(platformName)}</div>
@@ -833,20 +875,79 @@ function createCalendarMeetingCard(meeting) {
         meeting.meetingLink
           ? `
         <button class="join-calendar-meeting-btn" data-id="${escapeHtml(meeting.id)}" data-link="${escapeHtml(meeting.meetingLink)}" title="Join meeting">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
-          </svg>
         </button>
       `
           : ''
       }
       <button class="record-calendar-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Record meeting">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="12" cy="12" r="8" fill="currentColor"/>
-        </svg>
       </button>
     </div>
   `);
+
+  // Create platform icon programmatically (after sanitization)
+  const iconContainer = card.querySelector('.meeting-icon-container');
+  if (iconContainer) {
+    const normalizedPlatform = (meeting.platform || 'unknown').toLowerCase();
+    const config = platformConfig[normalizedPlatform] || platformConfig.unknown;
+
+    const iconWrapper = document.createElement('div');
+    iconWrapper.className = 'meeting-icon platform-icon';
+    iconWrapper.title = config.name;
+
+    if (config.iconType === 'image') {
+      const img = document.createElement('img');
+      img.src = config.icon;
+      img.alt = config.name;
+      img.style.width = '24px';
+      img.style.height = '24px';
+      img.style.objectFit = 'contain';
+      iconWrapper.appendChild(img);
+    } else {
+      iconWrapper.style.backgroundColor = `${config.color}20`;
+      const iconSpan = document.createElement('span');
+      iconSpan.style.color = config.color;
+      const svgParser = new DOMParser();
+      const svgDoc = svgParser.parseFromString(config.icon, 'image/svg+xml');
+      const svgElement = svgDoc.documentElement;
+      if (svgElement && svgElement.tagName === 'svg') {
+        iconSpan.appendChild(svgElement);
+      }
+      iconWrapper.appendChild(iconSpan);
+    }
+    iconContainer.appendChild(iconWrapper);
+  }
+
+  // Create join button SVG programmatically
+  const joinBtn = card.querySelector('.join-calendar-meeting-btn');
+  if (joinBtn) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z');
+    path.setAttribute('fill', 'currentColor');
+    svg.appendChild(path);
+    joinBtn.appendChild(svg);
+  }
+
+  // Create record button SVG programmatically
+  const recordBtn = card.querySelector('.record-calendar-meeting-btn');
+  if (recordBtn) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', '12');
+    circle.setAttribute('cy', '12');
+    circle.setAttribute('r', '8');
+    circle.setAttribute('fill', 'currentColor');
+    svg.appendChild(circle);
+    recordBtn.appendChild(svg);
+  }
 
   return card;
 }
@@ -969,12 +1070,15 @@ async function handleGoogleButtonClick() {
 async function fetchCalendarMeetings() {
   try {
     console.log('Fetching calendar meetings...');
-    const result = await window.electronAPI.getCalendarMeetings(24); // Next 24 hours
+    const result = await window.electronAPI.getCalendarMeetings(72); // Next 3 days (72 hours)
 
     if (result.success) {
       console.log(`Fetched ${result.meetings.length} calendar meetings`);
       calendarMeetings.length = 0; // Clear existing
-      calendarMeetings.push(...result.meetings);
+      // Limit to max 6 meetings to avoid cluttering the UI
+      const limitedMeetings = result.meetings.slice(0, 6);
+      calendarMeetings.push(...limitedMeetings);
+      console.log(`Displaying ${limitedMeetings.length} of ${result.meetings.length} calendar meetings`);
       renderMeetings(); // Re-render to show updated calendar
     } else {
       console.error('Failed to fetch calendar meetings:', result.error);
@@ -1349,6 +1453,7 @@ async function createNewMeeting() {
     date: now.toISOString(),
     participants: [],
     content: template, // Set the content directly
+    platform: 'in-person', // UI-1: Explicitly set in-person platform for in-person button
   };
 
   // Log what we're adding
