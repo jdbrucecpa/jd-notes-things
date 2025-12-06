@@ -2880,9 +2880,11 @@ function generateSummaryMarkdown(meeting, baseFilename) {
   if (meeting.platform) tags.push(meeting.platform.toLowerCase());
 
   // Build frontmatter with simple lists that Obsidian displays nicely
+  // RS-2: Include meeting_id for stale link detection
   let markdown = `---
 title: "${title}"
 date: ${dateStr}
+meeting_id: "${meeting.id || ''}"
 platform: "${meeting.platform || 'unknown'}"
 transcript_file: "${baseFilename}-transcript.md"
 participants: [${participantNames.join(', ')}]
@@ -2932,9 +2934,11 @@ function generateTranscriptMarkdown(meeting, baseFilename) {
   const dateStr = meetingDate.toISOString().split('T')[0];
   const title = meeting.title || 'Untitled Meeting';
 
+  // RS-2: Include meeting_id for stale link detection
   let markdown = `---
 title: "${title} - Full Transcript"
 date: ${dateStr}
+meeting_id: "${meeting.id || ''}"
 summary_file: "${baseFilename}.md"
 ---
 
@@ -5557,6 +5561,53 @@ ipcMain.handle('obsidian:getStatus', async () => {
     vaultPath: vaultStructure ? vaultStructure.vaultBasePath : null,
     routingConfigured: !!routingEngine,
   };
+});
+
+// RS-2: Refresh Obsidian links for meetings whose notes may have been moved
+ipcMain.handle('obsidian:refreshLinks', async () => {
+  try {
+    console.log('[Obsidian IPC] Refresh links requested');
+
+    if (!vaultStructure) {
+      return { success: false, error: 'Vault not configured' };
+    }
+
+    // Load all meeting data
+    const data = await fileOperationManager.readMeetingsData();
+    const allMeetings = [...data.upcomingMeetings, ...data.pastMeetings];
+
+    // Filter to only meetings that have been synced to Obsidian
+    const syncedMeetings = allMeetings.filter(m => m.obsidianLink);
+
+    if (syncedMeetings.length === 0) {
+      return {
+        success: true,
+        message: 'No synced meetings to refresh',
+        updated: 0,
+        stale: [],
+        refreshed: [],
+        missing: [],
+      };
+    }
+
+    // Refresh links using VaultStructure's scan method
+    const result = vaultStructure.refreshObsidianLinks(syncedMeetings);
+
+    // If any links were updated, save the meeting data
+    if (result.updated > 0) {
+      await fileOperationManager.writeData(data);
+      console.log(`[Obsidian IPC] Saved ${result.updated} updated meeting links`);
+    }
+
+    return {
+      success: true,
+      message: `Refreshed ${result.updated} stale links`,
+      ...result,
+    };
+  } catch (error) {
+    console.error('[Obsidian IPC] Refresh links failed:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 // ===================================================================

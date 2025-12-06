@@ -110,6 +110,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Obsidian Export (Phase 5)
   obsidianExportMeeting: meetingId => ipcRenderer.invoke('obsidian:exportMeeting', meetingId),
   obsidianGetStatus: () => ipcRenderer.invoke('obsidian:getStatus'),
+  // RS-2: Refresh Obsidian links for moved notes
+  obsidianRefreshLinks: () => ipcRenderer.invoke('obsidian:refreshLinks'),
   // Google Contacts & Speaker Matching (Phase 6)
   contactsFetchContacts: forceRefresh => ipcRenderer.invoke('contacts:fetchContacts', forceRefresh),
   contactsSearchContacts: query => ipcRenderer.invoke('contacts:searchContacts', query),

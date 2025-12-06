@@ -556,6 +556,199 @@ Comprehensive meeting notes covering all discussion topics.
   getCompanyWikiLink(companyName) {
     return `[[${companyName}]]`;
   }
+
+  // =================================================================
+  // RS-2: Stale Link Detection & Refresh
+  // =================================================================
+
+  /**
+   * Extract meeting_id from YAML frontmatter
+   * @param {string} content - File content
+   * @returns {string|null} Meeting ID or null if not found
+   * @private
+   */
+  _extractMeetingIdFromFrontmatter(content) {
+    // Match YAML frontmatter block
+    const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!frontmatterMatch) return null;
+
+    const frontmatter = frontmatterMatch[1];
+
+    // Extract meeting_id field
+    const meetingIdMatch = frontmatter.match(/^meeting_id:\s*["']?([^"'\r\n]+)["']?\s*$/m);
+    if (!meetingIdMatch) return null;
+
+    return meetingIdMatch[1].trim();
+  }
+
+  /**
+   * Recursively scan directory for markdown files
+   * @param {string} dirPath - Directory to scan (absolute path)
+   * @param {Array} results - Accumulator for results
+   * @returns {Array<string>} Array of file paths
+   * @private
+   */
+  _scanDirectoryForMarkdown(dirPath, results = []) {
+    try {
+      if (!fs.existsSync(dirPath)) return results;
+
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dirPath, entry.name);
+
+        if (entry.isDirectory()) {
+          // Skip hidden directories and config folder
+          if (!entry.name.startsWith('.') && entry.name !== 'config') {
+            this._scanDirectoryForMarkdown(fullPath, results);
+          }
+        } else if (entry.isFile() && entry.name.endsWith('.md')) {
+          results.push(fullPath);
+        }
+      }
+    } catch (error) {
+      console.warn(`[VaultStructure] Error scanning directory ${dirPath}:`, error.message);
+    }
+
+    return results;
+  }
+
+  /**
+   * Find a file by meeting ID in the vault
+   * @param {string} meetingId - Meeting ID to find
+   * @returns {Object|null} { relativePath, absolutePath } or null if not found
+   */
+  findFileByMeetingId(meetingId) {
+    if (!meetingId || !this.vaultBasePath) return null;
+
+    console.log(`[VaultStructure] Searching for meeting ID: ${meetingId}`);
+
+    const allFiles = this._scanDirectoryForMarkdown(this.vaultBasePath);
+
+    for (const filePath of allFiles) {
+      try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const foundId = this._extractMeetingIdFromFrontmatter(content);
+
+        if (foundId === meetingId) {
+          const relativePath = path.relative(this.vaultBasePath, filePath);
+          console.log(`[VaultStructure] Found meeting ${meetingId} at: ${relativePath}`);
+          return {
+            relativePath: relativePath.replace(/\\/g, '/'), // Normalize to forward slashes
+            absolutePath: filePath,
+          };
+        }
+      } catch (error) {
+        // Skip files that can't be read
+        console.warn(`[VaultStructure] Error reading file ${filePath}:`, error.message);
+      }
+    }
+
+    console.log(`[VaultStructure] Meeting ID not found: ${meetingId}`);
+    return null;
+  }
+
+  /**
+   * Scan entire vault and build map of meeting_id -> file path
+   * @returns {Map<string, {relativePath: string, absolutePath: string}>} Map of meeting IDs to paths
+   */
+  scanAllMeetingNotes() {
+    console.log('[VaultStructure] Scanning vault for meeting notes...');
+
+    if (!this.vaultBasePath) {
+      console.warn('[VaultStructure] No vault path configured');
+      return new Map();
+    }
+
+    const meetingMap = new Map();
+    const allFiles = this._scanDirectoryForMarkdown(this.vaultBasePath);
+
+    let scanned = 0;
+    let found = 0;
+
+    for (const filePath of allFiles) {
+      scanned++;
+      try {
+        const content = fs.readFileSync(filePath, 'utf8');
+        const meetingId = this._extractMeetingIdFromFrontmatter(content);
+
+        if (meetingId) {
+          found++;
+          const relativePath = path.relative(this.vaultBasePath, filePath);
+          meetingMap.set(meetingId, {
+            relativePath: relativePath.replace(/\\/g, '/'),
+            absolutePath: filePath,
+          });
+        }
+      } catch (error) {
+        // Skip files that can't be read
+      }
+    }
+
+    console.log(`[VaultStructure] Scan complete: ${found} meeting notes found in ${scanned} files`);
+    return meetingMap;
+  }
+
+  /**
+   * Refresh obsidian links for meetings by scanning vault for moved files
+   * @param {Array} meetings - Array of meeting objects with id and obsidianLink fields
+   * @returns {Object} { updated: number, stale: Array, refreshed: Array }
+   */
+  refreshObsidianLinks(meetings) {
+    console.log(`[VaultStructure] Refreshing links for ${meetings.length} synced meetings...`);
+
+    // Build map of all meeting notes in vault
+    const vaultMap = this.scanAllMeetingNotes();
+
+    const result = {
+      updated: 0,
+      stale: [],    // Meetings whose links were stale (file moved)
+      refreshed: [], // Meetings whose links were refreshed
+      missing: [],   // Meetings not found in vault at all
+    };
+
+    for (const meeting of meetings) {
+      if (!meeting.id || !meeting.obsidianLink) continue;
+
+      const vaultEntry = vaultMap.get(meeting.id);
+
+      if (!vaultEntry) {
+        // Meeting not found in vault - may have been deleted
+        result.missing.push({
+          id: meeting.id,
+          title: meeting.title,
+          previousPath: meeting.obsidianLink,
+        });
+        continue;
+      }
+
+      // Compare current stored path with actual vault path
+      const currentPath = meeting.obsidianLink.replace(/\\/g, '/');
+      const actualPath = vaultEntry.relativePath;
+
+      if (currentPath !== actualPath) {
+        // Path changed - file was moved
+        result.stale.push({
+          id: meeting.id,
+          title: meeting.title,
+          previousPath: currentPath,
+          newPath: actualPath,
+        });
+
+        // Update the meeting's obsidianLink
+        meeting.obsidianLink = actualPath;
+        result.updated++;
+        result.refreshed.push({
+          id: meeting.id,
+          title: meeting.title,
+          newPath: actualPath,
+        });
+      }
+    }
+
+    console.log(`[VaultStructure] Link refresh complete: ${result.updated} updated, ${result.missing.length} missing`);
+    return result;
+  }
 }
 
 module.exports = VaultStructure;

@@ -1084,6 +1084,23 @@
               </div>
             </div>
 
+            <!-- RS-2: Data Maintenance Section -->
+            <div class="settings-section">
+              <h3 class="settings-section-title">Data Maintenance</h3>
+              <p class="settings-section-description">Tools for maintaining sync between the app and your Obsidian vault.</p>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Refresh Obsidian Links</div>
+                  <div class="settings-item-description">Scan vault for moved/renamed notes and update internal links. Run this after reorganizing your vault.</div>
+                </div>
+                <div class="settings-item-control" style="display: flex; gap: 8px; align-items: center;">
+                  <button class="btn btn-secondary" id="refreshObsidianLinksBtn">Refresh Links</button>
+                  <span class="settings-item-status" id="refreshLinksStatus"></span>
+                </div>
+              </div>
+            </div>
+
             <!-- AI Model Configuration Section -->
             <div class="settings-section">
               <h3 class="settings-section-title">AI Model Configuration</h3>

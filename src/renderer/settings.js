@@ -184,6 +184,9 @@ export function initializeSettingsUI() {
   const exportAllSettingsBtn = document.getElementById('exportAllSettingsBtn');
   const importAllSettingsBtn = document.getElementById('importAllSettingsBtn');
   const exportStatus = document.getElementById('exportStatus');
+  // RS-2: Refresh Obsidian Links
+  const refreshObsidianLinksBtn = document.getElementById('refreshObsidianLinksBtn');
+  const refreshLinksStatus = document.getElementById('refreshLinksStatus');
 
   // Version information
   const electronVersion = document.getElementById('electronVersion');
@@ -308,6 +311,58 @@ export function initializeSettingsUI() {
       } catch (error) {
         console.error('[Settings] Error choosing vault path:', error);
         window.showToast('Failed to update vault path', 'error');
+      }
+    });
+  }
+
+  // RS-2: Refresh Obsidian Links button
+  if (refreshObsidianLinksBtn) {
+    refreshObsidianLinksBtn.addEventListener('click', async () => {
+      try {
+        // Disable button and show scanning status
+        refreshObsidianLinksBtn.disabled = true;
+        refreshObsidianLinksBtn.textContent = 'Scanning...';
+        if (refreshLinksStatus) {
+          refreshLinksStatus.textContent = 'Scanning vault...';
+          refreshLinksStatus.style.color = 'var(--text-secondary)';
+        }
+
+        const result = await window.electronAPI.obsidianRefreshLinks();
+
+        if (result.success) {
+          const msg = result.updated > 0
+            ? `Updated ${result.updated} stale link${result.updated !== 1 ? 's' : ''}`
+            : 'All links are up to date';
+
+          if (refreshLinksStatus) {
+            refreshLinksStatus.textContent = msg;
+            refreshLinksStatus.style.color = 'var(--status-success)';
+          }
+
+          // Show detailed toast
+          if (result.updated > 0) {
+            window.showToast(`${msg}. ${result.missing.length} notes not found in vault.`, 'success');
+          } else {
+            window.showToast(msg, 'success');
+          }
+        } else {
+          if (refreshLinksStatus) {
+            refreshLinksStatus.textContent = result.error || 'Failed';
+            refreshLinksStatus.style.color = 'var(--status-error)';
+          }
+          window.showToast(`Failed to refresh links: ${result.error}`, 'error');
+        }
+      } catch (error) {
+        console.error('[Settings] Error refreshing Obsidian links:', error);
+        if (refreshLinksStatus) {
+          refreshLinksStatus.textContent = 'Error';
+          refreshLinksStatus.style.color = 'var(--status-error)';
+        }
+        window.showToast('Failed to refresh Obsidian links', 'error');
+      } finally {
+        // Re-enable button
+        refreshObsidianLinksBtn.disabled = false;
+        refreshObsidianLinksBtn.textContent = 'Refresh Links';
       }
     });
   }

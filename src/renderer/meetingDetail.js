@@ -554,10 +554,10 @@ function populateMetadata(meeting) {
     createdEl.value = dateObj.toLocaleString();
   }
 
-  // Vault path (editable)
+  // Vault path (editable) - check both vaultPath and obsidianLink
   const vaultPathEl = document.getElementById('metadataVaultPath');
   if (vaultPathEl) {
-    vaultPathEl.value = meeting.vaultPath || '';
+    vaultPathEl.value = meeting.vaultPath || meeting.obsidianLink || '';
   }
 
   // Participants editor
@@ -973,19 +973,33 @@ async function exportToObsidian() {
       console.log('[MeetingDetail] Export successful');
       alert('Meeting exported to Obsidian successfully!');
 
-      // Update vault path if returned
-      if (result.data && result.data.vaultPath) {
-        currentMeeting.vaultPath = result.data.vaultPath;
+      // Update obsidianLink if returned (the IPC handler returns obsidianLink directly, not wrapped in data)
+      if (result.obsidianLink) {
+        currentMeeting.obsidianLink = result.obsidianLink;
 
-        // Update displays
+        // Update header vault path display
         const pathDisplayEl = document.getElementById('meetingDetailVaultPath');
         if (pathDisplayEl) {
-          pathDisplayEl.textContent = result.data.vaultPath;
+          pathDisplayEl.textContent = result.obsidianLink;
         }
 
+        // Update metadata tab vault path field
         const vaultPathEl = document.getElementById('metadataVaultPath');
         if (vaultPathEl) {
-          vaultPathEl.value = result.data.vaultPath;
+          vaultPathEl.value = result.obsidianLink;
+        }
+
+        // Update obsidian sync status indicator in header
+        const obsidianStatusEl = document.getElementById('meetingDetailObsidianStatus');
+        const obsidianStatusTextEl = document.getElementById('meetingDetailObsidianStatusText');
+        if (obsidianStatusEl && obsidianStatusTextEl) {
+          obsidianStatusTextEl.textContent = 'Synced';
+          obsidianStatusEl.style.color = '#4caf50'; // Green for synced
+        }
+
+        // Notify parent to persist changes
+        if (window._meetingDetailUpdateCallback) {
+          window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
         }
       }
     } else {
