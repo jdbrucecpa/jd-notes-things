@@ -37,7 +37,9 @@ class VocabularyService {
   load() {
     try {
       if (!fs.existsSync(this.configPath)) {
-        console.log(`${LOG_PREFIX} No vocabulary file found at ${this.configPath}, using empty config`);
+        console.log(
+          `${LOG_PREFIX} No vocabulary file found at ${this.configPath}, using empty config`
+        );
         this.config = this._getEmptyConfig();
         return this.config;
       }
@@ -53,7 +55,9 @@ class VocabularyService {
       const globalKeywords = this.config.global?.keyword_boosts?.length || 0;
       const clientCount = Object.keys(this.config.clients || {}).length;
 
-      console.log(`${LOG_PREFIX} Loaded vocabulary: ${globalSpellings} global spelling corrections, ${globalKeywords} global keyword boosts, ${clientCount} client configs`);
+      console.log(
+        `${LOG_PREFIX} Loaded vocabulary: ${globalSpellings} global spelling corrections, ${globalKeywords} global keyword boosts, ${clientCount} client configs`
+      );
       return this.config;
     } catch (error) {
       console.error(`${LOG_PREFIX} Error loading vocabulary:`, error.message);
@@ -202,7 +206,9 @@ class VocabularyService {
 
     const keywordBoosts = Array.from(keywordMap.values());
 
-    console.log(`${LOG_PREFIX} Merged vocabulary for "${clientSlug}": ${spellingCorrections.length} spelling corrections, ${keywordBoosts.length} keyword boosts`);
+    console.log(
+      `${LOG_PREFIX} Merged vocabulary for "${clientSlug}": ${spellingCorrections.length} spelling corrections, ${keywordBoosts.length} keyword boosts`
+    );
 
     return {
       spelling_corrections: spellingCorrections,
@@ -401,7 +407,9 @@ class VocabularyService {
     });
 
     this.save(config);
-    console.log(`${LOG_PREFIX} Added spelling correction for "${clientSlug}": ${from.join(', ')} → ${to}`);
+    console.log(
+      `${LOG_PREFIX} Added spelling correction for "${clientSlug}": ${from.join(', ')} → ${to}`
+    );
   }
 
   /**
@@ -459,9 +467,7 @@ class VocabularyService {
     const config = this.getConfig();
     const before = config.global.keyword_boosts.length;
 
-    config.global.keyword_boosts = config.global.keyword_boosts.filter(
-      kb => kb.word !== word
-    );
+    config.global.keyword_boosts = config.global.keyword_boosts.filter(kb => kb.word !== word);
 
     if (config.global.keyword_boosts.length < before) {
       this.save(config);
@@ -526,9 +532,7 @@ class VocabularyService {
 
     // Merge global keyword boosts
     if (imported.global?.keyword_boosts) {
-      const existingWords = new Set(
-        config.global.keyword_boosts.map(kb => kb.word?.toLowerCase())
-      );
+      const existingWords = new Set(config.global.keyword_boosts.map(kb => kb.word?.toLowerCase()));
       for (const kb of imported.global.keyword_boosts) {
         if (!existingWords.has(kb.word?.toLowerCase())) {
           config.global.keyword_boosts.push(kb);
@@ -544,9 +548,7 @@ class VocabularyService {
         } else {
           // Merge spelling corrections
           if (clientVocab.spelling_corrections) {
-            const existingTos = new Set(
-              config.clients[slug].spelling_corrections.map(sc => sc.to)
-            );
+            const existingTos = new Set(config.clients[slug].spelling_corrections.map(sc => sc.to));
             for (const sc of clientVocab.spelling_corrections) {
               if (!existingTos.has(sc.to)) {
                 config.clients[slug].spelling_corrections.push(sc);

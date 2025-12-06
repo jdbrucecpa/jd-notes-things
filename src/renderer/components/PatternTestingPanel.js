@@ -97,7 +97,8 @@ async function initializePatternEditor(_options) {
     configYaml = configResponse.yaml;
   } else {
     console.error('[PatternTestingPanel] Failed to load config:', configResponse.error);
-    configYaml = '# Failed to load configuration\n# Error: ' + (configResponse.error || 'Unknown error');
+    configYaml =
+      '# Failed to load configuration\n# Error: ' + (configResponse.error || 'Unknown error');
   }
 
   // If editor already exists, dispose of it first to prevent duplicates
@@ -318,7 +319,9 @@ function displaySampleEntries() {
   let html = '<div class="sample-entries-list">';
 
   samples.forEach((entry, index) => {
-    const timestamp = entry.timestamp ? `<span class="entry-timestamp">[${entry.timestamp}s]</span>` : '';
+    const timestamp = entry.timestamp
+      ? `<span class="entry-timestamp">[${entry.timestamp}s]</span>`
+      : '';
     const text = entry.text.length > 100 ? entry.text.substring(0, 100) + '...' : entry.text;
     const isUnknown = entry.speaker === 'Unknown';
 
@@ -483,22 +486,22 @@ async function loadTestSample() {
 
   // Pre-defined test samples
   const samples = {
-    'inline': `John Smith: Hello everyone, thanks for joining.
+    inline: `John Smith: Hello everyone, thanks for joining.
 Mary Johnson: Hi John, happy to be here.
 John Smith: Let's get started with the agenda.`,
 
-    'header': `John Smith:
+    header: `John Smith:
 "Hello everyone, thanks for joining."
 
 Mary Johnson:
 "Hi John, happy to be here."`,
 
-    'krisp': `Speaker 1
+    krisp: `Speaker 1
 2:09 - Hello everyone, thanks for joining.
 Speaker 2
 2:15 - Hi, happy to be here.`,
 
-    'markdown': `## John Smith
+    markdown: `## John Smith
 
 Hello everyone, thanks for joining.
 
@@ -506,7 +509,7 @@ Hello everyone, thanks for joining.
 
 Hi John, happy to be here.`,
 
-    'timestamp': `[10:23:45] Hello everyone, thanks for joining.
+    timestamp: `[10:23:45] Hello everyone, thanks for joining.
 [10:24:12] Hi, happy to be here.`,
   };
 
@@ -515,7 +518,6 @@ Hi John, happy to be here.`,
   // Auto-test
   await testCurrentSample();
 }
-
 
 /**
  * Show error message

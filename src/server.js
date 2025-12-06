@@ -39,7 +39,10 @@ async function getApiKey(keyName) {
  */
 async function getRecallConfig() {
   return {
-    apiUrl: await getApiKey('RECALLAI_API_URL') || process.env.RECALLAI_API_URL || 'https://api.recall.ai',
+    apiUrl:
+      (await getApiKey('RECALLAI_API_URL')) ||
+      process.env.RECALLAI_API_URL ||
+      'https://api.recall.ai',
     apiKey: await getApiKey('RECALLAI_API_KEY'),
     webhookSecret: await getApiKey('RECALL_WEBHOOK_SECRET'),
   };
@@ -62,7 +65,9 @@ app.get('/start-recording', async (req, res) => {
   console.log('[Upload Token] Creating upload token (webhook must be configured in dashboard)');
   if (global.webhookUrl) {
     console.log('[Upload Token] Current tunnel webhook URL:', global.webhookUrl);
-    console.log('[Upload Token] ⚠️  Update this URL in your Recall.ai dashboard at: https://us-west-2.recall.ai/webhooks');
+    console.log(
+      '[Upload Token] ⚠️  Update this URL in your Recall.ai dashboard at: https://us-west-2.recall.ai/webhooks'
+    );
   }
 
   try {

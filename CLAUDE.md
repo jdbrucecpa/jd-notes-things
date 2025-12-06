@@ -25,6 +25,7 @@ See [`README.md`](./README.md) for project overview and setup instructions.
 ### Electron Process Model
 
 **Main Process** (`src/main/`):
+
 - Recording Manager - Recall.ai SDK, local audio capture
 - Transcription Service - Multi-provider with runtime UI switching
 - Webhook Server - Express on port 13373 for async transcription callbacks
@@ -36,6 +37,7 @@ See [`README.md`](./README.md) for project overview and setup instructions.
 - Key Management - Windows Credential Manager integration
 
 **Renderer Process** (`src/renderer/`):
+
 - Main Window - Calendar view, meeting list, recording controls
 - Settings Panel - Full-page configuration UI with Monaco Editor
 - Import Wizard - Bulk transcript import
@@ -122,6 +124,7 @@ LLM service scans folder, presents templates in UI, generates summaries matching
 ### Multi-Provider Transcription
 
 Unified `TranscriptionService` with provider-specific adapters:
+
 - **AssemblyAI:** $0.37/hr (3-step API: upload → transcribe → poll)
 - **Deepgram:** $0.43/hr (direct upload)
 - **Recall.ai:** $0.85/hr (async webhook-based, SDK upload currently broken)
@@ -131,6 +134,7 @@ Runtime switching via UI dropdown with localStorage persistence.
 ### LLM Integration with Prompt Caching
 
 Multi-provider support with 85-90% cost reduction:
+
 - **Azure OpenAI, OpenAI, Anthropic Claude** - All support automatic prompt caching
 - Separate static content (transcript) from dynamic content (section prompts)
 - Token budgets: 50,000 for auto-summary, 15,000 per template section
@@ -139,12 +143,14 @@ Multi-provider support with 85-90% cost reduction:
 ### Google Integration
 
 **Unified Authentication:**
+
 - Single OAuth 2.0 flow for Calendar + Contacts
 - Combined scopes: `calendar.readonly` + `contacts.readonly`
 - Single token file with automatic refresh
 - Shared `GoogleAuth.js` module
 
 **Google Contacts:**
+
 - LRU cache (5,000 max entries, 24-hour TTL)
 - Batch email lookups for speaker matching
 
@@ -197,4 +203,3 @@ npm run format      # Format with Prettier
 - **Feedback-driven:** Phase N+1 incorporates learnings from Phase N
 - **No premature optimization:** Build for clarity first
 - **User-editable configs:** Prefer file-based over hardcoded where possible
-

@@ -47,7 +47,7 @@ export async function callIpc(method, args = [], options = {}) {
     errorMessage = 'Operation failed',
     showSuccessToast = false,
     showErrorToast = true,
-    context = 'IPC'
+    context = 'IPC',
   } = options;
 
   // Validate that the method exists

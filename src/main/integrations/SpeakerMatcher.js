@@ -52,7 +52,12 @@ class SpeakerMatcher {
     let speakerMapping = {};
     if (speechTimeline && speechTimeline.participants && speechTimeline.participants.length > 0) {
       console.log('[SpeakerMatcher] SM-1: Using SDK speech timeline for high-confidence matching');
-      speakerMapping = this.matchUsingTimeline(transcript, speechTimeline, participantEmails, contacts);
+      speakerMapping = this.matchUsingTimeline(
+        transcript,
+        speechTimeline,
+        participantEmails,
+        contacts
+      );
     }
 
     // Step 4: Fall back to heuristics for unmatched speakers
@@ -62,7 +67,9 @@ class SpeakerMatcher {
     );
 
     if (unmatchedStats.size > 0) {
-      console.log(`[SpeakerMatcher] Using heuristics for ${unmatchedStats.size} unmatched speakers`);
+      console.log(
+        `[SpeakerMatcher] Using heuristics for ${unmatchedStats.size} unmatched speakers`
+      );
       const heuristicMapping = this.createSpeakerMapping(
         unmatchedStats,
         participantEmails,
@@ -93,11 +100,15 @@ class SpeakerMatcher {
     const speakerMatchCounts = new Map(); // speakerLabel -> Map<participantName, count>
     const toleranceMs = 2000; // 2 second tolerance window for timestamp matching
 
-    console.log(`[SpeakerMatcher] SM-1: Timeline has ${speechTimeline.participants.length} SDK participants`);
+    console.log(
+      `[SpeakerMatcher] SM-1: Timeline has ${speechTimeline.participants.length} SDK participants`
+    );
 
     // Debug: log speech timeline segments
     for (const participant of speechTimeline.participants) {
-      console.log(`[SpeakerMatcher] SM-1: ${participant.name} has ${participant.segments.length} speech segments`);
+      console.log(
+        `[SpeakerMatcher] SM-1: ${participant.name} has ${participant.segments.length} speech segments`
+      );
       for (const seg of participant.segments.slice(0, 3)) {
         console.log(`[SpeakerMatcher] SM-1:   - segment: ${seg.start}ms to ${seg.end}ms`);
       }
@@ -116,7 +127,9 @@ class SpeakerMatcher {
         utteranceEndMs = lastWord.end || utteranceStartMs;
       }
 
-      console.log(`[SpeakerMatcher] SM-1: Utterance "${utterance.text?.substring(0, 30)}..." at ${utteranceStartMs}-${utteranceEndMs}ms`);
+      console.log(
+        `[SpeakerMatcher] SM-1: Utterance "${utterance.text?.substring(0, 30)}..." at ${utteranceStartMs}-${utteranceEndMs}ms`
+      );
 
       // Find SDK participant speaking at this time
       for (const sdkParticipant of speechTimeline.participants) {
@@ -125,8 +138,10 @@ class SpeakerMatcher {
           const segStart = segment.start - toleranceMs;
           const segEnd = segment.end + toleranceMs;
 
-          if (utteranceStartMs >= segStart && utteranceStartMs <= segEnd ||
-              utteranceEndMs >= segStart && utteranceEndMs <= segEnd) {
+          if (
+            (utteranceStartMs >= segStart && utteranceStartMs <= segEnd) ||
+            (utteranceEndMs >= segStart && utteranceEndMs <= segEnd)
+          ) {
             // Found a match - track it
             if (!speakerMatchCounts.has(utterance.speaker)) {
               speakerMatchCounts.set(utterance.speaker, new Map());
@@ -155,9 +170,14 @@ class SpeakerMatcher {
         }
       }
 
-      if (bestParticipant && bestCount >= 2) { // Require at least 2 matches for confidence
+      if (bestParticipant && bestCount >= 2) {
+        // Require at least 2 matches for confidence
         // Find the email for this participant if available
-        const participantEmail = this.findEmailForParticipant(bestParticipant, participantEmails, contacts);
+        const participantEmail = this.findEmailForParticipant(
+          bestParticipant,
+          participantEmails,
+          contacts
+        );
 
         mapping[speakerLabel] = {
           email: participantEmail,
@@ -274,7 +294,13 @@ class SpeakerMatcher {
    * @param {Object} existingMapping - Optional existing mapping to avoid duplicate assignments (SM-1)
    * @returns {Object} Speaker mapping
    */
-  createSpeakerMapping(speakerStats, participantIdentifiers, contacts, options, existingMapping = {}) {
+  createSpeakerMapping(
+    speakerStats,
+    participantIdentifiers,
+    contacts,
+    options,
+    existingMapping = {}
+  ) {
     const mapping = {};
 
     // SM-1: Track participants already assigned via speech timeline
@@ -305,7 +331,9 @@ class SpeakerMatcher {
           familyName: p.familyName || '',
           contact: contacts.get(p.email) || null,
         }));
-      console.log(`[SpeakerMatcher] Using ${participants.length} participants from participantData`);
+      console.log(
+        `[SpeakerMatcher] Using ${participants.length} participants from participantData`
+      );
     } else {
       // Build from identifiers (emails or names)
       participants = participantIdentifiers

@@ -43,8 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSummaryUpdate: callback => ipcRenderer.on('summary-update', (_, data) => callback(data)),
   onRecordingStateChange: callback =>
     ipcRenderer.on('recording-state-change', (_, data) => callback(data)),
-  onRecordingEnded: callback =>
-    ipcRenderer.on('recording-ended', (_, data) => callback(data)),
+  onRecordingEnded: callback => ipcRenderer.on('recording-ended', (_, data) => callback(data)),
   onParticipantsUpdated: callback =>
     ipcRenderer.on('participants-updated', (_, meetingId) => callback(meetingId)),
   onVideoFrame: callback => ipcRenderer.on('video-frame', (_, data) => callback(data)),
@@ -59,7 +58,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Recall.ai Storage Management
   recallListRecordings: () => ipcRenderer.invoke('recall:listRecordings'),
   recallDeleteAllRecordings: () => ipcRenderer.invoke('recall:deleteAllRecordings'),
-  recallDeleteRecording: (recordingId) => ipcRenderer.invoke('recall:deleteRecording', recordingId),
+  recallDeleteRecording: recordingId => ipcRenderer.invoke('recall:deleteRecording', recordingId),
   // Unified Google Authentication (Calendar + Contacts)
   googleGetAuthUrl: () => ipcRenderer.invoke('google:getAuthUrl'),
   googleAuthenticate: code => ipcRenderer.invoke('google:authenticate', code),
@@ -83,7 +82,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   routingSaveConfig: content => ipcRenderer.invoke('routing:saveConfig', content),
   routingValidateConfig: content => ipcRenderer.invoke('routing:validateConfig', content),
   routingTestEmails: emails => ipcRenderer.invoke('routing:testEmails', emails),
-  routingPreviewMeetingRoute: meetingId => ipcRenderer.invoke('routing:previewMeetingRoute', meetingId),
+  routingPreviewMeetingRoute: meetingId =>
+    ipcRenderer.invoke('routing:previewMeetingRoute', meetingId),
   routingGetAllDestinations: () => ipcRenderer.invoke('routing:getAllDestinations'),
   routingAddOrganization: (type, id, vaultPath, emails, contacts) =>
     ipcRenderer.invoke('routing:addOrganization', { type, id, vaultPath, emails, contacts }),
@@ -96,12 +96,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   vocabularyGetConfig: () => ipcRenderer.invoke('vocabulary:getConfig'),
   vocabularyGetStats: () => ipcRenderer.invoke('vocabulary:getStats'),
   vocabularyGetClientSlugs: () => ipcRenderer.invoke('vocabulary:getClientSlugs'),
-  vocabularyAddGlobalSpelling: (from, to) => ipcRenderer.invoke('vocabulary:addGlobalSpelling', { from, to }),
-  vocabularyAddGlobalKeyword: (word, intensifier) => ipcRenderer.invoke('vocabulary:addGlobalKeyword', { word, intensifier }),
-  vocabularyAddClientSpelling: (clientSlug, from, to) => ipcRenderer.invoke('vocabulary:addClientSpelling', { clientSlug, from, to }),
-  vocabularyAddClientKeyword: (clientSlug, word, intensifier) => ipcRenderer.invoke('vocabulary:addClientKeyword', { clientSlug, word, intensifier }),
-  vocabularyRemoveGlobalSpelling: to => ipcRenderer.invoke('vocabulary:removeGlobalSpelling', { to }),
-  vocabularyRemoveGlobalKeyword: word => ipcRenderer.invoke('vocabulary:removeGlobalKeyword', { word }),
+  vocabularyAddGlobalSpelling: (from, to) =>
+    ipcRenderer.invoke('vocabulary:addGlobalSpelling', { from, to }),
+  vocabularyAddGlobalKeyword: (word, intensifier) =>
+    ipcRenderer.invoke('vocabulary:addGlobalKeyword', { word, intensifier }),
+  vocabularyAddClientSpelling: (clientSlug, from, to) =>
+    ipcRenderer.invoke('vocabulary:addClientSpelling', { clientSlug, from, to }),
+  vocabularyAddClientKeyword: (clientSlug, word, intensifier) =>
+    ipcRenderer.invoke('vocabulary:addClientKeyword', { clientSlug, word, intensifier }),
+  vocabularyRemoveGlobalSpelling: to =>
+    ipcRenderer.invoke('vocabulary:removeGlobalSpelling', { to }),
+  vocabularyRemoveGlobalKeyword: word =>
+    ipcRenderer.invoke('vocabulary:removeGlobalKeyword', { word }),
   vocabularySaveConfig: config => ipcRenderer.invoke('vocabulary:saveConfig', config),
   vocabularyReload: () => ipcRenderer.invoke('vocabulary:reload'),
   // LLM Provider Management
@@ -116,8 +122,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   contactsFetchContacts: forceRefresh => ipcRenderer.invoke('contacts:fetchContacts', forceRefresh),
   contactsSearchContacts: query => ipcRenderer.invoke('contacts:searchContacts', query),
   // CS-1: Contacts Page
-  contactsGetAllContacts: forceRefresh => ipcRenderer.invoke('contacts:getAllContacts', forceRefresh),
-  contactsGetMeetingsForContact: email => ipcRenderer.invoke('contacts:getMeetingsForContact', email),
+  contactsGetAllContacts: forceRefresh =>
+    ipcRenderer.invoke('contacts:getAllContacts', forceRefresh),
+  contactsGetMeetingsForContact: email =>
+    ipcRenderer.invoke('contacts:getMeetingsForContact', email),
   // CS-3: Contact/Company Page Management
   contactsCreateContactPage: (contact, options) =>
     ipcRenderer.invoke('contacts:createContactPage', contact, options),

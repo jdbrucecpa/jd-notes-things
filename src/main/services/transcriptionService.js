@@ -102,7 +102,11 @@ class TranscriptionService {
 
     // Step 2: Request transcription with speaker diarization
     console.log('[AssemblyAI] Step 2: Requesting transcription...');
-    const transcriptId = await this.requestAssemblyAITranscription(uploadUrl, ASSEMBLYAI_API_KEY, options);
+    const transcriptId = await this.requestAssemblyAITranscription(
+      uploadUrl,
+      ASSEMBLYAI_API_KEY,
+      options
+    );
     console.log(`[AssemblyAI] Transcription started, ID: ${transcriptId}`);
 
     // Step 3: Poll for completion
@@ -135,19 +139,17 @@ class TranscriptionService {
     // Add custom spelling if vocabulary is provided (VC-3.2)
     if (options.custom_spelling && options.custom_spelling.length > 0) {
       requestBody.custom_spelling = options.custom_spelling;
-      console.log(`[AssemblyAI] Using ${options.custom_spelling.length} custom spelling corrections`);
+      console.log(
+        `[AssemblyAI] Using ${options.custom_spelling.length} custom spelling corrections`
+      );
     }
 
-    const response = await axios.post(
-      'https://api.assemblyai.com/v2/transcript',
-      requestBody,
-      {
-        headers: {
-          authorization: apiKey,
-          'content-type': 'application/json',
-        },
-      }
-    );
+    const response = await axios.post('https://api.assemblyai.com/v2/transcript', requestBody, {
+      headers: {
+        authorization: apiKey,
+        'content-type': 'application/json',
+      },
+    });
 
     return response.data.id;
   }

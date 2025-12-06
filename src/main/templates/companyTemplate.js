@@ -74,9 +74,17 @@ function generateCompanyAliases(companyName) {
   }
 
   // Add acronym if name has multiple words
-  const words = companyName.split(' ').filter(w => w && !['Inc', 'Inc.', 'Corp', 'Corp.', 'LLC', 'Ltd', 'Ltd.', 'Co', 'Co.', 'The'].includes(w));
+  const words = companyName
+    .split(' ')
+    .filter(
+      w =>
+        w && !['Inc', 'Inc.', 'Corp', 'Corp.', 'LLC', 'Ltd', 'Ltd.', 'Co', 'Co.', 'The'].includes(w)
+    );
   if (words.length >= 2) {
-    const acronym = words.map(w => w[0]).join('').toUpperCase();
+    const acronym = words
+      .map(w => w[0])
+      .join('')
+      .toUpperCase();
     if (acronym.length >= 2 && acronym.length <= 5) {
       aliases.push(acronym);
     }

@@ -215,10 +215,7 @@ class SettingsExportService {
    */
   generateExportFilename() {
     const now = new Date();
-    const timestamp = now.toISOString()
-      .replace(/[:.]/g, '')
-      .replace('T', '-')
-      .slice(0, 15);
+    const timestamp = now.toISOString().replace(/[:.]/g, '').replace('T', '-').slice(0, 15);
     return `jd-notes-settings-${timestamp}.zip`;
   }
 
@@ -330,7 +327,10 @@ class SettingsExportService {
             await this._importTemplateFile(file, overwrite, result);
           }
           // User data files
-          else if (!skipUserData && ['app-settings.json', 'speaker-mappings.json'].includes(fileName)) {
+          else if (
+            !skipUserData &&
+            ['app-settings.json', 'speaker-mappings.json'].includes(fileName)
+          ) {
             await this._importUserDataFile(file, overwrite, result);
           }
           // Manifest (already processed)
@@ -347,7 +347,9 @@ class SettingsExportService {
         }
       }
 
-      console.log(`${LOG_PREFIX} Import complete: ${result.imported.length} imported, ${result.skipped.length} skipped, ${result.errors.length} errors`);
+      console.log(
+        `${LOG_PREFIX} Import complete: ${result.imported.length} imported, ${result.skipped.length} skipped, ${result.errors.length} errors`
+      );
 
       if (result.errors.length > 0) {
         result.success = false;
@@ -408,7 +410,10 @@ class SettingsExportService {
     }
 
     if (fs.existsSync(destPath) && !overwrite) {
-      result.skipped.push({ file: file.path, reason: 'Template exists (use overwrite to replace)' });
+      result.skipped.push({
+        file: file.path,
+        reason: 'Template exists (use overwrite to replace)',
+      });
       return;
     }
 

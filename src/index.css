@@ -591,7 +591,9 @@ body {
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   cursor: pointer;
-  transition: background-color 0.2s, border 0.2s;
+  transition:
+    background-color 0.2s,
+    border 0.2s;
   position: relative;
 }
 
@@ -611,7 +613,7 @@ body {
   margin-right: 12px;
 }
 
-.meeting-select-checkbox input[type="checkbox"] {
+.meeting-select-checkbox input[type='checkbox'] {
   width: 18px;
   height: 18px;
   cursor: pointer;
@@ -740,8 +742,13 @@ body {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* Spinner animation for loading states */
@@ -1764,7 +1771,7 @@ body {
   color: var(--text-primary);
 }
 
-.routing-domain-chip input[type="checkbox"] {
+.routing-domain-chip input[type='checkbox'] {
   margin: 0;
   cursor: pointer;
 }
@@ -3381,8 +3388,12 @@ body {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spinning {
@@ -3480,7 +3491,10 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 4px;
   font-size: 12px;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
   color: var(--text-secondary);
 }
 
@@ -3592,7 +3606,10 @@ body {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 3px;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
   margin: 0 2px;
 }
 
@@ -6443,7 +6460,7 @@ body.dark-theme .pattern-error {
   display: flex;
 }
 
-.speaker-merge-checkbox input[type="checkbox"] {
+.speaker-merge-checkbox input[type='checkbox'] {
   width: 18px;
   height: 18px;
   cursor: pointer;

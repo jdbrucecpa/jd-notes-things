@@ -44,7 +44,7 @@ export function createModal({
   onConfirm,
   onCancel,
   size = 'medium',
-  showCancel = true
+  showCancel = true,
 }) {
   // Validate required parameters
   if (!title || typeof title !== 'string') {
@@ -56,8 +56,26 @@ export function createModal({
 
   // Sanitize body HTML to prevent XSS attacks
   const sanitizedBody = DOMPurify.sanitize(body, {
-    ALLOWED_TAGS: ['p', 'div', 'span', 'strong', 'em', 'br', 'ul', 'ol', 'li', 'code', 'pre', 'label', 'input', 'select', 'option', 'textarea', 'small'],
-    ALLOWED_ATTR: ['class', 'style', 'id', 'for', 'type', 'placeholder', 'value', 'name']
+    ALLOWED_TAGS: [
+      'p',
+      'div',
+      'span',
+      'strong',
+      'em',
+      'br',
+      'ul',
+      'ol',
+      'li',
+      'code',
+      'pre',
+      'label',
+      'input',
+      'select',
+      'option',
+      'textarea',
+      'small',
+    ],
+    ALLOWED_ATTR: ['class', 'style', 'id', 'for', 'type', 'placeholder', 'value', 'name'],
   });
 
   // Escape title to prevent XSS (title is plain text, not HTML)
@@ -130,7 +148,7 @@ export function createModal({
   /**
    * Handles keyboard shortcuts
    */
-  const handleKeyDown = (e) => {
+  const handleKeyDown = e => {
     // Escape key closes modal
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -140,7 +158,10 @@ export function createModal({
     else if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
       const activeElement = document.activeElement;
       // Don't trigger if user is typing in a textarea or input
-      if (activeElement && (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')) {
+      if (
+        activeElement &&
+        (activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'INPUT')
+      ) {
         return;
       }
       e.preventDefault();
@@ -189,7 +210,7 @@ export function createModal({
   /**
    * Handles click-outside-to-close behavior
    */
-  const handleOverlayClick = (e) => {
+  const handleOverlayClick = e => {
     // Close if clicking on overlay (not on modal dialog itself)
     if (e.target === modal) {
       closeModal();

@@ -11,7 +11,7 @@ let currentMappings = {};
 let searchTimeouts = {};
 let documentClickHandler = null; // Single delegated click handler
 let mergeMode = false; // Whether merge selection mode is active
-let selectedForMerge = new Set(); // Speakers selected for merging
+const selectedForMerge = new Set(); // Speakers selected for merging
 
 /**
  * Open the speaker mapping modal for a meeting
@@ -47,8 +47,10 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
   const extractStart = performance.now();
   const result = await window.electronAPI.speakerMappingExtractIds(transcript);
   const speakerIds = result.success ? result.speakerIds : [];
-  const profileSuggestions = result.success ? (result.profileSuggestions || {}) : {};
-  console.log(`[SpeakerMapping] Extract IDs took ${(performance.now() - extractStart).toFixed(0)}ms, found ${speakerIds.length} IDs`);
+  const profileSuggestions = result.success ? result.profileSuggestions || {} : {};
+  console.log(
+    `[SpeakerMapping] Extract IDs took ${(performance.now() - extractStart).toFixed(0)}ms, found ${speakerIds.length} IDs`
+  );
   if (Object.keys(profileSuggestions).length > 0) {
     console.log(`[SpeakerMapping] Profile suggestions:`, profileSuggestions);
   }
@@ -66,7 +68,9 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
     // Detect duplicate speakers
     const dupStart = performance.now();
     const dupResult = await window.electronAPI.speakerMappingDetectDuplicates(speakerIds);
-    console.log(`[SpeakerMapping] Detect duplicates took ${(performance.now() - dupStart).toFixed(0)}ms`);
+    console.log(
+      `[SpeakerMapping] Detect duplicates took ${(performance.now() - dupStart).toFixed(0)}ms`
+    );
     console.log('[SpeakerMapping] Duplicates:', dupResult);
 
     // Apply auto-merges and filter speaker list
@@ -84,11 +88,14 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
           contactEmail: null,
           obsidianLink: `[[${merge.to}]]`,
           autoMerged: true,
-          reason: merge.reason
+          reason: merge.reason,
         };
       }
       if (dupResult.autoMerge.length > 0) {
-        window.showToast?.(`Auto-merged ${dupResult.autoMerge.length} duplicate speaker(s)`, 'info');
+        window.showToast?.(
+          `Auto-merged ${dupResult.autoMerge.length} duplicate speaker(s)`,
+          'info'
+        );
       }
     }
 
@@ -100,9 +107,12 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
 
     // Get suggestions from known mappings
     const suggestStart = performance.now();
-    const suggestionsResult = await window.electronAPI.speakerMappingGetSuggestions(filteredSpeakerIds);
+    const suggestionsResult =
+      await window.electronAPI.speakerMappingGetSuggestions(filteredSpeakerIds);
     const storedSuggestions = suggestionsResult.success ? suggestionsResult.suggestions : {};
-    console.log(`[SpeakerMapping] Get suggestions took ${(performance.now() - suggestStart).toFixed(0)}ms`);
+    console.log(
+      `[SpeakerMapping] Get suggestions took ${(performance.now() - suggestStart).toFixed(0)}ms`
+    );
 
     // Merge profile suggestions with stored suggestions (profile takes precedence for single speaker)
     const suggestions = { ...storedSuggestions };
@@ -117,7 +127,9 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
     // Render speaker mapping rows
     const renderStart = performance.now();
     await renderSpeakerRows(speakersList, filteredSpeakerIds, suggestions);
-    console.log(`[SpeakerMapping] Render rows took ${(performance.now() - renderStart).toFixed(0)}ms`);
+    console.log(
+      `[SpeakerMapping] Render rows took ${(performance.now() - renderStart).toFixed(0)}ms`
+    );
 
     // Render duplicate suggestions section if any
     if (window._duplicateSuggestions?.length > 0) {
@@ -131,9 +143,13 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
   // Set up event listeners
   const listenersStart = performance.now();
   setupModalEventListeners(onComplete);
-  console.log(`[SpeakerMapping] Setup listeners took ${(performance.now() - listenersStart).toFixed(0)}ms`);
+  console.log(
+    `[SpeakerMapping] Setup listeners took ${(performance.now() - listenersStart).toFixed(0)}ms`
+  );
 
-  console.log(`[SpeakerMapping] Total modal open time: ${(performance.now() - startTime).toFixed(0)}ms`);
+  console.log(
+    `[SpeakerMapping] Total modal open time: ${(performance.now() - startTime).toFixed(0)}ms`
+  );
 }
 
 /**
@@ -226,11 +242,13 @@ function mergeSpeakers(fromSpeaker, toSpeaker, suggestionItem) {
     contactName: toSpeaker,
     contactEmail: null,
     obsidianLink: `[[${toSpeaker}]]`,
-    merged: true
+    merged: true,
   };
 
   // Remove the "from" speaker row from the list
-  const fromRow = document.querySelector(`.speaker-mapping-row[data-speaker-id="${CSS.escape(fromSpeaker)}"]`);
+  const fromRow = document.querySelector(
+    `.speaker-mapping-row[data-speaker-id="${CSS.escape(fromSpeaker)}"]`
+  );
   if (fromRow) {
     fromRow.remove();
   }
@@ -294,20 +312,28 @@ function createSpeakerRow(speakerId, suggestion) {
           </svg>
         </button>
       </div>
-      ${suggestion ? `
+      ${
+        suggestion
+          ? `
         <div class="speaker-suggestion ${suggestion.isProfileSuggestion ? 'profile-suggestion' : ''}">
           <span class="speaker-suggestion-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              ${suggestion.isProfileSuggestion
-                ? '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/>'
-                : '<path d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>'}
+              ${
+                suggestion.isProfileSuggestion
+                  ? '<path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/>'
+                  : '<path d="M12 2C6.48 2 2 6.48 2 12S6.48 22 12 22 22 17.52 22 12 17.52 2 12 2ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>'
+              }
             </svg>
           </span>
-          <span class="speaker-suggestion-text">${suggestion.isProfileSuggestion
-            ? 'Single speaker auto-labeled as you (from profile)'
-            : 'Auto-suggested from previous mapping'}</span>
+          <span class="speaker-suggestion-text">${
+            suggestion.isProfileSuggestion
+              ? 'Single speaker auto-labeled as you (from profile)'
+              : 'Auto-suggested from previous mapping'
+          }</span>
         </div>
-      ` : ''}
+      `
+          : ''
+      }
     </div>
   `;
 
@@ -417,9 +443,8 @@ function updateMergeConfirmButton() {
   const confirmBtn = document.getElementById('confirmMergeBtn');
   if (confirmBtn) {
     confirmBtn.disabled = selectedForMerge.size < 2;
-    confirmBtn.textContent = selectedForMerge.size >= 2
-      ? `Merge ${selectedForMerge.size} Speakers`
-      : 'Select 2+ Speakers';
+    confirmBtn.textContent =
+      selectedForMerge.size >= 2 ? `Merge ${selectedForMerge.size} Speakers` : 'Select 2+ Speakers';
   }
 }
 
@@ -445,11 +470,13 @@ function confirmMergeSelected() {
       contactName: targetSpeaker,
       contactEmail: null,
       obsidianLink: `[[${targetSpeaker}]]`,
-      merged: true
+      merged: true,
     };
 
     // Remove the merged speaker's row
-    const row = document.querySelector(`.speaker-mapping-row[data-speaker-id="${CSS.escape(speaker)}"]`);
+    const row = document.querySelector(
+      `.speaker-mapping-row[data-speaker-id="${CSS.escape(speaker)}"]`
+    );
     if (row) {
       row.remove();
     }
@@ -533,7 +560,9 @@ function showDropdown(row, speakerId, contacts) {
  */
 function hideDropdown(row) {
   const speakerId = row.dataset.speakerId;
-  const dropdown = document.querySelector(`.speaker-contact-dropdown[data-speaker-id="${speakerId}"]`);
+  const dropdown = document.querySelector(
+    `.speaker-contact-dropdown[data-speaker-id="${speakerId}"]`
+  );
   if (dropdown) {
     dropdown.remove();
   }
@@ -555,7 +584,8 @@ function selectContact(row, speakerId, contact) {
   const clearBtn = row.querySelector('.speaker-contact-clear');
 
   console.log('[SpeakerMapping] Selected contact:', contact);
-  const email = contact.emails && contact.emails.length > 0 ? contact.emails[0] : contact.email || null;
+  const email =
+    contact.emails && contact.emails.length > 0 ? contact.emails[0] : contact.email || null;
   console.log('[SpeakerMapping] Extracted email:', email);
 
   // Update UI
@@ -685,7 +715,7 @@ function setupModalEventListeners(onComplete) {
     // Merge auto-merged mappings with user mappings
     const allMappings = {
       ...(window._autoMergedMappings || {}),
-      ...currentMappings
+      ...currentMappings,
     };
 
     if (Object.keys(allMappings).length === 0) {
@@ -706,7 +736,10 @@ function setupModalEventListeners(onComplete) {
       if (result.success) {
         console.log('[SpeakerMapping] Mappings applied successfully');
         console.log('[SpeakerMapping] Updated meeting:', result.meeting);
-        console.log('[SpeakerMapping] Updated transcript sample:', result.meeting?.transcript?.slice(0, 2));
+        console.log(
+          '[SpeakerMapping] Updated transcript sample:',
+          result.meeting?.transcript?.slice(0, 2)
+        );
 
         // SM-3.6: Show appropriate message based on whether Obsidian files were updated
         const mappingCount = Object.keys(allMappings).length;

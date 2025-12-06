@@ -54,7 +54,7 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.68.0",
+    "@anthropic-ai/sdk": "^0.71.2",
     "@recallai/desktop-sdk": "^2.0.0",
     "@timfish/forge-externals-plugin": "^0.2.1",
     "@types/dompurify": "^3.0.5",
@@ -70,8 +70,8 @@
     "keytar": "^7.9.0",
     "localtunnel": "^2.0.2",
     "lru-cache": "^11.2.2",
-    "marked": "^16.4.2",
-    "monaco-editor": "^0.54.0",
+    "marked": "^17.0.1",
+    "monaco-editor": "^0.55.1",
     "monaco-editor-webpack-plugin": "^7.1.1",
     "openai": "^6.8.1",
     "react": "^19.1.0",

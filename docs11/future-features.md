@@ -93,5 +93,5 @@ CRM stays updated without manual data entry.
 #### Transition to SQLite for meeting data
 
 - eventually the meetings.json file will get too large
-- can do interim feature to archive old meetings to a separate file. 
+- can do interim feature to archive old meetings to a separate file.
 - SQLite will solve the problem, but adds complexity.

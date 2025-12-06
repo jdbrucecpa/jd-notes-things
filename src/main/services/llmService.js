@@ -574,11 +574,18 @@ function createLLMServiceFromEnv() {
  */
 async function createLLMServiceFromCredentials(keyManagementService) {
   // Try to get API keys from Windows Credential Manager first, fall back to env vars
-  const azureKey = (await keyManagementService.getKey('AZURE_OPENAI_API_KEY')) || process.env.AZURE_OPENAI_API_KEY;
-  const azureEndpoint = (await keyManagementService.getKey('AZURE_OPENAI_ENDPOINT')) || process.env.AZURE_OPENAI_ENDPOINT;
-  const azureDeployment = (await keyManagementService.getKey('AZURE_OPENAI_DEPLOYMENT')) || process.env.AZURE_OPENAI_DEPLOYMENT;
-  const anthropicKey = (await keyManagementService.getKey('ANTHROPIC_API_KEY')) || process.env.ANTHROPIC_API_KEY;
-  const openaiKey = (await keyManagementService.getKey('OPENAI_API_KEY')) || process.env.OPENAI_API_KEY;
+  const azureKey =
+    (await keyManagementService.getKey('AZURE_OPENAI_API_KEY')) || process.env.AZURE_OPENAI_API_KEY;
+  const azureEndpoint =
+    (await keyManagementService.getKey('AZURE_OPENAI_ENDPOINT')) ||
+    process.env.AZURE_OPENAI_ENDPOINT;
+  const azureDeployment =
+    (await keyManagementService.getKey('AZURE_OPENAI_DEPLOYMENT')) ||
+    process.env.AZURE_OPENAI_DEPLOYMENT;
+  const anthropicKey =
+    (await keyManagementService.getKey('ANTHROPIC_API_KEY')) || process.env.ANTHROPIC_API_KEY;
+  const openaiKey =
+    (await keyManagementService.getKey('OPENAI_API_KEY')) || process.env.OPENAI_API_KEY;
 
   // Determine which provider to use based on available keys
   // Priority: Azure > Anthropic > OpenAI
@@ -603,7 +610,10 @@ async function createLLMServiceFromCredentials(keyManagementService) {
       apiKey: azureKey,
       endpoint: azureEndpoint,
       deployment: azureDeployment,
-      apiVersion: (await keyManagementService.getKey('AZURE_OPENAI_API_VERSION')) || process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview',
+      apiVersion:
+        (await keyManagementService.getKey('AZURE_OPENAI_API_VERSION')) ||
+        process.env.AZURE_OPENAI_API_VERSION ||
+        '2025-01-01-preview',
     },
     anthropic: {
       apiKey: anthropicKey,

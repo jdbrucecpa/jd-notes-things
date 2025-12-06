@@ -49,7 +49,7 @@ function setupModalListeners() {
   }
 
   // Close on overlay click (not modal content)
-  overlay.addEventListener('click', (e) => {
+  overlay.addEventListener('click', e => {
     if (e.target === overlay) {
       closeQuickSearch();
     }
@@ -302,32 +302,34 @@ function renderResults() {
     return;
   }
 
-  const html = filteredResults.map((item, index) => {
-    const contact = item.contact;
-    const initials = getInitials(contact.name);
-    const isSelected = index === selectedIndex;
+  const html = filteredResults
+    .map((item, index) => {
+      const contact = item.contact;
+      const initials = getInitials(contact.name);
+      const isSelected = index === selectedIndex;
 
-    // Highlight matching text
-    const highlightedName = highlightMatch(contact.name || '', query);
-    const email = contact.emails && contact.emails[0] ? contact.emails[0] : '';
-    const highlightedEmail = highlightMatch(email, query);
-    const org = contact.organization || '';
-    const highlightedOrg = highlightMatch(org, query);
+      // Highlight matching text
+      const highlightedName = highlightMatch(contact.name || '', query);
+      const email = contact.emails && contact.emails[0] ? contact.emails[0] : '';
+      const highlightedEmail = highlightMatch(email, query);
+      const org = contact.organization || '';
+      const highlightedOrg = highlightMatch(org, query);
 
-    // Build meta line
-    const metaParts = [];
-    if (highlightedEmail) metaParts.push(highlightedEmail);
-    if (highlightedOrg) metaParts.push(highlightedOrg);
-    const metaLine = metaParts.join(' · ');
+      // Build meta line
+      const metaParts = [];
+      if (highlightedEmail) metaParts.push(highlightedEmail);
+      if (highlightedOrg) metaParts.push(highlightedOrg);
+      const metaLine = metaParts.join(' · ');
 
-    return `
+      return `
       <div class="quick-search-result-item ${isSelected ? 'selected' : ''}"
            data-index="${index}"
            data-resource="${contact.resourceName}">
         <div class="quick-search-result-avatar">
-          ${contact.photoUrl
-            ? `<img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" />`
-            : initials
+          ${
+            contact.photoUrl
+              ? `<img src="${contact.photoUrl}" alt="${escapeHtml(contact.name)}" />`
+              : initials
           }
         </div>
         <div class="quick-search-result-info">
@@ -336,7 +338,8 @@ function renderResults() {
         </div>
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 
   resultsContainer.innerHTML = html;
 

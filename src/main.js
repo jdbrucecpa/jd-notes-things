@@ -1,4 +1,15 @@
-const { app, BrowserWindow, ipcMain, Notification, Tray, Menu, globalShortcut, shell, screen, nativeImage } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Notification,
+  Tray,
+  Menu,
+  globalShortcut,
+  shell,
+  screen,
+  nativeImage,
+} = require('electron');
 const path = require('node:path');
 const fs = require('fs');
 const RecallAiSdk = require('@recallai/desktop-sdk');
@@ -16,7 +27,7 @@ const RoutingEngine = require('./main/routing/RoutingEngine');
 const ImportManager = require('./main/import/ImportManager');
 const TranscriptParser = require('./main/import/TranscriptParser');
 const PatternConfigLoader = require('./main/import/PatternConfigLoader');
-const { createLLMServiceFromEnv, createLLMServiceFromCredentials } = require('./main/services/llmService');
+const { createLLMServiceFromCredentials } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
 const speakerMappingService = require('./main/services/speakerMappingService');
@@ -161,26 +172,29 @@ function createDevIcon() {
 
         // Create a red rounded square with darker border
         const isEdge = x < 2 || x >= size - 2 || y < 2 || y >= size - 2;
-        const isCorner = (x < 4 && y < 4) || (x < 4 && y >= size - 4) ||
-                         (x >= size - 4 && y < 4) || (x >= size - 4 && y >= size - 4);
+        const isCorner =
+          (x < 4 && y < 4) ||
+          (x < 4 && y >= size - 4) ||
+          (x >= size - 4 && y < 4) ||
+          (x >= size - 4 && y >= size - 4);
 
         if (isCorner) {
           // Transparent corners for rounded effect
-          canvas[idx] = 0;     // R
+          canvas[idx] = 0; // R
           canvas[idx + 1] = 0; // G
           canvas[idx + 2] = 0; // B
           canvas[idx + 3] = 0; // A (transparent)
         } else if (isEdge) {
           // Dark red border
-          canvas[idx] = 139;     // R
-          canvas[idx + 1] = 0;   // G
-          canvas[idx + 2] = 0;   // B
+          canvas[idx] = 139; // R
+          canvas[idx + 1] = 0; // G
+          canvas[idx + 2] = 0; // B
           canvas[idx + 3] = 255; // A
         } else {
           // Bright red fill
-          canvas[idx] = 220;     // R
-          canvas[idx + 1] = 53;  // G
-          canvas[idx + 2] = 69;  // B
+          canvas[idx] = 220; // R
+          canvas[idx + 1] = 53; // G
+          canvas[idx + 2] = 69; // B
           canvas[idx + 3] = 255; // A
         }
       }
@@ -404,9 +418,9 @@ function createSystemTray() {
         // Fallback: create simple red square
         const canvas = Buffer.alloc(16 * 16 * 4);
         for (let i = 0; i < canvas.length; i += 4) {
-          canvas[i] = 220;     // R
-          canvas[i + 1] = 53;  // G
-          canvas[i + 2] = 69;  // B
+          canvas[i] = 220; // R
+          canvas[i + 1] = 53; // G
+          canvas[i + 2] = 69; // B
           canvas[i + 3] = 255; // A
         }
         tray = new Tray(nativeImage.createFromBuffer(canvas, { width: 16, height: 16 }));
@@ -461,20 +475,20 @@ function createSystemTray() {
         const canvas = {
           width: 16,
           height: 16,
-          data: Buffer.alloc(16 * 16 * 4) // RGBA
+          data: Buffer.alloc(16 * 16 * 4), // RGBA
         };
 
         // Fill with orange color (since user mentioned seeing orange)
         for (let i = 0; i < canvas.data.length; i += 4) {
-          canvas.data[i] = 255;     // R
+          canvas.data[i] = 255; // R
           canvas.data[i + 1] = 140; // G
-          canvas.data[i + 2] = 0;   // B (orange color)
+          canvas.data[i + 2] = 0; // B (orange color)
           canvas.data[i + 3] = 255; // A
         }
 
         trayIcon = nativeImage.createFromBuffer(canvas.data, {
           width: canvas.width,
-          height: canvas.height
+          height: canvas.height,
         });
       }
 
@@ -493,7 +507,7 @@ function createSystemTray() {
           } else {
             createWindow();
           }
-        }
+        },
       },
       { type: 'separator' },
       {
@@ -505,7 +519,7 @@ function createSystemTray() {
           } catch (error) {
             logger.main.error('Quick record failed:', error);
           }
-        }
+        },
       },
       {
         label: 'Record Meeting',
@@ -518,7 +532,7 @@ function createSystemTray() {
           } catch (error) {
             logger.main.error('Toggle recording failed:', error);
           }
-        }
+        },
       },
       {
         label: 'Stop Recording',
@@ -534,7 +548,7 @@ function createSystemTray() {
           } catch (error) {
             logger.main.error('Stop recording failed:', error);
           }
-        }
+        },
       },
       { type: 'separator' },
       {
@@ -559,7 +573,7 @@ function createSystemTray() {
           } catch (error) {
             logger.main.error('[Tray] Error opening vault folder:', error);
           }
-        }
+        },
       },
       { type: 'separator' },
       {
@@ -571,7 +585,7 @@ function createSystemTray() {
             mainWindow.focus();
             mainWindow.webContents.send('open-settings');
           }
-        }
+        },
       },
       {
         label: 'View Logs',
@@ -582,7 +596,7 @@ function createSystemTray() {
             mainWindow.focus();
             mainWindow.webContents.send('open-logs-viewer');
           }
-        }
+        },
       },
       { type: 'separator' },
       {
@@ -591,8 +605,8 @@ function createSystemTray() {
         click: () => {
           app.isQuitting = true;
           app.quit();
-        }
-      }
+        },
+      },
     ]);
 
     tray.setToolTip(appLabel);
@@ -639,7 +653,7 @@ function updateSystemTrayMenu() {
           } else {
             createWindow();
           }
-        }
+        },
       },
       { type: 'separator' },
       {
@@ -652,7 +666,7 @@ function updateSystemTrayMenu() {
           } catch (error) {
             logger.main.error('Quick record failed:', error);
           }
-        }
+        },
       },
       {
         label: 'Record Meeting',
@@ -666,7 +680,7 @@ function updateSystemTrayMenu() {
           } catch (error) {
             logger.main.error('Toggle recording failed:', error);
           }
-        }
+        },
       },
       {
         label: 'Stop Recording',
@@ -680,7 +694,7 @@ function updateSystemTrayMenu() {
           } catch (error) {
             logger.main.error('Stop recording failed:', error);
           }
-        }
+        },
       },
       { type: 'separator' },
       {
@@ -700,7 +714,7 @@ function updateSystemTrayMenu() {
           } catch (error) {
             logger.main.error('[Tray] Error opening vault folder:', error);
           }
-        }
+        },
       },
       { type: 'separator' },
       {
@@ -712,7 +726,7 @@ function updateSystemTrayMenu() {
             mainWindow.focus();
             mainWindow.webContents.send('open-settings');
           }
-        }
+        },
       },
       {
         label: 'View Logs',
@@ -723,7 +737,7 @@ function updateSystemTrayMenu() {
             mainWindow.focus();
             mainWindow.webContents.send('open-logs-viewer');
           }
-        }
+        },
       },
       { type: 'separator' },
       {
@@ -732,8 +746,8 @@ function updateSystemTrayMenu() {
         click: () => {
           app.isQuitting = true;
           app.quit();
-        }
-      }
+        },
+      },
     ]);
 
     tray.setContextMenu(contextMenu);
@@ -1049,7 +1063,7 @@ const createWindow = () => {
   });
 
   // Minimize to tray behavior (Phase 10.7)
-  mainWindow.on('minimize', (event) => {
+  mainWindow.on('minimize', event => {
     if (appSettings.notifications.minimizeToTray) {
       event.preventDefault();
       mainWindow.hide();
@@ -1067,7 +1081,7 @@ const createWindow = () => {
   });
 
   // Prevent quit on window close (minimize to tray instead)
-  mainWindow.on('close', (event) => {
+  mainWindow.on('close', event => {
     if (!app.isQuitting && appSettings.notifications.minimizeToTray) {
       event.preventDefault();
       mainWindow.hide();
@@ -1157,11 +1171,7 @@ async function initializeDefaultConfigFiles() {
     }
 
     // List of config files to copy (if missing)
-    const configFiles = [
-      'routing.yaml',
-      'transcript-patterns.yaml',
-      'vocabulary.yaml',
-    ];
+    const configFiles = ['routing.yaml', 'transcript-patterns.yaml', 'vocabulary.yaml'];
 
     // Copy each config file if it doesn't exist
     for (const filename of configFiles) {
@@ -1340,7 +1350,7 @@ app.whenReady().then(async () => {
       summaryFunction: generateTemplateSummaries, // Share template generation with recordings
       autoSummaryFunction: generateMeetingSummary, // Share auto-summary generation with recordings
       // v1.1: Auto-label single speakers as user before summary generation
-      autoLabelFunction: async (meeting) => {
+      autoLabelFunction: async meeting => {
         if (!userProfile?.name || !meeting.transcript) {
           return { applied: false };
         }
@@ -1683,8 +1693,12 @@ const fileOperationManager = {
  */
 async function listRecallRecordings() {
   try {
-    const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-    const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+    const RECALLAI_API_URL =
+      (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+      process.env.RECALLAI_API_URL ||
+      'https://api.recall.ai';
+    const RECALLAI_API_KEY =
+      (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
     if (!RECALLAI_API_KEY) {
       console.error('[Recall Storage] API key not configured');
@@ -1723,8 +1737,12 @@ async function listRecallRecordings() {
  */
 async function deleteRecallRecording(recordingId) {
   try {
-    const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-    const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+    const RECALLAI_API_URL =
+      (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+      process.env.RECALLAI_API_URL ||
+      'https://api.recall.ai';
+    const RECALLAI_API_KEY =
+      (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
     if (!RECALLAI_API_KEY) {
       return { error: 'RECALLAI_API_KEY is not configured' };
@@ -1746,7 +1764,10 @@ async function deleteRecallRecording(recordingId) {
       console.log(`[Recall Storage] Recording ${recordingId} already deleted or not found`);
       return { success: true, recordingId, alreadyDeleted: true };
     }
-    console.error(`[Recall Storage] Error deleting ${recordingId}:`, error.response?.data || error.message);
+    console.error(
+      `[Recall Storage] Error deleting ${recordingId}:`,
+      error.response?.data || error.message
+    );
     return { error: error.message, recordingId };
   }
 }
@@ -1802,8 +1823,12 @@ async function deleteAllRecallRecordings() {
 // Create a desktop SDK upload token directly (no separate server needed)
 async function createDesktopSdkUpload() {
   try {
-    const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-    const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+    const RECALLAI_API_URL =
+      (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+      process.env.RECALLAI_API_URL ||
+      'https://api.recall.ai';
+    const RECALLAI_API_KEY =
+      (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
     if (!RECALLAI_API_KEY) {
       console.error('RECALLAI_API_KEY is missing! Configure it in Settings > Security');
@@ -1836,8 +1861,8 @@ async function createDesktopSdkUpload() {
           {
             type: 'desktop_sdk_callback',
             events: [
-              'participant_events.join',     // Track participant info
-              'participant_events.speech_on',  // Track when participants start speaking (SM-1)
+              'participant_events.join', // Track participant info
+              'participant_events.speech_on', // Track when participants start speaking (SM-1)
               'participant_events.speech_off', // Track when participants stop speaking (SM-1)
             ],
           },
@@ -1870,7 +1895,10 @@ async function initSDK() {
   console.log('Initializing Recall.ai SDK');
 
   // Retrieve API URL from Windows Credential Manager (with .env fallback)
-  const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
+  const RECALLAI_API_URL =
+    (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+    process.env.RECALLAI_API_URL ||
+    'https://api.recall.ai';
 
   console.log('[SDK] Using Recall.ai API URL:', RECALLAI_API_URL);
 
@@ -1971,7 +1999,7 @@ async function initSDK() {
       // Send toast notification to renderer
       mainWindow.webContents.send('show-toast', {
         message: `${platformName} meeting detected`,
-        type: 'info'
+        type: 'info',
       });
     }
   });
@@ -2096,7 +2124,9 @@ async function initSDK() {
           }
           // VC-3.5: Capture participant emails for vocabulary lookup
           participantEmails = meeting.participantEmails || [];
-          console.log(`[Transcription] VC-3: Found ${participantEmails.length} participant emails for vocabulary lookup`);
+          console.log(
+            `[Transcription] VC-3: Found ${participantEmails.length} participant emails for vocabulary lookup`
+          );
         }
       } catch (error) {
         console.error(
@@ -2107,7 +2137,9 @@ async function initSDK() {
 
       // Immediately notify renderer that recording has ended (update UI right away)
       if (mainWindow && !mainWindow.isDestroyed() && meetingId) {
-        console.log('[Recording] Notifying renderer that recording ended - updating UI immediately');
+        console.log(
+          '[Recording] Notifying renderer that recording ended - updating UI immediately'
+        );
         mainWindow.webContents.send('recording-ended', {
           windowId: windowId,
           meetingId: meetingId,
@@ -2121,7 +2153,6 @@ async function initSDK() {
       // Update recording state and tray menu (Phase 10.7)
       isRecording = false;
       updateSystemTrayMenu();
-
 
       // Wait for file to be fully written before starting transcription
       setTimeout(async () => {
@@ -2179,15 +2210,28 @@ async function initSDK() {
                 const clientRoute = routingDecision.routes.find(r => r.type === 'client');
                 if (clientRoute) {
                   clientSlug = clientRoute.slug;
-                  console.log(`[Transcription] VC-3: Matched client "${clientSlug}" from participants`);
+                  console.log(
+                    `[Transcription] VC-3: Matched client "${clientSlug}" from participants`
+                  );
                 }
               }
               // Get vocabulary formatted for the provider (includes global + client-specific)
-              vocabularyOptions = vocabularyService.getVocabularyForProvider(transcriptionProvider, clientSlug);
-              const vocabCount = vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
-              console.log(`[Transcription] VC-3: Using ${vocabCount} vocabulary entries for ${transcriptionProvider}`);
+              vocabularyOptions = vocabularyService.getVocabularyForProvider(
+                transcriptionProvider,
+                clientSlug
+              );
+              const vocabCount =
+                vocabularyOptions.custom_spelling?.length ||
+                vocabularyOptions.keywords?.length ||
+                0;
+              console.log(
+                `[Transcription] VC-3: Using ${vocabCount} vocabulary entries for ${transcriptionProvider}`
+              );
             } catch (vocabError) {
-              console.warn('[Transcription] VC-3: Failed to load vocabulary, continuing without:', vocabError.message);
+              console.warn(
+                '[Transcription] VC-3: Failed to load vocabulary, continuing without:',
+                vocabError.message
+              );
             }
 
             console.log(`[Transcription] Calling transcriptionService.transcribe()...`);
@@ -2220,10 +2264,12 @@ async function initSDK() {
 
               // Check if we need to append to previous transcript
               if (meeting.recordingAction === 'append' && meeting.previousTranscript) {
-                console.log(`[Transcription] Appending ${transcript.entries.length} new entries to ${meeting.previousTranscript.length} existing entries`);
+                console.log(
+                  `[Transcription] Appending ${transcript.entries.length} new entries to ${meeting.previousTranscript.length} existing entries`
+                );
                 meetingsData.pastMeetings[meetingIndex].transcript = [
                   ...meeting.previousTranscript,
-                  ...transcript.entries
+                  ...transcript.entries,
                 ];
                 // Clean up temporary fields
                 delete meetingsData.pastMeetings[meetingIndex].previousTranscript;
@@ -2240,36 +2286,48 @@ async function initSDK() {
 
               console.log('[Transcription] Writing updated meeting data...');
               await fileOperationManager.writeData(meetingsData);
-              console.log(`[Transcription] ✓ Transcript saved with ${meetingsData.pastMeetings[meetingIndex].transcript.length} total entries`);
+              console.log(
+                `[Transcription] ✓ Transcript saved with ${meetingsData.pastMeetings[meetingIndex].transcript.length} total entries`
+              );
 
               // SM-1: Apply speaker matching immediately after transcription
               const meetingForMatching = meetingsData.pastMeetings[meetingIndex];
-              if (speakerMatcher && meetingForMatching.transcript && meetingForMatching.transcript.length > 0) {
+              if (
+                speakerMatcher &&
+                meetingForMatching.transcript &&
+                meetingForMatching.transcript.length > 0
+              ) {
                 try {
                   console.log('[Transcription] SM-1: Starting speaker matching...');
 
                   // Get participants from meeting data (prefer email, fall back to name)
                   const participants = meetingForMatching.participants || [];
-                  const participantEmails = participants
-                    .map(p => p.email)
-                    .filter(email => email);
-                  const participantNames = participants
-                    .map(p => p.name)
-                    .filter(name => name);
+                  const participantEmails = participants.map(p => p.email).filter(email => email);
+                  const participantNames = participants.map(p => p.name).filter(name => name);
 
-                  console.log(`[Transcription] SM-1: Found ${participantEmails.length} participant emails, ${participantNames.length} participant names`);
-                  console.log('[Transcription] SM-1: Participants:', JSON.stringify(participants, null, 2));
+                  console.log(
+                    `[Transcription] SM-1: Found ${participantEmails.length} participant emails, ${participantNames.length} participant names`
+                  );
+                  console.log(
+                    '[Transcription] SM-1: Participants:',
+                    JSON.stringify(participants, null, 2)
+                  );
 
                   // Get speech timeline if available
                   const speechTimeline = windowId ? getSpeechTimeline(windowId) : null;
                   if (speechTimeline) {
-                    console.log(`[Transcription] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`);
+                    console.log(
+                      `[Transcription] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`
+                    );
                   } else {
-                    console.log('[Transcription] SM-1: No speech timeline available, using heuristics only');
+                    console.log(
+                      '[Transcription] SM-1: No speech timeline available, using heuristics only'
+                    );
                   }
 
                   // Use emails if available, otherwise use names for matching
-                  const matchIdentifiers = participantEmails.length > 0 ? participantEmails : participantNames;
+                  const matchIdentifiers =
+                    participantEmails.length > 0 ? participantEmails : participantNames;
 
                   if (matchIdentifiers.length > 0) {
                     // Match speakers to participants
@@ -2280,28 +2338,33 @@ async function initSDK() {
                         includeOrganizer: true,
                         useWordCount: true,
                         speechTimeline,
-                        participantData: participants // Pass full participant data for name-based matching
+                        participantData: participants, // Pass full participant data for name-based matching
                       }
                     );
 
                     // Apply mapping to transcript
                     if (Object.keys(speakerMapping).length > 0) {
-                      meetingsData.pastMeetings[meetingIndex].transcript = speakerMatcher.applyMappingToTranscript(
-                        meetingForMatching.transcript,
-                        speakerMapping
-                      );
+                      meetingsData.pastMeetings[meetingIndex].transcript =
+                        speakerMatcher.applyMappingToTranscript(
+                          meetingForMatching.transcript,
+                          speakerMapping
+                        );
 
                       // Save the speaker mapping for future reference
                       meetingsData.pastMeetings[meetingIndex].speakerMapping = speakerMapping;
 
                       // Write updated data with speaker names
                       await fileOperationManager.writeData(meetingsData);
-                      console.log('[Transcription] SM-1: ✓ Speaker matching complete, transcript updated with names');
+                      console.log(
+                        '[Transcription] SM-1: ✓ Speaker matching complete, transcript updated with names'
+                      );
                     } else {
                       console.log('[Transcription] SM-1: No speaker matches found');
                     }
                   } else {
-                    console.log('[Transcription] SM-1: No participant identifiers available for matching');
+                    console.log(
+                      '[Transcription] SM-1: No participant identifiers available for matching'
+                    );
                   }
 
                   // Clean up speech timeline
@@ -2309,7 +2372,10 @@ async function initSDK() {
                     cleanupSpeechTimeline(windowId);
                   }
                 } catch (matchError) {
-                  console.error('[Transcription] SM-1: Speaker matching failed:', matchError.message);
+                  console.error(
+                    '[Transcription] SM-1: Speaker matching failed:',
+                    matchError.message
+                  );
                 }
               }
 
@@ -2324,13 +2390,18 @@ async function initSDK() {
                   meetingsData.pastMeetings[meetingIndex].transcript = autoResult.transcript;
                   // Replace participants with user (single-speaker = user)
                   // This replaces generic "Speaker A" with actual user info
-                  meetingsData.pastMeetings[meetingIndex].participants = [{
-                    name: userProfile.name,
-                    email: userProfile.email || null,
-                    isHost: true,
-                  }];
+                  meetingsData.pastMeetings[meetingIndex].participants = [
+                    {
+                      name: userProfile.name,
+                      email: userProfile.email || null,
+                      isHost: true,
+                    },
+                  ];
                   await fileOperationManager.writeData(meetingsData);
-                  logger.main.info('[Transcription] Auto-labeled single speaker as user:', userProfile.name);
+                  logger.main.info(
+                    '[Transcription] Auto-labeled single speaker as user:',
+                    userProfile.name
+                  );
                 }
               }
 
@@ -2574,7 +2645,9 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
       }
     }
 
-    console.log(`[ParticipantPopulation] Populated ${meeting.participants.length} participants with contact info`);
+    console.log(
+      `[ParticipantPopulation] Populated ${meeting.participants.length} participants with contact info`
+    );
   } catch (error) {
     console.error('[ParticipantPopulation] Error populating participants:', error);
   }
@@ -2648,7 +2721,9 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
         // SM-1: Get speech timeline for high-confidence matching
         const speechTimeline = meeting.recordingId ? getSpeechTimeline(meeting.recordingId) : null;
         if (speechTimeline) {
-          console.log(`[ObsidianExport] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`);
+          console.log(
+            `[ObsidianExport] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`
+          );
         }
 
         // Match speakers to participants
@@ -2709,7 +2784,10 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
       const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
       const dateStr = meetingDate.toISOString().split('T')[0];
       const titleSlug = meeting.title
-        ? meeting.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        ? meeting.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '')
         : 'meeting';
       const folderName = `${dateStr}-${titleSlug}`;
       const fullPath = path.join(routingOverride.path, 'meetings', folderName);
@@ -2722,7 +2800,9 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
           slug: routingOverride.slug,
         },
       ];
-      console.log(`[ObsidianExport] CS-4.4: Using routing override: ${fullPath} (${routingOverride.type})`);
+      console.log(
+        `[ObsidianExport] CS-4.4: Using routing override: ${fullPath} (${routingOverride.type})`
+      );
     } else if (meeting.obsidianLink) {
       // Manual override - use existing path
       // Extract folder path from obsidianLink (remove filename)
@@ -2983,7 +3063,9 @@ summary_file: "${baseFilename}.md"
 
           // CS-3.7: Use wiki-link for speaker name if it's a real name (not a speaker label)
           // This enables Obsidian backlinks - meetings will show up on contact pages
-          const isRealName = segment.speakerName && !segment.speakerName.match(/^(Speaker\s*[A-Z0-9]|SPK[-_]|spk_|SPEAKER_)/i);
+          const isRealName =
+            segment.speakerName &&
+            !segment.speakerName.match(/^(Speaker\s*[A-Z0-9]|SPK[-_]|spk_|SPEAKER_)/i);
           if (isRealName) {
             speaker = `[[${segment.speakerName}]]`;
           }
@@ -3031,7 +3113,9 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
     // CS-3.5: Auto-create contact pages for participants
     // ONLY create pages for validated Google Contacts (must have email)
     if (meeting.participants && meeting.participants.length > 0) {
-      console.log(`[AutoCreate] Checking ${meeting.participants.length} participants for contact pages`);
+      console.log(
+        `[AutoCreate] Checking ${meeting.participants.length} participants for contact pages`
+      );
 
       for (const participant of meeting.participants) {
         if (!participant.name) continue;
@@ -3050,7 +3134,14 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
         }
 
         // Skip header content like "Summary", "Notes", etc.
-        const headerPatterns = ['summary', 'notes', 'agenda', 'introduction', 'conclusion', 'action items'];
+        const headerPatterns = [
+          'summary',
+          'notes',
+          'agenda',
+          'introduction',
+          'conclusion',
+          'action items',
+        ];
         if (headerPatterns.some(h => participant.name.toLowerCase().includes(h))) {
           console.log(`[AutoCreate] Skipping (header content): ${participant.name}`);
           continue;
@@ -3190,7 +3281,10 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
         contacts: associatedContacts,
       };
 
-      console.log(`[AutoCreate] Creating company page ${orgName} with contacts:`, associatedContacts);
+      console.log(
+        `[AutoCreate] Creating company page ${orgName} with contacts:`,
+        associatedContacts
+      );
       const result = vaultStructure.createCompanyPage(companyData);
 
       if (result.created) {
@@ -3201,9 +3295,10 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
 
     // Log summary
     if (createdPages.contacts.length > 0 || createdPages.companies.length > 0) {
-      console.log(`[AutoCreate] Created ${createdPages.contacts.length} contact page(s) and ${createdPages.companies.length} company page(s)`);
+      console.log(
+        `[AutoCreate] Created ${createdPages.contacts.length} contact page(s) and ${createdPages.companies.length} company page(s)`
+      );
     }
-
   } catch (error) {
     console.error('[AutoCreate] Error creating pages:', error.message);
     // Don't throw - this is a non-critical operation
@@ -3274,178 +3369,182 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
   return await withProviderSwitch(
     'template',
     async () => {
-    // Use all templates if none specified
-    if (!templateIds) {
-      const allTemplates = templateManager.getAllTemplates();
-      templateIds = allTemplates.map(t => t.id);
-    }
+      // Use all templates if none specified
+      if (!templateIds) {
+        const allTemplates = templateManager.getAllTemplates();
+        templateIds = allTemplates.map(t => t.id);
+      }
 
-    // Convert transcript to text format
-    let transcriptText = '';
-    if (Array.isArray(meeting.transcript)) {
-      transcriptText = meeting.transcript
-        .map(segment => {
-        if (typeof segment === 'object') {
-          // Use mapped speaker name if available (v1.1), fall back to original speaker
-          const speakerName = segment.speakerName || segment.speakerDisplayName || segment.speaker || 'Speaker';
-          return `${speakerName}: ${segment.text}`;
+      // Convert transcript to text format
+      let transcriptText = '';
+      if (Array.isArray(meeting.transcript)) {
+        transcriptText = meeting.transcript
+          .map(segment => {
+            if (typeof segment === 'object') {
+              // Use mapped speaker name if available (v1.1), fall back to original speaker
+              const speakerName =
+                segment.speakerName || segment.speakerDisplayName || segment.speaker || 'Speaker';
+              return `${speakerName}: ${segment.text}`;
+            }
+            return String(segment);
+          })
+          .join('\n');
+      } else if (typeof meeting.transcript === 'string') {
+        transcriptText = meeting.transcript;
+      } else {
+        transcriptText = String(meeting.transcript);
+      }
+
+      console.log(`[TemplateSummary] Transcript length: ${transcriptText.length} characters`);
+
+      // v1.1: Add user profile context to transcript for personalized summaries
+      if (userProfile?.name) {
+        const contextParts = [];
+        contextParts.push(`The person reading this summary is ${userProfile.name}.`);
+        if (userProfile.title) {
+          contextParts.push(`Their role is ${userProfile.title}.`);
         }
-        return String(segment);
-      })
-      .join('\n');
-    } else if (typeof meeting.transcript === 'string') {
-      transcriptText = meeting.transcript;
-    } else {
-      transcriptText = String(meeting.transcript);
-    }
-
-    console.log(`[TemplateSummary] Transcript length: ${transcriptText.length} characters`);
-
-    // v1.1: Add user profile context to transcript for personalized summaries
-    if (userProfile?.name) {
-      const contextParts = [];
-      contextParts.push(`The person reading this summary is ${userProfile.name}.`);
-      if (userProfile.title) {
-        contextParts.push(`Their role is ${userProfile.title}.`);
-      }
-      if (userProfile.organization) {
-        contextParts.push(`They work at ${userProfile.organization}.`);
-      }
-      if (userProfile.context) {
-        contextParts.push(userProfile.context);
-      }
-      const userContextText = 'User Context: ' + contextParts.join(' ');
-      transcriptText = userContextText + '\n\n' + transcriptText;
-      logger.main.debug('[TemplateSummary] Including user profile context');
-    }
-
-    // Collect section metadata only - NO FUNCTIONS to avoid memory issues
-    const sectionTasks = [];
-
-    for (const templateId of templateIds) {
-      const template = templateManager.getTemplate(templateId);
-      if (!template) {
-        console.warn('[TemplateSummary] Template not found:', templateId);
-        continue;
+        if (userProfile.organization) {
+          contextParts.push(`They work at ${userProfile.organization}.`);
+        }
+        if (userProfile.context) {
+          contextParts.push(userProfile.context);
+        }
+        const userContextText = 'User Context: ' + contextParts.join(' ');
+        transcriptText = userContextText + '\n\n' + transcriptText;
+        logger.main.debug('[TemplateSummary] Including user profile context');
       }
 
-      console.log('[TemplateSummary] Generating summary with template:', template.name);
+      // Collect section metadata only - NO FUNCTIONS to avoid memory issues
+      const sectionTasks = [];
 
-      for (const section of template.sections) {
-        console.log(`[TemplateSummary] Queuing section: ${section.title}`);
+      for (const templateId of templateIds) {
+        const template = templateManager.getTemplate(templateId);
+        if (!template) {
+          console.warn('[TemplateSummary] Template not found:', templateId);
+          continue;
+        }
 
-        // Store ONLY data - no functions (functions capture context and cause OOM)
-        sectionTasks.push({
-          templateId: template.id,
-          templateName: template.name,
-          sectionTitle: section.title,
-          sectionPrompt: section.prompt,
-          name: `${template.name} - ${section.title}`,
-        });
+        console.log('[TemplateSummary] Generating summary with template:', template.name);
+
+        for (const section of template.sections) {
+          console.log(`[TemplateSummary] Queuing section: ${section.title}`);
+
+          // Store ONLY data - no functions (functions capture context and cause OOM)
+          sectionTasks.push({
+            templateId: template.id,
+            templateName: template.name,
+            sectionTitle: section.title,
+            sectionPrompt: section.prompt,
+            name: `${template.name} - ${section.title}`,
+          });
+        }
       }
-    }
 
-    // Estimate tokens per request (rough estimate: 1 token ≈ 4 chars)
-    const estimatedTokensPerRequest = Math.ceil(transcriptText.length / 4) + 200; // +200 for prompts
+      // Estimate tokens per request (rough estimate: 1 token ≈ 4 chars)
+      const estimatedTokensPerRequest = Math.ceil(transcriptText.length / 4) + 200; // +200 for prompts
 
-    // Azure limit: 200k tokens/min. Use 70% to be safe
-    const tokenBudgetPerMinute = 140000;
+      // Azure limit: 200k tokens/min. Use 70% to be safe
+      const tokenBudgetPerMinute = 140000;
 
-    // Calculate safe concurrency based on token budget
-    const safeConcurrency = Math.max(1, Math.floor(tokenBudgetPerMinute / estimatedTokensPerRequest));
-    const _actualConcurrency = Math.min(3, safeConcurrency); // Cap at 3 for safety (reserved for future use)
+      // Calculate safe concurrency based on token budget
+      const safeConcurrency = Math.max(
+        1,
+        Math.floor(tokenBudgetPerMinute / estimatedTokensPerRequest)
+      );
+      const _actualConcurrency = Math.min(3, safeConcurrency); // Cap at 3 for safety (reserved for future use)
 
-    console.log(`[TemplateSummary] Transcript: ~${estimatedTokensPerRequest} tokens/request`);
-    console.log(
-      `[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`
-    );
-    const startTime = Date.now();
+      console.log(`[TemplateSummary] Transcript: ~${estimatedTokensPerRequest} tokens/request`);
+      console.log(
+        `[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`
+      );
+      const startTime = Date.now();
 
-    // Process completely sequentially - NO concurrency, NO closures
-    // This is slower but avoids OOM with large transcripts
-    const sectionResults = new Array(sectionTasks.length);
+      // Process completely sequentially - NO concurrency, NO closures
+      // This is slower but avoids OOM with large transcripts
+      const sectionResults = new Array(sectionTasks.length);
 
-    for (let i = 0; i < sectionTasks.length; i++) {
-      const task = sectionTasks[i];
-      let retries = 0;
-      const maxRetries = 3;
+      for (let i = 0; i < sectionTasks.length; i++) {
+        const task = sectionTasks[i];
+        let retries = 0;
+        const maxRetries = 3;
 
-      console.log(`[TemplateSummary] Processing ${i + 1}/${sectionTasks.length}: ${task.name}`);
+        console.log(`[TemplateSummary] Processing ${i + 1}/${sectionTasks.length}: ${task.name}`);
 
-      while (retries <= maxRetries) {
-        try {
-          const result = await executeTemplateSectionTask(llmService, task, transcriptText);
-          sectionResults[i] = result;
-          break; // Success, move to next task
-        } catch (error) {
-          if (error.status === 429 && retries < maxRetries) {
-            const retryAfter = error.headers?.get?.('retry-after') || 60;
-            const delayMs = (parseInt(retryAfter) + 1) * 1000;
-            console.log(
-              `[RateLimit] Hit rate limit. Retry ${retries + 1}/${maxRetries} after ${delayMs}ms`
-            );
-            await new Promise(resolve => setTimeout(resolve, delayMs));
-            retries++;
-          } else {
-            console.error(`[RateLimit] Failed after ${retries} retries:`, error.message);
-            sectionResults[i] = { success: false, content: '*Error generating this section*' };
-            break; // Give up, move to next task
+        while (retries <= maxRetries) {
+          try {
+            const result = await executeTemplateSectionTask(llmService, task, transcriptText);
+            sectionResults[i] = result;
+            break; // Success, move to next task
+          } catch (error) {
+            if (error.status === 429 && retries < maxRetries) {
+              const retryAfter = error.headers?.get?.('retry-after') || 60;
+              const delayMs = (parseInt(retryAfter) + 1) * 1000;
+              console.log(
+                `[RateLimit] Hit rate limit. Retry ${retries + 1}/${maxRetries} after ${delayMs}ms`
+              );
+              await new Promise(resolve => setTimeout(resolve, delayMs));
+              retries++;
+            } else {
+              console.error(`[RateLimit] Failed after ${retries} retries:`, error.message);
+              sectionResults[i] = { success: false, content: '*Error generating this section*' };
+              break; // Give up, move to next task
+            }
           }
         }
       }
-    }
 
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`[TemplateSummary] All API calls completed in ${duration}s`);
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      console.log(`[TemplateSummary] All API calls completed in ${duration}s`);
 
-    // Group results by template and reconstruct summaries
-    const summaries = [];
-    const templateMap = new Map();
+      // Group results by template and reconstruct summaries
+      const summaries = [];
+      const templateMap = new Map();
 
-    // Initialize template summaries
-    for (const templateId of templateIds) {
-      const template = templateManager.getTemplate(templateId);
-      if (!template) continue;
+      // Initialize template summaries
+      for (const templateId of templateIds) {
+        const template = templateManager.getTemplate(templateId);
+        if (!template) continue;
 
-      templateMap.set(template.id, {
-        templateId: template.id,
-        templateName: template.name,
-        sections: [],
-      });
-    }
-
-    // Add section results to their templates
-    sectionTasks.forEach((task, index) => {
-      const result = sectionResults[index];
-      const templateData = templateMap.get(task.templateId);
-
-      if (templateData) {
-        templateData.sections.push({
-          title: task.sectionTitle,
-          content: result.content,
+        templateMap.set(template.id, {
+          templateId: template.id,
+          templateName: template.name,
+          sections: [],
         });
       }
-    });
 
-    // Build final markdown for each template
-    for (const [_templateId, templateData] of templateMap) {
-      let summaryMarkdown = `# ${meeting.title}\n\n`;
-      summaryMarkdown += `Generated using template: **${templateData.templateName}**\n\n`;
-      summaryMarkdown += `---\n\n`;
+      // Add section results to their templates
+      sectionTasks.forEach((task, index) => {
+        const result = sectionResults[index];
+        const templateData = templateMap.get(task.templateId);
 
-      for (const section of templateData.sections) {
-        summaryMarkdown += `## ${section.title}\n\n${section.content}\n\n`;
+        if (templateData) {
+          templateData.sections.push({
+            title: task.sectionTitle,
+            content: result.content,
+          });
+        }
+      });
+
+      // Build final markdown for each template
+      for (const [_templateId, templateData] of templateMap) {
+        let summaryMarkdown = `# ${meeting.title}\n\n`;
+        summaryMarkdown += `Generated using template: **${templateData.templateName}**\n\n`;
+        summaryMarkdown += `---\n\n`;
+
+        for (const section of templateData.sections) {
+          summaryMarkdown += `## ${section.title}\n\n${section.content}\n\n`;
+        }
+
+        summaries.push({
+          templateId: templateData.templateId,
+          templateName: templateData.templateName,
+          content: summaryMarkdown,
+        });
       }
 
-      summaries.push({
-        templateId: templateData.templateId,
-        templateName: templateData.templateName,
-        content: summaryMarkdown,
-      });
-    }
-
-    console.log(`[TemplateSummary] Generated ${summaries.length} template-based summaries`);
-    return summaries;
+      console.log(`[TemplateSummary] Generated ${summaries.length} template-based summaries`);
+      return summaries;
     },
     '[TemplateSummary]'
   );
@@ -3535,7 +3634,9 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
 
 // Update a single field on a meeting (UI-1: Platform changes in metadata tab)
 ipcMain.handle('updateMeetingField', async (event, meetingId, field, value) => {
-  console.log(`[IPC] updateMeetingField called: meetingId=${meetingId}, field=${field}, value=${value}`);
+  console.log(
+    `[IPC] updateMeetingField called: meetingId=${meetingId}, field=${field}, value=${value}`
+  );
 
   // Allowlist of fields that can be updated via this handler
   const allowedFields = ['platform', 'title', 'status'];
@@ -3942,7 +4043,8 @@ ipcMain.handle('contacts:searchContacts', async (event, query) => {
     const matchingContacts = allContacts.filter(contact => {
       const nameMatch = contact.name && contact.name.toLowerCase().includes(normalizedQuery);
       const emailMatch =
-        contact.emails && contact.emails.some(email => email.toLowerCase().includes(normalizedQuery));
+        contact.emails &&
+        contact.emails.some(email => email.toLowerCase().includes(normalizedQuery));
       return nameMatch || emailMatch;
     });
 
@@ -4005,7 +4107,9 @@ ipcMain.handle('contacts:getMeetingsForContact', async (event, contactEmail) => 
     }
 
     const normalizedEmail = contactEmail.toLowerCase().trim();
-    console.log(`[Contacts IPC] Searching ${meetings.length} meetings for email: ${normalizedEmail}`);
+    console.log(
+      `[Contacts IPC] Searching ${meetings.length} meetings for email: ${normalizedEmail}`
+    );
 
     // Filter meetings where contact participated
     const contactMeetings = meetings.filter(meeting => {
@@ -4133,15 +4237,16 @@ ipcMain.handle(
       // SM-1: Get speech timeline for high-confidence matching if recordingId provided
       const speechTimeline = recordingId ? getSpeechTimeline(recordingId) : null;
       if (speechTimeline) {
-        console.log(`[Speakers IPC] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`);
+        console.log(
+          `[Speakers IPC] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`
+        );
       }
 
       // Perform speaker matching
-      const speakerMapping = await speakerMatcher.matchSpeakers(
-        transcript,
-        participantEmails,
-        { ...options, speechTimeline }
-      );
+      const speakerMapping = await speakerMatcher.matchSpeakers(transcript, participantEmails, {
+        ...options,
+        speechTimeline,
+      });
 
       // Apply mapping to transcript
       const updatedTranscript = speakerMatcher.applyMappingToTranscript(transcript, speakerMapping);
@@ -4256,15 +4361,18 @@ ipcMain.handle('speakerMapping:getSuggestions', async (event, { speakerIds }) =>
 });
 
 // Add or update a speaker mapping
-ipcMain.handle('speakerMapping:addMapping', async (event, { speakerId, contact, sourceContext }) => {
-  try {
-    const mapping = await speakerMappingService.addMapping(speakerId, contact, sourceContext);
-    return { success: true, mapping };
-  } catch (error) {
-    console.error('[SpeakerMapping IPC] Failed to add mapping:', error);
-    return { success: false, error: error.message };
+ipcMain.handle(
+  'speakerMapping:addMapping',
+  async (event, { speakerId, contact, sourceContext }) => {
+    try {
+      const mapping = await speakerMappingService.addMapping(speakerId, contact, sourceContext);
+      return { success: true, mapping };
+    } catch (error) {
+      console.error('[SpeakerMapping IPC] Failed to add mapping:', error);
+      return { success: false, error: error.message };
+    }
   }
-});
+);
 
 // Delete a speaker mapping
 ipcMain.handle('speakerMapping:deleteMapping', async (event, { speakerId }) => {
@@ -4283,7 +4391,10 @@ ipcMain.handle('speakerMapping:extractSpeakerIds', async (event, { transcript })
     const speakerIds = speakerMappingService.extractUniqueSpeakerIds(transcript);
 
     // v1.1: Get auto-suggestions from user profile (single speaker = user)
-    const profileSuggestions = speakerMappingService.getAutoSuggestionsFromProfile(speakerIds, userProfile);
+    const profileSuggestions = speakerMappingService.getAutoSuggestionsFromProfile(
+      speakerIds,
+      userProfile
+    );
 
     return {
       success: true,
@@ -4308,15 +4419,22 @@ ipcMain.handle('speakerMapping:detectDuplicates', async (event, { speakers }) =>
 });
 
 // Apply mappings to a transcript
-ipcMain.handle('speakerMapping:applyToTranscript', async (event, { transcript, mappings, options }) => {
-  try {
-    const updatedTranscript = speakerMappingService.applyMappingsToTranscript(transcript, mappings, options);
-    return { success: true, transcript: updatedTranscript };
-  } catch (error) {
-    console.error('[SpeakerMapping IPC] Failed to apply mappings:', error);
-    return { success: false, error: error.message };
+ipcMain.handle(
+  'speakerMapping:applyToTranscript',
+  async (event, { transcript, mappings, options }) => {
+    try {
+      const updatedTranscript = speakerMappingService.applyMappingsToTranscript(
+        transcript,
+        mappings,
+        options
+      );
+      return { success: true, transcript: updatedTranscript };
+    } catch (error) {
+      console.error('[SpeakerMapping IPC] Failed to apply mappings:', error);
+      return { success: false, error: error.message };
+    }
   }
-});
+);
 
 // Apply mappings to a meeting and save
 ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappings, options }) => {
@@ -4345,7 +4463,10 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
 
     // Apply mappings to transcript
     console.log(`[SpeakerMapping IPC] Mappings to apply:`, JSON.stringify(mappings, null, 2));
-    console.log(`[SpeakerMapping IPC] Transcript before (first 2):`, meeting.transcript?.slice(0, 2));
+    console.log(
+      `[SpeakerMapping IPC] Transcript before (first 2):`,
+      meeting.transcript?.slice(0, 2)
+    );
 
     meeting.transcript = speakerMappingService.applyMappingsToTranscript(
       meeting.transcript,
@@ -4353,7 +4474,10 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
       options
     );
 
-    console.log(`[SpeakerMapping IPC] Transcript after (first 2):`, meeting.transcript?.slice(0, 2));
+    console.log(
+      `[SpeakerMapping IPC] Transcript after (first 2):`,
+      meeting.transcript?.slice(0, 2)
+    );
 
     // Store the applied mappings for reference
     meeting.appliedSpeakerMappings = mappings;
@@ -4400,9 +4524,7 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
         }
 
         // Find existing participant with this speaker ID as name and replace it
-        const existingIndex = meeting.participants.findIndex(
-          p => p.name === speakerId
-        );
+        const existingIndex = meeting.participants.findIndex(p => p.name === speakerId);
 
         if (existingIndex !== -1) {
           // Replace the speaker ID participant with the contact
@@ -4448,8 +4570,10 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
           const existingIdx = seenNames.get(normalizedName);
           const existing = deduped[existingIdx];
           // Prefer entry with email, or longer original name
-          if ((!existing.email && p.email) ||
-              (p.name.length > existing.name.length && !existing.email)) {
+          if (
+            (!existing.email && p.email) ||
+            (p.name.length > existing.name.length && !existing.email)
+          ) {
             deduped[existingIdx] = p;
             console.log(`[SpeakerMapping IPC] Dedup: replaced "${existing.name}" with "${p.name}"`);
           } else {
@@ -4466,9 +4590,9 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
 
       // Deduplicate participantEmails
       if (meeting.participantEmails?.length > 0) {
-        meeting.participantEmails = [...new Set(
-          meeting.participantEmails.map(e => e?.toLowerCase().trim()).filter(Boolean)
-        )];
+        meeting.participantEmails = [
+          ...new Set(meeting.participantEmails.map(e => e?.toLowerCase().trim()).filter(Boolean)),
+        ];
       }
     }
 
@@ -4489,17 +4613,23 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
     // Persist each mapping to the service for future auto-suggest
     if (mappings) {
       for (const [speakerId, mapping] of Object.entries(mappings)) {
-        await speakerMappingService.addMapping(speakerId, {
-          name: mapping.contactName,
-          email: mapping.contactEmail,
-        }, {
-          meetingId,
-          meetingTitle: meeting.title,
-        });
+        await speakerMappingService.addMapping(
+          speakerId,
+          {
+            name: mapping.contactName,
+            email: mapping.contactEmail,
+          },
+          {
+            meetingId,
+            meetingTitle: meeting.title,
+          }
+        );
       }
     }
 
-    console.log(`[SpeakerMapping IPC] Applied ${Object.keys(mappings || {}).length} mappings to meeting (in ${meetingList})`);
+    console.log(
+      `[SpeakerMapping IPC] Applied ${Object.keys(mappings || {}).length} mappings to meeting (in ${meetingList})`
+    );
 
     // SM-3.5/SM-3.6: Update Obsidian files if meeting was already exported
     let obsidianUpdated = false;
@@ -4531,7 +4661,9 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
         }
 
         if (obsidianUpdated) {
-          console.log(`[SpeakerMapping IPC] Successfully updated Obsidian files for meeting ${meetingId}`);
+          console.log(
+            `[SpeakerMapping IPC] Successfully updated Obsidian files for meeting ${meetingId}`
+          );
         }
       } catch (obsidianError) {
         // Log error but don't fail the whole operation - meeting data was already saved
@@ -4624,7 +4756,9 @@ ipcMain.handle('templates:getContent', async (event, templateId) => {
     }
 
     // Read raw file content
-    const filePath = template.filePath || path.join(templateManager.templatesPath, `${templateId}${template.format}`);
+    const filePath =
+      template.filePath ||
+      path.join(templateManager.templatesPath, `${templateId}${template.format}`);
     const content = fs.readFileSync(filePath, 'utf8');
 
     return { success: true, content };
@@ -4637,7 +4771,13 @@ ipcMain.handle('templates:getContent', async (event, templateId) => {
 // Estimate cost for templates
 ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript, provider }) => {
   try {
-    console.log('[Template IPC] Estimating cost for', templateIds.length, 'templates', 'with provider:', provider);
+    console.log(
+      '[Template IPC] Estimating cost for',
+      templateIds.length,
+      'templates',
+      'with provider:',
+      provider
+    );
     const estimate = templateManager.estimateCost(templateIds, transcript, provider);
     return { success: true, estimate };
   } catch (error) {
@@ -4649,66 +4789,71 @@ ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript
 // Generate summaries using multiple templates
 ipcMain.handle(
   'templates:generateSummaries',
-  withValidation(templatesGenerateSummariesSchema, async (event, { meetingId, templateIds, routingOverride }) => {
-    try {
-      console.log(
-        '[Template IPC] Generating summaries for meeting:',
-        meetingId,
-        'with',
-        templateIds.length,
-        'templates'
-      );
-      if (routingOverride) {
-        console.log('[Template IPC] Using routing override:', routingOverride);
+  withValidation(
+    templatesGenerateSummariesSchema,
+    async (event, { meetingId, templateIds, routingOverride }) => {
+      try {
+        console.log(
+          '[Template IPC] Generating summaries for meeting:',
+          meetingId,
+          'with',
+          templateIds.length,
+          'templates'
+        );
+        if (routingOverride) {
+          console.log('[Template IPC] Using routing override:', routingOverride);
+        }
+
+        // Load meeting data
+        const data = await fileOperationManager.readMeetingsData();
+        const meeting = [...data.upcomingMeetings, ...data.pastMeetings].find(
+          m => m.id === meetingId
+        );
+
+        if (!meeting) {
+          return { success: false, error: 'Meeting not found' };
+        }
+
+        if (!meeting.transcript) {
+          return { success: false, error: 'Meeting has no transcript' };
+        }
+
+        // Use shared template generation function
+        console.log('[Template IPC] Using shared generateTemplateSummaries function');
+        const summaries = await generateTemplateSummaries(meeting, templateIds);
+
+        // Save summaries to meeting object
+        meeting.summaries = summaries;
+        await fileOperationManager.writeData(data);
+        console.log('[Template IPC] Saved summaries to meeting object');
+
+        // Auto-trigger export to Obsidian after template generation
+        console.log('[Template IPC] Auto-triggering Obsidian export...');
+        const exportResult = await exportMeetingToObsidian(meeting, routingOverride);
+
+        if (exportResult.success && exportResult.obsidianLink) {
+          meeting.obsidianLink = exportResult.obsidianLink;
+          await fileOperationManager.writeData(data);
+          console.log(
+            '[Template IPC] Auto-export successful, obsidianLink saved:',
+            exportResult.obsidianLink
+          );
+        } else if (!exportResult.success) {
+          console.warn('[Template IPC] Auto-export failed:', exportResult.error);
+        }
+
+        return {
+          success: true,
+          summaries,
+          exported: exportResult.success,
+          obsidianLink: exportResult.obsidianLink || null,
+        };
+      } catch (error) {
+        console.error('[Template IPC] Failed to generate summaries:', error);
+        return { success: false, error: error.message };
       }
-
-    // Load meeting data
-    const data = await fileOperationManager.readMeetingsData();
-    const meeting = [...data.upcomingMeetings, ...data.pastMeetings].find(m => m.id === meetingId);
-
-    if (!meeting) {
-      return { success: false, error: 'Meeting not found' };
     }
-
-    if (!meeting.transcript) {
-      return { success: false, error: 'Meeting has no transcript' };
-    }
-
-    // Use shared template generation function
-    console.log('[Template IPC] Using shared generateTemplateSummaries function');
-    const summaries = await generateTemplateSummaries(meeting, templateIds);
-
-    // Save summaries to meeting object
-    meeting.summaries = summaries;
-    await fileOperationManager.writeData(data);
-    console.log('[Template IPC] Saved summaries to meeting object');
-
-    // Auto-trigger export to Obsidian after template generation
-    console.log('[Template IPC] Auto-triggering Obsidian export...');
-    const exportResult = await exportMeetingToObsidian(meeting, routingOverride);
-
-    if (exportResult.success && exportResult.obsidianLink) {
-      meeting.obsidianLink = exportResult.obsidianLink;
-      await fileOperationManager.writeData(data);
-      console.log(
-        '[Template IPC] Auto-export successful, obsidianLink saved:',
-        exportResult.obsidianLink
-      );
-    } else if (!exportResult.success) {
-      console.warn('[Template IPC] Auto-export failed:', exportResult.error);
-    }
-
-    return {
-      success: true,
-      summaries,
-      exported: exportResult.success,
-      obsidianLink: exportResult.obsidianLink || null,
-    };
-  } catch (error) {
-    console.error('[Template IPC] Failed to generate summaries:', error);
-    return { success: false, error: error.message };
-  }
-  })
+  )
 );
 
 // Reload templates from disk
@@ -4737,134 +4882,146 @@ function getRoutingConfigPath() {
 }
 
 // Get routing configuration
-ipcMain.handle('routing:getConfig', createIpcHandler(async () => {
-  console.log('[Routing IPC] Getting routing configuration');
+ipcMain.handle(
+  'routing:getConfig',
+  createIpcHandler(async () => {
+    console.log('[Routing IPC] Getting routing configuration');
 
-  const routingPath = getRoutingConfigPath();
-  console.log('[Routing IPC] Using config path:', routingPath);
+    const routingPath = getRoutingConfigPath();
+    console.log('[Routing IPC] Using config path:', routingPath);
 
-  if (!fs.existsSync(routingPath)) {
-    throw new Error('Routing configuration file not found at: ' + routingPath);
-  }
+    if (!fs.existsSync(routingPath)) {
+      throw new Error('Routing configuration file not found at: ' + routingPath);
+    }
 
-  const content = fs.readFileSync(routingPath, 'utf8');
-  const config = yaml.load(content);
+    const content = fs.readFileSync(routingPath, 'utf8');
+    const config = yaml.load(content);
 
-  return {
-    config,
-    content,
-    path: routingPath,
-  };
-}));
+    return {
+      config,
+      content,
+      path: routingPath,
+    };
+  })
+);
 
 // Save routing configuration
-ipcMain.handle('routing:saveConfig', createIpcHandler(async (event, content) => {
-  console.log('[Routing IPC] Saving routing configuration');
+ipcMain.handle(
+  'routing:saveConfig',
+  createIpcHandler(async (event, content) => {
+    console.log('[Routing IPC] Saving routing configuration');
 
-  const routingPath = getRoutingConfigPath();
-  const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+    const routingPath = getRoutingConfigPath();
+    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
 
-  // Create backup before saving
-  if (fs.existsSync(routingPath)) {
-    fs.copyFileSync(routingPath, backupPath);
-    console.log('[Routing IPC] Created backup at:', backupPath);
-  }
+    // Create backup before saving
+    if (fs.existsSync(routingPath)) {
+      fs.copyFileSync(routingPath, backupPath);
+      console.log('[Routing IPC] Created backup at:', backupPath);
+    }
 
-  // Validate YAML before saving
-  try {
-    yaml.load(content);
-  } catch (yamlError) {
-    throw new Error(`Invalid YAML: ${yamlError.message}`);
-  }
+    // Validate YAML before saving
+    try {
+      yaml.load(content);
+    } catch (yamlError) {
+      throw new Error(`Invalid YAML: ${yamlError.message}`);
+    }
 
-  // Save the new configuration
-  fs.writeFileSync(routingPath, content, 'utf8');
-  console.log('[Routing IPC] Routing configuration saved successfully');
+    // Save the new configuration
+    fs.writeFileSync(routingPath, content, 'utf8');
+    console.log('[Routing IPC] Routing configuration saved successfully');
 
-  // Reload routing engine
-  if (routingEngine) {
-    routingEngine.reloadConfig();
-    console.log('[Routing IPC] Routing engine reloaded');
-  }
+    // Reload routing engine
+    if (routingEngine) {
+      routingEngine.reloadConfig();
+      console.log('[Routing IPC] Routing engine reloaded');
+    }
 
-  return {};
-}));
+    return {};
+  })
+);
 
 // Validate routing configuration
-ipcMain.handle('routing:validateConfig', createIpcHandler(async (event, content) => {
-  console.log('[Routing IPC] Validating routing configuration');
+ipcMain.handle(
+  'routing:validateConfig',
+  createIpcHandler(async (event, content) => {
+    console.log('[Routing IPC] Validating routing configuration');
 
-  // Parse YAML
-  const config = yaml.load(content);
-  const errors = [];
+    // Parse YAML
+    const config = yaml.load(content);
+    const errors = [];
 
-  // Validate structure
-  if (!config) {
-    errors.push('Configuration is empty');
-    return { valid: false, errors };
-  }
+    // Validate structure
+    if (!config) {
+      errors.push('Configuration is empty');
+      return { valid: false, errors };
+    }
 
-  // Check for required sections
-  if (!config.clients && !config.industry && !config.internal) {
-    errors.push('At least one routing section (clients, industry, or internal) is required');
-  }
+    // Check for required sections
+    if (!config.clients && !config.industry && !config.internal) {
+      errors.push('At least one routing section (clients, industry, or internal) is required');
+    }
 
-  // Validate clients
-  if (config.clients) {
-    Object.keys(config.clients).forEach(key => {
-      const client = config.clients[key];
-      if (!client.vault_path) {
-        errors.push(`Client "${key}" is missing vault_path`);
-      }
-    });
-  }
+    // Validate clients
+    if (config.clients) {
+      Object.keys(config.clients).forEach(key => {
+        const client = config.clients[key];
+        if (!client.vault_path) {
+          errors.push(`Client "${key}" is missing vault_path`);
+        }
+      });
+    }
 
-  // Validate industry
-  if (config.industry) {
-    Object.keys(config.industry).forEach(key => {
-      const ind = config.industry[key];
-      if (!ind.vault_path) {
-        errors.push(`Industry contact "${key}" is missing vault_path`);
-      }
-    });
-  }
+    // Validate industry
+    if (config.industry) {
+      Object.keys(config.industry).forEach(key => {
+        const ind = config.industry[key];
+        if (!ind.vault_path) {
+          errors.push(`Industry contact "${key}" is missing vault_path`);
+        }
+      });
+    }
 
-  // Validate internal
-  if (config.internal && !config.internal.vault_path) {
-    errors.push('Internal section is missing vault_path');
-  }
+    // Validate internal
+    if (config.internal && !config.internal.vault_path) {
+      errors.push('Internal section is missing vault_path');
+    }
 
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
-}));
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  })
+);
 
 // Test routing with given emails
-ipcMain.handle('routing:testEmails', createIpcHandler(async (event, emails) => {
-  console.log('[Routing IPC] Testing routing with emails:', emails);
+ipcMain.handle(
+  'routing:testEmails',
+  createIpcHandler(async (event, emails) => {
+    console.log('[Routing IPC] Testing routing with emails:', emails);
 
-  if (!routingEngine) {
-    throw new Error('Routing engine not initialized');
-  }
+    if (!routingEngine) {
+      throw new Error('Routing engine not initialized');
+    }
 
-  // Create a mock meeting object with participants
-  const mockMeeting = {
-    participants: emails.map(email => ({ email })),
-  };
+    // Create a mock meeting object with participants
+    const mockMeeting = {
+      participants: emails.map(email => ({ email })),
+    };
 
-  // Use routing engine to determine vault path
-  const result = routingEngine.determineMeetingPath(mockMeeting);
+    // Use routing engine to determine vault path
+    const result = routingEngine.determineMeetingPath(mockMeeting);
 
-  return {
-    vaultPath: result.vaultPath,
-    reason: result.reason,
-    matchedOrganizations: result.matchedOrgs || [],
-    matchedEmails: emails.filter(email => {
-      return routingEngine.findMatchingOrganization(email) !== null;
-    }),
-  };
-}));
+    return {
+      vaultPath: result.vaultPath,
+      reason: result.reason,
+      matchedOrganizations: result.matchedOrgs || [],
+      matchedEmails: emails.filter(email => {
+        return routingEngine.findMatchingOrganization(email) !== null;
+      }),
+    };
+  })
+);
 
 // CS-4: Preview routing for a meeting (used in template modal)
 ipcMain.handle('routing:previewMeetingRoute', async (event, meetingId) => {
@@ -4875,12 +5032,14 @@ ipcMain.handle('routing:previewMeetingRoute', async (event, meetingId) => {
       console.error('[Routing IPC] Routing engine not initialized');
       // Return a fallback unfiled route instead of throwing
       return {
-        routes: [{
-          path: '_unfiled/',
-          type: 'unfiled',
-          organization: null,
-          reason: 'Routing engine not initialized - defaulting to unfiled',
-        }],
+        routes: [
+          {
+            path: '_unfiled/',
+            type: 'unfiled',
+            organization: null,
+            reason: 'Routing engine not initialized - defaulting to unfiled',
+          },
+        ],
         multiOrg: false,
         orgCount: 0,
         participantEmails: [],
@@ -4905,12 +5064,14 @@ ipcMain.handle('routing:previewMeetingRoute', async (event, meetingId) => {
     if (!meeting) {
       console.error('[Routing IPC] Meeting not found:', meetingId);
       return {
-        routes: [{
-          path: '_unfiled/',
-          type: 'unfiled',
-          organization: null,
-          reason: 'Meeting not found - defaulting to unfiled',
-        }],
+        routes: [
+          {
+            path: '_unfiled/',
+            type: 'unfiled',
+            organization: null,
+            reason: 'Meeting not found - defaulting to unfiled',
+          },
+        ],
         multiOrg: false,
         orgCount: 0,
         participantEmails: [],
@@ -4964,7 +5125,7 @@ ipcMain.handle('routing:previewMeetingRoute', async (event, meetingId) => {
     const routingConfig = routingEngine.getConfig();
 
     // Helper to get organization name from config
-    const getOrgName = (route) => {
+    const getOrgName = route => {
       if (route.type === 'client' && route.slug && routingConfig.clients?.[route.slug]) {
         return routingConfig.clients[route.slug].name || route.slug;
       }
@@ -5004,12 +5165,14 @@ ipcMain.handle('routing:previewMeetingRoute', async (event, meetingId) => {
     console.error('[Routing IPC] Error previewing route:', error);
     // Return a fallback unfiled route on any error
     return {
-      routes: [{
-        path: '_unfiled/',
-        type: 'unfiled',
-        organization: null,
-        reason: `Error: ${error.message || 'Unknown error'} - defaulting to unfiled`,
-      }],
+      routes: [
+        {
+          path: '_unfiled/',
+          type: 'unfiled',
+          organization: null,
+          reason: `Error: ${error.message || 'Unknown error'} - defaulting to unfiled`,
+        },
+      ],
       multiOrg: false,
       orgCount: 0,
       participantEmails: [],
@@ -5115,218 +5278,230 @@ function buildRoutingReason(route, matchResults, participantEmails, orgName) {
 }
 
 // Add new organization to routing config
-ipcMain.handle('routing:addOrganization', createIpcHandler(async (event, { type, id, vaultPath, emails, contacts }) => {
-  console.log('[Routing IPC] Adding new organization:', type, id);
+ipcMain.handle(
+  'routing:addOrganization',
+  createIpcHandler(async (event, { type, id, vaultPath, emails, contacts }) => {
+    console.log('[Routing IPC] Adding new organization:', type, id);
 
-  const routingPath = getRoutingConfigPath();
+    const routingPath = getRoutingConfigPath();
 
-  if (!fs.existsSync(routingPath)) {
-    throw new Error('Routing configuration file not found');
-  }
+    if (!fs.existsSync(routingPath)) {
+      throw new Error('Routing configuration file not found');
+    }
 
-  const content = fs.readFileSync(routingPath, 'utf8');
-  const config = yaml.load(content);
+    const content = fs.readFileSync(routingPath, 'utf8');
+    const config = yaml.load(content);
 
-  // Validate inputs
-  if (!type || !id || !vaultPath) {
-    throw new Error('Type, ID, and vault path are required');
-  }
+    // Validate inputs
+    if (!type || !id || !vaultPath) {
+      throw new Error('Type, ID, and vault path are required');
+    }
 
-  if (!['clients', 'industry'].includes(type)) {
-    throw new Error('Type must be "clients" or "industry"');
-  }
+    if (!['clients', 'industry'].includes(type)) {
+      throw new Error('Type must be "clients" or "industry"');
+    }
 
-  // Check if organization already exists
-  if (config[type] && config[type][id]) {
-    throw new Error(`Organization "${id}" already exists in ${type}`);
-  }
+    // Check if organization already exists
+    if (config[type] && config[type][id]) {
+      throw new Error(`Organization "${id}" already exists in ${type}`);
+    }
 
-  // Initialize section if it doesn't exist
-  if (!config[type]) {
-    config[type] = {};
-  }
+    // Initialize section if it doesn't exist
+    if (!config[type]) {
+      config[type] = {};
+    }
 
-  // Add the new organization
-  config[type][id] = {
-    vault_path: vaultPath,
-    emails: emails || [],
-    contacts: contacts || [],
-  };
+    // Add the new organization
+    config[type][id] = {
+      vault_path: vaultPath,
+      emails: emails || [],
+      contacts: contacts || [],
+    };
 
-  // Create backup before saving
-  const backupPath = routingPath.replace('.yaml', '.backup.yaml');
-  if (fs.existsSync(routingPath)) {
-    fs.copyFileSync(routingPath, backupPath);
-    console.log('[Routing IPC] Created backup at:', backupPath);
-  }
+    // Create backup before saving
+    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+    if (fs.existsSync(routingPath)) {
+      fs.copyFileSync(routingPath, backupPath);
+      console.log('[Routing IPC] Created backup at:', backupPath);
+    }
 
-  // Convert back to YAML and save
-  const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
-  fs.writeFileSync(routingPath, newContent, 'utf8');
-  console.log('[Routing IPC] Organization added successfully');
+    // Convert back to YAML and save
+    const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
+    fs.writeFileSync(routingPath, newContent, 'utf8');
+    console.log('[Routing IPC] Organization added successfully');
 
-  // Reload routing engine
-  if (routingEngine) {
-    routingEngine.reloadConfig();
-    console.log('[Routing IPC] Routing engine reloaded');
-  }
+    // Reload routing engine
+    if (routingEngine) {
+      routingEngine.reloadConfig();
+      console.log('[Routing IPC] Routing engine reloaded');
+    }
 
-  return { content: newContent };
-}));
+    return { content: newContent };
+  })
+);
 
 // CS-4.5: Add emails/domains to existing organization
-ipcMain.handle('routing:addEmailsToOrganization', createIpcHandler(async (event, { type, slug, emails, contacts }) => {
-  console.log('[Routing IPC] Adding emails to organization:', type, slug);
+ipcMain.handle(
+  'routing:addEmailsToOrganization',
+  createIpcHandler(async (event, { type, slug, emails, contacts }) => {
+    console.log('[Routing IPC] Adding emails to organization:', type, slug);
 
-  const routingPath = getRoutingConfigPath();
+    const routingPath = getRoutingConfigPath();
 
-  if (!fs.existsSync(routingPath)) {
-    throw new Error('Routing configuration file not found');
-  }
+    if (!fs.existsSync(routingPath)) {
+      throw new Error('Routing configuration file not found');
+    }
 
-  const content = fs.readFileSync(routingPath, 'utf8');
-  const config = yaml.load(content);
+    const content = fs.readFileSync(routingPath, 'utf8');
+    const config = yaml.load(content);
 
-  // Validate inputs
-  if (!type || !slug) {
-    throw new Error('Type and slug are required');
-  }
+    // Validate inputs
+    if (!type || !slug) {
+      throw new Error('Type and slug are required');
+    }
 
-  // Map type names (handle both singular and plural)
-  const typeKey = type === 'client' ? 'clients' : type === 'industry' ? 'industry' : type;
+    // Map type names (handle both singular and plural)
+    const typeKey = type === 'client' ? 'clients' : type === 'industry' ? 'industry' : type;
 
-  // Check if organization exists
-  if (!config[typeKey] || !config[typeKey][slug]) {
-    throw new Error(`Organization "${slug}" not found in ${typeKey}`);
-  }
+    // Check if organization exists
+    if (!config[typeKey] || !config[typeKey][slug]) {
+      throw new Error(`Organization "${slug}" not found in ${typeKey}`);
+    }
 
-  const org = config[typeKey][slug];
+    const org = config[typeKey][slug];
 
-  // Add new emails (deduplicate)
-  if (emails && emails.length > 0) {
-    const existingEmails = org.emails || [];
-    const newEmails = emails.filter(e => !existingEmails.includes(e));
-    org.emails = [...existingEmails, ...newEmails];
-    console.log(`[Routing IPC] Added ${newEmails.length} new email domains:`, newEmails);
-  }
+    // Add new emails (deduplicate)
+    if (emails && emails.length > 0) {
+      const existingEmails = org.emails || [];
+      const newEmails = emails.filter(e => !existingEmails.includes(e));
+      org.emails = [...existingEmails, ...newEmails];
+      console.log(`[Routing IPC] Added ${newEmails.length} new email domains:`, newEmails);
+    }
 
-  // Add new contacts (deduplicate)
-  if (contacts && contacts.length > 0) {
-    const existingContacts = org.contacts || [];
-    const newContacts = contacts.filter(c => !existingContacts.includes(c));
-    org.contacts = [...existingContacts, ...newContacts];
-    console.log(`[Routing IPC] Added ${newContacts.length} new contacts:`, newContacts);
-  }
+    // Add new contacts (deduplicate)
+    if (contacts && contacts.length > 0) {
+      const existingContacts = org.contacts || [];
+      const newContacts = contacts.filter(c => !existingContacts.includes(c));
+      org.contacts = [...existingContacts, ...newContacts];
+      console.log(`[Routing IPC] Added ${newContacts.length} new contacts:`, newContacts);
+    }
 
-  // Create backup before saving
-  const backupPath = routingPath.replace('.yaml', '.backup.yaml');
-  if (fs.existsSync(routingPath)) {
-    fs.copyFileSync(routingPath, backupPath);
-    console.log('[Routing IPC] Created backup at:', backupPath);
-  }
+    // Create backup before saving
+    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+    if (fs.existsSync(routingPath)) {
+      fs.copyFileSync(routingPath, backupPath);
+      console.log('[Routing IPC] Created backup at:', backupPath);
+    }
 
-  // Convert back to YAML and save
-  const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
-  fs.writeFileSync(routingPath, newContent, 'utf8');
-  console.log('[Routing IPC] Emails added successfully');
+    // Convert back to YAML and save
+    const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
+    fs.writeFileSync(routingPath, newContent, 'utf8');
+    console.log('[Routing IPC] Emails added successfully');
 
-  // Reload routing engine
-  if (routingEngine) {
-    routingEngine.reloadConfig();
-    console.log('[Routing IPC] Routing engine reloaded');
-  }
+    // Reload routing engine
+    if (routingEngine) {
+      routingEngine.reloadConfig();
+      console.log('[Routing IPC] Routing engine reloaded');
+    }
 
-  return { success: true, content: newContent };
-}));
+    return { success: true, content: newContent };
+  })
+);
 
 // Delete organization from routing config
-ipcMain.handle('routing:deleteOrganization', createIpcHandler(async (event, { type, id }) => {
-  console.log('[Routing IPC] Deleting organization:', type, id);
+ipcMain.handle(
+  'routing:deleteOrganization',
+  createIpcHandler(async (event, { type, id }) => {
+    console.log('[Routing IPC] Deleting organization:', type, id);
 
-  const routingPath = getRoutingConfigPath();
+    const routingPath = getRoutingConfigPath();
 
-  if (!fs.existsSync(routingPath)) {
-    throw new Error('Routing configuration file not found');
-  }
+    if (!fs.existsSync(routingPath)) {
+      throw new Error('Routing configuration file not found');
+    }
 
-  const content = fs.readFileSync(routingPath, 'utf8');
-  const config = yaml.load(content);
+    const content = fs.readFileSync(routingPath, 'utf8');
+    const config = yaml.load(content);
 
-  // Validate inputs
-  if (!type || !id) {
-    throw new Error('Type and ID are required');
-  }
+    // Validate inputs
+    if (!type || !id) {
+      throw new Error('Type and ID are required');
+    }
 
-  // Check if organization exists
-  if (!config[type] || !config[type][id]) {
-    throw new Error(`Organization "${id}" not found in ${type}`);
-  }
+    // Check if organization exists
+    if (!config[type] || !config[type][id]) {
+      throw new Error(`Organization "${id}" not found in ${type}`);
+    }
 
-  // Prevent deleting internal (it's special)
-  if (type === 'internal') {
-    throw new Error('Cannot delete internal organization');
-  }
+    // Prevent deleting internal (it's special)
+    if (type === 'internal') {
+      throw new Error('Cannot delete internal organization');
+    }
 
-  // Create backup before deleting
-  const backupPath = routingPath.replace('.yaml', '.backup.yaml');
-  if (fs.existsSync(routingPath)) {
-    fs.copyFileSync(routingPath, backupPath);
-    console.log('[Routing IPC] Created backup at:', backupPath);
-  }
+    // Create backup before deleting
+    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+    if (fs.existsSync(routingPath)) {
+      fs.copyFileSync(routingPath, backupPath);
+      console.log('[Routing IPC] Created backup at:', backupPath);
+    }
 
-  // Delete the organization
-  delete config[type][id];
+    // Delete the organization
+    delete config[type][id];
 
-  // Keep the section even if empty (don't delete it)
-  // This ensures the routing engine doesn't fail on reload
+    // Keep the section even if empty (don't delete it)
+    // This ensures the routing engine doesn't fail on reload
 
-  // Convert back to YAML and save
-  const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
-  fs.writeFileSync(routingPath, newContent, 'utf8');
-  console.log('[Routing IPC] Organization deleted successfully');
+    // Convert back to YAML and save
+    const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
+    fs.writeFileSync(routingPath, newContent, 'utf8');
+    console.log('[Routing IPC] Organization deleted successfully');
 
-  // Reload routing engine
-  if (routingEngine) {
-    routingEngine.reloadConfig();
-    console.log('[Routing IPC] Routing engine reloaded');
-  }
+    // Reload routing engine
+    if (routingEngine) {
+      routingEngine.reloadConfig();
+      console.log('[Routing IPC] Routing engine reloaded');
+    }
 
-  return { content: newContent };
-}));
+    return { content: newContent };
+  })
+);
 
 // Restore routing configuration from backup
-ipcMain.handle('routing:restoreBackup', createIpcHandler(async () => {
-  console.log('[Routing IPC] Restoring routing configuration from backup');
+ipcMain.handle(
+  'routing:restoreBackup',
+  createIpcHandler(async () => {
+    console.log('[Routing IPC] Restoring routing configuration from backup');
 
-  const routingPath = getRoutingConfigPath();
-  const backupPath = routingPath.replace('.yaml', '.backup.yaml');
+    const routingPath = getRoutingConfigPath();
+    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
 
-  if (!fs.existsSync(backupPath)) {
-    throw new Error('Backup file not found. No backup available to restore.');
-  }
+    if (!fs.existsSync(backupPath)) {
+      throw new Error('Backup file not found. No backup available to restore.');
+    }
 
-  // Read the backup file
-  const backupContent = fs.readFileSync(backupPath, 'utf8');
+    // Read the backup file
+    const backupContent = fs.readFileSync(backupPath, 'utf8');
 
-  // Validate the backup is valid YAML
-  try {
-    yaml.load(backupContent);
-  } catch (yamlError) {
-    throw new Error(`Backup file is corrupted: ${yamlError.message}`);
-  }
+    // Validate the backup is valid YAML
+    try {
+      yaml.load(backupContent);
+    } catch (yamlError) {
+      throw new Error(`Backup file is corrupted: ${yamlError.message}`);
+    }
 
-  // Restore the backup by copying it to the main config
-  fs.copyFileSync(backupPath, routingPath);
-  console.log('[Routing IPC] Routing configuration restored from backup');
+    // Restore the backup by copying it to the main config
+    fs.copyFileSync(backupPath, routingPath);
+    console.log('[Routing IPC] Routing configuration restored from backup');
 
-  // Reload routing engine
-  if (routingEngine) {
-    routingEngine.reloadConfig();
-    console.log('[Routing IPC] Routing engine reloaded');
-  }
+    // Reload routing engine
+    if (routingEngine) {
+      routingEngine.reloadConfig();
+      console.log('[Routing IPC] Routing engine reloaded');
+    }
 
-  return {};
-}));
+    return {};
+  })
+);
 
 // ===================================================================
 // End Routing Configuration IPC Handlers
@@ -5476,7 +5651,10 @@ ipcMain.handle('vocabulary:reload', async () => {
 ipcMain.handle('llm:getProvider', async () => {
   try {
     if (!llmService) {
-      return { success: false, error: 'LLM service not configured - please add API keys in settings' };
+      return {
+        success: false,
+        error: 'LLM service not configured - please add API keys in settings',
+      };
     }
     return {
       success: true,
@@ -5494,7 +5672,10 @@ ipcMain.handle(
   withValidation(llmSwitchProviderSchema, async (event, { provider }) => {
     try {
       if (!llmService) {
-        return { success: false, error: 'LLM service not configured - please add API keys in settings' };
+        return {
+          success: false,
+          error: 'LLM service not configured - please add API keys in settings',
+        };
       }
 
       console.log(`[LLM] Switching provider to: ${provider}`);
@@ -5757,7 +5938,10 @@ ipcMain.handle('import:transcribeAudio', async (event, { filePath, provider, opt
   // Validate provider
   const validProviders = ['assemblyai', 'deepgram'];
   if (!validProviders.includes(provider)) {
-    return { success: false, error: `Invalid provider: ${provider}. Use one of: ${validProviders.join(', ')}` };
+    return {
+      success: false,
+      error: `Invalid provider: ${provider}. Use one of: ${validProviders.join(', ')}`,
+    };
   }
 
   // Validate file exists
@@ -5767,16 +5951,23 @@ ipcMain.handle('import:transcribeAudio', async (event, { filePath, provider, opt
 
   try {
     // Send progress update
-    event.sender.send('import:progress', { step: 'transcribing', file: path.basename(filePath), provider });
+    event.sender.send('import:progress', {
+      step: 'transcribing',
+      file: path.basename(filePath),
+      provider,
+    });
 
     // VC-3: Get vocabulary for transcription (user can specify clientSlug in options)
     let vocabularyOptions = {};
     try {
       const clientSlug = options.clientSlug || null;
       vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
-      const vocabCount = vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
+      const vocabCount =
+        vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
       if (vocabCount > 0) {
-        console.log(`[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`);
+        console.log(
+          `[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`
+        );
       }
     } catch (vocabError) {
       console.warn('[Import] VC-3: Failed to load vocabulary:', vocabError.message);
@@ -5786,7 +5977,9 @@ ipcMain.handle('import:transcribeAudio', async (event, { filePath, provider, opt
     const transcribeOptions = { ...options, ...vocabularyOptions };
     const transcript = await transcriptionService.transcribe(provider, filePath, transcribeOptions);
 
-    console.log(`[Import] Transcription complete. Got ${transcript.utterances?.length || 0} utterances`);
+    console.log(
+      `[Import] Transcription complete. Got ${transcript.utterances?.length || 0} utterances`
+    );
 
     return {
       success: true,
@@ -5826,21 +6019,32 @@ ipcMain.handle('import:importAudioFile', async (event, { filePath, provider, opt
 
   try {
     // Step 1: Transcribe the audio file
-    event.sender.send('import:progress', { step: 'transcribing', file: path.basename(filePath), provider });
+    event.sender.send('import:progress', {
+      step: 'transcribing',
+      file: path.basename(filePath),
+      provider,
+    });
 
     // VC-3: Get vocabulary for transcription
     let vocabularyOptions = {};
     try {
       vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
-      const vocabCount = vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
+      const vocabCount =
+        vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
       if (vocabCount > 0) {
-        console.log(`[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`);
+        console.log(
+          `[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`
+        );
       }
     } catch (vocabError) {
       console.warn('[Import] VC-3: Failed to load vocabulary:', vocabError.message);
     }
 
-    const transcriptResult = await transcriptionService.transcribe(provider, filePath, vocabularyOptions);
+    const transcriptResult = await transcriptionService.transcribe(
+      provider,
+      filePath,
+      vocabularyOptions
+    );
 
     // Transcription service returns 'entries' not 'utterances'
     const entries = transcriptResult.entries || transcriptResult.utterances || [];
@@ -5851,7 +6055,10 @@ ipcMain.handle('import:importAudioFile', async (event, { filePath, provider, opt
     console.log(`[Import] Transcription complete. Got ${entries.length} entries`);
 
     // Step 2: Create a meeting object from the transcription
-    event.sender.send('import:progress', { step: 'creating-meeting', file: path.basename(filePath) });
+    event.sender.send('import:progress', {
+      step: 'creating-meeting',
+      file: path.basename(filePath),
+    });
 
     const meetingId = 'imported-audio-' + Date.now();
     const fileName = path.basename(filePath, path.extname(filePath));
@@ -5862,11 +6069,16 @@ ipcMain.handle('import:importAudioFile', async (event, { filePath, provider, opt
     const meetingDate = dateMatch ? new Date(dateMatch[1].replace(/_/g, '-')) : fileStats.mtime;
 
     // Detect UUID-like filenames (e.g., windows-desktop-032c0723-9059-4218-956e-68b6654d3ebd)
-    const isUuidFilename = /^[a-z-]+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileName) ||
-                           /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(fileName);
+    const isUuidFilename =
+      /^[a-z-]+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileName) ||
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(fileName);
 
     // Generate a friendly title
-    const dateStr = meetingDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const dateStr = meetingDate.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
     const timeStr = meetingDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const friendlyTitle = isUuidFilename
       ? `Imported Recording - ${dateStr} ${timeStr}`
@@ -5921,11 +6133,13 @@ ipcMain.handle('import:importAudioFile', async (event, { filePath, provider, opt
         if (labelResult?.applied) {
           meeting.transcript = labelResult.transcript;
           if (labelResult.userProfile) {
-            meeting.participants = [{
-              name: labelResult.userProfile.name,
-              email: labelResult.userProfile.email || null,
-              isHost: true,
-            }];
+            meeting.participants = [
+              {
+                name: labelResult.userProfile.name,
+                email: labelResult.userProfile.email || null,
+                isHost: true,
+              },
+            ];
           }
           console.log('[Import] Auto-labeled single speaker as:', labelResult.userProfile?.name);
         }
@@ -5936,7 +6150,10 @@ ipcMain.handle('import:importAudioFile', async (event, { filePath, provider, opt
 
     // Step 4: Generate auto-summary if requested
     if (generateAutoSummary && meeting.transcript.length > 0) {
-      event.sender.send('import:progress', { step: 'generating-auto-summary', file: path.basename(filePath) });
+      event.sender.send('import:progress', {
+        step: 'generating-auto-summary',
+        file: path.basename(filePath),
+      });
       try {
         await importManager.generateSummary(meeting);
       } catch (err) {
@@ -5946,7 +6163,10 @@ ipcMain.handle('import:importAudioFile', async (event, { filePath, provider, opt
 
     // Step 5: Generate template summaries if requested
     if (templateIds && templateIds.length > 0 && meeting.transcript.length > 0) {
-      event.sender.send('import:progress', { step: 'generating-template-summaries', file: path.basename(filePath) });
+      event.sender.send('import:progress', {
+        step: 'generating-template-summaries',
+        file: path.basename(filePath),
+      });
       try {
         await importManager.generateTemplateSummaries(meeting, templateIds);
       } catch (err) {
@@ -6028,7 +6248,7 @@ function isAudioFile(filePath) {
  * @param {string} filePath - Path to the file
  * @returns {boolean} True if transcript file
  */
-function isTranscriptFile(filePath) {
+function _isTranscriptFile(filePath) {
   const ext = path.extname(filePath).toLowerCase().slice(1);
   return TRANSCRIPT_EXTENSIONS.includes(ext);
 }
@@ -6402,7 +6622,7 @@ ipcMain.handle('settings:chooseVaultPath', async () => {
 });
 
 // Get AI provider preferences (Phase 10.3)
-ipcMain.handle('settings:getProviderPreferences', async (event) => {
+ipcMain.handle('settings:getProviderPreferences', async event => {
   // Get settings from renderer's localStorage via webContents
   const preferences = await event.sender.executeJavaScript(`
     (function() {
@@ -6489,7 +6709,10 @@ ipcMain.handle('app:updateSettings', async (event, updates) => {
   try {
     // Merge updates into current settings
     if (updates.recordingQuality) {
-      appSettings.recordingQuality = { ...appSettings.recordingQuality, ...updates.recordingQuality };
+      appSettings.recordingQuality = {
+        ...appSettings.recordingQuality,
+        ...updates.recordingQuality,
+      };
     }
     if (updates.notifications) {
       appSettings.notifications = { ...appSettings.notifications, ...updates.notifications };
@@ -6547,7 +6770,7 @@ ipcMain.handle('app:getLogs', async (event, options = {}) => {
         logPath,
         totalLines: logLines.length,
         filteredLines: filteredLogs.length,
-      }
+      },
     };
   } catch (error) {
     logger.ipc.error('[IPC] app:getLogs failed:', error);
@@ -6608,9 +6831,7 @@ ipcMain.handle('settings:export', async () => {
     const result = await dialog.showSaveDialog(mainWindow, {
       title: 'Export Settings',
       defaultPath: defaultFilename,
-      filters: [
-        { name: 'ZIP Archive', extensions: ['zip'] },
-      ],
+      filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
     });
 
     if (result.canceled || !result.filePath) {
@@ -6646,9 +6867,7 @@ ipcMain.handle('settings:import', async (event, options = {}) => {
     // Show open dialog
     const result = await dialog.showOpenDialog(mainWindow, {
       title: 'Import Settings',
-      filters: [
-        { name: 'ZIP Archive', extensions: ['zip'] },
-      ],
+      filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
       properties: ['openFile'],
     });
 
@@ -6688,7 +6907,7 @@ ipcMain.handle('keys:list', async () => {
 
     // Get obfuscated values for keys that exist
     const keysWithValues = await Promise.all(
-      keys.map(async (key) => {
+      keys.map(async key => {
         if (key.hasValue) {
           const value = await keyManagementService.getKey(key.key);
           return {
@@ -7016,7 +7235,9 @@ ipcMain.handle(
 
       // If action is 'append', save the existing transcript
       if (action === 'append' && meeting.transcript && meeting.transcript.length > 0) {
-        console.log(`[Recording] Saving ${meeting.transcript.length} existing transcript entries for append`);
+        console.log(
+          `[Recording] Saving ${meeting.transcript.length} existing transcript entries for append`
+        );
         meeting.previousTranscript = meeting.transcript;
         meeting.recordingAction = 'append';
       } else if (action === 'overwrite') {
@@ -7070,7 +7291,9 @@ ipcMain.handle(
         if (!meeting.platform) {
           if (detectedMeeting?.window?.platform) {
             meeting.platform = detectedMeeting.window.platform;
-            console.log(`[Recording] UI-1: Setting platform from detected meeting: ${meeting.platform}`);
+            console.log(
+              `[Recording] UI-1: Setting platform from detected meeting: ${meeting.platform}`
+            );
           } else {
             meeting.platform = 'in-person';
             console.log('[Recording] UI-1: No detected meeting, defaulting to in-person');
@@ -7178,7 +7401,9 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
     } catch (sdkError) {
       // If recording doesn't exist in SDK, it may have already been stopped
       // This can happen when using AssemblyAI/Deepgram where recording ends automatically
-      console.warn(`SDK stopRecording failed: ${sdkError.message} - recording may have already ended`);
+      console.warn(
+        `SDK stopRecording failed: ${sdkError.message} - recording may have already ended`
+      );
 
       // Clean up our tracking
       activeRecordings.removeRecording(validatedId);
@@ -7240,8 +7465,12 @@ global.webhookHandlers = {
     console.log(`[Webhook] Transcript ready. ID: ${transcriptId}, Recording: ${recordingId}`);
 
     try {
-      const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-      const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+      const RECALLAI_API_URL =
+        (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+        process.env.RECALLAI_API_URL ||
+        'https://api.recall.ai';
+      const RECALLAI_API_KEY =
+        (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
       // Fetch the transcript
       const response = await axios.get(`${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`, {
@@ -7323,8 +7552,12 @@ ipcMain.on('webhook-transcript-done', async (event, { transcriptId, recordingId 
   console.log(`[Webhook] Transcript ready. ID: ${transcriptId}, Recording: ${recordingId}`);
 
   try {
-    const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-    const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+    const RECALLAI_API_URL =
+      (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+      process.env.RECALLAI_API_URL ||
+      'https://api.recall.ai';
+    const RECALLAI_API_KEY =
+      (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
     // Fetch the transcript
     const response = await axios.get(`${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`, {
@@ -7370,31 +7603,34 @@ ipcMain.on('webhook-transcript-done', async (event, { transcriptId, recordingId 
 });
 
 // Handle transcript failed webhook
-ipcMain.on('webhook-transcript-failed', async (event, { transcriptId: _transcriptId, recordingId, error }) => {
-  console.error(`[Webhook] Transcript failed for recording: ${recordingId}`, error);
+ipcMain.on(
+  'webhook-transcript-failed',
+  async (event, { transcriptId: _transcriptId, recordingId, error }) => {
+    console.error(`[Webhook] Transcript failed for recording: ${recordingId}`, error);
 
-  try {
-    // Find the meeting and update status
-    const meetingsData = await fileOperationManager.readMeetingsData();
-    const meeting = meetingsData.pastMeetings.find(m => m.recallRecordingId === recordingId);
+    try {
+      // Find the meeting and update status
+      const meetingsData = await fileOperationManager.readMeetingsData();
+      const meeting = meetingsData.pastMeetings.find(m => m.recallRecordingId === recordingId);
 
-    if (meeting) {
-      meeting.transcriptError = error;
-      meeting.transcriptStatus = 'failed';
-      await fileOperationManager.writeData(meetingsData);
+      if (meeting) {
+        meeting.transcriptError = error;
+        meeting.transcriptStatus = 'failed';
+        await fileOperationManager.writeData(meetingsData);
 
-      // Notify renderer
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('transcript-failed', {
-          meetingId: meeting.id,
-          error,
-        });
+        // Notify renderer
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('transcript-failed', {
+            meetingId: meeting.id,
+            error,
+          });
+        }
       }
+    } catch (err) {
+      console.error('[Webhook] Error handling transcript failure:', err);
     }
-  } catch (err) {
-    console.error('[Webhook] Error handling transcript failure:', err);
   }
-});
+);
 
 // Handle upload failed webhook
 ipcMain.on('webhook-upload-failed', async (event, { recordingId, error }) => {
@@ -7929,7 +8165,9 @@ async function processParticipantJoin(evt) {
     const participantEmail = participantData.email || null;
 
     // SM-1: Log full participant data to see what SDK provides
-    console.log(`Participant joined: ${participantName} (ID: ${participantId}, Host: ${isHost}, Email: ${participantEmail || 'none'})`)
+    console.log(
+      `Participant joined: ${participantName} (ID: ${participantId}, Host: ${isHost}, Email: ${participantEmail || 'none'})`
+    );
     console.log('[SM-1 Debug] Full participant data:', JSON.stringify(participantData, null, 2));
 
     // Skip "Host" and "Guest" generic names
@@ -8111,7 +8349,9 @@ function processSpeechOff(evt) {
     });
     participant.currentStart = null;
 
-    console.log(`[SpeechTimeline] ${participant.name} stopped speaking at ${relativeTime}ms (segment: ${participant.segments.length})`);
+    console.log(
+      `[SpeechTimeline] ${participant.name} stopped speaking at ${relativeTime}ms (segment: ${participant.segments.length})`
+    );
   } catch (error) {
     console.error('[SpeechTimeline] Error processing speech_off:', error);
   }
@@ -8269,8 +8509,12 @@ async function matchSpeakersToParticipants(meeting) {
  */
 // eslint-disable-next-line no-unused-vars
 async function pollForUploadCompletion(windowId) {
-  const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-  const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+  const RECALLAI_API_URL =
+    (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+    process.env.RECALLAI_API_URL ||
+    'https://api.recall.ai';
+  const RECALLAI_API_KEY =
+    (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
   if (!RECALLAI_API_KEY) {
     throw new Error('RECALLAI_API_KEY not configured. Set it in Settings > Security');
@@ -8396,8 +8640,12 @@ async function pollForUploadCompletion(windowId) {
 async function startRecallAIAsyncTranscription(recordingId, windowId) {
   console.log(`[Recall.ai] Starting async transcription for recording: ${recordingId}`);
 
-  const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-  const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+  const RECALLAI_API_URL =
+    (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+    process.env.RECALLAI_API_URL ||
+    'https://api.recall.ai';
+  const RECALLAI_API_KEY =
+    (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
   if (!RECALLAI_API_KEY) {
     throw new Error('RECALLAI_API_KEY not configured. Set it in Settings > Security');
@@ -8466,8 +8714,12 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
  * @param {string} meetingId - Our meeting ID
  */
 async function pollRecallAITranscript(recordingId, transcriptId, windowId, meetingId) {
-  const RECALLAI_API_URL = (await keyManagementService.getKey('RECALLAI_API_URL')) || process.env.RECALLAI_API_URL || 'https://api.recall.ai';
-  const RECALLAI_API_KEY = (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+  const RECALLAI_API_URL =
+    (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+    process.env.RECALLAI_API_URL ||
+    'https://api.recall.ai';
+  const RECALLAI_API_KEY =
+    (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
 
   // Poll the specific transcript endpoint
   const pollingEndpoint = `${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`;
@@ -8665,10 +8917,12 @@ async function processRecallAITranscript(transcript, meetingId, _windowId) {
 
         // Check if we need to append to previous transcript
         if (meeting.recordingAction === 'append' && meeting.previousTranscript) {
-          console.log(`[Recall.ai] Appending ${processedTranscript.length} new utterances to ${meeting.previousTranscript.length} existing utterances`);
+          console.log(
+            `[Recall.ai] Appending ${processedTranscript.length} new utterances to ${meeting.previousTranscript.length} existing utterances`
+          );
           data.pastMeetings[meetingIndex].transcript = [
             ...meeting.previousTranscript,
-            ...processedTranscript
+            ...processedTranscript,
           ];
           // Clean up temporary fields
           delete data.pastMeetings[meetingIndex].previousTranscript;
@@ -8681,7 +8935,9 @@ async function processRecallAITranscript(transcript, meetingId, _windowId) {
         }
 
         data.pastMeetings[meetingIndex].transcriptComplete = true;
-        console.log(`[Recall.ai] Updated meeting with ${data.pastMeetings[meetingIndex].transcript.length} total utterances`);
+        console.log(
+          `[Recall.ai] Updated meeting with ${data.pastMeetings[meetingIndex].transcript.length} total utterances`
+        );
       }
       return data;
     });
@@ -8878,8 +9134,8 @@ async function withProviderSwitch(providerType, callback, logContext = '[LLM]') 
     providerType === 'auto'
       ? 'autoSummaryProvider'
       : providerType === 'template'
-      ? 'templateSummaryProvider'
-      : 'patternGenerationProvider';
+        ? 'templateSummaryProvider'
+        : 'patternGenerationProvider';
   const desiredProvider = mapProviderValue(preferences[preferenceKey]);
   const originalProvider = llmService.config.provider;
 
@@ -9014,7 +9270,9 @@ function loadAutoSummaryPrompt(needsTitleSuggestion) {
   try {
     // Try to load template file from userData/config/templates
     const templatePath = path.join(
-      templateManager ? templateManager.templatesPath : path.join(app.getPath('userData'), 'config', 'templates'),
+      templateManager
+        ? templateManager.templatesPath
+        : path.join(app.getPath('userData'), 'config', 'templates'),
       'auto-summary-prompt.txt'
     );
 
@@ -9042,7 +9300,10 @@ function loadAutoSummaryPrompt(needsTitleSuggestion) {
       return processedTemplate;
     }
   } catch (error) {
-    console.warn('[AutoSummary] Failed to load template file, using hardcoded fallback:', error.message);
+    console.warn(
+      '[AutoSummary] Failed to load template file, using hardcoded fallback:',
+      error.message
+    );
   }
 
   // Fallback to hardcoded prompt (original behavior)
@@ -9121,7 +9382,9 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
     // Format the transcript into a single text for the AI to process
     // Use mapped speaker name if available (v1.1), fall back to original speaker
     const transcriptText = meeting.transcript
-      .map(entry => `${entry.speakerName || entry.speakerDisplayName || entry.speaker}: ${entry.text}`)
+      .map(
+        entry => `${entry.speakerName || entry.speakerDisplayName || entry.speaker}: ${entry.text}`
+      )
       .join('\n');
 
     // Format detected participants if available

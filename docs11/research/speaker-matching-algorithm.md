@@ -11,12 +11,14 @@ This document designs an improved speaker-to-participant matching algorithm usin
 ### Existing Approach (`SpeakerMatcher.js`)
 
 **Signals Used:**
+
 1. Speaker count matching (if speakers = participants, do 1:1)
 2. First speaker = organizer assumption
 3. Most talkative speaker = host assumption
 4. Sequential mapping for remainder
 
 **Limitations:**
+
 - Low confidence for most matches
 - No use of Recall.ai speech events
 - No transcript content analysis
@@ -24,6 +26,7 @@ This document designs an improved speaker-to-participant matching algorithm usin
 - Assumes organizer speaks first (often wrong)
 
 **Confidence Ratings:**
+
 - `count-match`: medium
 - `first-speaker`: low
 - `most-talkative`: low
@@ -37,11 +40,13 @@ This document designs an improved speaker-to-participant matching algorithm usin
 ### Industry Best Practices
 
 From [2024 research](https://www.isca-archive.org/interspeech_2024/boeddeker24_interspeech.html):
+
 - Segment-level speaker reassignment can fix 40% of speaker confusion errors
 - Timestamp accuracy is critical for matching
 - Multi-pass approaches improve accuracy
 
 From [Recall.ai](https://www.gladia.io/blog/using-gladia-speech-to-text-api-with-virtual-meeting-recordings):
+
 - Meeting platforms (Zoom, Teams) provide separate audio streams per participant
 - This enables 100% accurate speaker diarization when available
 
@@ -103,7 +108,7 @@ class SpeechTimelineCorrelator {
     if (!this.speakingTimeline.has(participantId)) {
       this.speakingTimeline.set(participantId, {
         name: participantName,
-        segments: []
+        segments: [],
       });
     }
     this.speakingTimeline.get(participantId).currentStart = timestamp;
@@ -118,7 +123,7 @@ class SpeechTimelineCorrelator {
     if (participant && participant.currentStart) {
       participant.segments.push({
         start: participant.currentStart,
-        end: timestamp
+        end: timestamp,
       });
       delete participant.currentStart;
     }
@@ -140,14 +145,13 @@ class SpeechTimelineCorrelator {
         const segEnd = segment.end + tolerance;
 
         if (timestamp >= segStart && timestamp <= segEnd) {
-          const overlap = Math.min(segEnd, timestamp + 100) -
-                          Math.max(segStart, timestamp);
+          const overlap = Math.min(segEnd, timestamp + 100) - Math.max(segStart, timestamp);
           if (overlap > bestOverlap) {
             bestOverlap = overlap;
             bestMatch = {
               participantId,
               name: data.name,
-              confidence: 'high'
+              confidence: 'high',
             };
           }
         }
@@ -196,7 +200,7 @@ class SpeechTimelineCorrelator {
           name: bestParticipant.name,
           confidence: 'high',
           method: 'speech-timeline',
-          matchCount: bestCount
+          matchCount: bestCount,
         };
       }
     }
@@ -219,7 +223,7 @@ class TranscriptAnalyzer {
   findIntroductions(transcript) {
     const introPatterns = [
       /(?:I'm|I am|This is|My name is|It's)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/g,
-      /(?:Hi,?\s+)?([A-Z][a-z]+)\s+(?:here|speaking)/g
+      /(?:Hi,?\s+)?([A-Z][a-z]+)\s+(?:here|speaking)/g,
     ];
 
     const introductions = new Map(); // speaker -> [mentioned names]
@@ -274,9 +278,7 @@ class TranscriptAnalyzer {
     // Self-introductions are strong signals
     for (const [speaker, names] of introductions) {
       for (const name of names) {
-        const match = participants.find(p =>
-          p.name?.toLowerCase().includes(name.toLowerCase())
-        );
+        const match = participants.find(p => p.name?.toLowerCase().includes(name.toLowerCase()));
         if (match) {
           if (!scores.has(speaker)) scores.set(speaker, new Map());
           const current = scores.get(speaker).get(match.email) || 0;
@@ -289,9 +291,7 @@ class TranscriptAnalyzer {
     // If Speaker A addresses "John", Speaker A is probably NOT John
     for (const [speaker, names] of addressed) {
       for (const name of names) {
-        const match = participants.find(p =>
-          p.name?.toLowerCase().includes(name.toLowerCase())
-        );
+        const match = participants.find(p => p.name?.toLowerCase().includes(name.toLowerCase()));
         if (match) {
           if (!scores.has(speaker)) scores.set(speaker, new Map());
           const current = scores.get(speaker).get(match.email) || 0;
@@ -336,7 +336,7 @@ class SpeakerMappingStore {
       name,
       email,
       confidence: 'user-confirmed',
-      lastUsed: Date.now()
+      lastUsed: Date.now(),
     });
     await this.persist();
   }
@@ -367,7 +367,7 @@ class ImprovedSpeakerMatcher {
     const {
       speechEvents = [], // From SDK
       meetingOrganizer = null,
-      useContentAnalysis = true
+      useContentAnalysis = true,
     } = options;
 
     const mapping = {};
@@ -398,16 +398,15 @@ class ImprovedSpeakerMatcher {
 
       const suggestion = this.mappingStore.getSuggestion(speaker);
       if (suggestion) {
-        scores.get(speaker).set(suggestion.email,
-          (scores.get(speaker).get(suggestion.email) || 0) + 8);
+        scores
+          .get(speaker)
+          .set(suggestion.email, (scores.get(speaker).get(suggestion.email) || 0) + 8);
       }
     }
 
     // Signal 3: Content analysis
     if (useContentAnalysis) {
-      const contentScores = this.transcriptAnalyzer.scoreMatches(
-        transcript, participants
-      );
+      const contentScores = this.transcriptAnalyzer.scoreMatches(transcript, participants);
       for (const [speaker, participantScores] of contentScores) {
         for (const [email, score] of participantScores) {
           const current = scores.get(speaker)?.get(email) || 0;
@@ -477,7 +476,7 @@ class ImprovedSpeakerMatcher {
           name: participant?.name || bestEmail,
           confidence: this.scoreToConfidence(bestScore),
           method: 'multi-signal',
-          score: bestScore
+          score: bestScore,
         };
         unmappedParticipants.delete(bestEmail);
       } else {
@@ -485,7 +484,7 @@ class ImprovedSpeakerMatcher {
           email: null,
           name: `Unknown (${speaker})`,
           confidence: 'none',
-          method: 'unmatched'
+          method: 'unmatched',
         };
       }
     }
@@ -504,12 +503,12 @@ class ImprovedSpeakerMatcher {
 
 ## Confidence Scoring
 
-| Confidence | Score Range | Signals |
-|------------|-------------|---------|
-| **high** | 10+ | SDK speech timeline match, or user-confirmed |
-| **medium** | 5-9 | Multiple weak signals agreeing, or content analysis match |
-| **low** | 1-4 | Single weak signal (heuristic) |
-| **none** | 0 or negative | No matching signals |
+| Confidence | Score Range   | Signals                                                   |
+| ---------- | ------------- | --------------------------------------------------------- |
+| **high**   | 10+           | SDK speech timeline match, or user-confirmed              |
+| **medium** | 5-9           | Multiple weak signals agreeing, or content analysis match |
+| **low**    | 1-4           | Single weak signal (heuristic)                            |
+| **none**   | 0 or negative | No matching signals                                       |
 
 ---
 

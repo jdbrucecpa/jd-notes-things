@@ -97,7 +97,9 @@ class VaultStructure {
     const vaultWithSep = normalizedVault + path.sep;
 
     if (normalizedTarget !== normalizedVault && !normalizedTarget.startsWith(vaultWithSep)) {
-      const error = new Error(`Path traversal detected: Attempted to access ${normalizedTarget} outside vault ${normalizedVault}`);
+      const error = new Error(
+        `Path traversal detected: Attempted to access ${normalizedTarget} outside vault ${normalizedVault}`
+      );
       console.error('[VaultStructure Security]', error.message);
       throw error;
     }
@@ -200,7 +202,13 @@ class VaultStructure {
    * @returns {string} Path to saved index
    */
   saveIndex(meetingPath, indexData) {
-    const { title: _title, date: _date, participants: _participants, platform: _platform, meetingType: _meetingType } = indexData; // Validate presence of key fields
+    const {
+      title: _title,
+      date: _date,
+      participants: _participants,
+      platform: _platform,
+      meetingType: _meetingType,
+    } = indexData; // Validate presence of key fields
 
     const indexContent = this._generateIndexMarkdown(indexData);
     const indexPath = path.join(meetingPath, 'index.md');
@@ -428,7 +436,10 @@ Comprehensive meeting notes covering all discussion topics.
    * @returns {Object} Result with path and created flag
    */
   createContactPage(contact, options = {}) {
-    const { generateContactPage, generateContactFilename } = require('../templates/contactTemplate.js');
+    const {
+      generateContactPage,
+      generateContactFilename,
+    } = require('../templates/contactTemplate.js');
 
     const filename = generateContactFilename(contact.name);
     const relativePath = `People/${filename}.md`;
@@ -493,7 +504,10 @@ Comprehensive meeting notes covering all discussion topics.
    * @returns {Object} Result with path and created flag
    */
   createCompanyPage(company, options = {}) {
-    const { generateCompanyPage, generateCompanyFilename } = require('../templates/companyTemplate.js');
+    const {
+      generateCompanyPage,
+      generateCompanyFilename,
+    } = require('../templates/companyTemplate.js');
 
     const filename = generateCompanyFilename(company.name);
     const relativePath = `Companies/${filename}.md`;
@@ -680,7 +694,7 @@ Comprehensive meeting notes covering all discussion topics.
             absolutePath: filePath,
           });
         }
-      } catch (error) {
+      } catch {
         // Skip files that can't be read
       }
     }
@@ -702,9 +716,9 @@ Comprehensive meeting notes covering all discussion topics.
 
     const result = {
       updated: 0,
-      stale: [],    // Meetings whose links were stale (file moved)
+      stale: [], // Meetings whose links were stale (file moved)
       refreshed: [], // Meetings whose links were refreshed
-      missing: [],   // Meetings not found in vault at all
+      missing: [], // Meetings not found in vault at all
     };
 
     for (const meeting of meetings) {
@@ -746,7 +760,9 @@ Comprehensive meeting notes covering all discussion topics.
       }
     }
 
-    console.log(`[VaultStructure] Link refresh complete: ${result.updated} updated, ${result.missing.length} missing`);
+    console.log(
+      `[VaultStructure] Link refresh complete: ${result.updated} updated, ${result.missing.length} missing`
+    );
     return result;
   }
 }

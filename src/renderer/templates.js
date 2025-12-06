@@ -54,15 +54,18 @@ export function initializeTemplateEditor() {
  */
 function setupEventListeners() {
   // Tab switching
-  initializeTabs([
-    { buttonId: 'editorTabBtn', contentId: 'editorTabContent' },
-    { buttonId: 'previewTabBtn', contentId: 'previewTabContent' }
-  ], (tabId) => {
-    // Update preview when switching to preview tab
-    if (tabId === 'previewTabBtn') {
-      updatePreview();
+  initializeTabs(
+    [
+      { buttonId: 'editorTabBtn', contentId: 'editorTabContent' },
+      { buttonId: 'previewTabBtn', contentId: 'previewTabContent' },
+    ],
+    tabId => {
+      // Update preview when switching to preview tab
+      if (tabId === 'previewTabBtn') {
+        updatePreview();
+      }
     }
-  });
+  );
 
   // New template button
   const newTemplateBtn = document.getElementById('newTemplateBtn');
@@ -130,7 +133,8 @@ function renderTemplateList() {
   }
 
   if (templates.length === 0) {
-    templateList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No templates found</p>';
+    templateList.innerHTML =
+      '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No templates found</p>';
     return;
   }
 
@@ -226,7 +230,8 @@ function updatePreview() {
   const template = templates.find(t => t.id === currentTemplateId);
 
   if (!template) {
-    previewContent.innerHTML = '<p style="color: var(--text-secondary); text-align: center; margin-top: 60px;">No template selected</p>';
+    previewContent.innerHTML =
+      '<p style="color: var(--text-secondary); text-align: center; margin-top: 60px;">No template selected</p>';
     return;
   }
 

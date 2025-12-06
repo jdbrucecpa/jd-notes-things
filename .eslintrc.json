@@ -4,14 +4,8 @@
     "es2021": true,
     "browser": true
   },
-  "extends": [
-    "eslint:recommended",
-    "plugin:security/recommended"
-  ],
-  "plugins": [
-    "security",
-    "no-unsanitized"
-  ],
+  "extends": ["eslint:recommended", "plugin:security/recommended"],
+  "plugins": ["security", "no-unsanitized"],
   "parserOptions": {
     "ecmaVersion": 2021,
     "sourceType": "module"
@@ -35,10 +29,5 @@
     "security/detect-possible-timing-attacks": "warn",
     "security/detect-pseudoRandomBytes": "error"
   },
-  "ignorePatterns": [
-    "node_modules/",
-    "out/",
-    ".webpack/",
-    "dist/"
-  ]
+  "ignorePatterns": ["node_modules/", "out/", ".webpack/", "dist/"]
 }

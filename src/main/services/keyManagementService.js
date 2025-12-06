@@ -102,10 +102,10 @@ class KeyManagementService {
   async listKeys() {
     try {
       const credentials = await keytar.findCredentials(this.serviceName);
-      const storedKeyNames = credentials.map((c) => c.account);
+      const storedKeyNames = credentials.map(c => c.account);
 
       // Return all possible keys with their storage status
-      const keyList = Object.keys(this.keyTypes).map((keyName) => ({
+      const keyList = Object.keys(this.keyTypes).map(keyName => ({
         key: keyName,
         name: this.keyTypes[keyName],
         hasValue: storedKeyNames.includes(keyName),
@@ -242,7 +242,10 @@ class KeyManagementService {
 
       case 'GOOGLE_CALENDAR_CLIENT_ID':
         if (!value.includes('.apps.googleusercontent.com')) {
-          return { valid: false, message: 'Google Client ID should end with .apps.googleusercontent.com' };
+          return {
+            valid: false,
+            message: 'Google Client ID should end with .apps.googleusercontent.com',
+          };
         }
         break;
 

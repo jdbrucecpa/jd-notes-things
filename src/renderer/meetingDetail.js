@@ -7,7 +7,7 @@ import { escapeHtml, markdownToSafeHtml } from './security.js';
 import { contactsService } from './services/contactsService.js';
 import { withButtonLoadingElement } from './utils/buttonHelper.js';
 import { initializeTabs } from './utils/tabHelper.js';
-import { openSpeakerMappingModal, hasCrypticSpeakerIds } from './speakerMapping.js';
+import { openSpeakerMappingModal } from './speakerMapping.js';
 
 // Current meeting being viewed
 let currentMeeting = null;
@@ -64,7 +64,7 @@ export function initializeMeetingDetail(meetingId, meeting, onBack, onUpdate) {
     participantCount: meeting.participants?.length || 0,
     participants: meeting.participants,
     transcriptLength: meeting.transcript?.length || 0,
-    firstSpeaker: meeting.transcript?.[0]?.speakerName || meeting.transcript?.[0]?.speaker || 'N/A'
+    firstSpeaker: meeting.transcript?.[0]?.speakerName || meeting.transcript?.[0]?.speaker || 'N/A',
   });
 
   currentMeeting = meeting;
@@ -105,7 +105,7 @@ function setupEventListeners(onBack, onUpdate) {
     { buttonId: 'summaryTabBtn', contentId: 'summaryTab' },
     { buttonId: 'transcriptTabBtn', contentId: 'transcriptTab' },
     { buttonId: 'templatesTabBtn', contentId: 'templatesTab' },
-    { buttonId: 'metadataTabBtn', contentId: 'metadataTab' }
+    { buttonId: 'metadataTabBtn', contentId: 'metadataTab' },
   ]);
 
   // Edit title button
@@ -177,7 +177,6 @@ function setupEventListeners(onBack, onUpdate) {
     regenerateBtn.onclick = () => regenerateSummary(onUpdate);
   }
 }
-
 
 /**
  * Populate meeting info card
@@ -516,15 +515,21 @@ function populateMetadata(meeting) {
     newPlatformEl.value = normalizedPlatform;
 
     // Add change listener to save platform
-    newPlatformEl.addEventListener('change', async (e) => {
+    newPlatformEl.addEventListener('change', async e => {
       const newPlatform = e.target.value;
-      console.log(`[Metadata] Platform change event fired: ${meeting.platform} -> ${newPlatform}, meetingId: ${meeting.id}`);
+      console.log(
+        `[Metadata] Platform change event fired: ${meeting.platform} -> ${newPlatform}, meetingId: ${meeting.id}`
+      );
       meeting.platform = newPlatform;
 
       // Update meeting via IPC
       try {
         console.log('[Metadata] Calling updateMeetingField IPC...');
-        const result = await window.electronAPI.updateMeetingField(meeting.id, 'platform', newPlatform);
+        const result = await window.electronAPI.updateMeetingField(
+          meeting.id,
+          'platform',
+          newPlatform
+        );
         console.log('[Metadata] IPC result:', result);
         if (result.success) {
           console.log(`[Metadata] Platform updated to: ${newPlatform}`);
@@ -690,9 +695,7 @@ async function generateTemplates(onUpdate) {
     }
 
     // Get template IDs (excluding auto-summary if present)
-    const templateIds = templates
-      .filter(t => t.id !== 'auto-summary')
-      .map(t => t.id);
+    const templateIds = templates.filter(t => t.id !== 'auto-summary').map(t => t.id);
 
     if (templateIds.length === 0) {
       alert('No custom templates found. Only auto-summary is available.');
@@ -761,23 +764,27 @@ async function addParticipant(onUpdate) {
   }
 
   // Show contact search modal
-  showContactSearchModal((selectedContact) => {
+  showContactSearchModal(selectedContact => {
     // Check for duplicates by email
-    const isDuplicate = currentMeeting.participants.some(p =>
-      p.email && selectedContact.email &&
-      p.email.toLowerCase() === selectedContact.email.toLowerCase()
+    const isDuplicate = currentMeeting.participants.some(
+      p =>
+        p.email &&
+        selectedContact.email &&
+        p.email.toLowerCase() === selectedContact.email.toLowerCase()
     );
 
     if (isDuplicate) {
       // Auto-replace duplicate participant
-      const index = currentMeeting.participants.findIndex(p =>
-        p.email && selectedContact.email &&
-        p.email.toLowerCase() === selectedContact.email.toLowerCase()
+      const index = currentMeeting.participants.findIndex(
+        p =>
+          p.email &&
+          selectedContact.email &&
+          p.email.toLowerCase() === selectedContact.email.toLowerCase()
       );
 
       currentMeeting.participants[index] = {
         name: selectedContact.name,
-        email: selectedContact.email
+        email: selectedContact.email,
       };
 
       window.showToast(`Updated existing participant: ${selectedContact.name}`, 'info');
@@ -785,7 +792,7 @@ async function addParticipant(onUpdate) {
       // Add new participant
       currentMeeting.participants.push({
         name: selectedContact.name,
-        email: selectedContact.email
+        email: selectedContact.email,
       });
 
       window.showToast(`Added participant: ${selectedContact.name}`, 'success');
@@ -856,7 +863,7 @@ function showContactSearchModal(onSelect) {
   };
 
   // Close on overlay click
-  overlay.addEventListener('click', (e) => {
+  overlay.addEventListener('click', e => {
     if (e.target === overlay) {
       closeModal();
     }
@@ -866,7 +873,7 @@ function showContactSearchModal(onSelect) {
   closeBtn.addEventListener('click', closeModal);
 
   // Escape key to close
-  const handleEscape = (e) => {
+  const handleEscape = e => {
     if (e.key === 'Escape') {
       closeModal();
       document.removeEventListener('keydown', handleEscape);
@@ -876,7 +883,7 @@ function showContactSearchModal(onSelect) {
 
   // Search contacts as user types
   let searchTimeout;
-  searchInput.addEventListener('input', async (e) => {
+  searchInput.addEventListener('input', async e => {
     clearTimeout(searchTimeout);
     const query = e.target.value.trim();
 
@@ -922,7 +929,8 @@ function showContactSearchModal(onSelect) {
         });
       } catch (error) {
         console.error('Error searching contacts:', error);
-        resultsContainer.innerHTML = '<div class="search-hint error">Error searching contacts</div>';
+        resultsContainer.innerHTML =
+          '<div class="search-hint error">Error searching contacts</div>';
       }
     }, 300); // Debounce search
   });
@@ -1018,7 +1026,11 @@ async function regenerateSummary(onUpdate) {
   const btn = document.getElementById('regenerateSummaryBtn');
   if (!btn) return;
 
-  if (!confirm('Regenerate the auto-summary for this meeting? This will replace the existing summary.')) {
+  if (
+    !confirm(
+      'Regenerate the auto-summary for this meeting? This will replace the existing summary.'
+    )
+  ) {
     return;
   }
 
@@ -1042,7 +1054,10 @@ async function regenerateSummary(onUpdate) {
 
       if (meetingsData.success) {
         // Find the updated meeting
-        const allMeetings = [...meetingsData.data.upcomingMeetings, ...meetingsData.data.pastMeetings];
+        const allMeetings = [
+          ...meetingsData.data.upcomingMeetings,
+          ...meetingsData.data.pastMeetings,
+        ];
         const updatedMeeting = allMeetings.find(m => m.id === currentMeetingId);
 
         if (updatedMeeting) {
@@ -1148,7 +1163,8 @@ function setupSpeakerEditorListeners() {
     }
 
     if (query.length < 2) {
-      resultsDiv.innerHTML = '<div class="search-hint">Type at least 2 characters to search...</div>';
+      resultsDiv.innerHTML =
+        '<div class="search-hint">Type at least 2 characters to search...</div>';
       return;
     }
 
@@ -1161,11 +1177,13 @@ function setupSpeakerEditorListeners() {
         if (result.success && result.contacts.length > 0) {
           renderContactResults(result.contacts, resultsDiv, searchInput);
         } else {
-          resultsDiv.innerHTML = '<div class="search-hint">No contacts found. You can still type a custom name.</div>';
+          resultsDiv.innerHTML =
+            '<div class="search-hint">No contacts found. You can still type a custom name.</div>';
         }
       } catch (error) {
         console.error('[MeetingDetail] Contact search error:', error);
-        resultsDiv.innerHTML = '<div class="search-hint error">Search failed. You can still type a custom name.</div>';
+        resultsDiv.innerHTML =
+          '<div class="search-hint error">Search failed. You can still type a custom name.</div>';
       }
     }, 300);
   });
@@ -1180,7 +1198,7 @@ function setupSpeakerEditorListeners() {
   closeBtn.addEventListener('click', closeSpeakerEditor);
 
   // Save on Enter
-  searchInput.addEventListener('keydown', async (e) => {
+  searchInput.addEventListener('keydown', async e => {
     if (e.key === 'Enter') {
       e.preventDefault();
       await saveSpeakerEdit(searchInput.value.trim());
@@ -1254,14 +1272,17 @@ async function saveSpeakerEdit(newSpeakerName, contact = null) {
     return;
   }
 
-  console.log(`[MeetingDetail] Updating speaker at index ${context.utteranceIndex} to: ${newSpeakerName}`);
+  console.log(
+    `[MeetingDetail] Updating speaker at index ${context.utteranceIndex} to: ${newSpeakerName}`
+  );
 
   // Update the transcript in memory
   if (currentMeeting.transcript && currentMeeting.transcript[context.utteranceIndex]) {
     currentMeeting.transcript[context.utteranceIndex].speaker = newSpeakerName;
 
     // Update the UI
-    const speakerNameSpan = context.speakerElement.querySelector('.speaker-name') || context.speakerElement;
+    const speakerNameSpan =
+      context.speakerElement.querySelector('.speaker-name') || context.speakerElement;
     const editIcon = speakerNameSpan.querySelector('.edit-icon');
     speakerNameSpan.textContent = newSpeakerName;
     if (editIcon) {
@@ -1271,7 +1292,8 @@ async function saveSpeakerEdit(newSpeakerName, contact = null) {
     // Auto-add participant if contact was selected (Phase 10.6)
     if (contact) {
       // Extract email - contact might have 'email' (string) or 'emails' (array)
-      const contactEmail = contact.email || (contact.emails && contact.emails.length > 0 ? contact.emails[0] : null);
+      const contactEmail =
+        contact.email || (contact.emails && contact.emails.length > 0 ? contact.emails[0] : null);
 
       if (contactEmail) {
         if (!currentMeeting.participants) {
@@ -1279,16 +1301,15 @@ async function saveSpeakerEdit(newSpeakerName, contact = null) {
         }
 
         // Check if participant already exists
-        const existingParticipant = currentMeeting.participants.find(p =>
-          p.email && contactEmail &&
-          p.email.toLowerCase() === contactEmail.toLowerCase()
+        const existingParticipant = currentMeeting.participants.find(
+          p => p.email && contactEmail && p.email.toLowerCase() === contactEmail.toLowerCase()
         );
 
         if (!existingParticipant) {
           // Add new participant
           currentMeeting.participants.push({
             name: contact.name,
-            email: contactEmail
+            email: contactEmail,
           });
 
           // Re-populate the editors to show new participant
@@ -1315,7 +1336,7 @@ async function saveSpeakerEdit(newSpeakerName, contact = null) {
       console.log('[MeetingDetail] Calling update callback with:', {
         meetingId: currentMeetingId,
         participantCount: currentMeeting.participants?.length || 0,
-        transcriptUpdated: true
+        transcriptUpdated: true,
       });
       await window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
       console.log('[MeetingDetail] Update callback completed');
@@ -1458,26 +1479,33 @@ async function openFixSpeakersModal(onUpdate) {
     return;
   }
 
-  await openSpeakerMappingModal(currentMeetingId, currentMeeting.transcript, async (updatedMeeting) => {
-    console.log('[MeetingDetail] Speaker mappings applied, updating view');
-    console.log('[MeetingDetail] Updated meeting participants:', updatedMeeting.participants);
-    console.log('[MeetingDetail] Updated transcript sample:', updatedMeeting.transcript?.slice(0, 2));
+  await openSpeakerMappingModal(
+    currentMeetingId,
+    currentMeeting.transcript,
+    async updatedMeeting => {
+      console.log('[MeetingDetail] Speaker mappings applied, updating view');
+      console.log('[MeetingDetail] Updated meeting participants:', updatedMeeting.participants);
+      console.log(
+        '[MeetingDetail] Updated transcript sample:',
+        updatedMeeting.transcript?.slice(0, 2)
+      );
 
-    // Update current meeting with the updated data
-    currentMeeting = updatedMeeting;
+      // Update current meeting with the updated data
+      currentMeeting = updatedMeeting;
 
-    // Refresh all relevant sections
-    populateMeetingInfo(currentMeeting);
-    populateParticipants(currentMeeting);  // Important - update participants list!
-    populateSummary(currentMeeting);
-    await populateTranscript(currentMeeting);
-    populateMetadata(currentMeeting);
+      // Refresh all relevant sections
+      populateMeetingInfo(currentMeeting);
+      populateParticipants(currentMeeting); // Important - update participants list!
+      populateSummary(currentMeeting);
+      await populateTranscript(currentMeeting);
+      populateMetadata(currentMeeting);
 
-    // Notify parent of the update
-    if (onUpdate) {
-      onUpdate(currentMeetingId, currentMeeting);
+      // Notify parent of the update
+      if (onUpdate) {
+        onUpdate(currentMeetingId, currentMeeting);
+      }
     }
-  });
+  );
 }
 
 /**

@@ -67,7 +67,10 @@ class GoogleAuth {
       return false;
     }
 
-    console.log('[GoogleAuth] Loaded credentials from:', this.keyManagementService ? 'Windows Credential Manager' : '.env file');
+    console.log(
+      '[GoogleAuth] Loaded credentials from:',
+      this.keyManagementService ? 'Windows Credential Manager' : '.env file'
+    );
     this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
     this.initialized = true;
@@ -133,7 +136,9 @@ class GoogleAuth {
           if (!username) {
             // Delete token file if we can't secure it
             await fs.unlink(this.tokenPath).catch(() => {});
-            throw new Error('[GoogleAuth Security] Cannot determine current username - unable to secure token file');
+            throw new Error(
+              '[GoogleAuth Security] Cannot determine current username - unable to secure token file'
+            );
           }
 
           // Remove inheritance and grant full control to current user only
@@ -156,7 +161,10 @@ class GoogleAuth {
         } catch (err) {
           // Delete the insecurely-created token file
           await fs.unlink(this.tokenPath).catch(() => {});
-          console.error('[GoogleAuth Security] Failed to secure token file, deleted for safety:', err.message);
+          console.error(
+            '[GoogleAuth Security] Failed to secure token file, deleted for safety:',
+            err.message
+          );
           throw new Error(`Failed to secure token file: ${err.message}`);
         }
       }
@@ -283,7 +291,11 @@ class GoogleAuth {
         }
 
         const tokenInfo = await response.json();
-        console.log('[GoogleAuth] Token validated successfully, expires in:', tokenInfo.expires_in, 'seconds');
+        console.log(
+          '[GoogleAuth] Token validated successfully, expires in:',
+          tokenInfo.expires_in,
+          'seconds'
+        );
         return true;
       }
 

@@ -24,17 +24,25 @@ this.registerEvent(
 );
 
 // Other available events
-this.app.vault.on('create', (file) => { /* file created */ });
-this.app.vault.on('delete', (file) => { /* file deleted */ });
-this.app.vault.on('modify', (file) => { /* file modified */ });
+this.app.vault.on('create', file => {
+  /* file created */
+});
+this.app.vault.on('delete', file => {
+  /* file deleted */
+});
+this.app.vault.on('modify', file => {
+  /* file modified */
+});
 ```
 
 **Caveats:**
+
 - Only works when Obsidian is running
 - External renames (file explorer, other apps) appear as delete+create, not rename
 - Requires users to install a companion plugin
 
 **References:**
+
 - [Obsidian Forum: File Rename Event API](https://forum.obsidian.md/t/api-callback-for-file-rename-event/11395)
 
 ### 2. File System Watchers (Chokidar)
@@ -47,7 +55,7 @@ const chokidar = require('chokidar');
 const watcher = chokidar.watch('/path/to/vault', {
   persistent: true,
   ignoreInitial: true,
-  depth: 10
+  depth: 10,
 });
 
 watcher
@@ -61,16 +69,19 @@ watcher
 **Potential Workaround:** Track file by inode (on Unix) or unique content hash, but this is complex and unreliable.
 
 **References:**
+
 - [GitHub: paulmillr/chokidar](https://github.com/paulmillr/chokidar)
 
 ### 3. External Rename Handler Plugin
 
 There's an existing Obsidian plugin that handles external renames:
+
 - Detects when external tools rename files
 - Treats delete+create as a single rename event
 - Requires Obsidian to be running during the rename
 
 **Reference:**
+
 - [GitHub: obsidian-external-rename-handler](https://github.com/mnaoumov/obsidian-external-rename-handler)
 
 ### 4. Frontmatter Meeting ID Approach (Recommended)
@@ -79,8 +90,8 @@ Our notes already include a unique meeting ID in the YAML frontmatter:
 
 ```yaml
 ---
-meeting_id: "abc123-def456"
-title: "Q4 Planning Meeting"
+meeting_id: 'abc123-def456'
+title: 'Q4 Planning Meeting'
 date: 2024-12-01
 ---
 ```
@@ -97,12 +108,12 @@ This provides a reliable anchor for finding moved files:
 
 ## Approach Comparison
 
-| Approach | Pros | Cons |
-|----------|------|------|
-| **Obsidian Plugin** | Real-time events, accurate | Requires companion plugin, only works when Obsidian running |
-| **Chokidar Watcher** | No plugin needed | No rename event, resource-intensive, complex correlation |
-| **Manual Refresh Scan** | Simple, reliable, works offline | User must trigger, slight delay |
-| **Frontmatter ID Lookup** | Works regardless of how file moved | Requires vault scan, but fast with frontmatter parsing |
+| Approach                  | Pros                               | Cons                                                        |
+| ------------------------- | ---------------------------------- | ----------------------------------------------------------- |
+| **Obsidian Plugin**       | Real-time events, accurate         | Requires companion plugin, only works when Obsidian running |
+| **Chokidar Watcher**      | No plugin needed                   | No rename event, resource-intensive, complex correlation    |
+| **Manual Refresh Scan**   | Simple, reliable, works offline    | User must trigger, slight delay                             |
+| **Frontmatter ID Lookup** | Works regardless of how file moved | Requires vault scan, but fast with frontmatter parsing      |
 
 ---
 
@@ -121,8 +132,8 @@ This provides a reliable anchor for finding moved files:
 
 ```markdown
 ---
-meeting_id: "meeting-1733234567890"
-title: "Client Strategy Session"
+meeting_id: 'meeting-1733234567890'
+title: 'Client Strategy Session'
 date: 2024-12-03
 ---
 ```
@@ -237,6 +248,7 @@ Link Refresh Complete
 ### Not Found Resolution
 
 For notes that can't be found automatically:
+
 1. Show meeting title and expected path
 2. Offer "Locate Manually" button (file picker)
 3. Option to mark as "Deleted" (removes from tracking)
@@ -245,12 +257,12 @@ For notes that can't be found automatically:
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
+| File                                 | Changes                                          |
+| ------------------------------------ | ------------------------------------------------ |
 | `src/main/storage/VaultStructure.js` | Add `findFileByMeetingId()`, `refreshAllLinks()` |
-| `src/renderer/settings.js` | Add "Refresh Obsidian Links" UI |
-| Meeting data model | Ensure `meeting_id` is in frontmatter |
-| `src/main.js` | Add IPC handlers for link refresh |
+| `src/renderer/settings.js`           | Add "Refresh Obsidian Links" UI                  |
+| Meeting data model                   | Ensure `meeting_id` is in frontmatter            |
+| `src/main.js`                        | Add IPC handlers for link refresh                |
 
 ---
 
@@ -267,6 +279,7 @@ Could periodically validate links (e.g., on app startup) and show a badge if sta
 ### Optional: Obsidian Companion Plugin
 
 If user demand exists, could build a simple companion plugin:
+
 - Listens for rename/move events
 - Sends path updates to main app via local HTTP or file-based IPC
 - Provides "JD Notes Things" command palette integration

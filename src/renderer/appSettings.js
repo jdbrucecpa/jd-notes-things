@@ -42,7 +42,8 @@ function populateSettingsUI() {
   const stopRecordingShortcut = document.getElementById('stopRecordingShortcut');
 
   if (startStopShortcut) {
-    startStopShortcut.value = appSettings.shortcuts.startStopRecording || 'CommandOrControl+Shift+R';
+    startStopShortcut.value =
+      appSettings.shortcuts.startStopRecording || 'CommandOrControl+Shift+R';
   }
   if (quickRecordShortcut) {
     quickRecordShortcut.value = appSettings.shortcuts.quickRecord || 'CommandOrControl+Shift+Q';
@@ -78,7 +79,9 @@ function setupEventListeners() {
   // Keyboard Shortcuts
   document.getElementById('startStopShortcut')?.addEventListener('change', handleShortcutChange);
   document.getElementById('quickRecordShortcut')?.addEventListener('change', handleShortcutChange);
-  document.getElementById('stopRecordingShortcut')?.addEventListener('change', handleShortcutChange);
+  document
+    .getElementById('stopRecordingShortcut')
+    ?.addEventListener('change', handleShortcutChange);
 
   // Logs Viewer
   document.getElementById('refreshLogsBtn')?.addEventListener('click', refreshLogs);
@@ -141,16 +144,19 @@ function setupToggle(toggleId, category, key) {
  */
 async function handleShortcutChange(_event) {
   try {
-    const startStopShortcut = document.getElementById('startStopShortcut')?.value || 'CommandOrControl+Shift+R';
-    const quickRecordShortcut = document.getElementById('quickRecordShortcut')?.value || 'CommandOrControl+Shift+Q';
-    const stopRecordingShortcut = document.getElementById('stopRecordingShortcut')?.value || 'CommandOrControl+Shift+S';
+    const startStopShortcut =
+      document.getElementById('startStopShortcut')?.value || 'CommandOrControl+Shift+R';
+    const quickRecordShortcut =
+      document.getElementById('quickRecordShortcut')?.value || 'CommandOrControl+Shift+Q';
+    const stopRecordingShortcut =
+      document.getElementById('stopRecordingShortcut')?.value || 'CommandOrControl+Shift+S';
 
     const updates = {
       shortcuts: {
         startStopRecording: startStopShortcut,
         quickRecord: quickRecordShortcut,
         stopRecording: stopRecordingShortcut,
-      }
+      },
     };
 
     const result = await window.electronAPI.appUpdateSettings(updates);
@@ -182,7 +188,8 @@ async function refreshLogs() {
     if (!logViewerContent) return;
 
     // Show loading state
-    logViewerContent.innerHTML = '<div style="color: #666; text-align: center; padding: 40px;">Loading logs...</div>';
+    logViewerContent.innerHTML =
+      '<div style="color: #666; text-align: center; padding: 40px;">Loading logs...</div>';
 
     const result = await window.electronAPI.appGetLogs({ limit: 1000, level: logLevelFilter });
 
@@ -190,18 +197,21 @@ async function refreshLogs() {
       const { logs, logPath: path, totalLines, filteredLines } = result.data;
 
       if (logs.length === 0) {
-        logViewerContent.innerHTML = '<div style="color: #666; text-align: center; padding: 40px;">No logs found</div>';
+        logViewerContent.innerHTML =
+          '<div style="color: #666; text-align: center; padding: 40px;">No logs found</div>';
       } else {
         // Render logs
-        const logsHTML = logs.map(line => {
-          let className = 'log-line';
-          if (line.includes('[error]')) className += ' error';
-          else if (line.includes('[warn]')) className += ' warn';
-          else if (line.includes('[info]')) className += ' info';
-          else if (line.includes('[debug]')) className += ' debug';
+        const logsHTML = logs
+          .map(line => {
+            let className = 'log-line';
+            if (line.includes('[error]')) className += ' error';
+            else if (line.includes('[warn]')) className += ' warn';
+            else if (line.includes('[info]')) className += ' info';
+            else if (line.includes('[debug]')) className += ' debug';
 
-          return `<div class="${className}">${escapeHtml(line)}</div>`;
-        }).join('');
+            return `<div class="${className}">${escapeHtml(line)}</div>`;
+          })
+          .join('');
 
         logViewerContent.innerHTML = logsHTML;
 

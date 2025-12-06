@@ -28,17 +28,20 @@ JD Notes Things is a Windows desktop app that automatically records your Zoom, T
 ## Features
 
 ### Core Functionality
+
 - **One-click recording** — Capture system audio from any meeting platform
 - **Multi-provider transcription** — Choose AssemblyAI ($0.37/hr), Deepgram ($0.43/hr), or Recall.ai
 - **AI summaries** — Generate structured notes with OpenAI, Claude, or Azure OpenAI
 - **Smart organization** — Auto-route meetings to the right folder based on who's in the call
 
 ### Integrations
+
 - **Google Calendar** — See upcoming meetings and auto-detect when they start
 - **Google Contacts** — Match speakers to real names in your transcripts
 - **Obsidian** — Native markdown output with proper linking between summary and transcript
 
 ### Developer-Friendly
+
 - **Template system** — Customize summary output with your own prompts
 - **YAML routing config** — Full control over where meetings land
 - **Cost optimized** — Prompt caching reduces LLM costs by 85-90%
@@ -87,7 +90,7 @@ The installer uses Squirrel for Windows, which provides automatic updates and cl
 
 ### Other Platforms (Experimental)
 
-This app is built with Electron and *theoretically* supports macOS and Linux. However, **these platforms have not been tested or attempted.**
+This app is built with Electron and _theoretically_ supports macOS and Linux. However, **these platforms have not been tested or attempted.**
 
 If you want to try building for other platforms:
 
@@ -100,6 +103,7 @@ npm run package -- --platform=linux
 ```
 
 **Known limitations on other platforms:**
+
 - The Recall.ai Desktop SDK may not be available for macOS/Linux
 - Windows Credential Manager (keytar) would need platform-specific alternatives
 - DPAPI encryption is Windows-only
@@ -113,12 +117,12 @@ Contributions to add cross-platform support are welcome!
 
 ### Required API Keys
 
-| Service | Purpose | Get Key |
-|---------|---------|---------|
-| Recall.ai | Audio recording | [recall.ai](https://recall.ai) |
-| AssemblyAI *or* Deepgram | Transcription | [assemblyai.com](https://assemblyai.com) / [deepgram.com](https://deepgram.com) |
-| OpenAI *or* Anthropic | AI summaries | [openai.com](https://openai.com) / [anthropic.com](https://anthropic.com) |
-| Google Cloud | Calendar & Contacts | [console.cloud.google.com](https://console.cloud.google.com) |
+| Service                  | Purpose             | Get Key                                                                         |
+| ------------------------ | ------------------- | ------------------------------------------------------------------------------- |
+| Recall.ai                | Audio recording     | [recall.ai](https://recall.ai)                                                  |
+| AssemblyAI _or_ Deepgram | Transcription       | [assemblyai.com](https://assemblyai.com) / [deepgram.com](https://deepgram.com) |
+| OpenAI _or_ Anthropic    | AI summaries        | [openai.com](https://openai.com) / [anthropic.com](https://anthropic.com)       |
+| Google Cloud             | Calendar & Contacts | [console.cloud.google.com](https://console.cloud.google.com)                    |
 
 ### Environment Variables
 
@@ -201,6 +205,7 @@ Add your own summary templates to `config/templates/`:
 
 ```markdown
 <!-- config/templates/action-items.md -->
+
 # Action Items
 
 Extract all action items from this meeting transcript.
@@ -236,11 +241,11 @@ src/
 
 ## Cost Estimates
 
-| Component | Cost | Notes |
-|-----------|------|-------|
-| Transcription | $0.37-0.43/hr | AssemblyAI or Deepgram |
-| AI Summary | ~$0.05/meeting | With prompt caching |
-| **Total** | **~$0.50/hr** | For a typical meeting |
+| Component     | Cost           | Notes                  |
+| ------------- | -------------- | ---------------------- |
+| Transcription | $0.37-0.43/hr  | AssemblyAI or Deepgram |
+| AI Summary    | ~$0.05/meeting | With prompt caching    |
+| **Total**     | **~$0.50/hr**  | For a typical meeting  |
 
 Prompt caching provides 85-90% cost reduction on LLM calls by reusing the transcript context across multiple summary sections.
 

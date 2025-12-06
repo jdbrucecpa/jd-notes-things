@@ -13,7 +13,7 @@ module.exports = {
   },
   externals: {
     '@recallai/desktop-sdk': 'commonjs @recallai/desktop-sdk',
-    'keytar': 'commonjs keytar',
+    keytar: 'commonjs keytar',
   },
   plugins: [
     new CopyWebpackPlugin({

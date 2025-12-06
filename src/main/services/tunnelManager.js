@@ -43,7 +43,7 @@ class TunnelManager {
       });
 
       // Handle tunnel errors
-      this.tunnel.on('error', (err) => {
+      this.tunnel.on('error', err => {
         console.error('[Tunnel] Tunnel error:', err.message);
       });
 

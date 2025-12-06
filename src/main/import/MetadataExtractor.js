@@ -68,7 +68,13 @@ class MetadataExtractor {
       status: 'needs_verification',
       confidence: {
         date: dateConfidence,
-        dateSource: dateFromFilename ? 'filename' : dateFromContent ? 'content' : dateFromFile ? 'file_mtime' : 'default',
+        dateSource: dateFromFilename
+          ? 'filename'
+          : dateFromContent
+            ? 'content'
+            : dateFromFile
+              ? 'file_mtime'
+              : 'default',
         title: titleFromFilename ? 'high' : titleFromContent ? 'medium' : 'low',
         titleSource: titleFromFilename ? 'filename' : titleFromContent ? 'content' : 'default',
         participants: participants.length > 0 ? 'high' : 'low',

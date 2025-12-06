@@ -1,41 +1,45 @@
 const { z } = require('zod');
 
 // Participant schema
-const ParticipantSchema = z.object({
-  name: z.string(),
-  id: z
-    .union([z.string(), z.number()])
-    .optional()
-    .transform(val => (val !== undefined ? String(val) : undefined)),
-  email: z.string().nullable().optional(), // SM-2: Added for speaker mapping
-  mappedFromSpeakerId: z.string().optional(), // SM-2: Track which speaker ID was mapped
-}).passthrough(); // Allow additional fields for flexibility
+const ParticipantSchema = z
+  .object({
+    name: z.string(),
+    id: z
+      .union([z.string(), z.number()])
+      .optional()
+      .transform(val => (val !== undefined ? String(val) : undefined)),
+    email: z.string().nullable().optional(), // SM-2: Added for speaker mapping
+    mappedFromSpeakerId: z.string().optional(), // SM-2: Track which speaker ID was mapped
+  })
+  .passthrough(); // Allow additional fields for flexibility
 
 // Transcript entry schema
 // Accept both string and number timestamps for backwards compatibility
-const TranscriptEntrySchema = z.object({
-  speaker: z.string(),
-  text: z.string(),
-  timestamp: z
-    .union([z.number(), z.string(), z.null()])
-    .optional()
-    .transform(val => {
-      if (val === null || val === undefined) {
-        return undefined; // Omit null/undefined timestamps
-      }
-      if (typeof val === 'string') {
-        // Try to parse string timestamp to number
-        const parsed = parseFloat(val);
-        return isNaN(parsed) ? Date.parse(val) : parsed;
-      }
-      return val;
-    }),
-  // SM-2: Speaker mapping fields
-  speakerName: z.string().optional(), // Mapped contact name
-  speakerEmail: z.string().nullable().optional(), // Mapped contact email
-  speakerDisplayName: z.string().optional(), // Display name (may include wiki-links)
-  speakerMapped: z.boolean().optional(), // Flag indicating speaker was mapped
-}).passthrough(); // Allow additional fields for flexibility
+const TranscriptEntrySchema = z
+  .object({
+    speaker: z.string(),
+    text: z.string(),
+    timestamp: z
+      .union([z.number(), z.string(), z.null()])
+      .optional()
+      .transform(val => {
+        if (val === null || val === undefined) {
+          return undefined; // Omit null/undefined timestamps
+        }
+        if (typeof val === 'string') {
+          // Try to parse string timestamp to number
+          const parsed = parseFloat(val);
+          return isNaN(parsed) ? Date.parse(val) : parsed;
+        }
+        return val;
+      }),
+    // SM-2: Speaker mapping fields
+    speakerName: z.string().optional(), // Mapped contact name
+    speakerEmail: z.string().nullable().optional(), // Mapped contact email
+    speakerDisplayName: z.string().optional(), // Display name (may include wiki-links)
+    speakerMapped: z.boolean().optional(), // Flag indicating speaker was mapped
+  })
+  .passthrough(); // Allow additional fields for flexibility
 
 // Meeting schema
 const MeetingSchema = z

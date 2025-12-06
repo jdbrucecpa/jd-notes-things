@@ -85,11 +85,13 @@ class ImportManager {
             // Replace participants with user (single-speaker = user)
             // This replaces generic "Speaker A" with actual user info
             if (labelResult.userProfile) {
-              meeting.participants = [{
-                name: labelResult.userProfile.name,
-                email: labelResult.userProfile.email || null,
-                isHost: true,
-              }];
+              meeting.participants = [
+                {
+                  name: labelResult.userProfile.name,
+                  email: labelResult.userProfile.email || null,
+                  isHost: true,
+                },
+              ];
             }
             console.log('[Import] Auto-labeled single speaker as:', labelResult.userProfile?.name);
           }

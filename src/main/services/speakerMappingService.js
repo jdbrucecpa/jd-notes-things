@@ -258,7 +258,11 @@ class SpeakerMappingService {
     const processed = new Set();
 
     // Normalize for comparison
-    const normalize = name => name.toLowerCase().trim().replace(/[^a-z0-9\s]/g, '');
+    const normalize = name =>
+      name
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s]/g, '');
     const getFirstName = name => name.split(/\s+/)[0].toLowerCase();
     const getLastName = name => {
       const parts = name.split(/\s+/);
@@ -284,9 +288,8 @@ class SpeakerMappingService {
         // Case 1: Exact match after normalization (auto-merge)
         if (norm1 === norm2 && speaker1 !== speaker2) {
           // Keep the longer/more complete name
-          const [from, to] = speaker1.length >= speaker2.length
-            ? [speaker2, speaker1]
-            : [speaker1, speaker2];
+          const [from, to] =
+            speaker1.length >= speaker2.length ? [speaker2, speaker1] : [speaker1, speaker2];
           autoMerge.push({ from, to, reason: 'Same name (different case/punctuation)' });
           processed.add(from);
           continue;
@@ -299,12 +302,20 @@ class SpeakerMappingService {
 
           if (parts1 === 1 && parts2 > 1) {
             // speaker1 is first name only, speaker2 is full name
-            autoMerge.push({ from: speaker1, to: speaker2, reason: 'First name matches full name' });
+            autoMerge.push({
+              from: speaker1,
+              to: speaker2,
+              reason: 'First name matches full name',
+            });
             processed.add(speaker1);
             continue;
           } else if (parts2 === 1 && parts1 > 1) {
             // speaker2 is first name only, speaker1 is full name
-            autoMerge.push({ from: speaker2, to: speaker1, reason: 'First name matches full name' });
+            autoMerge.push({
+              from: speaker2,
+              to: speaker1,
+              reason: 'First name matches full name',
+            });
             processed.add(speaker2);
             continue;
           } else if (parts1 === 1 && parts2 === 1) {
@@ -321,7 +332,7 @@ class SpeakerMappingService {
           if (first1[0] === first2[0]) {
             suggestions.push({
               speakers: [speaker1, speaker2],
-              reason: `Same last name "${last1}", first names start with "${first1[0].toUpperCase()}"`
+              reason: `Same last name "${last1}", first names start with "${first1[0].toUpperCase()}"`,
             });
           }
         }
@@ -330,12 +341,12 @@ class SpeakerMappingService {
         if (norm1.length > 3 && norm2.length > 3) {
           const distance = this.levenshteinDistance(norm1, norm2);
           const maxLen = Math.max(norm1.length, norm2.length);
-          const similarity = 1 - (distance / maxLen);
+          const similarity = 1 - distance / maxLen;
 
           if (similarity > 0.8 && similarity < 1) {
             suggestions.push({
               speakers: [speaker1, speaker2],
-              reason: `Similar names (${Math.round(similarity * 100)}% match)`
+              reason: `Similar names (${Math.round(similarity * 100)}% match)`,
             });
           }
         }
@@ -351,7 +362,9 @@ class SpeakerMappingService {
   levenshteinDistance(str1, str2) {
     const m = str1.length;
     const n = str2.length;
-    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+    const dp = Array(m + 1)
+      .fill(null)
+      .map(() => Array(n + 1).fill(0));
 
     for (let i = 0; i <= m; i++) dp[i][0] = i;
     for (let j = 0; j <= n; j++) dp[0][j] = j;
@@ -394,7 +407,9 @@ class SpeakerMappingService {
         confidence: 'high',
         obsidianLink: `[[${userProfile.name}]]`,
       };
-      logger.info(`${LOG_PREFIX} Auto-suggesting single speaker "${speakerId}" as user "${userProfile.name}"`);
+      logger.info(
+        `${LOG_PREFIX} Auto-suggesting single speaker "${speakerId}" as user "${userProfile.name}"`
+      );
     }
 
     // Could add more heuristics here in the future:
@@ -429,7 +444,9 @@ class SpeakerMappingService {
     }
 
     // Apply the mapping
-    const updatedTranscript = this.applyMappingsToTranscript(transcript, suggestions, { useWikiLinks: false });
+    const updatedTranscript = this.applyMappingsToTranscript(transcript, suggestions, {
+      useWikiLinks: false,
+    });
 
     logger.info(`${LOG_PREFIX} Auto-applied user profile mapping to single-speaker transcript`);
 
@@ -519,7 +536,9 @@ class SpeakerMappingService {
       return utterance;
     });
 
-    logger.info(`${LOG_PREFIX} Applied mappings to ${mappedCount} utterances out of ${transcript.length}`);
+    logger.info(
+      `${LOG_PREFIX} Applied mappings to ${mappedCount} utterances out of ${transcript.length}`
+    );
     return result;
   }
 
@@ -531,12 +550,14 @@ class SpeakerMappingService {
     return {
       totalMappings: mappings.length,
       totalUseCount: mappings.reduce((sum, m) => sum + (m.useCount || 0), 0),
-      oldestMapping: mappings.length > 0
-        ? new Date(Math.min(...mappings.map(m => new Date(m.createdAt))))
-        : null,
-      newestMapping: mappings.length > 0
-        ? new Date(Math.max(...mappings.map(m => new Date(m.createdAt))))
-        : null,
+      oldestMapping:
+        mappings.length > 0
+          ? new Date(Math.min(...mappings.map(m => new Date(m.createdAt))))
+          : null,
+      newestMapping:
+        mappings.length > 0
+          ? new Date(Math.max(...mappings.map(m => new Date(m.createdAt))))
+          : null,
     };
   }
 
@@ -573,7 +594,9 @@ class SpeakerMappingService {
     }
 
     await this.saveMappings();
-    logger.info(`${LOG_PREFIX} Imported ${Object.keys(data.mappings).length} mappings (merge=${merge})`);
+    logger.info(
+      `${LOG_PREFIX} Imported ${Object.keys(data.mappings).length} mappings (merge=${merge})`
+    );
   }
 }
 

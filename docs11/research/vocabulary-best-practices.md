@@ -13,20 +13,22 @@ This document captures research findings for implementing custom vocabulary to i
 **Feature Name:** `custom_spelling`
 
 **How it works:**
+
 - Maps incorrect transcriptions TO correct spellings
 - Applied during transcription (not post-processing)
 - Uses a find/replace approach
 
 **API Usage:**
+
 ```javascript
 const params = {
   audio: audioFile,
   speaker_labels: true,
   custom_spelling: [
-    { from: ["Decarlo"], to: "DeCarlo" },
-    { from: ["Sequel"], to: "SQL" },
-    { from: ["acme corp", "akme"], to: "ACME Corp" }
-  ]
+    { from: ['Decarlo'], to: 'DeCarlo' },
+    { from: ['Sequel'], to: 'SQL' },
+    { from: ['acme corp', 'akme'], to: 'ACME Corp' },
+  ],
 };
 
 const transcript = await client.transcripts.transcribe(params);
@@ -43,11 +45,13 @@ const transcript = await client.transcripts.transcribe(params);
 | Multi-word | Supports phrases |
 
 **Pros:**
+
 - Simple to implement
 - Corrects specific known misspellings
 - Applied at transcription time (no post-processing needed)
 
 **Cons:**
+
 - Must know the incorrect spelling in advance
 - Doesn't "boost" recognition of rare words
 - Reactive (fixing known issues) rather than proactive
@@ -59,18 +63,20 @@ const transcript = await client.transcripts.transcribe(params);
 **Feature Name:** `keywords`
 
 **How it works:**
+
 - Boosts probability of recognizing specific words
 - Uses intensifier values (-10 to +10)
 - Positive = boost recognition, Negative = suppress
 
 **API Usage:**
+
 ```javascript
 // Via URL parameters
 const url = 'https://api.deepgram.com/v1/listen?diarize=true&keywords=Anthropic:5&keywords=GPT-4:3';
 
 // Or via body (if supported)
 const params = {
-  keywords: ["Anthropic:5", "GPT-4:3", "claude:5"]
+  keywords: ['Anthropic:5', 'GPT-4:3', 'claude:5'],
 };
 ```
 
@@ -85,12 +91,14 @@ const params = {
 | Case | Keywords appear as provided |
 
 **Pros:**
+
 - Proactively improves recognition of rare/technical terms
 - Can suppress unwanted words
 - Works well for proper nouns, brand names, jargon
 - Up to 200 keywords supported
 
 **Cons:**
+
 - Requires Enhanced or Nova models for best results
 - Doesn't correct alternate spellings
 - May need to tune intensifier values
@@ -99,14 +107,14 @@ const params = {
 
 ## Comparison Summary
 
-| Feature | AssemblyAI | Deepgram |
-|---------|------------|----------|
-| Approach | Spelling correction | Probability boosting |
-| Best For | Known misspellings | Rare/technical terms |
-| When Applied | Transcription time | Transcription time |
-| Post-processing | LeMUR option available | N/A |
-| Limit | Unknown | 200 keywords |
-| Configuration | `from`/`to` mapping | `keyword:intensifier` |
+| Feature         | AssemblyAI             | Deepgram              |
+| --------------- | ---------------------- | --------------------- |
+| Approach        | Spelling correction    | Probability boosting  |
+| Best For        | Known misspellings     | Rare/technical terms  |
+| When Applied    | Transcription time     | Transcription time    |
+| Post-processing | LeMUR option available | N/A                   |
+| Limit           | Unknown                | 200 keywords          |
+| Configuration   | `from`/`to` mapping    | `keyword:intensifier` |
 
 ---
 
@@ -117,6 +125,7 @@ const params = {
 **Recommendation:** Apply vocabulary at transcription time for both providers.
 
 **Rationale:**
+
 1. Post-processing requires additional API calls (LeMUR) = more cost
 2. Post-processing adds latency to meeting workflow
 3. Both providers natively support transcription-time vocabulary
@@ -131,35 +140,35 @@ const params = {
 global:
   # For AssemblyAI (custom_spelling)
   spelling_corrections:
-    - from: ["ai", "A.I."]
-      to: "AI"
-    - from: ["gpt4", "gpt-4"]
-      to: "GPT-4"
+    - from: ['ai', 'A.I.']
+      to: 'AI'
+    - from: ['gpt4', 'gpt-4']
+      to: 'GPT-4'
 
   # For Deepgram (keywords with intensifiers)
   keyword_boosts:
-    - word: "Anthropic"
+    - word: 'Anthropic'
       intensifier: 5
-    - word: "Claude"
+    - word: 'Claude'
       intensifier: 5
 
 # Client-specific vocabulary
 clients:
   acme-corp:
     spelling_corrections:
-      - from: ["akme", "acme"]
-        to: "ACME"
+      - from: ['akme', 'acme']
+        to: 'ACME'
     keyword_boosts:
-      - word: "ACME"
+      - word: 'ACME'
         intensifier: 5
-      - word: "RoadRunner"
+      - word: 'RoadRunner'
         intensifier: 3
 
   tech-startup:
     keyword_boosts:
-      - word: "TechStartup"
+      - word: 'TechStartup'
         intensifier: 5
-      - word: "InnovatePlatform"
+      - word: 'InnovatePlatform'
         intensifier: 4
 ```
 
@@ -190,7 +199,7 @@ class VocabularyService {
       vocabulary.keyword_boosts.forEach(kb => {
         customSpelling.push({
           from: [kb.word.toLowerCase()],
-          to: kb.word
+          to: kb.word,
         });
       });
     }
@@ -254,12 +263,12 @@ async function getVocabularyForMeeting(participantEmails) {
 
 ## Implementation Files
 
-| File | Changes |
-|------|---------|
-| `config/vocabulary.yaml` | New - Global and client vocabulary storage |
-| `src/main/services/vocabularyService.js` | New - Vocabulary loading and formatting |
+| File                                        | Changes                                      |
+| ------------------------------------------- | -------------------------------------------- |
+| `config/vocabulary.yaml`                    | New - Global and client vocabulary storage   |
+| `src/main/services/vocabularyService.js`    | New - Vocabulary loading and formatting      |
 | `src/main/services/transcriptionService.js` | Add vocabulary parameter to transcribe calls |
-| Settings UI | Add vocabulary management interface |
+| Settings UI                                 | Add vocabulary management interface          |
 
 ---
 

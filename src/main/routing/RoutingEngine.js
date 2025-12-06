@@ -53,8 +53,7 @@ class RoutingEngine {
 
     // For routing purposes, don't count internal as an "org" - only count external orgs
     const externalOrgCount =
-      Object.keys(matchResults.clients).length +
-      Object.keys(matchResults.industry).length;
+      Object.keys(matchResults.clients).length + Object.keys(matchResults.industry).length;
 
     // Determine routing based on attendees
     if (allInternal) {

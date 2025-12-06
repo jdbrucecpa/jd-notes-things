@@ -168,10 +168,11 @@ function filterContacts(query) {
     const normalizedQuery = query.toLowerCase();
     filteredContacts = allContacts.filter(contact => {
       const nameMatch = contact.name && contact.name.toLowerCase().includes(normalizedQuery);
-      const emailMatch = contact.emails && contact.emails.some(
-        email => email.toLowerCase().includes(normalizedQuery)
-      );
-      const orgMatch = contact.organization && contact.organization.toLowerCase().includes(normalizedQuery);
+      const emailMatch =
+        contact.emails &&
+        contact.emails.some(email => email.toLowerCase().includes(normalizedQuery));
+      const orgMatch =
+        contact.organization && contact.organization.toLowerCase().includes(normalizedQuery);
       return nameMatch || emailMatch || orgMatch;
     });
   }
@@ -201,18 +202,16 @@ function renderContactsList() {
     return;
   }
 
-  const html = filteredContacts.map(contact => {
-    const initials = getInitials(contact.name);
-    const primaryEmail = contact.emails && contact.emails[0] ? contact.emails[0] : '';
-    const isSelected = selectedContact && selectedContact.resourceName === contact.resourceName;
+  const html = filteredContacts
+    .map(contact => {
+      const initials = getInitials(contact.name);
+      const primaryEmail = contact.emails && contact.emails[0] ? contact.emails[0] : '';
+      const isSelected = selectedContact && selectedContact.resourceName === contact.resourceName;
 
-    return `
+      return `
       <div class="contact-item ${isSelected ? 'selected' : ''}" data-resource="${contact.resourceName}">
         <div class="contact-item-avatar">
-          ${contact.photoUrl
-            ? `<img src="${contact.photoUrl}" alt="${contact.name}" />`
-            : initials
-          }
+          ${contact.photoUrl ? `<img src="${contact.photoUrl}" alt="${contact.name}" />` : initials}
         </div>
         <div class="contact-item-info">
           <div class="contact-item-name">${escapeHtml(contact.name)}</div>
@@ -220,7 +219,8 @@ function renderContactsList() {
         </div>
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 
   contactsList.innerHTML = html;
 
@@ -275,40 +275,52 @@ async function renderContactDetail(contact) {
   const primaryEmail = contact.emails && contact.emails[0] ? contact.emails[0] : null;
 
   // Build emails section
-  const emailsHtml = contact.emails && contact.emails.length > 0
-    ? contact.emails.map(email => `
+  const emailsHtml =
+    contact.emails && contact.emails.length > 0
+      ? contact.emails
+          .map(
+            email => `
         <div class="contact-detail-item">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z" fill="currentColor"/>
           </svg>
           <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>
         </div>
-      `).join('')
-    : '<div class="contact-detail-item">No email addresses</div>';
+      `
+          )
+          .join('')
+      : '<div class="contact-detail-item">No email addresses</div>';
 
   // Build phones section
-  const phonesHtml = contact.phones && contact.phones.length > 0
-    ? contact.phones.map(phone => `
+  const phonesHtml =
+    contact.phones && contact.phones.length > 0
+      ? contact.phones
+          .map(
+            phone => `
         <div class="contact-detail-item">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" fill="currentColor"/>
           </svg>
           <span>${escapeHtml(phone)}</span>
         </div>
-      `).join('')
-    : '';
+      `
+          )
+          .join('')
+      : '';
 
   // Build Google contact link
   // resourceName format is "people/c1234567890", need to extract the ID
   const contactId = contact.resourceName ? contact.resourceName.replace('people/', '') : null;
-  const googleLinkHtml = contactId ? `
+  const googleLinkHtml = contactId
+    ? `
     <div class="contact-detail-item">
       <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z" fill="currentColor"/>
       </svg>
       <a href="https://contacts.google.com/person/${contactId}" target="_blank">Open in Google Contacts</a>
     </div>
-  ` : '';
+  `
+    : '';
 
   // Check if Obsidian pages exist
   let contactPageExists = false;
@@ -324,7 +336,9 @@ async function renderContactDetail(contact) {
   // Check company page if organization exists
   if (contact.organization) {
     try {
-      const companyResult = await window.electronAPI.contactsCompanyPageExists(contact.organization);
+      const companyResult = await window.electronAPI.contactsCompanyPageExists(
+        contact.organization
+      );
       companyPageExists = companyResult.success && companyResult.exists;
     } catch (error) {
       console.warn('[Contacts] Could not check Obsidian company page status:', error);
@@ -378,16 +392,14 @@ async function renderContactDetail(contact) {
   detailContent.innerHTML = `
     <div class="contact-detail-header">
       <div class="contact-detail-avatar">
-        ${contact.photoUrl
-          ? `<img src="${contact.photoUrl}" alt="${contact.name}" />`
-          : initials
-        }
+        ${contact.photoUrl ? `<img src="${contact.photoUrl}" alt="${contact.name}" />` : initials}
       </div>
       <div>
         <div class="contact-detail-name">${escapeHtml(contact.name)}</div>
-        ${contact.organization
-          ? `<div class="contact-detail-org">${escapeHtml(contact.organization)}${contact.title ? ` - ${escapeHtml(contact.title)}` : ''}</div>`
-          : ''
+        ${
+          contact.organization
+            ? `<div class="contact-detail-org">${escapeHtml(contact.organization)}${contact.title ? ` - ${escapeHtml(contact.title)}` : ''}</div>`
+            : ''
         }
       </div>
     </div>
@@ -443,21 +455,23 @@ async function loadContactMeetings(email) {
     const result = await window.electronAPI.contactsGetMeetingsForContact(email);
 
     if (result.success && result.meetings && result.meetings.length > 0) {
-      const html = result.meetings.map(meeting => {
-        const date = new Date(meeting.date);
-        const dateStr = date.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-          year: 'numeric'
-        });
+      const html = result.meetings
+        .map(meeting => {
+          const date = new Date(meeting.date);
+          const dateStr = date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          });
 
-        return `
+          return `
           <div class="contact-meeting-item" data-meeting-id="${meeting.id}">
             <span class="contact-meeting-date">${dateStr}</span>
             <span class="contact-meeting-title">${escapeHtml(meeting.title)}</span>
           </div>
         `;
-      }).join('');
+        })
+        .join('');
 
       meetingsList.innerHTML = html;
 
@@ -469,7 +483,7 @@ async function loadContactMeetings(email) {
           navigationContext = {
             type: 'contact',
             contact: selectedContact,
-            contactEmail: email
+            contactEmail: email,
           };
           // Close contacts and open meeting
           closeContactsView();
@@ -484,7 +498,8 @@ async function loadContactMeetings(email) {
     }
   } catch (error) {
     console.error('[Contacts] Error loading meetings:', error);
-    meetingsList.innerHTML = '<div class="contact-detail-item" style="color: var(--color-error);">Error loading meetings</div>';
+    meetingsList.innerHTML =
+      '<div class="contact-detail-item" style="color: var(--color-error);">Error loading meetings</div>';
   }
 }
 

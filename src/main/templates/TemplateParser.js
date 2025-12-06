@@ -134,7 +134,7 @@ class TemplateParser {
         name: filename.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
         description: `Plain text template: ${filename}`,
         type: 'general',
-        cost_estimate: 0.50,
+        cost_estimate: 0.5,
         sections: [
           {
             title: 'Content',
@@ -194,52 +194,52 @@ class TemplateParser {
   static MODEL_PRICING = {
     // OpenAI Models (verified Jan 2025)
     'openai-gpt-4o-mini': {
-      input: 0.15,   // $0.15 per 1M tokens
-      output: 0.60,  // $0.60 per 1M tokens
+      input: 0.15, // $0.15 per 1M tokens
+      output: 0.6, // $0.60 per 1M tokens
       updated: '2025-01-18',
     },
     'openai-gpt-4o': {
-      input: 2.50,   // $2.50 per 1M tokens
-      output: 10.00, // $10.00 per 1M tokens
+      input: 2.5, // $2.50 per 1M tokens
+      output: 10.0, // $10.00 per 1M tokens
       updated: '2025-01-18',
     },
 
     // Azure OpenAI Models (verified Jan 2025)
     'azure-gpt-5-mini': {
-      input: 0.25,   // $0.25 per 1M tokens
-      output: 2.00,  // $2.00 per 1M tokens
+      input: 0.25, // $0.25 per 1M tokens
+      output: 2.0, // $2.00 per 1M tokens
       updated: '2025-01-18',
     },
     'azure-gpt-5': {
-      input: 3.00,   // $3.00 per 1M tokens (estimated)
-      output: 12.00, // $12.00 per 1M tokens (estimated)
+      input: 3.0, // $3.00 per 1M tokens (estimated)
+      output: 12.0, // $12.00 per 1M tokens (estimated)
       updated: '2025-01-18',
     },
     'azure-gpt-4o-mini': {
-      input: 0.15,   // $0.15 per 1M tokens (same as OpenAI)
-      output: 0.60,  // $0.60 per 1M tokens
+      input: 0.15, // $0.15 per 1M tokens (same as OpenAI)
+      output: 0.6, // $0.60 per 1M tokens
       updated: '2025-01-18',
     },
     'azure-gpt-4o': {
-      input: 2.50,   // $2.50 per 1M tokens (same as OpenAI)
-      output: 10.00, // $10.00 per 1M tokens
+      input: 2.5, // $2.50 per 1M tokens (same as OpenAI)
+      output: 10.0, // $10.00 per 1M tokens
       updated: '2025-01-18',
     },
 
     // Anthropic Claude Models (verified Jan 2025)
     'claude-haiku-4-5': {
-      input: 1.00,   // $1.00 per 1M tokens
-      output: 5.00,  // $5.00 per 1M tokens
+      input: 1.0, // $1.00 per 1M tokens
+      output: 5.0, // $5.00 per 1M tokens
       updated: '2025-01-18',
     },
     'claude-sonnet-4': {
-      input: 3.00,   // $3.00 per 1M tokens
-      output: 15.00, // $15.00 per 1M tokens
+      input: 3.0, // $3.00 per 1M tokens
+      output: 15.0, // $15.00 per 1M tokens
       updated: '2025-01-18',
     },
     'claude-opus-4': {
-      input: 15.00,  // $15.00 per 1M tokens (estimated)
-      output: 75.00, // $75.00 per 1M tokens (estimated)
+      input: 15.0, // $15.00 per 1M tokens (estimated)
+      output: 75.0, // $75.00 per 1M tokens (estimated)
       updated: '2025-01-18',
     },
   };
@@ -280,7 +280,7 @@ class TemplateParser {
       inputCost,
       outputCost,
       totalCost,
-      provider,  // Include provider in response for transparency
+      provider, // Include provider in response for transparency
     };
   }
 }

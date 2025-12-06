@@ -11,7 +11,11 @@ import { sanitizeHtml, escapeHtml } from './renderer/security.js';
 import { initializeSettingsUI, openSettingsTab } from './renderer/settings.js';
 import { initializeTemplateEditor } from './renderer/templates.js';
 import { initializeRoutingEditor } from './renderer/routing.js';
-import { initializeMeetingDetail, clearMeetingDetail, updateMeetingDetail } from './renderer/meetingDetail.js';
+import {
+  initializeMeetingDetail,
+  clearMeetingDetail,
+  updateMeetingDetail,
+} from './renderer/meetingDetail.js';
 import { initAppSettingsUI } from './renderer/appSettings.js';
 import { initContactsPage, openContactsView } from './renderer/contacts.js';
 import { initQuickSearch } from './renderer/quickSearch.js';
@@ -109,10 +113,11 @@ const platformConfig = {
 
 /**
  * Get platform icon HTML for a given platform type
+ * Note: Currently unused - icons are now created programmatically in createMeetingCard()
  * @param {string} platform - Platform identifier (zoom, teams, google-meet, etc.)
  * @returns {string} HTML string for the platform icon
  */
-function getPlatformIconHtml(platform) {
+function _getPlatformIconHtml(platform) {
   // Normalize platform to lowercase for matching config keys
   const normalizedPlatform = (platform || 'unknown').toLowerCase();
   const config = platformConfig[normalizedPlatform] || platformConfig.unknown;
@@ -139,7 +144,7 @@ function getPlatformName(platform) {
  * @param {string} platform - Platform identifier
  * @returns {string} Platform color hex
  */
-function getPlatformColor(platform) {
+function _getPlatformColor(platform) {
   // Normalize platform to lowercase for matching config keys
   const normalizedPlatform = (platform || 'unknown').toLowerCase();
   return platformConfig[normalizedPlatform]?.color || platformConfig.unknown.color;
@@ -464,13 +469,16 @@ async function saveMeetingsData() {
     console.log('[Save] Data being saved:', {
       upcomingCount: meetingsData.upcomingMeetings?.length || 0,
       pastCount: meetingsData.pastMeetings?.length || 0,
-      firstPastMeeting: meetingsData.pastMeetings?.[0] ? {
-        id: meetingsData.pastMeetings[0].id,
-        title: meetingsData.pastMeetings[0].title,
-        participantCount: meetingsData.pastMeetings[0].participants?.length || 0,
-        transcriptLength: meetingsData.pastMeetings[0].transcript?.length || 0,
-        firstSpeakers: meetingsData.pastMeetings[0].transcript?.slice(0, 3).map(t => t.speaker) || []
-      } : null
+      firstPastMeeting: meetingsData.pastMeetings?.[0]
+        ? {
+            id: meetingsData.pastMeetings[0].id,
+            title: meetingsData.pastMeetings[0].title,
+            participantCount: meetingsData.pastMeetings[0].participants?.length || 0,
+            transcriptLength: meetingsData.pastMeetings[0].transcript?.length || 0,
+            firstSpeakers:
+              meetingsData.pastMeetings[0].transcript?.slice(0, 3).map(t => t.speaker) || [],
+          }
+        : null,
     });
     const result = await window.electronAPI.saveMeetingsData(meetingsData);
     if (result.success) {
@@ -691,7 +699,11 @@ async function syncAllUnsyncedMeetings() {
     return;
   }
 
-  if (!confirm(`Sync ${unsyncedMeetings.length} meeting${unsyncedMeetings.length !== 1 ? 's' : ''} to Obsidian?`)) {
+  if (
+    !confirm(
+      `Sync ${unsyncedMeetings.length} meeting${unsyncedMeetings.length !== 1 ? 's' : ''} to Obsidian?`
+    )
+  ) {
     return;
   }
 
@@ -729,9 +741,15 @@ async function syncAllUnsyncedMeetings() {
 
   // Show summary
   if (failCount === 0) {
-    showToast(`Successfully synced ${successCount} meeting${successCount !== 1 ? 's' : ''} to Obsidian!`, 'success');
+    showToast(
+      `Successfully synced ${successCount} meeting${successCount !== 1 ? 's' : ''} to Obsidian!`,
+      'success'
+    );
   } else if (successCount > 0) {
-    showToast(`Synced ${successCount} of ${unsyncedMeetings.length} meetings (${failCount} failed)`, 'warning');
+    showToast(
+      `Synced ${successCount} of ${unsyncedMeetings.length} meetings (${failCount} failed)`,
+      'warning'
+    );
   } else {
     showToast(`Failed to sync all ${failCount} meetings`, 'error');
   }
@@ -756,37 +774,8 @@ function createMeetingCard(meeting) {
   card.className = 'meeting-card';
   card.dataset.id = meeting.id;
 
-  let iconHtml = '';
-
-  // UI-1: Use platform-specific icons if platform is available
-  if (meeting.platform && meeting.platform !== 'unknown') {
-    iconHtml = getPlatformIconHtml(meeting.platform);
-  } else if (meeting.type === 'profile') {
-    iconHtml = `
-      <div class="profile-pic">
-        <img src="https://via.placeholder.com/40" alt="Profile">
-      </div>
-    `;
-  } else if (meeting.type === 'calendar') {
-    iconHtml = `
-      <div class="meeting-icon calendar">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 4H18V2H16V4H8V2H6V4H5C3.89 4 3.01 4.9 3.01 6L3 20C3 21.1 3.89 22 5 22H19C20.1 22 21 21.1 21 20V6C21 4.9 20.1 4 19 4ZM19 20H5V10H19V20ZM19 8H5V6H19V8ZM9 14H7V12H9V14ZM13 14H11V12H13V14ZM17 14H15V12H17V14ZM9 18H7V16H9V18ZM13 18H11V16H13V18ZM17 18H15V16H17V18Z" fill="#6947BD"/>
-        </svg>
-      </div>
-    `;
-  } else if (meeting.type === 'document') {
-    iconHtml = `
-      <div class="meeting-icon document">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M14 2H6C4.9 2 4.01 2.9 4.01 4L4 20C4 21.1 4.89 22 5.99 22H18C19.1 22 20 21.1 20 20V8L14 2ZM16 18H8V16H16V18ZM16 14H8V12H16V14ZM13 9V3.5L18.5 9H13Z" fill="#4CAF50"/>
-        </svg>
-      </div>
-    `;
-  } else {
-    // Default to unknown platform icon for meetings without specific type
-    iconHtml = getPlatformIconHtml('unknown');
-  }
+  // Note: Icons are created programmatically after sanitization (see below)
+  // to avoid DOMPurify stripping SVG elements
 
   // Format date and time
   const dateObj = new Date(meeting.date);
@@ -900,7 +889,10 @@ function createMeetingCard(meeting) {
 
     // Cloud upload icon
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z');
+    path.setAttribute(
+      'd',
+      'M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z'
+    );
     path.setAttribute('fill', 'currentColor');
 
     svg.appendChild(path);
@@ -917,7 +909,10 @@ function createMeetingCard(meeting) {
     svg.setAttribute('fill', 'none');
 
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z');
+    path.setAttribute(
+      'd',
+      'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z'
+    );
     path.setAttribute('fill', 'currentColor');
 
     svg.appendChild(path);
@@ -934,7 +929,7 @@ function createMeetingCard(meeting) {
   checkbox.className = 'meeting-checkbox';
   checkbox.dataset.meetingId = meeting.id;
 
-  checkbox.addEventListener('change', (e) => {
+  checkbox.addEventListener('change', e => {
     e.stopPropagation(); // Prevent card click event
     if (e.target.checked) {
       bulkSelectionState.selectedMeetings.add(meeting.id);
@@ -950,7 +945,7 @@ function createMeetingCard(meeting) {
   card.insertBefore(checkboxContainer, card.firstChild);
 
   // Add click handler to card for toggling selection in bulk mode
-  card.addEventListener('click', (e) => {
+  card.addEventListener('click', e => {
     // Only toggle if in bulk selection mode
     if (bulkSelectionState.enabled) {
       // Don't toggle if clicking the checkbox itself or delete button
@@ -1048,7 +1043,10 @@ function createCalendarMeetingCard(meeting) {
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('fill', 'none');
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z');
+    path.setAttribute(
+      'd',
+      'M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z'
+    );
     path.setAttribute('fill', 'currentColor');
     svg.appendChild(path);
     joinBtn.appendChild(svg);
@@ -1200,7 +1198,9 @@ async function fetchCalendarMeetings() {
       // Limit to max 6 meetings to avoid cluttering the UI
       const limitedMeetings = result.meetings.slice(0, 6);
       calendarMeetings.push(...limitedMeetings);
-      console.log(`Displaying ${limitedMeetings.length} of ${result.meetings.length} calendar meetings`);
+      console.log(
+        `Displaying ${limitedMeetings.length} of ${result.meetings.length} calendar meetings`
+      );
       renderMeetings(); // Re-render to show updated calendar
     } else {
       console.error('Failed to fetch calendar meetings:', result.error);
@@ -1302,7 +1302,9 @@ function showEditorView(meetingId) {
   // Show Back button only if there's a navigation context (e.g., coming from contacts)
   const backButton = document.getElementById('backButton');
   const backButtonText = document.getElementById('backButtonText');
-  const contactContext = window.getContactNavigationContext ? window.getContactNavigationContext() : null;
+  const contactContext = window.getContactNavigationContext
+    ? window.getContactNavigationContext()
+    : null;
 
   if (contactContext && contactContext.type === 'contact' && contactContext.contact) {
     if (backButton) backButton.style.display = 'flex';
@@ -1333,7 +1335,7 @@ function showEditorView(meetingId) {
     participants: meeting.participants,
     transcriptLength: meeting.transcript?.length || 0,
     firstSpeaker: meeting.transcript?.[0]?.speakerName || meeting.transcript?.[0]?.speaker || 'N/A',
-    allSpeakers: meeting.transcript?.map(t => t.speakerName || t.speaker) || []
+    allSpeakers: meeting.transcript?.map(t => t.speakerName || t.speaker) || [],
   });
 
   // Show floating controls section for meeting detail view
@@ -1369,7 +1371,7 @@ function showEditorView(meetingId) {
         meetingId: updatedMeetingId,
         participantCount: updatedMeeting.participants?.length || 0,
         hasTranscript: !!updatedMeeting.transcript,
-        speakers: updatedMeeting.transcript?.map(t => t.speaker).slice(0, 3) || []
+        speakers: updatedMeeting.transcript?.map(t => t.speaker).slice(0, 3) || [],
       });
 
       // Update the meeting in the local arrays
@@ -1386,7 +1388,9 @@ function showEditorView(meetingId) {
       }
 
       // Update in meetingsData
-      const upcomingDataIndex = meetingsData.upcomingMeetings.findIndex(m => m.id === updatedMeetingId);
+      const upcomingDataIndex = meetingsData.upcomingMeetings.findIndex(
+        m => m.id === updatedMeetingId
+      );
       if (upcomingDataIndex !== -1) {
         meetingsData.upcomingMeetings[upcomingDataIndex] = updatedMeeting;
         console.log('[Renderer] Updated in meetingsData.upcomingMeetings');
@@ -1663,7 +1667,12 @@ async function createNewMeeting() {
  * @returns {Array} - Filtered array of meetings
  */
 function filterMeetings(meetings) {
-  if (!searchState.query && !searchState.filters.dateFrom && !searchState.filters.dateTo && !searchState.filters.notSynced) {
+  if (
+    !searchState.query &&
+    !searchState.filters.dateFrom &&
+    !searchState.filters.dateTo &&
+    !searchState.filters.notSynced
+  ) {
     return meetings; // No filters active, return all meetings
   }
 
@@ -1691,7 +1700,11 @@ function filterMeetings(meetings) {
       }
 
       // Also check participantEmails array (fallback)
-      if (!participantMatch && meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+      if (
+        !participantMatch &&
+        meeting.participantEmails &&
+        Array.isArray(meeting.participantEmails)
+      ) {
         participantMatch = meeting.participantEmails.some(email =>
           email?.toLowerCase().includes(query)
         );
@@ -1816,7 +1829,11 @@ function renderMeetings() {
   );
 
   // Show search results count if search/filter is active
-  const hasActiveFilter = searchState.query || searchState.filters.dateFrom || searchState.filters.dateTo || searchState.filters.notSynced;
+  const hasActiveFilter =
+    searchState.query ||
+    searchState.filters.dateFrom ||
+    searchState.filters.dateTo ||
+    searchState.filters.notSynced;
   if (hasActiveFilter) {
     const searchInfo = document.createElement('div');
     searchInfo.className = 'search-info';
@@ -1852,7 +1869,8 @@ function renderMeetings() {
         `;
       }
     } else {
-      emptyState.innerHTML = '<p>No meetings yet. Click "Record In-Person Meeting" to get started.</p>';
+      emptyState.innerHTML =
+        '<p>No meetings yet. Click "Record In-Person Meeting" to get started.</p>';
     }
     notesContainer.appendChild(emptyState);
   }
@@ -1873,7 +1891,8 @@ async function loadMeetingsDataFromFile() {
           title: result.data.pastMeetings[0].title,
           participantCount: result.data.pastMeetings[0].participants?.length || 0,
           transcriptLength: result.data.pastMeetings[0].transcript?.length || 0,
-          firstSpeakers: result.data.pastMeetings[0].transcript?.slice(0, 3).map(t => t.speaker) || []
+          firstSpeakers:
+            result.data.pastMeetings[0].transcript?.slice(0, 3).map(t => t.speaker) || [],
         });
       }
 
@@ -2351,7 +2370,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (hasDetectedMeeting) {
           console.log('Found detected meeting, joining...');
           // Get transcription provider from localStorage
-          const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'assemblyai';
+          const transcriptionProvider =
+            localStorage.getItem('transcriptionProvider') || 'assemblyai';
           console.log('[Join Meeting] Using transcription provider:', transcriptionProvider);
           await window.electronAPI.joinDetectedMeeting(transcriptionProvider);
           // Keep button disabled as we're navigating to a different view
@@ -2492,7 +2512,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           showToast('Meeting synced to Obsidian!', 'success');
 
           // Update local meeting data
-          const meeting = [...pastMeetings, ...meetingsData.pastMeetings].find(m => m.id === meetingId);
+          const meeting = [...pastMeetings, ...meetingsData.pastMeetings].find(
+            m => m.id === meetingId
+          );
           if (meeting) {
             meeting.obsidianLink = result.data?.obsidianLink || true;
             meeting.vaultPath = result.data?.vaultPath;
@@ -2673,7 +2695,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         clearMeetingDetail();
 
         // Back button only shows when there's a contact context - return to contact
-        const contactContext = window.getContactNavigationContext ? window.getContactNavigationContext() : null;
+        const contactContext = window.getContactNavigationContext
+          ? window.getContactNavigationContext()
+          : null;
         if (contactContext && contactContext.type === 'contact') {
           console.log('Returning to contact:', contactContext.contact?.name);
           if (window.returnToContact) {
@@ -2744,7 +2768,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const transcriptionProviderSelect = document.getElementById('transcriptionProviderSelect');
   if (transcriptionProviderSelect) {
     // Load saved provider preference (default to AssemblyAI)
-    const savedTranscriptionProvider = localStorage.getItem('transcriptionProvider') || 'assemblyai';
+    const savedTranscriptionProvider =
+      localStorage.getItem('transcriptionProvider') || 'assemblyai';
     transcriptionProviderSelect.value = savedTranscriptionProvider;
     console.log('Current transcription provider:', savedTranscriptionProvider);
 
@@ -2764,7 +2789,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         assemblyai: 'AssemblyAI',
         deepgram: 'Deepgram',
       };
-      showToast(`Transcription provider changed to ${providerNames[newProvider] || newProvider}`, 'success');
+      showToast(
+        `Transcription provider changed to ${providerNames[newProvider] || newProvider}`,
+        'success'
+      );
     });
   }
 
@@ -3038,7 +3066,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
 
     closeBtn.onclick = closeModal;
-    modal.onclick = (e) => {
+    modal.onclick = e => {
       if (e.target === modal) closeModal();
     };
 
@@ -3065,7 +3093,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const stopIcon = recordButton.querySelector('.stop-icon');
 
     try {
-      console.log(`Starting manual recording for meeting: ${currentEditingMeetingId}, action: ${action}`);
+      console.log(
+        `Starting manual recording for meeting: ${currentEditingMeetingId}, action: ${action}`
+      );
       recordButton.disabled = true;
 
       // Change to stop mode immediately for better feedback
@@ -3117,7 +3147,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   let availableTemplates = [];
   let selectedTemplateIds = [];
   let routingOverride = null; // CS-4.4: Manual routing override
-  let originalRoutes = null; // Store original routes for reference
 
   // Load templates on page load
   async function loadTemplates() {
@@ -3195,21 +3224,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       const preview = await window.electronAPI.routingPreviewMeetingRoute(currentEditingMeetingId);
 
       if (!preview || !preview.routes || preview.routes.length === 0) {
-        previewContent.innerHTML = '<div class="routing-preview-error">Unable to determine save location</div>';
+        previewContent.innerHTML =
+          '<div class="routing-preview-error">Unable to determine save location</div>';
         return;
       }
-
-      // Store original routes for reference
-      originalRoutes = preview.routes;
 
       // CS-4.4: Display override if set, otherwise show original routes
       const routesToDisplay = routingOverride ? [routingOverride] : preview.routes;
 
-      const html = routesToDisplay.map(route => {
-        const iconSvg = getRouteTypeIcon(route.type);
-        const isOverride = routingOverride && route === routingOverride;
+      const html = routesToDisplay
+        .map(route => {
+          const iconSvg = getRouteTypeIcon(route.type);
+          const isOverride = routingOverride && route === routingOverride;
 
-        return `
+          return `
           <div class="routing-preview-path${isOverride ? ' override' : ''}">
             ${isOverride ? '<span class="routing-override-badge">Manual</span>' : ''}
             <div class="routing-preview-icon ${route.type}">
@@ -3222,7 +3250,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             <span class="routing-preview-type-badge">${route.type}</span>
           </div>
         `;
-      }).join('');
+        })
+        .join('');
 
       previewContent.innerHTML = html;
     } catch (error) {
@@ -3248,7 +3277,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Group by type
       const clients = result.destinations?.filter(d => d.type === 'client') || [];
       const industry = result.destinations?.filter(d => d.type === 'industry') || [];
-      const other = result.destinations?.filter(d => d.type !== 'client' && d.type !== 'industry') || [];
+      const other =
+        result.destinations?.filter(d => d.type !== 'client' && d.type !== 'industry') || [];
 
       let html = '';
 
@@ -3333,7 +3363,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const select = document.getElementById('routingDestinationSelect');
 
     if (changeBtn) {
-      changeBtn.addEventListener('click', (e) => {
+      changeBtn.addEventListener('click', e => {
         e.preventDefault();
         showDestinationPicker();
       });
@@ -3341,7 +3371,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // CS-4.6: Auto-show new org form when "Create New" is selected
     if (select) {
-      select.addEventListener('change', (e) => {
+      select.addEventListener('change', e => {
         if (e.target.value === '__create_new__') {
           hideDestinationPicker();
           showNewOrgForm();
@@ -3350,14 +3380,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (applyBtn) {
-      applyBtn.addEventListener('click', (e) => {
+      applyBtn.addEventListener('click', e => {
         e.preventDefault();
         applyDestinationOverride();
       });
     }
 
     if (cancelBtn) {
-      cancelBtn.addEventListener('click', (e) => {
+      cancelBtn.addEventListener('click', e => {
         e.preventDefault();
         hideDestinationPicker();
       });
@@ -3375,7 +3405,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function getMeetingParticipantDomains() {
     if (!currentEditingMeetingId) return [];
 
-    const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
+    const meeting = [...upcomingMeetings, ...pastMeetings].find(
+      m => m.id === currentEditingMeetingId
+    );
     if (!meeting) return [];
 
     // Get user's domain to exclude it
@@ -3402,12 +3434,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const domains = new Set();
-    const personalDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'live.com'];
+    const personalDomains = [
+      'gmail.com',
+      'outlook.com',
+      'hotmail.com',
+      'yahoo.com',
+      'icloud.com',
+      'live.com',
+    ];
     emails.forEach(email => {
       const domain = email.split('@')[1]?.toLowerCase();
-      if (domain &&
-          !personalDomains.includes(domain) &&
-          domain !== userDomain) {
+      if (domain && !personalDomains.includes(domain) && domain !== userDomain) {
         domains.add(domain);
       }
     });
@@ -3444,16 +3481,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Build domain chips
     if (newOrgDomains.length > 0) {
-      domainsDiv.innerHTML = newOrgDomains.map(domain => `
+      domainsDiv.innerHTML = newOrgDomains
+        .map(
+          domain => `
         <label class="routing-domain-chip selected">
           <input type="checkbox" value="${escapeHtml(domain)}" checked>
           <span>${escapeHtml(domain)}</span>
         </label>
-      `).join('');
+      `
+        )
+        .join('');
 
       // Add change listeners
       domainsDiv.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-        checkbox.addEventListener('change', (e) => {
+        checkbox.addEventListener('change', e => {
           const domain = e.target.value;
           const chip = e.target.closest('.routing-domain-chip');
           if (e.target.checked) {
@@ -3466,7 +3507,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       });
     } else {
-      domainsDiv.innerHTML = '<span style="color: var(--text-secondary); font-size: 12px;">No domains detected from meeting participants</span>';
+      domainsDiv.innerHTML =
+        '<span style="color: var(--text-secondary); font-size: 12px;">No domains detected from meeting participants</span>';
     }
 
     form.style.display = 'block';
@@ -3543,7 +3585,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Note: No need to show create rule prompt since domains were already added
       } else {
-        window.showToast(`Failed to create organization: ${result.error || 'Unknown error'}`, 'error');
+        window.showToast(
+          `Failed to create organization: ${result.error || 'Unknown error'}`,
+          'error'
+        );
       }
     } catch (error) {
       console.error('[Templates] Error creating organization:', error);
@@ -3561,21 +3606,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     const cancelBtn = document.getElementById('routingNewOrgCancel');
 
     if (closeBtn) {
-      closeBtn.addEventListener('click', (e) => {
+      closeBtn.addEventListener('click', e => {
         e.preventDefault();
         hideNewOrgForm();
       });
     }
 
     if (createBtn) {
-      createBtn.addEventListener('click', (e) => {
+      createBtn.addEventListener('click', e => {
         e.preventDefault();
         createNewOrganization();
       });
     }
 
     if (cancelBtn) {
-      cancelBtn.addEventListener('click', (e) => {
+      cancelBtn.addEventListener('click', e => {
         e.preventDefault();
         hideNewOrgForm();
       });
@@ -3603,7 +3648,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Get meeting participants to extract domains
-    const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === currentEditingMeetingId);
+    const meeting = [...upcomingMeetings, ...pastMeetings].find(
+      m => m.id === currentEditingMeetingId
+    );
     if (!meeting) {
       createRuleDiv.style.display = 'none';
       return;
@@ -3633,13 +3680,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Extract unique domains (exclude personal domains and user's own domain)
-    const personalDomains = ['gmail.com', 'outlook.com', 'hotmail.com', 'yahoo.com', 'icloud.com', 'live.com'];
+    const personalDomains = [
+      'gmail.com',
+      'outlook.com',
+      'hotmail.com',
+      'yahoo.com',
+      'icloud.com',
+      'live.com',
+    ];
     const domains = new Set();
     emails.forEach(email => {
       const domain = email.split('@')[1]?.toLowerCase();
-      if (domain &&
-          !personalDomains.includes(domain) &&
-          domain !== userDomain) {
+      if (domain && !personalDomains.includes(domain) && domain !== userDomain) {
         domains.add(domain);
       }
     });
@@ -3681,16 +3733,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     selectedDomainsForRule = new Set(unmatchedDomains); // Default all selected
 
     // Build domain chips HTML
-    domainsDiv.innerHTML = unmatchedDomains.map(domain => `
+    domainsDiv.innerHTML = unmatchedDomains
+      .map(
+        domain => `
       <label class="routing-domain-chip selected">
         <input type="checkbox" value="${escapeHtml(domain)}" checked>
         <span>${escapeHtml(domain)}</span>
       </label>
-    `).join('');
+    `
+      )
+      .join('');
 
     // Add change listeners to checkboxes
     domainsDiv.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-      checkbox.addEventListener('change', (e) => {
+      checkbox.addEventListener('change', e => {
         const domain = e.target.value;
         const chip = e.target.closest('.routing-domain-chip');
         if (e.target.checked) {
@@ -3701,7 +3757,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           chip.classList.remove('selected');
         }
         // Update create button state
-        document.getElementById('routingCreateRuleBtn').disabled = selectedDomainsForRule.size === 0;
+        document.getElementById('routingCreateRuleBtn').disabled =
+          selectedDomainsForRule.size === 0;
       });
     });
 
@@ -3734,7 +3791,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       );
 
       if (result.success) {
-        window.showToast(`Added ${selectedDomainsForRule.size} domain(s) to ${routingOverride.organization}`, 'success');
+        window.showToast(
+          `Added ${selectedDomainsForRule.size} domain(s) to ${routingOverride.organization}`,
+          'success'
+        );
         hideCreateRulePrompt();
       } else {
         window.showToast('Failed to create routing rule', 'error');
@@ -3754,14 +3814,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dismissBtn = document.getElementById('routingCreateRuleDismiss');
 
     if (createBtn) {
-      createBtn.addEventListener('click', (e) => {
+      createBtn.addEventListener('click', e => {
         e.preventDefault();
         createRoutingRule();
       });
     }
 
     if (dismissBtn) {
-      dismissBtn.addEventListener('click', (e) => {
+      dismissBtn.addEventListener('click', e => {
         e.preventDefault();
         hideCreateRulePrompt();
       });
@@ -3803,7 +3863,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     modal.style.display = 'none';
     selectedTemplateIds = [];
     routingOverride = null; // CS-4.4: Reset routing override
-    originalRoutes = null;
     // Hide destination picker if open
     const picker = document.getElementById('routingDestinationPicker');
     if (picker) picker.style.display = 'none';
@@ -4120,9 +4179,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           const sizeKB = (file.size / 1024).toFixed(1);
           const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
           const sizeDisplay = file.size > 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
-          const isAudio = file.isAudio || file.type === 'audio' || isAudioFileByExtension(file.name);
+          const isAudio =
+            file.isAudio || file.type === 'audio' || isAudioFileByExtension(file.name);
           const fileIconClass = isAudio ? 'file-icon audio-file' : 'file-icon';
-          const typeLabel = isAudio ? 'Audio' : ext;
 
           return `
           <div class="file-item ${isAudio ? 'audio-file-item' : ''}" data-index="${index}">
@@ -4216,7 +4275,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (validFiles.length === 0) {
       console.warn('[Import] No valid files selected');
-      alert('No valid files selected. Please choose transcript files (.txt, .md, .vtt, .srt) or audio files (.mp3, .wav, .m4a).');
+      alert(
+        'No valid files selected. Please choose transcript files (.txt, .md, .vtt, .srt) or audio files (.mp3, .wav, .m4a).'
+      );
       return;
     }
 
@@ -4224,7 +4285,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     validFiles.forEach(file => {
       const exists = selectedFiles.some(f => f.path === file.path);
       if (!exists) {
-        console.log('[Import] Adding file to selection:', file.name, 'path:', file.path, 'type:', file.type);
+        console.log(
+          '[Import] Adding file to selection:',
+          file.name,
+          'path:',
+          file.path,
+          'type:',
+          file.type
+        );
         selectedFiles.push(file);
       } else {
         console.log('[Import] Skipping duplicate:', file.name);
@@ -4463,11 +4531,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // IM-1.6: Separate audio files from transcript files BEFORE closing modal
     // Use multiple checks for robustness: isAudio flag, type property, or extension check
-    const audioFiles = selectedFiles.filter(f =>
-      f.isAudio === true || f.type === 'audio' || isAudioFileByExtension(f.name)
+    const audioFiles = selectedFiles.filter(
+      f => f.isAudio === true || f.type === 'audio' || isAudioFileByExtension(f.name)
     );
-    const transcriptFiles = selectedFiles.filter(f =>
-      f.isAudio !== true && f.type !== 'audio' && !isAudioFileByExtension(f.name)
+    const transcriptFiles = selectedFiles.filter(
+      f => f.isAudio !== true && f.type !== 'audio' && !isAudioFileByExtension(f.name)
     );
     const transcriptPaths = transcriptFiles.map(file => file.path);
 
@@ -4515,12 +4583,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       // IM-1.4/1.5: Process audio files first (transcribe then import)
       if (audioFiles.length > 0) {
-        console.log(`[Import] Processing ${audioFiles.length} audio files with provider: ${audioProvider}`);
+        console.log(
+          `[Import] Processing ${audioFiles.length} audio files with provider: ${audioProvider}`
+        );
 
         for (const audioFile of audioFiles) {
           try {
             console.log(`[Import] Transcribing audio file: ${audioFile.name}`);
-            updateBackgroundImportIndicator(processedFiles + 1, totalFiles, `Transcribing ${audioFile.name}...`);
+            updateBackgroundImportIndicator(
+              processedFiles + 1,
+              totalFiles,
+              `Transcribing ${audioFile.name}...`
+            );
 
             const result = await window.electronAPI.importAudioFile(audioFile.path, audioProvider, {
               generateAutoSummary,
@@ -4581,7 +4655,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Reload meetings data to show imported meetings
         await loadMeetingsDataFromFile();
         renderMeetings();
-
       } else {
         showToast(`Import failed: All ${totalFiles} file(s) failed`, 'error');
         if (errors.length > 0) {

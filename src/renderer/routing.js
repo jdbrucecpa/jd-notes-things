@@ -59,7 +59,7 @@ function setupEventListeners() {
   // Tab switching
   initializeTabs([
     { buttonId: 'routingEditorTabBtn', contentId: 'routingEditorTabContent' },
-    { buttonId: 'routingTestTabBtn', contentId: 'routingTestTabContent' }
+    { buttonId: 'routingTestTabBtn', contentId: 'routingTestTabContent' },
   ]);
 
   // Refresh routing button
@@ -125,7 +125,7 @@ async function loadRouting() {
     const response = await callIpc('routingGetConfig', [], {
       errorMessage: 'Failed to load routing configuration',
       showErrorToast: false, // Custom error handling below
-      context: 'RoutingEditor'
+      context: 'RoutingEditor',
     });
 
     routingConfig = response.config;
@@ -144,7 +144,9 @@ async function loadRouting() {
   } catch (error) {
     // Custom error handling for routing editor
     if (routingEditor) {
-      routingEditor.setValue(`# Error loading routing configuration: ${error.message}\n\n# Please check your config/routing.yaml file`);
+      routingEditor.setValue(
+        `# Error loading routing configuration: ${error.message}\n\n# Please check your config/routing.yaml file`
+      );
     }
 
     const orgList = document.getElementById('routingOrganizationList');
@@ -169,7 +171,7 @@ function parseOrganizations() {
         id: key,
         type: 'clients', // Use plural to match YAML section name
         name: key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        data: routingConfig.clients[key]
+        data: routingConfig.clients[key],
       });
     });
   }
@@ -181,7 +183,7 @@ function parseOrganizations() {
         id: key,
         type: 'industry', // Singular to match YAML section name
         name: key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-        data: routingConfig.industry[key]
+        data: routingConfig.industry[key],
       });
     });
   }
@@ -192,7 +194,7 @@ function parseOrganizations() {
       id: 'internal',
       type: 'internal',
       name: 'Internal Team',
-      data: routingConfig.internal
+      data: routingConfig.internal,
     });
   }
 
@@ -211,7 +213,8 @@ function renderOrganizationList() {
   }
 
   if (organizations.length === 0) {
-    orgList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No organizations found</p>';
+    orgList.innerHTML =
+      '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No organizations found</p>';
     return;
   }
 
@@ -364,12 +367,12 @@ async function undoRouting() {
         successMessage: 'Configuration restored from backup successfully',
         errorMessage: 'Failed to restore from backup',
         showSuccessToast: true,
-        context: 'RoutingEditor'
+        context: 'RoutingEditor',
       });
 
       // Reload the configuration
       await loadRouting();
-    }
+    },
   });
 }
 
@@ -388,7 +391,7 @@ async function saveRouting() {
       successMessage: 'Routing configuration saved successfully',
       errorMessage: 'Failed to save routing configuration',
       showSuccessToast: true,
-      context: 'RoutingEditor'
+      context: 'RoutingEditor',
     });
 
     // Reload to update organizations list
@@ -412,7 +415,7 @@ async function validateRouting() {
     const response = await callIpc('routingValidateConfig', [content], {
       errorMessage: 'Validation failed',
       showErrorToast: true,
-      context: 'RoutingEditor'
+      context: 'RoutingEditor',
     });
 
     // Custom validation result handling
@@ -452,7 +455,7 @@ async function runRoutingTest() {
     const response = await callIpc('routingTestEmails', [emails], {
       errorMessage: 'Routing test failed',
       showErrorToast: true,
-      context: 'RoutingEditor'
+      context: 'RoutingEditor',
     });
 
     // Display results
@@ -555,15 +558,29 @@ async function createNewOrganization() {
       }
 
       // Parse emails and contacts
-      const emails = emailsStr ? emailsStr.split(',').map(e => e.trim()).filter(e => e) : [];
-      const contacts = contactsStr ? contactsStr.split(',').map(c => c.trim()).filter(c => c) : [];
+      const emails = emailsStr
+        ? emailsStr
+            .split(',')
+            .map(e => e.trim())
+            .filter(e => e)
+        : [];
+      const contacts = contactsStr
+        ? contactsStr
+            .split(',')
+            .map(c => c.trim())
+            .filter(c => c)
+        : [];
 
-      const response = await callIpc('routingAddOrganization', [type, id, vaultPath, emails, contacts], {
-        successMessage: 'Organization added successfully',
-        errorMessage: 'Failed to add organization',
-        showSuccessToast: true,
-        context: 'RoutingEditor'
-      });
+      const response = await callIpc(
+        'routingAddOrganization',
+        [type, id, vaultPath, emails, contacts],
+        {
+          successMessage: 'Organization added successfully',
+          errorMessage: 'Failed to add organization',
+          showSuccessToast: true,
+          context: 'RoutingEditor',
+        }
+      );
 
       // Update the editor content
       if (routingEditor && response.content) {
@@ -572,7 +589,7 @@ async function createNewOrganization() {
 
       // Reload the configuration and organization list
       await loadRouting();
-    }
+    },
   });
 
   // Focus on the ID input after modal is created
@@ -614,7 +631,7 @@ async function deleteOrganization() {
         successMessage: 'Organization deleted successfully',
         errorMessage: 'Failed to delete organization',
         showSuccessToast: true,
-        context: 'RoutingEditor'
+        context: 'RoutingEditor',
       });
 
       // Update the editor content
@@ -633,7 +650,7 @@ async function deleteOrganization() {
 
       // Reload the configuration and organization list
       await loadRouting();
-    }
+    },
   });
 }
 

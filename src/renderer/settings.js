@@ -9,7 +9,10 @@
 import { initializeSecurityPanel } from './securitySettings.js';
 import { updateEditorTheme } from './templates.js';
 import { updateRoutingEditorTheme } from './routing.js';
-import { initialize as initializePatternTestingPanel, updateEditorTheme as updatePatternEditorTheme } from './components/PatternTestingPanel.js';
+import {
+  initialize as initializePatternTestingPanel,
+  updateEditorTheme as updatePatternEditorTheme,
+} from './components/PatternTestingPanel.js';
 import { initializeTabs } from './utils/tabHelper.js';
 
 // Default settings
@@ -105,7 +108,7 @@ export function importSettings(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = e => {
       try {
         const imported = JSON.parse(e.target.result);
         const merged = { ...DEFAULT_SETTINGS, ...imported };
@@ -177,7 +180,9 @@ export function initializeSettingsUI() {
   const browseVaultPathBtn = document.getElementById('browseVaultPathBtn');
   const autoSummaryProviderSelect = document.getElementById('autoSummaryProviderSelect');
   const templateSummaryProviderSelect = document.getElementById('templateSummaryProviderSelect');
-  const patternGenerationProviderSelect = document.getElementById('patternGenerationProviderSelect');
+  const patternGenerationProviderSelect = document.getElementById(
+    'patternGenerationProviderSelect'
+  );
   const exportSettingsBtn = document.getElementById('exportSettingsBtn');
   const importSettingsBtn = document.getElementById('importSettingsBtn');
   const importSettingsFile = document.getElementById('importSettingsFile');
@@ -222,43 +227,46 @@ export function initializeSettingsUI() {
   }
 
   // Tab switching
-  initializeTabs([
-    { buttonId: 'profileSettingsTab', contentId: 'profilePanel' },
-    { buttonId: 'generalSettingsTab', contentId: 'generalPanel' },
-    { buttonId: 'securitySettingsTab', contentId: 'securityPanel' },
-    { buttonId: 'routingSettingsTab', contentId: 'routingPanel' },
-    { buttonId: 'templatesSettingsTab', contentId: 'templatesPanel' },
-    { buttonId: 'vocabularySettingsTab', contentId: 'vocabularyPanel' },
-    { buttonId: 'patternsSettingsTab', contentId: 'patternsPanel' },
-    { buttonId: 'notificationsSettingsTab', contentId: 'notificationsPanel' },
-    { buttonId: 'shortcutsSettingsTab', contentId: 'shortcutsPanel' },
-    { buttonId: 'logsSettingsTab', contentId: 'logsPanel' },
-    { buttonId: 'advancedSettingsTab', contentId: 'advancedPanel' },
-    { buttonId: 'aboutSettingsTab', contentId: 'aboutPanel' }
-  ], (buttonId) => {
-    // Trigger panel-specific actions based on which tab was activated
-    if (buttonId === 'profileSettingsTab') {
-      console.log('[Settings] Profile tab clicked, loading profile');
-      loadUserProfile();
-    } else if (buttonId === 'templatesSettingsTab' && window.loadTemplates) {
-      console.log('[Settings] Templates tab clicked, calling loadTemplates()');
-      window.loadTemplates();
-    } else if (buttonId === 'routingSettingsTab' && window.loadRouting) {
-      console.log('[Settings] Routing tab clicked, calling loadRouting()');
-      window.loadRouting();
-    } else if (buttonId === 'patternsSettingsTab') {
-      console.log('[Settings] Patterns tab clicked, initializing pattern editor');
-      initializePatternTestingPanel('pattern-editor').catch(err => {
-        console.error('[Settings] Failed to initialize pattern editor:', err);
-      });
-    } else if (buttonId === 'logsSettingsTab' && window.refreshLogs) {
-      console.log('[Settings] Logs tab clicked, auto-loading logs');
-      window.refreshLogs();
-    } else if (buttonId === 'vocabularySettingsTab') {
-      console.log('[Settings] Vocabulary tab clicked, loading vocabulary');
-      loadVocabulary();
+  initializeTabs(
+    [
+      { buttonId: 'profileSettingsTab', contentId: 'profilePanel' },
+      { buttonId: 'generalSettingsTab', contentId: 'generalPanel' },
+      { buttonId: 'securitySettingsTab', contentId: 'securityPanel' },
+      { buttonId: 'routingSettingsTab', contentId: 'routingPanel' },
+      { buttonId: 'templatesSettingsTab', contentId: 'templatesPanel' },
+      { buttonId: 'vocabularySettingsTab', contentId: 'vocabularyPanel' },
+      { buttonId: 'patternsSettingsTab', contentId: 'patternsPanel' },
+      { buttonId: 'notificationsSettingsTab', contentId: 'notificationsPanel' },
+      { buttonId: 'shortcutsSettingsTab', contentId: 'shortcutsPanel' },
+      { buttonId: 'logsSettingsTab', contentId: 'logsPanel' },
+      { buttonId: 'advancedSettingsTab', contentId: 'advancedPanel' },
+      { buttonId: 'aboutSettingsTab', contentId: 'aboutPanel' },
+    ],
+    buttonId => {
+      // Trigger panel-specific actions based on which tab was activated
+      if (buttonId === 'profileSettingsTab') {
+        console.log('[Settings] Profile tab clicked, loading profile');
+        loadUserProfile();
+      } else if (buttonId === 'templatesSettingsTab' && window.loadTemplates) {
+        console.log('[Settings] Templates tab clicked, calling loadTemplates()');
+        window.loadTemplates();
+      } else if (buttonId === 'routingSettingsTab' && window.loadRouting) {
+        console.log('[Settings] Routing tab clicked, calling loadRouting()');
+        window.loadRouting();
+      } else if (buttonId === 'patternsSettingsTab') {
+        console.log('[Settings] Patterns tab clicked, initializing pattern editor');
+        initializePatternTestingPanel('pattern-editor').catch(err => {
+          console.error('[Settings] Failed to initialize pattern editor:', err);
+        });
+      } else if (buttonId === 'logsSettingsTab' && window.refreshLogs) {
+        console.log('[Settings] Logs tab clicked, auto-loading logs');
+        window.refreshLogs();
+      } else if (buttonId === 'vocabularySettingsTab') {
+        console.log('[Settings] Vocabulary tab clicked, loading vocabulary');
+        loadVocabulary();
+      }
     }
-  });
+  );
 
   // Dark mode toggle
   if (darkModeToggle) {
@@ -330,9 +338,10 @@ export function initializeSettingsUI() {
         const result = await window.electronAPI.obsidianRefreshLinks();
 
         if (result.success) {
-          const msg = result.updated > 0
-            ? `Updated ${result.updated} stale link${result.updated !== 1 ? 's' : ''}`
-            : 'All links are up to date';
+          const msg =
+            result.updated > 0
+              ? `Updated ${result.updated} stale link${result.updated !== 1 ? 's' : ''}`
+              : 'All links are up to date';
 
           if (refreshLinksStatus) {
             refreshLinksStatus.textContent = msg;
@@ -341,7 +350,10 @@ export function initializeSettingsUI() {
 
           // Show detailed toast
           if (result.updated > 0) {
-            window.showToast(`${msg}. ${result.missing.length} notes not found in vault.`, 'success');
+            window.showToast(
+              `${msg}. ${result.missing.length} notes not found in vault.`,
+              'success'
+            );
           } else {
             window.showToast(msg, 'success');
           }
@@ -369,25 +381,34 @@ export function initializeSettingsUI() {
 
   // Auto Summary Provider selection
   if (autoSummaryProviderSelect) {
-    autoSummaryProviderSelect.addEventListener('change', (e) => {
+    autoSummaryProviderSelect.addEventListener('change', e => {
       updateSetting('autoSummaryProvider', e.target.value);
-      window.showToast(`Auto-summary provider changed to ${e.target.options[e.target.selectedIndex].text}`, 'success');
+      window.showToast(
+        `Auto-summary provider changed to ${e.target.options[e.target.selectedIndex].text}`,
+        'success'
+      );
     });
   }
 
   // Template Summary Provider selection
   if (templateSummaryProviderSelect) {
-    templateSummaryProviderSelect.addEventListener('change', (e) => {
+    templateSummaryProviderSelect.addEventListener('change', e => {
       updateSetting('templateSummaryProvider', e.target.value);
-      window.showToast(`Template summary provider changed to ${e.target.options[e.target.selectedIndex].text}`, 'success');
+      window.showToast(
+        `Template summary provider changed to ${e.target.options[e.target.selectedIndex].text}`,
+        'success'
+      );
     });
   }
 
   // Pattern Generation Provider selection (Phase 10.8.3)
   if (patternGenerationProviderSelect) {
-    patternGenerationProviderSelect.addEventListener('change', (e) => {
+    patternGenerationProviderSelect.addEventListener('change', e => {
       updateSetting('patternGenerationProvider', e.target.value);
-      window.showToast(`Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`, 'success');
+      window.showToast(
+        `Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`,
+        'success'
+      );
     });
   }
 
@@ -407,7 +428,7 @@ export function initializeSettingsUI() {
   }
 
   if (importSettingsFile) {
-    importSettingsFile.addEventListener('change', async (e) => {
+    importSettingsFile.addEventListener('change', async e => {
       const file = e.target.files[0];
       if (!file) return;
 
@@ -529,15 +550,18 @@ export function initializeSettingsUI() {
 
   // Load version information
   if (electronVersion && window.electronAPI) {
-    window.electronAPI.getAppVersion().then(version => {
-      electronVersion.textContent = version.electron || '-';
-      nodeVersion.textContent = version.node || '-';
-      chromeVersion.textContent = version.chrome || '-';
-    }).catch(() => {
-      electronVersion.textContent = 'N/A';
-      nodeVersion.textContent = 'N/A';
-      chromeVersion.textContent = 'N/A';
-    });
+    window.electronAPI
+      .getAppVersion()
+      .then(version => {
+        electronVersion.textContent = version.electron || '-';
+        nodeVersion.textContent = version.node || '-';
+        chromeVersion.textContent = version.chrome || '-';
+      })
+      .catch(() => {
+        electronVersion.textContent = 'N/A';
+        nodeVersion.textContent = 'N/A';
+        chromeVersion.textContent = 'N/A';
+      });
   }
 
   /**
@@ -577,20 +601,25 @@ export function initializeSettingsUI() {
     }
 
     if (templateSummaryProviderSelect) {
-      templateSummaryProviderSelect.value = currentSettings.templateSummaryProvider || 'azure-gpt-5-mini';
+      templateSummaryProviderSelect.value =
+        currentSettings.templateSummaryProvider || 'azure-gpt-5-mini';
     }
 
     if (patternGenerationProviderSelect) {
-      patternGenerationProviderSelect.value = currentSettings.patternGenerationProvider || 'openai-gpt-4o-mini';
+      patternGenerationProviderSelect.value =
+        currentSettings.patternGenerationProvider || 'openai-gpt-4o-mini';
     }
 
     // Update vault path (this will be populated from main process)
     if (vaultPathInput && window.electronAPI) {
-      window.electronAPI.getVaultPath().then(path => {
-        vaultPathInput.value = path || 'Not configured';
-      }).catch(() => {
-        vaultPathInput.value = 'Not configured';
-      });
+      window.electronAPI
+        .getVaultPath()
+        .then(path => {
+          vaultPathInput.value = path || 'Not configured';
+        })
+        .catch(() => {
+          vaultPathInput.value = 'Not configured';
+        });
     }
   }
 
@@ -665,7 +694,9 @@ async function saveUserProfile() {
       if (statusEl) {
         statusEl.textContent = 'Saved!';
         statusEl.style.color = 'var(--status-success)';
-        setTimeout(() => { statusEl.textContent = ''; }, 2000);
+        setTimeout(() => {
+          statusEl.textContent = '';
+        }, 2000);
       }
       window.showToast?.('Profile saved successfully', 'success');
       console.log('[Settings] Saved user profile');
@@ -740,7 +771,8 @@ async function loadClientSlugs() {
           if (!result.data.includes(slug)) {
             const option = document.createElement('option');
             option.value = slug;
-            option.textContent = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' (vocabulary only)';
+            option.textContent =
+              slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' (vocabulary only)';
             clientSelect.appendChild(option);
           }
         }
@@ -772,7 +804,12 @@ function getActiveVocabulary() {
   if (!vocabularyConfig) return { spelling_corrections: [], keyword_boosts: [] };
 
   if (vocabularyScope === 'client' && selectedClientSlug) {
-    return vocabularyConfig.clients?.[selectedClientSlug] || { spelling_corrections: [], keyword_boosts: [] };
+    return (
+      vocabularyConfig.clients?.[selectedClientSlug] || {
+        spelling_corrections: [],
+        keyword_boosts: [],
+      }
+    );
   }
   return vocabularyConfig.global || { spelling_corrections: [], keyword_boosts: [] };
 }
@@ -789,7 +826,9 @@ function renderSpellingList(corrections) {
     return;
   }
 
-  list.innerHTML = corrections.map((sc, index) => `
+  list.innerHTML = corrections
+    .map(
+      (sc, index) => `
     <div class="vocabulary-item" data-index="${index}">
       <div class="vocabulary-item-content">
         <span class="vocabulary-item-from">${Array.isArray(sc.from) ? sc.from.join(', ') : sc.from}</span>
@@ -802,7 +841,9 @@ function renderSpellingList(corrections) {
         </svg>
       </button>
     </div>
-  `).join('');
+  `
+    )
+    .join('');
 }
 
 /**
@@ -817,7 +858,9 @@ function renderKeywordList(keywords) {
     return;
   }
 
-  list.innerHTML = keywords.map((kb, index) => `
+  list.innerHTML = keywords
+    .map(
+      (kb, index) => `
     <div class="vocabulary-item" data-index="${index}">
       <div class="vocabulary-item-content">
         <span class="vocabulary-item-word">${kb.word}</span>
@@ -829,7 +872,9 @@ function renderKeywordList(keywords) {
         </svg>
       </button>
     </div>
-  `).join('');
+  `
+    )
+    .join('');
 }
 
 /**
@@ -847,12 +892,19 @@ async function addSpelling() {
     return;
   }
 
-  const fromArray = fromValue.split(',').map(s => s.trim()).filter(s => s);
+  const fromArray = fromValue
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s);
 
   try {
     let result;
     if (vocabularyScope === 'client' && selectedClientSlug) {
-      result = await window.electronAPI.vocabularyAddClientSpelling(selectedClientSlug, fromArray, toValue);
+      result = await window.electronAPI.vocabularyAddClientSpelling(
+        selectedClientSlug,
+        fromArray,
+        toValue
+      );
     } else {
       result = await window.electronAPI.vocabularyAddGlobalSpelling(fromArray, toValue);
     }
@@ -889,7 +941,11 @@ async function addKeyword() {
   try {
     let result;
     if (vocabularyScope === 'client' && selectedClientSlug) {
-      result = await window.electronAPI.vocabularyAddClientKeyword(selectedClientSlug, word, intensifier);
+      result = await window.electronAPI.vocabularyAddClientKeyword(
+        selectedClientSlug,
+        word,
+        intensifier
+      );
     } else {
       result = await window.electronAPI.vocabularyAddGlobalKeyword(word, intensifier);
     }
@@ -919,7 +975,9 @@ async function deleteSpelling(to) {
       // Remove from client config manually
       if (vocabularyConfig.clients?.[selectedClientSlug]) {
         vocabularyConfig.clients[selectedClientSlug].spelling_corrections =
-          vocabularyConfig.clients[selectedClientSlug].spelling_corrections.filter(sc => sc.to !== to);
+          vocabularyConfig.clients[selectedClientSlug].spelling_corrections.filter(
+            sc => sc.to !== to
+          );
         await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
         await loadVocabulary();
         window.showToast?.('Spelling correction removed', 'success');
@@ -947,8 +1005,9 @@ async function deleteKeyword(word) {
     if (vocabularyScope === 'client') {
       // Remove from client config manually
       if (vocabularyConfig.clients?.[selectedClientSlug]) {
-        vocabularyConfig.clients[selectedClientSlug].keyword_boosts =
-          vocabularyConfig.clients[selectedClientSlug].keyword_boosts.filter(kb => kb.word !== word);
+        vocabularyConfig.clients[selectedClientSlug].keyword_boosts = vocabularyConfig.clients[
+          selectedClientSlug
+        ].keyword_boosts.filter(kb => kb.word !== word);
         await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
         await loadVocabulary();
         window.showToast?.('Keyword boost removed', 'success');
@@ -995,7 +1054,7 @@ function initializeVocabularyUI() {
   // Client selector
   const clientSelect = document.getElementById('vocabularyClientSelect');
   if (clientSelect) {
-    clientSelect.addEventListener('change', (e) => {
+    clientSelect.addEventListener('change', e => {
       selectedClientSlug = e.target.value;
       renderVocabularyUI();
     });
@@ -1012,7 +1071,7 @@ function initializeVocabularyUI() {
         if (!vocabularyConfig.clients[normalizedSlug]) {
           vocabularyConfig.clients[normalizedSlug] = {
             spelling_corrections: [],
-            keyword_boosts: []
+            keyword_boosts: [],
           };
           await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
           await loadClientSlugs();
@@ -1042,12 +1101,12 @@ function initializeVocabularyUI() {
   }
 
   // Enter key support for spelling form
-  document.getElementById('spellingTo')?.addEventListener('keypress', (e) => {
+  document.getElementById('spellingTo')?.addEventListener('keypress', e => {
     if (e.key === 'Enter') addSpelling();
   });
 
   // Enter key support for keyword form
-  document.getElementById('keywordWord')?.addEventListener('keypress', (e) => {
+  document.getElementById('keywordWord')?.addEventListener('keypress', e => {
     if (e.key === 'Enter') addKeyword();
   });
 
@@ -1088,25 +1147,33 @@ function initializeVocabularyUI() {
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = '.json,.yaml,.yml';
-      input.onchange = async (e) => {
+      input.onchange = async e => {
         const file = e.target.files[0];
         if (file) {
           const reader = new FileReader();
-          reader.onload = async (event) => {
+          reader.onload = async event => {
             try {
               const imported = JSON.parse(event.target.result);
               // Merge with existing
               if (imported.global) {
-                vocabularyConfig.global.spelling_corrections.push(...(imported.global.spelling_corrections || []));
-                vocabularyConfig.global.keyword_boosts.push(...(imported.global.keyword_boosts || []));
+                vocabularyConfig.global.spelling_corrections.push(
+                  ...(imported.global.spelling_corrections || [])
+                );
+                vocabularyConfig.global.keyword_boosts.push(
+                  ...(imported.global.keyword_boosts || [])
+                );
               }
               if (imported.clients) {
                 for (const [slug, clientVocab] of Object.entries(imported.clients)) {
                   if (!vocabularyConfig.clients[slug]) {
                     vocabularyConfig.clients[slug] = clientVocab;
                   } else {
-                    vocabularyConfig.clients[slug].spelling_corrections.push(...(clientVocab.spelling_corrections || []));
-                    vocabularyConfig.clients[slug].keyword_boosts.push(...(clientVocab.keyword_boosts || []));
+                    vocabularyConfig.clients[slug].spelling_corrections.push(
+                      ...(clientVocab.spelling_corrections || [])
+                    );
+                    vocabularyConfig.clients[slug].keyword_boosts.push(
+                      ...(clientVocab.keyword_boosts || [])
+                    );
                   }
                 }
               }

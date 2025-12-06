@@ -103,13 +103,16 @@ const templatesEstimateCostSchema = z.object({
 
 // templates:generateSummaries
 // CS-4.4: Added optional routingOverride for manual destination selection
-const routingOverrideSchema = z.object({
-  type: z.enum(['client', 'industry', 'internal', 'unfiled']),
-  slug: z.string().min(1),
-  path: z.string().min(1),
-  organization: z.string().optional(),
-  reason: z.string().optional(),
-}).nullable().optional();
+const routingOverrideSchema = z
+  .object({
+    type: z.enum(['client', 'industry', 'internal', 'unfiled']),
+    slug: z.string().min(1),
+    path: z.string().min(1),
+    organization: z.string().optional(),
+    reason: z.string().optional(),
+  })
+  .nullable()
+  .optional();
 
 const templatesGenerateSummariesSchema = z.object({
   meetingId: meetingIdSchema,
@@ -180,7 +183,9 @@ function validateIpcInput(schema, data) {
     return schema.parse(data);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const issues = error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join(', ');
+      const issues = error.issues
+        .map(issue => `${issue.path.join('.')}: ${issue.message}`)
+        .join(', ');
       throw new Error(`IPC Input Validation Failed: ${issues}`);
     }
     throw error;

@@ -8,7 +8,6 @@
  */
 
 const fs = require('fs').promises;
-const fsSync = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 const { z } = require('zod');

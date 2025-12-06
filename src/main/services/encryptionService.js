@@ -422,7 +422,7 @@ class EncryptionService {
           await walk(fullPath);
         } else if (entry.isFile()) {
           // Check if file has any of the specified extensions
-          const hasExtension = extensions.some((ext) => fullPath.endsWith(ext));
+          const hasExtension = extensions.some(ext => fullPath.endsWith(ext));
           if (hasExtension) {
             files.push(fullPath);
           }
