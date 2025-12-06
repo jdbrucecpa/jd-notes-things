@@ -192,6 +192,42 @@ body {
   -webkit-app-region: no-drag; /* Make input not draggable to allow text selection */
 }
 
+/* RS-1: Not Synced filter toggle button */
+.filter-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-left: 8px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-app-region: no-drag;
+}
+
+.filter-toggle-btn:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--text-secondary);
+}
+
+.filter-toggle-btn.active {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+.filter-toggle-btn.active svg {
+  fill: white;
+}
+
+.filter-toggle-btn svg {
+  flex-shrink: 0;
+}
+
 .btn {
   padding: 8px 16px;
   border-radius: 5px;
@@ -484,6 +520,24 @@ body {
   background-color: var(--bg-secondary);
 }
 
+/* RS-1.7: Accent button style for Sync All */
+.btn-accent {
+  background-color: var(--accent-color);
+  border: 1.5px solid var(--accent-color);
+  color: white;
+  transition: all 0.2s ease;
+}
+
+.btn-accent:hover {
+  background-color: #5839a0;
+  border-color: #5839a0;
+}
+
+.btn-accent:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-icon-text {
   display: inline-flex;
   align-items: center;
@@ -655,6 +709,39 @@ body {
 .delete-meeting-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* RS-1.6: Sync to Obsidian button on meeting cards */
+.sync-meeting-btn {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--accent-color);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.sync-meeting-btn:hover {
+  background-color: rgba(105, 71, 189, 0.1);
+  color: var(--accent-color);
+}
+
+.sync-meeting-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sync-meeting-btn.syncing {
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 /* Spinner animation for loading states */

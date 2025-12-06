@@ -47,6 +47,7 @@ const searchState = {
   filters: {
     dateFrom: null,
     dateTo: null,
+    notSynced: false, // RS-1: Filter for meetings not exported to Obsidian
   },
 };
 
@@ -631,6 +632,7 @@ window.clearSearch = function () {
   searchState.query = '';
   searchState.filters.dateFrom = null;
   searchState.filters.dateTo = null;
+  searchState.filters.notSynced = false;
 
   // Clear search input
   const searchInput = document.querySelector('.search-input');
@@ -638,9 +640,105 @@ window.clearSearch = function () {
     searchInput.value = '';
   }
 
+  // Update filter button state
+  const filterBtn = document.getElementById('notSyncedFilterBtn');
+  if (filterBtn) {
+    filterBtn.classList.remove('active');
+  }
+
   // Re-render meetings
   renderMeetings();
 };
+
+// RS-1: Toggle "Not Synced to Obsidian" filter
+window.toggleNotSyncedFilter = function () {
+  searchState.filters.notSynced = !searchState.filters.notSynced;
+
+  // Update button visual state
+  const filterBtn = document.getElementById('notSyncedFilterBtn');
+  if (filterBtn) {
+    filterBtn.classList.toggle('active', searchState.filters.notSynced);
+  }
+
+  // Re-render meetings
+  renderMeetings();
+};
+
+// RS-1: Clear "Not Synced to Obsidian" filter (called from empty state)
+window.clearNotSyncedFilter = function () {
+  searchState.filters.notSynced = false;
+
+  // Update button visual state
+  const filterBtn = document.getElementById('notSyncedFilterBtn');
+  if (filterBtn) {
+    filterBtn.classList.remove('active');
+  }
+
+  // Re-render meetings
+  renderMeetings();
+};
+
+// RS-1.7: Sync all unsynced meetings to Obsidian
+async function syncAllUnsyncedMeetings() {
+  // Get all unsynced meetings
+  const allMeetings = [...upcomingMeetings, ...pastMeetings];
+  const unsyncedMeetings = allMeetings.filter(
+    m => !m.obsidianLink && !m.vaultPath && m.type !== 'calendar'
+  );
+
+  if (unsyncedMeetings.length === 0) {
+    showToast('No meetings to sync', 'info');
+    return;
+  }
+
+  if (!confirm(`Sync ${unsyncedMeetings.length} meeting${unsyncedMeetings.length !== 1 ? 's' : ''} to Obsidian?`)) {
+    return;
+  }
+
+  const syncAllBtn = document.getElementById('syncAllBtn');
+  if (syncAllBtn) {
+    syncAllBtn.disabled = true;
+    syncAllBtn.innerHTML = `
+      <svg class="spinner" width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      Syncing...
+    `;
+  }
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (const meeting of unsyncedMeetings) {
+    try {
+      const result = await window.electronAPI.obsidianExportMeeting(meeting.id);
+      if (result.success) {
+        successCount++;
+        // Update local meeting data
+        meeting.obsidianLink = result.data?.obsidianLink || true;
+        meeting.vaultPath = result.data?.vaultPath;
+      } else {
+        failCount++;
+        console.error(`Failed to sync meeting ${meeting.id}:`, result.error);
+      }
+    } catch (error) {
+      failCount++;
+      console.error(`Error syncing meeting ${meeting.id}:`, error);
+    }
+  }
+
+  // Show summary
+  if (failCount === 0) {
+    showToast(`Successfully synced ${successCount} meeting${successCount !== 1 ? 's' : ''} to Obsidian!`, 'success');
+  } else if (successCount > 0) {
+    showToast(`Synced ${successCount} of ${unsyncedMeetings.length} meetings (${failCount} failed)`, 'warning');
+  } else {
+    showToast(`Failed to sync all ${failCount} meetings`, 'error');
+  }
+
+  // Re-render to update UI
+  renderMeetings();
+}
 
 // ========================================
 // Display AI Generated Summaries
@@ -730,6 +828,11 @@ function createMeetingCard(meeting) {
     </div>
   `;
 
+  // RS-1.6: Add sync button for unsynced meetings
+  const syncButtonHtml = !isSynced
+    ? `<button class="sync-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Sync to Obsidian"></button>`
+    : '';
+
   // Set card HTML (without checkbox or icon - we'll add them programmatically)
   card.innerHTML = sanitizeHtml(`
     <div class="meeting-icon-container">
@@ -739,6 +842,7 @@ function createMeetingCard(meeting) {
       ${metadataHtml}
     </div>
     <div class="meeting-actions">
+      ${syncButtonHtml}
       <button class="delete-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Delete note">
       </button>
     </div>
@@ -783,6 +887,24 @@ function createMeetingCard(meeting) {
     }
 
     iconContainer.appendChild(iconWrapper);
+  }
+
+  // RS-1.6: Create sync button SVG programmatically (after sanitization)
+  const syncBtn = card.querySelector('.sync-meeting-btn');
+  if (syncBtn) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+
+    // Cloud upload icon
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z');
+    path.setAttribute('fill', 'currentColor');
+
+    svg.appendChild(path);
+    syncBtn.appendChild(svg);
   }
 
   // Create delete button SVG programmatically (after sanitization) to avoid DOMPurify stripping it
@@ -1541,11 +1663,18 @@ async function createNewMeeting() {
  * @returns {Array} - Filtered array of meetings
  */
 function filterMeetings(meetings) {
-  if (!searchState.query && !searchState.filters.dateFrom && !searchState.filters.dateTo) {
+  if (!searchState.query && !searchState.filters.dateFrom && !searchState.filters.dateTo && !searchState.filters.notSynced) {
     return meetings; // No filters active, return all meetings
   }
 
   return meetings.filter(meeting => {
+    // RS-1: Not synced to Obsidian filter
+    if (searchState.filters.notSynced) {
+      if (meeting.obsidianLink) {
+        return false; // Has been synced, exclude it
+      }
+    }
+
     // Search query filter (title, participants)
     if (searchState.query) {
       const query = searchState.query.toLowerCase();
@@ -1628,6 +1757,16 @@ function renderMeetings() {
     });
   }
 
+  // RS-1.7: Sync All button HTML (only shown when notSynced filter is active)
+  const syncAllButtonHtml = searchState.filters.notSynced
+    ? `<button class="btn btn-accent btn-icon-text" id="syncAllBtn" title="Sync all unsynced meetings to Obsidian">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" fill="currentColor"/>
+          </svg>
+          Sync All
+        </button>`
+    : '';
+
   // Create all notes section (replaces both upcoming and date-grouped sections)
   const notesSection = document.createElement('section');
   notesSection.className = 'meetings-section';
@@ -1635,6 +1774,7 @@ function renderMeetings() {
     <div class="section-header">
       <h2 class="section-title">Notes</h2>
       <div class="section-actions">
+        ${syncAllButtonHtml}
         <button class="btn btn-outline btn-icon-text" id="toggleBulkSelectBtn" title="Select multiple meetings">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M19 3H5C3.9 3 3 3.9 3 5V19C3 20.1 3.9 21 5 21H19C20.1 21 21 20.1 21 19V5C21 3.9 20.1 3 19 3ZM10 17L5 12L6.41 10.59L10 14.17L17.59 6.58L19 8L10 17Z" fill="currentColor"/>
@@ -1653,6 +1793,12 @@ function renderMeetings() {
     toggleBulkSelectBtn.addEventListener('click', toggleBulkSelectionMode);
   }
 
+  // RS-1.7: Attach Sync All button event listener
+  const syncAllBtn = notesSection.querySelector('#syncAllBtn');
+  if (syncAllBtn) {
+    syncAllBtn.addEventListener('click', syncAllUnsyncedMeetings);
+  }
+
   // Get the notes container
   const notesContainer = notesSection.querySelector('#notes-list');
 
@@ -1669,11 +1815,17 @@ function renderMeetings() {
     allMeetings.filter(meeting => meeting.type !== 'calendar') // Skip calendar entries
   );
 
-  // Show search results count if search is active
-  if (searchState.query || searchState.filters.dateFrom || searchState.filters.dateTo) {
+  // Show search results count if search/filter is active
+  const hasActiveFilter = searchState.query || searchState.filters.dateFrom || searchState.filters.dateTo || searchState.filters.notSynced;
+  if (hasActiveFilter) {
     const searchInfo = document.createElement('div');
     searchInfo.className = 'search-info';
-    searchInfo.textContent = `Found ${filteredMeetings.length} meeting${filteredMeetings.length !== 1 ? 's' : ''}`;
+    // RS-1: Show appropriate message for not synced filter
+    if (searchState.filters.notSynced) {
+      searchInfo.textContent = `${filteredMeetings.length} meeting${filteredMeetings.length !== 1 ? 's' : ''} not synced to Obsidian`;
+    } else {
+      searchInfo.textContent = `Found ${filteredMeetings.length} meeting${filteredMeetings.length !== 1 ? 's' : ''}`;
+    }
     notesContainer.parentElement.insertBefore(searchInfo, notesContainer);
   }
 
@@ -1686,11 +1838,19 @@ function renderMeetings() {
   if (filteredMeetings.length === 0) {
     const emptyState = document.createElement('div');
     emptyState.className = 'empty-state';
-    if (searchState.query || searchState.filters.dateFrom || searchState.filters.dateTo) {
-      emptyState.innerHTML = `
-        <p>No meetings found matching your search criteria.</p>
-        <button class="btn" onclick="clearSearch()">Clear Search</button>
-      `;
+    if (hasActiveFilter) {
+      // RS-1: Show appropriate message for not synced filter
+      if (searchState.filters.notSynced) {
+        emptyState.innerHTML = `
+          <p>All meetings are synced to Obsidian!</p>
+          <button class="btn" onclick="clearNotSyncedFilter()">Clear Filter</button>
+        `;
+      } else {
+        emptyState.innerHTML = `
+          <p>No meetings found matching your search criteria.</p>
+          <button class="btn" onclick="clearSearch()">Clear Search</button>
+        `;
+      }
     } else {
       emptyState.innerHTML = '<p>No meetings yet. Click "Record In-Person Meeting" to get started.</p>';
     }
@@ -2251,6 +2411,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // RS-1: Not Synced filter button click handler
+  const notSyncedFilterBtn = document.getElementById('notSyncedFilterBtn');
+  if (notSyncedFilterBtn) {
+    notSyncedFilterBtn.addEventListener('click', () => {
+      window.toggleNotSyncedFilter();
+    });
+  }
+
   // Add click event delegation for meeting cards and their actions
   document.querySelector('.main-content').addEventListener('click', async e => {
     // Check if refresh calendar button was clicked
@@ -2296,6 +2464,56 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // TODO: Future enhancement - associate calendar meeting with this note
       // Could store calendar meeting ID in the note metadata
+
+      return;
+    }
+
+    // RS-1.6: Check if sync button was clicked
+    if (e.target.closest('.sync-meeting-btn')) {
+      e.stopPropagation(); // Prevent opening the note
+      const syncBtn = e.target.closest('.sync-meeting-btn');
+      const meetingId = syncBtn.dataset.id;
+
+      console.log('Syncing meeting to Obsidian:', meetingId);
+
+      // Show loading state
+      syncBtn.disabled = true;
+      syncBtn.classList.add('syncing');
+      const originalSvg = syncBtn.innerHTML;
+      syncBtn.innerHTML = `<svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>`;
+
+      try {
+        const result = await window.electronAPI.obsidianExportMeeting(meetingId);
+
+        if (result.success) {
+          console.log('Meeting synced to Obsidian successfully');
+          showToast('Meeting synced to Obsidian!', 'success');
+
+          // Update local meeting data
+          const meeting = [...pastMeetings, ...meetingsData.pastMeetings].find(m => m.id === meetingId);
+          if (meeting) {
+            meeting.obsidianLink = result.data?.obsidianLink || true;
+            meeting.vaultPath = result.data?.vaultPath;
+          }
+
+          // Re-render to update UI (removes sync button, updates status)
+          renderMeetings();
+        } else {
+          console.error('Failed to sync to Obsidian:', result.error);
+          showToast(`Sync failed: ${result.error}`, 'error');
+          syncBtn.disabled = false;
+          syncBtn.classList.remove('syncing');
+          syncBtn.innerHTML = originalSvg;
+        }
+      } catch (error) {
+        console.error('Error syncing to Obsidian:', error);
+        showToast(`Sync error: ${error.message}`, 'error');
+        syncBtn.disabled = false;
+        syncBtn.classList.remove('syncing');
+        syncBtn.innerHTML = originalSvg;
+      }
 
       return;
     }
