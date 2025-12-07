@@ -14,7 +14,7 @@ patterns:
 
   - id: "timestamp-speaker-header"
     name: "Timestamped Speaker Header (Bracketed)"
-    description: "Bracketed timestamp followed by speaker name with colon. Example: [00:00] JD Bruce:"
+    description: "Bracketed timestamp followed by speaker name with colon. Example: [00:00] Joe Smith:"
     type: "header"
     regex: "^\\[(\\d{1,2}:\\d{2}(?::\\d{2})?)\\]\\s+([A-Za-z0-9\\s.'-]+):$"
     captureGroups:
@@ -24,7 +24,7 @@ patterns:
     priority: 1
     examples:
       - "[00:00] Unknown:"
-      - "[02:19] JD Bruce:"
+      - "[02:19] Joe Smith:"
       - "[02:41] SPK-97u3vkknxxt:"
   
   # ===== SPEAKER HEADER PATTERNS =====
@@ -197,7 +197,7 @@ patterns:
 
   - id: "markdown-bold-speaker-timestamp"
     name: "Markdown Bold Speaker with Timestamp (Header)"
-    description: "Bold speaker with pipe-separated timestamp. Example: **JD Bruce | 01:43**"
+    description: "Bold speaker with pipe-separated timestamp. Example: **Joe Smith | 01:43**"
     type: "header"
     regex: "^\\*\\*([^|*]+)\\s*\\|\\s*(\\d{1,2}:\\d{2}(?::\\d{2})?)\\*\\*$"
     captureGroups:
@@ -207,7 +207,7 @@ patterns:
     priority: 1
     examples:
       - "**Speaker 2 | 01:42**"
-      - "**JD Bruce | 01:43**"
+      - "**Joe Smith | 01:43**"
       - "**Dr. Smith | 10:23:45**"
 
   - id: "markdown-bold-inline"
