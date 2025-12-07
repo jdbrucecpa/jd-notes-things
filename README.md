@@ -224,6 +224,28 @@ npm run lint       # Run ESLint
 npm run format     # Format with Prettier
 ```
 
+### Creating a Release
+
+The app uses auto-updates via GitHub Releases. To create a new release:
+
+1. **Update version** in `package.json`
+2. **Commit the version bump**:
+   ```bash
+   git add package.json
+   git commit -m "chore: bump version to v1.2.0"
+   ```
+3. **Create and push a version tag**:
+   ```bash
+   git tag v1.2.0
+   git push origin main
+   git push origin v1.2.0
+   ```
+
+The GitHub Actions workflow will automatically:
+- Build the Windows installer
+- Create a GitHub Release with the Squirrel artifacts
+- Users with the app installed will receive the update automatically
+
 ### Project Structure
 
 ```

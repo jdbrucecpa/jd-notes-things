@@ -205,7 +205,7 @@ class ImportManager {
     const content = this.createBasicContent(metadata, parsedData);
 
     // Extract participant emails for routing
-    let participantEmails = metadata.participantEmails || [];
+    const participantEmails = metadata.participantEmails || [];
 
     // v1.1: Look up contacts by name to get emails
     let contactMatches = new Map();

@@ -25,6 +25,159 @@ import zoomLogo from './assets/zoom.png';
 import teamsLogo from './assets/teams.png';
 import meetLogo from './assets/meet.png';
 
+// ===================================================================
+// Custom Title Bar (Claude Desktop style)
+// ===================================================================
+function initializeTitleBar() {
+  const titlebarMenuBtn = document.getElementById('titlebarMenuBtn');
+  const titlebarDropdown = document.getElementById('titlebarDropdown');
+  const minimizeBtn = document.getElementById('minimizeBtn');
+  const maximizeBtn = document.getElementById('maximizeBtn');
+  const closeBtn = document.getElementById('closeBtn');
+
+  // Window control buttons
+  if (minimizeBtn) {
+    minimizeBtn.addEventListener('click', () => {
+      window.electronAPI.windowMinimize();
+    });
+  }
+
+  if (maximizeBtn) {
+    maximizeBtn.addEventListener('click', () => {
+      window.electronAPI.windowMaximize();
+    });
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      window.electronAPI.windowClose();
+    });
+  }
+
+  // Hamburger menu toggle
+  let activeSubmenu = null;
+
+  if (titlebarMenuBtn && titlebarDropdown) {
+    titlebarMenuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      titlebarDropdown.classList.toggle('show');
+      // Hide any open submenu
+      if (activeSubmenu) {
+        activeSubmenu.classList.remove('show');
+        activeSubmenu = null;
+      }
+    });
+
+    // Handle submenu items
+    const menuItems = titlebarDropdown.querySelectorAll('[data-menu]');
+    menuItems.forEach(item => {
+      item.addEventListener('mouseenter', () => {
+        // Hide previous submenu
+        if (activeSubmenu) {
+          activeSubmenu.classList.remove('show');
+        }
+        // Show new submenu
+        const menuType = item.getAttribute('data-menu');
+        const submenu = document.getElementById(`submenu-${menuType}`);
+        if (submenu) {
+          submenu.classList.add('show');
+          activeSubmenu = submenu;
+        }
+      });
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.titlebar-left')) {
+        titlebarDropdown.classList.remove('show');
+        if (activeSubmenu) {
+          activeSubmenu.classList.remove('show');
+          activeSubmenu = null;
+        }
+      }
+    });
+  }
+
+  // Menu action handlers
+  const menuActions = {
+    menuNewMeeting: () => {
+      const newNoteBtn = document.getElementById('newNoteBtn');
+      if (newNoteBtn) newNoteBtn.click();
+    },
+    menuImport: () => {
+      openSettingsTab('import');
+    },
+    menuSettings: () => {
+      openSettingsTab('general');
+    },
+    menuExit: () => {
+      window.electronAPI.windowClose();
+    },
+    menuUndo: () => document.execCommand('undo'),
+    menuRedo: () => document.execCommand('redo'),
+    menuCut: () => document.execCommand('cut'),
+    menuCopy: () => document.execCommand('copy'),
+    menuPaste: () => document.execCommand('paste'),
+    menuReload: () => location.reload(),
+    menuToggleDevTools: () => {
+      // Dev tools toggling needs to be done via main process
+      console.log('Toggle DevTools requested');
+    },
+    menuZoomIn: () => {
+      // Zoom is handled by Electron's built-in Ctrl+Plus
+      console.log('Zoom In - use Ctrl+Plus');
+    },
+    menuZoomOut: () => {
+      // Zoom is handled by Electron's built-in Ctrl+Minus
+      console.log('Zoom Out - use Ctrl+Minus');
+    },
+    menuResetZoom: () => {
+      // Zoom reset is handled by Electron's built-in Ctrl+0
+      console.log('Reset Zoom - use Ctrl+0');
+    },
+    menuAbout: () => {
+      openSettingsTab('about');
+    },
+    menuGitHub: () => {
+      window.electronAPI.openExternal('https://github.com/jdbrucecpa/jd-notes-things');
+    },
+    menuCheckUpdates: async () => {
+      const result = await window.electronAPI.checkForUpdates();
+      if (!result.success) {
+        alert(result.message);
+      }
+    },
+  };
+
+  // Bind menu action handlers
+  Object.keys(menuActions).forEach(id => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.addEventListener('click', () => {
+        // Close menus
+        if (titlebarDropdown) titlebarDropdown.classList.remove('show');
+        if (activeSubmenu) {
+          activeSubmenu.classList.remove('show');
+          activeSubmenu = null;
+        }
+        // Execute action
+        menuActions[id]();
+      });
+    }
+  });
+
+  // Update title based on dev mode
+  const titlebarTitle = document.getElementById('titlebarTitle');
+  if (titlebarTitle) {
+    // Check if we're in dev mode by looking at the background color
+    const isDev = document.body.style.backgroundColor === 'rgb(74, 26, 26)' ||
+                  window.location.href.includes('localhost');
+    if (isDev) {
+      titlebarTitle.textContent = 'JD Notes Things Dev';
+    }
+  }
+}
+
 // Create empty meetings data structure to be filled from the file
 const meetingsData = {
   upcomingMeetings: [],
@@ -2050,6 +2203,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Show body now that CSS is loaded (prevents FOUC)
   document.body.classList.add('loaded');
+
+  // Initialize Custom Title Bar (Claude Desktop style)
+  initializeTitleBar();
 
   // Initialize Settings UI (Phase 10.1)
   initializeSettingsUI();

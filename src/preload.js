@@ -182,6 +182,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   patternsSaveConfig: configYaml => ipcRenderer.invoke('patterns:saveConfig', { configYaml }),
   // Settings (Phase 10.1 + 10.3)
   getAppVersion: () => ipcRenderer.invoke('settings:getAppVersion'),
+  checkForUpdates: () => ipcRenderer.invoke('settings:checkForUpdates'),
   getVaultPath: () => ipcRenderer.invoke('settings:getVaultPath'),
   chooseVaultPath: () => ipcRenderer.invoke('settings:chooseVaultPath'),
   getProviderPreferences: () => ipcRenderer.invoke('settings:getProviderPreferences'),
@@ -215,4 +216,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onOpenLogsViewer: callback => ipcRenderer.on('open-logs-viewer', (_, data) => callback(data)),
   onStopRecordingRequested: callback =>
     ipcRenderer.on('stop-recording-requested', (_, data) => callback(data)),
+  // Custom Title Bar Window Controls
+  windowMinimize: () => ipcRenderer.send('window:minimize'),
+  windowMaximize: () => ipcRenderer.send('window:maximize'),
+  windowClose: () => ipcRenderer.send('window:close'),
+  windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
 });

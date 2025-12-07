@@ -239,7 +239,8 @@ async function refreshLogs(textFilter = null) {
     const result = await window.electronAPI.appGetLogs({ limit: 2000, level: apiLevel });
 
     if (result.success) {
-      let { logs, logPath: path, totalLines, filteredLines } = result.data;
+      const { logPath: path, totalLines } = result.data;
+      let { logs, filteredLines } = result.data;
 
       // Apply text filter if specified
       if (textFilterValue) {

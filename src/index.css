@@ -121,17 +121,221 @@ body {
   color: var(--text-primary);
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
+}
+
+/* ============================================
+   CUSTOM TITLE BAR (Claude Desktop style)
+   ============================================ */
+
+.custom-titlebar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  background: #2b2b2b;
+  color: #d4d4d4;
+  -webkit-app-region: drag;
+  user-select: none;
+  position: relative;
+  z-index: 9999;
+  flex-shrink: 0;
+}
+
+.titlebar-drag-region {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  -webkit-app-region: drag;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  z-index: 1;
+  position: relative;
+}
+
+.titlebar-menu-btn {
+  -webkit-app-region: no-drag;
+  background: transparent;
+  border: none;
+  color: #d4d4d4;
+  padding: 4px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.titlebar-menu-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.titlebar-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 8px;
+  background: #3c3c3c;
+  border: 1px solid #555;
+  border-radius: 6px;
+  min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  padding: 4px 0;
+}
+
+.titlebar-dropdown.show {
+  display: block;
+}
+
+.titlebar-dropdown-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.titlebar-dropdown-item {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  color: #d4d4d4;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  width: 100%;
+}
+
+.titlebar-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.titlebar-dropdown-divider {
+  height: 1px;
+  background: #555;
+  margin: 4px 8px;
+}
+
+.titlebar-submenu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 148px;
+  background: #3c3c3c;
+  border: 1px solid #555;
+  border-radius: 6px;
+  min-width: 180px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10001;
+  padding: 4px 0;
+}
+
+.titlebar-submenu.show {
+  display: block;
+}
+
+.titlebar-center {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.titlebar-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #a0a0a0;
+}
+
+.titlebar-right {
+  display: flex;
+  margin-left: auto;
+  z-index: 1;
+}
+
+.titlebar-btn {
+  -webkit-app-region: no-drag;
+  background: transparent;
+  border: none;
+  color: #d4d4d4;
+  width: 46px;
+  height: 32px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.titlebar-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.titlebar-btn-close:hover {
+  background: #e81123;
+  color: white;
+}
+
+/* Light theme title bar adjustments */
+body:not(.dark-theme) .custom-titlebar {
+  background: #f0f0f0;
+  color: #333;
+}
+
+body:not(.dark-theme) .titlebar-menu-btn,
+body:not(.dark-theme) .titlebar-btn {
+  color: #333;
+}
+
+body:not(.dark-theme) .titlebar-title {
+  color: #666;
+}
+
+body:not(.dark-theme) .titlebar-dropdown,
+body:not(.dark-theme) .titlebar-submenu {
+  background: #ffffff;
+  border-color: #ddd;
+}
+
+body:not(.dark-theme) .titlebar-dropdown-item {
+  color: #333;
+}
+
+body:not(.dark-theme) .titlebar-dropdown-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) .titlebar-dropdown-divider {
+  background: #ddd;
+}
+
+body:not(.dark-theme) .titlebar-menu-btn:hover,
+body:not(.dark-theme) .titlebar-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+body:not(.dark-theme) .titlebar-btn-close:hover {
+  background: #e81123;
+  color: white;
 }
 
 .app-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: calc(100vh - 32px); /* Account for custom title bar */
   width: 100%;
+  flex: 1;
   transition:
     width 0.3s ease,
     margin-right 0.3s ease;
-  flex: 1;
 }
 
 /* ============================================

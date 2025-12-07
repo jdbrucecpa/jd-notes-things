@@ -12,6 +12,7 @@ const {
 } = require('electron');
 const path = require('node:path');
 const fs = require('fs');
+const { autoUpdater } = require('update-electron-app');
 const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
 const sdkLogger = require('./sdk-logger');
@@ -998,7 +999,9 @@ const createWindow = () => {
       contextIsolation: true,
       nodeIntegration: false,
     },
-    titleBarStyle: 'hiddenInset',
+    // Custom title bar like Claude Desktop
+    frame: false,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     backgroundColor: isDev ? '#4a1a1a' : '#1e1e1e', // Red-tinted background for dev mode
   };
 
@@ -1441,6 +1444,29 @@ app.whenReady().then(async () => {
   // Phase 10.7: Create system tray and register shortcuts (after window creation)
   createSystemTray();
   registerGlobalShortcuts();
+
+  // Initialize auto-updater (only in production)
+  if (!process.env.ELECTRON_IS_DEV && app.isPackaged) {
+    logger.main.info('[AutoUpdater] Initializing auto-updater...');
+    try {
+      autoUpdater({
+        repo: 'jdbrucecpa/jd-notes-things',
+        updateInterval: '1 hour',
+        notifyUser: true,
+        logger: {
+          log: (...args) => logger.main.info('[AutoUpdater]', ...args),
+          info: (...args) => logger.main.info('[AutoUpdater]', ...args),
+          warn: (...args) => logger.main.warn('[AutoUpdater]', ...args),
+          error: (...args) => logger.main.error('[AutoUpdater]', ...args),
+        },
+      });
+      logger.main.info('[AutoUpdater] Auto-updater initialized successfully');
+    } catch (error) {
+      logger.main.error('[AutoUpdater] Failed to initialize auto-updater:', error);
+    }
+  } else {
+    logger.main.info('[AutoUpdater] Skipping auto-updater in development mode');
+  }
 
   // When the window is ready, send the initial meeting detection status
   mainWindow.webContents.on('did-finish-load', () => {
@@ -6668,6 +6694,40 @@ ipcMain.handle('settings:getAppVersion', async () => {
   };
 });
 
+// Check for updates manually
+ipcMain.handle('settings:checkForUpdates', async () => {
+  logger.main.info('[AutoUpdater] Manual update check requested');
+
+  if (process.env.ELECTRON_IS_DEV || !app.isPackaged) {
+    return {
+      success: false,
+      message: 'Auto-updates are not available in development mode'
+    };
+  }
+
+  try {
+    // Use electron's autoUpdater to check for updates
+    const { autoUpdater: electronAutoUpdater } = require('electron');
+
+    // Set the feed URL for Squirrel.Windows
+    const feedURL = `https://update.electronjs.org/jdbrucecpa/jd-notes-things/${process.platform}-${process.arch}/${app.getVersion()}`;
+    electronAutoUpdater.setFeedURL({ url: feedURL });
+
+    electronAutoUpdater.checkForUpdates();
+
+    return {
+      success: true,
+      message: 'Checking for updates...'
+    };
+  } catch (error) {
+    logger.main.error('[AutoUpdater] Manual update check failed:', error);
+    return {
+      success: false,
+      message: error.message
+    };
+  }
+});
+
 // Get vault path
 ipcMain.handle('settings:getVaultPath', async () => {
   return vaultStructure?.vaultBasePath || null;
@@ -7102,6 +7162,38 @@ ipcMain.handle('keys:test', async (event, keyName) => {
 ipcMain.on('open-external', (event, url) => {
   console.log('[IPC] open-external called with url:', url);
   require('electron').shell.openExternal(url);
+});
+
+// ===================================================================
+// Window Control IPC Handlers (Custom Title Bar)
+// ===================================================================
+ipcMain.on('window:minimize', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.minimize();
+  }
+});
+
+ipcMain.on('window:maximize', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  }
+});
+
+ipcMain.on('window:close', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.close();
+  }
+});
+
+ipcMain.handle('window:isMaximized', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow.isMaximized();
+  }
+  return false;
 });
 
 // Handler to get active recording ID for a note

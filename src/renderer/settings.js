@@ -494,6 +494,49 @@ export function initializeSettingsUI() {
       });
   }
 
+  // GitHub repo link handler
+  const githubRepoLink = document.getElementById('githubRepoLink');
+  if (githubRepoLink) {
+    githubRepoLink.addEventListener('click', e => {
+      e.preventDefault();
+      window.electronAPI.openExternal('https://github.com/jdbrucecpa/jd-notes-things');
+    });
+  }
+
+  // Check for Updates button handler
+  const checkForUpdatesBtn = document.getElementById('checkForUpdatesBtn');
+  const updateStatus = document.getElementById('updateStatus');
+  if (checkForUpdatesBtn) {
+    checkForUpdatesBtn.addEventListener('click', async () => {
+      checkForUpdatesBtn.disabled = true;
+      checkForUpdatesBtn.textContent = 'Checking...';
+      if (updateStatus) {
+        updateStatus.textContent = 'Checking for updates...';
+      }
+
+      try {
+        const result = await window.electronAPI.checkForUpdates();
+        if (result.success) {
+          if (updateStatus) {
+            updateStatus.textContent = result.message || 'Checking for updates...';
+          }
+        } else {
+          if (updateStatus) {
+            updateStatus.textContent = result.message || 'Update check not available';
+          }
+        }
+      } catch (error) {
+        console.error('[Settings] Update check error:', error);
+        if (updateStatus) {
+          updateStatus.textContent = 'Error checking for updates';
+        }
+      }
+
+      checkForUpdatesBtn.disabled = false;
+      checkForUpdatesBtn.textContent = 'Check Now';
+    });
+  }
+
   /**
    * Load current settings into UI controls
    */

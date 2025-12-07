@@ -42,6 +42,98 @@
     </style>
   </head>
   <body>
+    <!-- Custom Title Bar (Claude Desktop style) -->
+    <div class="custom-titlebar" id="customTitlebar">
+      <div class="titlebar-drag-region"></div>
+
+      <!-- Left: Hamburger Menu -->
+      <div class="titlebar-left">
+        <button class="titlebar-menu-btn" id="titlebarMenuBtn" title="Menu">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+          </svg>
+        </button>
+        <!-- Dropdown Menu -->
+        <div class="titlebar-dropdown" id="titlebarDropdown">
+          <div class="titlebar-dropdown-section">
+            <button class="titlebar-dropdown-item" data-menu="file">
+              <span>File</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 17l5-5-5-5v10z"/></svg>
+            </button>
+            <button class="titlebar-dropdown-item" data-menu="edit">
+              <span>Edit</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 17l5-5-5-5v10z"/></svg>
+            </button>
+            <button class="titlebar-dropdown-item" data-menu="view">
+              <span>View</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 17l5-5-5-5v10z"/></svg>
+            </button>
+            <button class="titlebar-dropdown-item" data-menu="help">
+              <span>Help</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 17l5-5-5-5v10z"/></svg>
+            </button>
+          </div>
+        </div>
+        <!-- Submenu for File -->
+        <div class="titlebar-submenu" id="submenu-file">
+          <button class="titlebar-dropdown-item" id="menuNewMeeting">New Meeting</button>
+          <button class="titlebar-dropdown-item" id="menuImport">Import Transcript...</button>
+          <div class="titlebar-dropdown-divider"></div>
+          <button class="titlebar-dropdown-item" id="menuSettings">Settings</button>
+          <div class="titlebar-dropdown-divider"></div>
+          <button class="titlebar-dropdown-item" id="menuExit">Exit</button>
+        </div>
+        <!-- Submenu for Edit -->
+        <div class="titlebar-submenu" id="submenu-edit">
+          <button class="titlebar-dropdown-item" id="menuUndo">Undo</button>
+          <button class="titlebar-dropdown-item" id="menuRedo">Redo</button>
+          <div class="titlebar-dropdown-divider"></div>
+          <button class="titlebar-dropdown-item" id="menuCut">Cut</button>
+          <button class="titlebar-dropdown-item" id="menuCopy">Copy</button>
+          <button class="titlebar-dropdown-item" id="menuPaste">Paste</button>
+        </div>
+        <!-- Submenu for View -->
+        <div class="titlebar-submenu" id="submenu-view">
+          <button class="titlebar-dropdown-item" id="menuReload">Reload</button>
+          <button class="titlebar-dropdown-item" id="menuToggleDevTools">Toggle Developer Tools</button>
+          <div class="titlebar-dropdown-divider"></div>
+          <button class="titlebar-dropdown-item" id="menuZoomIn">Zoom In</button>
+          <button class="titlebar-dropdown-item" id="menuZoomOut">Zoom Out</button>
+          <button class="titlebar-dropdown-item" id="menuResetZoom">Reset Zoom</button>
+        </div>
+        <!-- Submenu for Help -->
+        <div class="titlebar-submenu" id="submenu-help">
+          <button class="titlebar-dropdown-item" id="menuAbout">About</button>
+          <button class="titlebar-dropdown-item" id="menuGitHub">GitHub Repository</button>
+          <button class="titlebar-dropdown-item" id="menuCheckUpdates">Check for Updates</button>
+        </div>
+      </div>
+
+      <!-- Center: App Title -->
+      <div class="titlebar-center">
+        <span class="titlebar-title" id="titlebarTitle">JD Notes Things</span>
+      </div>
+
+      <!-- Right: Window Controls -->
+      <div class="titlebar-right">
+        <button class="titlebar-btn" id="minimizeBtn" title="Minimize">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <rect width="10" height="1" x="1" y="6" fill="currentColor"/>
+          </svg>
+        </button>
+        <button class="titlebar-btn" id="maximizeBtn" title="Maximize">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <rect width="9" height="9" x="1.5" y="1.5" fill="none" stroke="currentColor" stroke-width="1"/>
+          </svg>
+        </button>
+        <button class="titlebar-btn titlebar-btn-close" id="closeBtn" title="Close">
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
     <div class="app-container">
       <div id="mainView" style="display: block;">
       <!-- Compact Toolbar - Option 4 Design -->
@@ -1713,8 +1805,16 @@
             <div class="settings-section">
               <div class="about-info">
                 <h3>JD Notes Things</h3>
-                <p class="version" id="appVersion">v1.0.0</p>
+                <p class="version" id="appVersion">v1.1.0</p>
                 <p>AI-Powered Meeting Transcription & Summarization</p>
+                <p style="margin-top: 12px;">
+                  <a href="#" id="githubRepoLink" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    GitHub Repository
+                  </a>
+                </p>
               </div>
             </div>
 
@@ -1742,6 +1842,19 @@
                 </div>
                 <div class="settings-item-control">
                   <span style="font-family: monospace; color: var(--text-secondary);" id="chromeVersion">-</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="settings-section-title">Updates</h3>
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Check for Updates</div>
+                  <div class="settings-item-description" id="updateStatus">Auto-updates are enabled. Click to check manually.</div>
+                </div>
+                <div class="settings-item-control">
+                  <button class="action-btn" id="checkForUpdatesBtn">Check Now</button>
                 </div>
               </div>
             </div>
