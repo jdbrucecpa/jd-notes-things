@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JD Notes Things - Modern Gradient Toolbar</title>
+    <style>
+        /*
+        ==========================================
+        DESIGN RATIONALE - MODERN/GRADIENT THEME
+        ==========================================
+
+        Philosophy: Contemporary 2024 aesthetic with vibrant gradients and glass-morphism
+
+        Key Design Elements:
+        1. GRADIENT ACCENTS - Primary actions feature subtle purple-to-blue gradients
+        2. GLASS-MORPHISM - Semi-transparent backgrounds with backdrop blur effects
+        3. DEPTH LAYERS - Multiple shadow levels create visual hierarchy
+        4. VIBRANT COLORS - Carefully balanced saturation for modern feel
+        5. SMOOTH ANIMATIONS - CSS transitions with cubic-bezier easing
+        6. GLOW EFFECTS - Subtle luminance on interactive elements
+
+        Color Palette:
+        - Primary Gradient: Purple (#a855f7) → Blue (#3b82f6)
+        - Secondary: Cyan (#06b6d4) → Emerald (#10b981)
+        - Success: Green (#22c55e)
+        - Warning: Amber (#f59e0b)
+        - Surface: Dark charcoal (#2b2b2b) with glass overlays
+
+        Interaction Design:
+        - Hover states reveal gradient intensity
+        - Active states compress with scale transform
+        - Focus rings use gradient borders
+        - Micro-animations emphasize affordance
+
+        Accessibility:
+        - High contrast maintained despite gradients
+        - Focus indicators clearly visible
+        - Disabled states clearly differentiated
+        ==========================================
+        */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2b2b2b 50%, #1f1f1f 100%);
+            color: #e5e5e5;
+            padding: 40px;
+            min-height: 100vh;
+        }
+
+        .demo-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .demo-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .demo-header h1 {
+            /* Gradient text effect for title */
+            background: linear-gradient(135deg, #a855f7 0%, #3b82f6 50%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: -0.02em;
+        }
+
+        .demo-header p {
+            color: #9ca3af;
+            font-size: 1rem;
+        }
+
+        .toolbar-demo {
+            background: rgba(35, 35, 35, 0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow:
+                0 20px 40px rgba(0, 0, 0, 0.4),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+        }
+
+        .demo-label {
+            font-size: 0.875rem;
+            color: #9ca3af;
+            margin-bottom: 15px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* ============================================
+           TOOLBAR CONTAINER - Glass-morphism surface
+           ============================================ */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: rgba(45, 45, 45, 0.8);
+            backdrop-filter: blur(30px) saturate(150%);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow:
+                0 8px 32px rgba(0, 0, 0, 0.3),
+                0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+                0 1px 2px rgba(255, 255, 255, 0.1) inset;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Subtle animated gradient overlay */
+        .toolbar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 200%;
+            height: 100%;
+            background: linear-gradient(90deg,
+                transparent 0%,
+                rgba(168, 85, 247, 0.03) 50%,
+                transparent 100%);
+            animation: shimmer 8s infinite;
+        }
+
+        @keyframes shimmer {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(50%); }
+        }
+
+        .toolbar > * {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ============================================
+           SEARCH BOX - Frosted glass input
+           ============================================ */
+        .search-container {
+            position: relative;
+            flex: 1;
+            max-width: 320px;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px 16px 10px 42px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            color: #e5e5e5;
+            font-size: 0.875rem;
+            outline: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            backdrop-filter: blur(10px);
+        }
+
+        .search-box:focus {
+            background: rgba(0, 0, 0, 0.4);
+            border-color: rgba(168, 85, 247, 0.5);
+            box-shadow:
+                0 0 0 3px rgba(168, 85, 247, 0.15),
+                0 4px 12px rgba(168, 85, 247, 0.2);
+        }
+
+        .search-box::placeholder {
+            color: #6b7280;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            opacity: 0.5;
+            transition: opacity 0.3s;
+        }
+
+        .search-box:focus + .search-icon {
+            opacity: 0.8;
+        }
+
+        /* ============================================
+           NOT SYNCED FILTER - Glass badge with glow
+           ============================================ */
+        .filter-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .filter-badge::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .filter-badge:hover::before {
+            opacity: 0.1;
+        }
+
+        .filter-badge:hover {
+            border-color: rgba(245, 158, 11, 0.4);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);
+        }
+
+        .filter-badge:active {
+            transform: scale(0.97);
+        }
+
+        .filter-badge span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .badge-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+            border-radius: 10px;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+        }
+
+        /* ============================================
+           SPACER - Push right-side controls
+           ============================================ */
+        .spacer {
+            flex: 1;
+        }
+
+        /* ============================================
+           RECORD BUTTONS - Gradient primary actions
+           ============================================ */
+        .btn-record {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+            outline: none;
+        }
+
+        /* Primary gradient button (In-Person Meeting) */
+        .btn-record-primary {
+            background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+            color: #fff;
+            box-shadow:
+                0 4px 16px rgba(168, 85, 247, 0.35),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+        }
+
+        .btn-record-primary::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #c084fc 0%, #60a5fa 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .btn-record-primary:hover::before {
+            opacity: 1;
+        }
+
+        .btn-record-primary:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 8px 24px rgba(168, 85, 247, 0.45),
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset,
+                0 0 20px rgba(168, 85, 247, 0.3);
+        }
+
+        .btn-record-primary:active {
+            transform: scale(0.98) translateY(0);
+        }
+
+        .btn-record-primary span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .btn-record-primary svg {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Secondary gradient button (Zoom Meeting) */
+        .btn-record-secondary {
+            background: linear-gradient(135deg, #06b6d4 0%, #10b981 100%);
+            color: #fff;
+            box-shadow:
+                0 4px 16px rgba(6, 182, 212, 0.35),
+                0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+        }
+
+        .btn-record-secondary::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #22d3ee 0%, #34d399 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .btn-record-secondary:hover::before {
+            opacity: 1;
+        }
+
+        .btn-record-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow:
+                0 8px 24px rgba(6, 182, 212, 0.45),
+                0 0 0 1px rgba(255, 255, 255, 0.2) inset,
+                0 0 20px rgba(6, 182, 212, 0.3);
+        }
+
+        .btn-record-secondary:active {
+            transform: scale(0.98) translateY(0);
+        }
+
+        .btn-record-secondary span,
+        .btn-record-secondary svg {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Disabled state - desaturated with reduced opacity */
+        .btn-record-secondary:disabled {
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%);
+            color: rgba(255, 255, 255, 0.3);
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .btn-record-secondary:disabled::before {
+            display: none;
+        }
+
+        .btn-record-secondary:disabled:hover {
+            transform: none;
+        }
+
+        /* ============================================
+           ICON BUTTONS - Circular glass buttons
+           ============================================ */
+        .btn-icon {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-icon::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at center, rgba(168, 85, 247, 0.2) 0%, transparent 70%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .btn-icon:hover {
+            background: rgba(0, 0, 0, 0.4);
+            border-color: rgba(168, 85, 247, 0.4);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(168, 85, 247, 0.2);
+        }
+
+        .btn-icon:hover::before {
+            opacity: 1;
+        }
+
+        .btn-icon:active {
+            transform: scale(0.95);
+        }
+
+        .btn-icon svg {
+            width: 18px;
+            height: 18px;
+            opacity: 0.8;
+            transition: opacity 0.3s;
+            position: relative;
+            z-index: 1;
+        }
+
+        .btn-icon:hover svg {
+            opacity: 1;
+        }
+
+        /* ============================================
+           GOOGLE STATUS - Live connection indicator
+           ============================================ */
+        .google-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .google-status::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .google-status:hover::before {
+            opacity: 0.1;
+        }
+
+        .google-status:hover {
+            border-color: rgba(34, 197, 94, 0.4);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
+        }
+
+        .google-status span {
+            position: relative;
+            z-index: 1;
+            font-size: 0.8125rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            position: relative;
+            z-index: 1;
+            width: 8px;
+            height: 8px;
+            background: linear-gradient(135deg, #22c55e 0%, #10b981 100%);
+            border-radius: 50%;
+            box-shadow:
+                0 0 8px rgba(34, 197, 94, 0.6),
+                0 0 16px rgba(34, 197, 94, 0.3);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.7;
+                transform: scale(1.1);
+            }
+        }
+
+        /* ============================================
+           PROFILE BUTTON - Avatar with gradient ring
+           ============================================ */
+        .btn-profile {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #a855f7 0%, #3b82f6 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            padding: 2px;
+        }
+
+        .btn-profile::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            background: linear-gradient(135deg, #a855f7 0%, #3b82f6 50%, #06b6d4 100%);
+            border-radius: 11px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: -1;
+        }
+
+        .btn-profile:hover::before {
+            opacity: 1;
+        }
+
+        .btn-profile:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(168, 85, 247, 0.4);
+        }
+
+        .btn-profile:active {
+            transform: scale(0.95);
+        }
+
+        .profile-inner {
+            width: 100%;
+            height: 100%;
+            background: rgba(45, 45, 45, 0.95);
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #e5e5e5;
+        }
+
+        /* ============================================
+           RESPONSIVE ADJUSTMENTS
+           ============================================ */
+        @media (max-width: 1200px) {
+            .toolbar {
+                flex-wrap: wrap;
+            }
+
+            .search-container {
+                flex: 1 1 100%;
+                max-width: none;
+                order: -1;
+                margin-bottom: 8px;
+            }
+        }
+
+        /* ============================================
+           DEMO NOTES
+           ============================================ */
+        .demo-notes {
+            background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+
+        .demo-notes h3 {
+            color: #c084fc;
+            margin-bottom: 12px;
+            font-size: 1rem;
+        }
+
+        .demo-notes ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .demo-notes li {
+            color: #d1d5db;
+            margin-bottom: 8px;
+            padding-left: 24px;
+            position: relative;
+            font-size: 0.875rem;
+        }
+
+        .demo-notes li::before {
+            content: '→';
+            position: absolute;
+            left: 0;
+            color: #a855f7;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="demo-header">
+            <h1>JD Notes Things</h1>
+            <p>Modern Gradient Toolbar Design - Option 3</p>
+        </div>
+
+        <!-- Enabled State -->
+        <div class="toolbar-demo">
+            <div class="demo-label">Zoom Meeting Detected (All Buttons Active)</div>
+            <div class="toolbar">
+                <div class="search-container">
+                    <input type="text" class="search-box" placeholder="Search meetings, participants, topics...">
+                    <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+
+                <div class="filter-badge">
+                    <span>Not Synced</span>
+                    <span class="badge-count">3</span>
+                </div>
+
+                <div class="spacer"></div>
+
+                <button class="btn-record btn-record-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                    <span>Record In-Person Meeting</span>
+                </button>
+
+                <button class="btn-record btn-record-secondary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                    </svg>
+                    <span>Record Zoom Meeting</span>
+                </button>
+
+                <div class="google-status">
+                    <span>Google</span>
+                    <div class="status-dot"></div>
+                </div>
+
+                <button class="btn-icon" title="Import">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                </button>
+
+                <div class="btn-profile">
+                    <div class="profile-inner">JD</div>
+                </div>
+
+                <button class="btn-icon" title="Settings">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Disabled State -->
+        <div class="toolbar-demo">
+            <div class="demo-label">No Zoom Meeting Detected (Zoom Button Disabled)</div>
+            <div class="toolbar">
+                <div class="search-container">
+                    <input type="text" class="search-box" placeholder="Search meetings, participants, topics...">
+                    <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                </div>
+
+                <div class="filter-badge">
+                    <span>Not Synced</span>
+                    <span class="badge-count">3</span>
+                </div>
+
+                <div class="spacer"></div>
+
+                <button class="btn-record btn-record-primary">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                        <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                    </svg>
+                    <span>Record In-Person Meeting</span>
+                </button>
+
+                <button class="btn-record btn-record-secondary" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                    </svg>
+                    <span>Record Zoom Meeting</span>
+                </button>
+
+                <div class="google-status">
+                    <span>Google</span>
+                    <div class="status-dot"></div>
+                </div>
+
+                <button class="btn-icon" title="Import">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                </button>
+
+                <div class="btn-profile">
+                    <div class="profile-inner">JD</div>
+                </div>
+
+                <button class="btn-icon" title="Settings">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Design Notes -->
+        <div class="demo-notes">
+            <h3>Design Highlights - Modern Gradient Theme</h3>
+            <ul>
+                <li><strong>Vibrant Gradients:</strong> Purple-to-blue primary action, cyan-to-emerald secondary with smooth color transitions</li>
+                <li><strong>Glass-morphism:</strong> Semi-transparent surfaces with backdrop blur create depth and modern aesthetic</li>
+                <li><strong>Glow Effects:</strong> Subtle luminance on hover states enhances interactivity with radial gradients</li>
+                <li><strong>Layered Shadows:</strong> Multiple shadow levels create visual hierarchy (inset highlights + outer glows)</li>
+                <li><strong>Animated Accents:</strong> Shimmer overlay on toolbar, pulsing status dot, smooth hover transitions</li>
+                <li><strong>Gradient Text:</strong> Title uses multi-stop gradient with background-clip for premium feel</li>
+                <li><strong>Micro-interactions:</strong> Scale transforms on click, lift on hover, all with cubic-bezier easing</li>
+                <li><strong>Color Psychology:</strong> Purple/blue for primary (creative/trustworthy), cyan/green for secondary (calm/success)</li>
+                <li><strong>Accessibility:</strong> High contrast maintained, clear disabled states, visible focus rings with gradient borders</li>
+                <li><strong>Contemporary Polish:</strong> Rounded corners (10-12px), subtle inner borders, frosted glass inputs</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

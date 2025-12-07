@@ -642,8 +642,8 @@ window.clearSearch = function () {
   searchState.filters.dateTo = null;
   searchState.filters.notSynced = false;
 
-  // Clear search input
-  const searchInput = document.querySelector('.search-input');
+  // Clear search input (support both old and new selectors)
+  const searchInput = document.querySelector('.toolbar-search-input') || document.querySelector('.search-input');
   if (searchInput) {
     searchInput.value = '';
   }
@@ -653,6 +653,9 @@ window.clearSearch = function () {
   if (filterBtn) {
     filterBtn.classList.remove('active');
   }
+
+  // Update filter count
+  updateFilterCount();
 
   // Re-render meetings
   renderMeetings();
@@ -1222,14 +1225,14 @@ async function fetchCalendarMeetings() {
 function showHomeView() {
   document.getElementById('homeView').style.display = 'block';
   document.getElementById('editorView').style.display = 'none';
-  document.getElementById('newNoteBtn').style.display = 'block';
+  // Show Quick button in toolbar (use flex for proper alignment)
+  const newNoteBtn = document.getElementById('newNoteBtn');
+  if (newNoteBtn) newNoteBtn.style.display = 'flex';
   document.getElementById('toggleSidebar').style.display = 'none';
 
-  // Hide navigation buttons when on home
+  // Hide home button on home view (use visibility to preserve layout)
   const homeButton = document.getElementById('homeButton');
-  const backButton = document.getElementById('backButton');
-  if (homeButton) homeButton.style.display = 'none';
-  if (backButton) backButton.style.display = 'none';
+  if (homeButton) homeButton.style.visibility = 'hidden';
 
   // Hide the entire floating controls section on home page
   const floatingControls = document.querySelector('.floating-controls');
@@ -1237,25 +1240,25 @@ function showHomeView() {
     floatingControls.style.display = 'none';
   }
 
-  // Show Record Zoom Meeting button and set its state based on meeting detection
+  // Show Meeting button and divider in toolbar
   const joinMeetingBtn = document.getElementById('joinMeetingBtn');
   if (joinMeetingBtn) {
-    // Always show the button
     joinMeetingBtn.style.display = 'flex';
-    joinMeetingBtn.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
-      </svg>
-      Record Zoom Meeting
-    `;
-
-    // Enable/disable based on meeting detection
-    if (window.meetingDetected) {
-      joinMeetingBtn.disabled = false;
-    } else {
-      joinMeetingBtn.disabled = true;
-    }
   }
+  const actionDivider = document.getElementById('actionDivider');
+  if (actionDivider) {
+    actionDivider.style.display = 'block';
+  }
+
+  // Update Meeting button based on current detection state
+  if (window.meetingDetected && window.meetingPlatform) {
+    updateMeetingButtonPlatform(window.meetingPlatform);
+  } else {
+    updateMeetingButtonPlatform(null);
+  }
+
+  // Update filter count
+  updateFilterCount();
 }
 
 // Function to update Obsidian button state
@@ -1293,30 +1296,24 @@ function showEditorView(meetingId) {
   document.getElementById('newNoteBtn').style.display = 'none';
   document.getElementById('toggleSidebar').style.display = 'none'; // Hide the sidebar toggle
 
-  // Show Home button (always visible when not on home)
+  // Show Home button (use visibility to preserve layout)
   const homeButton = document.getElementById('homeButton');
   if (homeButton) {
-    homeButton.style.display = 'block';
+    homeButton.style.visibility = 'visible';
   }
 
-  // Show Back button only if there's a navigation context (e.g., coming from contacts)
-  const backButton = document.getElementById('backButton');
-  const backButtonText = document.getElementById('backButtonText');
-  const contactContext = window.getContactNavigationContext
-    ? window.getContactNavigationContext()
-    : null;
-
-  if (contactContext && contactContext.type === 'contact' && contactContext.contact) {
-    if (backButton) backButton.style.display = 'flex';
-    if (backButtonText) backButtonText.textContent = contactContext.contact.name || 'Contact';
-  } else {
-    if (backButton) backButton.style.display = 'none';
-  }
-
-  // Always hide the join meeting button when in editor view
+  // Hide the action buttons and divider when in editor view
   const joinMeetingBtn = document.getElementById('joinMeetingBtn');
   if (joinMeetingBtn) {
     joinMeetingBtn.style.display = 'none';
+  }
+  const quickBtn = document.getElementById('newNoteBtn');
+  if (quickBtn) {
+    quickBtn.style.display = 'none';
+  }
+  const actionDivider = document.getElementById('actionDivider');
+  if (actionDivider) {
+    actionDivider.style.display = 'none';
   }
 
   // Find the meeting in either upcoming or past meetings
@@ -1739,6 +1736,100 @@ function filterMeetings(meetings) {
   });
 }
 
+/**
+ * Update the filter count badge in the toolbar
+ * Shows count of meetings not synced to Obsidian
+ */
+function updateFilterCount() {
+  const filterCountEl = document.getElementById('filterCount');
+  if (!filterCountEl) return;
+
+  // Count unsynced meetings
+  const allMeetings = [...upcomingMeetings, ...pastMeetings];
+  const unsyncedCount = allMeetings.filter(
+    m => !m.obsidianLink && !m.vaultPath && m.type !== 'calendar'
+  ).length;
+
+  filterCountEl.textContent = unsyncedCount > 0 ? unsyncedCount : '';
+  filterCountEl.dataset.count = unsyncedCount;
+
+  // Update button title with count
+  const filterBtn = document.getElementById('notSyncedFilterBtn');
+  if (filterBtn) {
+    if (unsyncedCount > 0) {
+      filterBtn.title = `Filter: ${unsyncedCount} meeting${unsyncedCount !== 1 ? 's' : ''} not synced to Obsidian`;
+    } else {
+      filterBtn.title = 'Filter meetings';
+    }
+  }
+}
+
+/**
+ * Update the Meeting button with platform-specific icon
+ * @param {string} platform - Platform identifier (zoom, teams, google-meet, or null)
+ */
+function updateMeetingButtonPlatform(platform) {
+  console.log('[Toolbar] updateMeetingButtonPlatform called with:', platform);
+
+  const iconContainer = document.getElementById('meetingPlatformIcon');
+  const meetingBtn = document.getElementById('joinMeetingBtn');
+
+  console.log('[Toolbar] iconContainer found:', !!iconContainer);
+  console.log('[Toolbar] meetingBtn found:', !!meetingBtn);
+
+  if (!iconContainer || !meetingBtn) {
+    console.warn('[Toolbar] Missing elements - iconContainer:', !!iconContainer, 'meetingBtn:', !!meetingBtn);
+    return;
+  }
+
+  // Normalize platform name
+  const normalizedPlatform = (platform || '').toLowerCase().replace('googlemeet', 'google-meet');
+  console.log('[Toolbar] Normalized platform:', normalizedPlatform);
+
+  // Default camera icon for no meeting
+  const defaultIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+  </svg>`;
+
+  if (!platform || !normalizedPlatform) {
+    // No meeting detected - show default icon and disable button
+    console.log('[Toolbar] No platform, showing default icon and disabling button');
+    iconContainer.innerHTML = defaultIcon;
+    meetingBtn.disabled = true;
+    meetingBtn.title = 'Record Meeting (No meeting detected)';
+    return;
+  }
+
+  // Get platform config, fall back to 'unknown' if platform not recognized
+  let config = platformConfig[normalizedPlatform];
+  console.log('[Toolbar] Platform config found:', !!config, config?.name);
+
+  if (!config) {
+    // Platform detected but not in our config - use unknown/generic config but still enable
+    console.log('[Toolbar] Unknown platform, using generic config but enabling button');
+    config = platformConfig.unknown;
+  }
+
+  // Enable button and update icon
+  console.log('[Toolbar] Enabling button for platform:', config.name);
+  meetingBtn.disabled = false;
+  meetingBtn.style.display = 'flex'; // Ensure button is visible
+  meetingBtn.title = `Record ${config.name} Meeting`;
+
+  // Use image for platforms with image icons
+  if (config.iconType === 'image' && config.icon) {
+    console.log('[Toolbar] Using image icon:', config.icon);
+    iconContainer.innerHTML = `<img src="${config.icon}" alt="${config.name}" width="16" height="16" style="object-fit: contain;">`;
+  } else if (config.icon) {
+    console.log('[Toolbar] Using SVG icon');
+    iconContainer.innerHTML = config.icon;
+  } else {
+    console.log('[Toolbar] Using default icon');
+    iconContainer.innerHTML = defaultIcon;
+  }
+  console.log('[Toolbar] Button updated, disabled:', meetingBtn.disabled);
+}
+
 function renderMeetings() {
   // Clear previous content
   const mainContent = document.querySelector('.main-content .content-container');
@@ -1870,10 +1961,13 @@ function renderMeetings() {
       }
     } else {
       emptyState.innerHTML =
-        '<p>No meetings yet. Click "Record In-Person Meeting" to get started.</p>';
+        '<p>No meetings yet. Click "Quick" to record an in-person meeting.</p>';
     }
     notesContainer.appendChild(emptyState);
   }
+
+  // Update filter count in toolbar after rendering
+  updateFilterCount();
 }
 
 // Load meetings data from file
@@ -1999,22 +2093,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Listen for meeting detection status updates
   window.electronAPI.onMeetingDetectionStatus(data => {
-    console.log('Meeting detection status update:', data);
-    const joinMeetingBtn = document.getElementById('joinMeetingBtn');
+    console.log('[Toolbar] Meeting detection status update:', data);
+    console.log('[Toolbar] Platform received:', data.platform);
 
     // Store the meeting detection state globally
     window.meetingDetected = data.detected;
+    window.meetingPlatform = data.platform || null;
 
-    if (joinMeetingBtn) {
-      // Only update button state if we're in the home view
-      const inHomeView = document.getElementById('homeView').style.display !== 'none';
-
-      if (inHomeView) {
-        // Always show the button, but enable/disable based on meeting detection
-        joinMeetingBtn.style.display = 'block';
-        joinMeetingBtn.disabled = !data.detected;
-      }
-    }
+    // Update the Meeting button with platform-specific icon
+    updateMeetingButtonPlatform(data.detected ? data.platform : null);
+    console.log('[Toolbar] Updated meeting button, detected:', data.detected, 'platform:', data.platform);
   });
 
   // SDK initialization state - disable record button until SDK is ready
@@ -2411,25 +2499,28 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Search input handler - debounced for performance
-  const searchInput = document.querySelector('.search-input');
+  // Support both old (.search-input) and new (.toolbar-search-input) selectors
+  const searchInput = document.querySelector('.toolbar-search-input') || document.querySelector('.search-input');
   const debouncedSearch = debounce(query => {
     console.log('Search query:', query);
     searchState.query = query.trim();
     renderMeetings();
   }, 300);
 
-  searchInput.addEventListener('input', e => {
-    debouncedSearch(e.target.value);
-  });
+  if (searchInput) {
+    searchInput.addEventListener('input', e => {
+      debouncedSearch(e.target.value);
+    });
 
-  // Clear search on Escape key
-  searchInput.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      searchInput.value = '';
-      searchState.query = '';
-      renderMeetings();
-    }
-  });
+    // Clear search on Escape key
+    searchInput.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        searchInput.value = '';
+        searchState.query = '';
+        renderMeetings();
+      }
+    });
+  }
 
   // RS-1: Not Synced filter button click handler
   const notSyncedFilterBtn = document.getElementById('notSyncedFilterBtn');

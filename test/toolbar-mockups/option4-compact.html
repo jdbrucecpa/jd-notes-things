@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Option 4: Compact Icon-Focused Toolbar - JD Notes Things</title>
+    <style>
+        /*
+         * DESIGN RATIONALE: COMPACT/ICON-FOCUSED TOOLBAR
+         * UPDATED: Added filter button, renamed buttons, platform-specific icons
+         *
+         * Key Changes:
+         * 1. Separate filter button (expandable for future filters)
+         * 2. "Quick" instead of "Record" for in-person recording
+         * 3. "Meeting" instead of "Zoom" - dynamically shows Zoom/Meet/Teams icon
+         * 4. Google "G" icon instead of envelope
+         * 5. Platform-specific icons use actual PNG logos from src/assets/
+         */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #1e1e1e;
+            padding: 20px;
+            color: #e0e0e0;
+        }
+
+        .demo-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #fff;
+            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        /* Main Toolbar Container */
+        .toolbar {
+            background: linear-gradient(180deg, #2f2f2f 0%, #2b2b2b 100%);
+            border-bottom: 1px solid #3a3a3a;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            padding: 0 12px;
+            gap: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Search Box */
+        .search-container {
+            position: relative;
+            transition: width 0.2s ease;
+            width: 180px;
+        }
+
+        .search-container:focus-within {
+            width: 280px;
+        }
+
+        .search-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 8px;
+            width: 14px;
+            height: 14px;
+            color: #888;
+            pointer-events: none;
+        }
+
+        .search-input {
+            width: 100%;
+            height: 24px;
+            background: #1e1e1e;
+            border: 1px solid #404040;
+            border-radius: 4px;
+            padding: 0 8px 0 28px;
+            color: #e0e0e0;
+            font-size: 12px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .search-input::placeholder {
+            color: #666;
+        }
+
+        .search-input:focus {
+            border-color: #0d7eff;
+            background: #252525;
+        }
+
+        /* Filter Button - Separate from search for future extensibility */
+        .filter-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 24px;
+            padding: 0 8px;
+            background: transparent;
+            border: 1px solid #404040;
+            border-radius: 4px;
+            color: #888;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            gap: 4px;
+            position: relative;
+        }
+
+        .filter-btn:hover {
+            background: #3a3a3a;
+            border-color: #4a4a4a;
+            color: #e0e0e0;
+        }
+
+        .filter-btn.has-active {
+            background: rgba(13, 126, 255, 0.15);
+            border-color: #0d7eff;
+            color: #0d7eff;
+        }
+
+        .filter-btn .filter-icon {
+            width: 12px;
+            height: 12px;
+        }
+
+        .filter-btn .filter-count {
+            background: #d97706;
+            color: #fff;
+            font-size: 9px;
+            font-weight: 600;
+            padding: 1px 4px;
+            border-radius: 3px;
+            min-width: 14px;
+            text-align: center;
+        }
+
+        .filter-btn.has-active .filter-count {
+            background: #0d7eff;
+        }
+
+        /* Spacer */
+        .spacer {
+            flex: 1;
+        }
+
+        /* Vertical divider */
+        .divider {
+            width: 1px;
+            height: 20px;
+            background: #3a3a3a;
+            margin: 0 4px;
+        }
+
+        /* Toolbar Button Base */
+        .toolbar-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            height: 26px;
+            padding: 0 10px;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            color: #e0e0e0;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+            position: relative;
+        }
+
+        .toolbar-btn:hover {
+            background: #3a3a3a;
+            border-color: #4a4a4a;
+        }
+
+        .toolbar-btn:active {
+            background: #333;
+        }
+
+        /* Primary action button - Quick Record */
+        .toolbar-btn.primary {
+            background: #0d7eff;
+            border-color: #0d7eff;
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .toolbar-btn.primary:hover {
+            background: #0066cc;
+            border-color: #0066cc;
+        }
+
+        .toolbar-btn.primary:active {
+            background: #0055aa;
+        }
+
+        /* Secondary action button - Meeting */
+        .toolbar-btn.secondary {
+            background: #2f2f2f;
+            border-color: #4a4a4a;
+        }
+
+        .toolbar-btn.secondary:hover {
+            background: #3a3a3a;
+            border-color: #5a5a5a;
+        }
+
+        /* Disabled state */
+        .toolbar-btn.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        /* Icon-only buttons */
+        .icon-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            background: transparent;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            position: relative;
+        }
+
+        .icon-btn:hover {
+            background: #3a3a3a;
+            border-color: #4a4a4a;
+        }
+
+        .icon-btn:active {
+            background: #333;
+        }
+
+        /* Icon sizing */
+        .btn-icon {
+            width: 18px;
+            height: 18px;
+            color: currentColor;
+        }
+
+        /* Platform-specific icons for Meeting button */
+        .platform-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        /* Platform logo images */
+        .platform-logo {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            object-fit: contain;
+        }
+
+        /* Generic camera (no meeting detected) */
+        .platform-icon.generic {
+            color: #888;
+        }
+
+        /* Google "G" icon styling */
+        .google-icon {
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Notification badge */
+        .notification-badge {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border: 2px solid #2b2b2b;
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .notification-badge.disconnected {
+            background: #ef4444;
+            animation: none;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        /* Tooltip System */
+        .tooltip {
+            position: absolute;
+            bottom: -32px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1a1a;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            border: 1px solid #3a3a3a;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+        }
+
+        .tooltip::before {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-bottom: 4px solid #1a1a1a;
+        }
+
+        .toolbar-btn:hover .tooltip,
+        .icon-btn:hover .tooltip,
+        .filter-btn:hover .tooltip {
+            opacity: 1;
+        }
+
+        /* State toggle for demo */
+        .state-toggle {
+            margin-top: 30px;
+            padding: 15px;
+            background: #252525;
+            border-radius: 8px;
+            border: 1px solid #3a3a3a;
+        }
+
+        .state-toggle h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #fff;
+        }
+
+        .toggle-group {
+            margin-bottom: 12px;
+        }
+
+        .toggle-group-label {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .toggle-btn {
+            padding: 8px 16px;
+            background: #3a3a3a;
+            border: 1px solid #4a4a4a;
+            border-radius: 4px;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 12px;
+            margin-right: 8px;
+            margin-bottom: 4px;
+            transition: all 0.15s ease;
+        }
+
+        .toggle-btn:hover {
+            background: #4a4a4a;
+        }
+
+        .toggle-btn.active {
+            background: #0d7eff;
+            border-color: #0d7eff;
+            color: #fff;
+        }
+
+        /* Features list */
+        .features {
+            margin-top: 30px;
+            padding: 20px;
+            background: #252525;
+            border-radius: 8px;
+            border: 1px solid #3a3a3a;
+        }
+
+        .features h3 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+
+        .features ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .features li {
+            padding: 8px 0;
+            color: #b0b0b0;
+            font-size: 13px;
+            display: flex;
+            align-items: flex-start;
+        }
+
+        .features li::before {
+            content: '✓';
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 10px;
+            font-size: 14px;
+        }
+
+        .metric {
+            display: inline-block;
+            background: #3a3a3a;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #10b981;
+            margin: 0 2px;
+        }
+
+        .update-badge {
+            display: inline-block;
+            background: #10b981;
+            color: #000;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 8px;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1>Option 4: Compact Icon-Focused Toolbar <span class="update-badge">Updated</span></h1>
+        <p class="subtitle">Maximum space efficiency with future-proof filter system and platform-aware meeting button</p>
+
+        <!-- Main Toolbar -->
+        <div class="toolbar" id="toolbar">
+            <!-- Compact Search -->
+            <div class="search-container">
+                <div class="search-wrapper">
+                    <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <input type="text" class="search-input" placeholder="Search..." aria-label="Search meetings">
+                </div>
+            </div>
+
+            <!-- Filter Button - Separate for future extensibility -->
+            <button class="filter-btn" id="filterBtn">
+                <svg class="filter-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                </svg>
+                <span class="filter-count" id="filterCount">3</span>
+                <span class="tooltip">Filters (3 not synced)</span>
+            </button>
+
+            <!-- Spacer -->
+            <div class="spacer"></div>
+
+            <!-- Primary Action - Quick Record (In-Person) -->
+            <button class="toolbar-btn primary">
+                <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                </svg>
+                Quick
+                <span class="tooltip">Quick Record (In-Person Meeting)</span>
+            </button>
+
+            <!-- Secondary Action - Meeting (Platform-Aware) -->
+            <button class="toolbar-btn secondary" id="meetingBtn">
+                <!-- Default: Generic camera icon when no meeting detected -->
+                <svg class="platform-icon generic" id="meetingIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                Meeting
+                <span class="tooltip" id="meetingTooltip">Record Meeting (No meeting detected)</span>
+            </button>
+
+            <div class="divider"></div>
+
+            <!-- Google Account Status - Using Google "G" icon -->
+            <button class="icon-btn" id="googleBtn">
+                <!-- Google "G" multicolor icon -->
+                <svg class="google-icon" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                <span class="notification-badge" id="googleStatus"></span>
+                <span class="tooltip" id="googleTooltip">Google: Connected</span>
+            </button>
+
+            <!-- Import Button -->
+            <button class="icon-btn">
+                <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <span class="tooltip">Import Transcripts</span>
+            </button>
+
+            <!-- User Profile -->
+            <button class="icon-btn">
+                <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+                <span class="tooltip">User Profile</span>
+            </button>
+
+            <!-- Settings Button -->
+            <button class="icon-btn">
+                <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <span class="tooltip">Settings</span>
+            </button>
+        </div>
+
+        <!-- Interactive State Toggle -->
+        <div class="state-toggle">
+            <h3>Interactive Demo Controls</h3>
+
+            <div class="toggle-group">
+                <div class="toggle-group-label">Meeting Platform Detected</div>
+                <button class="toggle-btn" onclick="setMeetingPlatform('none')">No Meeting</button>
+                <button class="toggle-btn" onclick="setMeetingPlatform('zoom')">Zoom</button>
+                <button class="toggle-btn" onclick="setMeetingPlatform('meet')">Google Meet</button>
+                <button class="toggle-btn" onclick="setMeetingPlatform('teams')">Microsoft Teams</button>
+            </div>
+
+            <div class="toggle-group">
+                <div class="toggle-group-label">Google Connection</div>
+                <button class="toggle-btn active" onclick="toggleGoogleStatus(true)">Connected</button>
+                <button class="toggle-btn" onclick="toggleGoogleStatus(false)">Disconnected</button>
+            </div>
+
+            <div class="toggle-group">
+                <div class="toggle-group-label">Filter State</div>
+                <button class="toggle-btn" onclick="toggleFilterState()">Toggle Filter Active</button>
+            </div>
+        </div>
+
+        <!-- Design Features -->
+        <div class="features">
+            <h3>Updated Design Features</h3>
+            <ul>
+                <li>
+                    <strong>Separate Filter Button:</strong> Expandable filter system ready for future filters (date range, participants, status, etc.) <span class="update-badge">New</span>
+                </li>
+                <li>
+                    <strong>"Quick" Button:</strong> Renamed from "Record" for clearer distinction as in-person/quick recording <span class="update-badge">New</span>
+                </li>
+                <li>
+                    <strong>"Meeting" Button:</strong> Renamed from "Zoom" - now platform-agnostic <span class="update-badge">New</span>
+                </li>
+                <li>
+                    <strong>Platform-Aware Icons:</strong> Meeting button shows actual Zoom/Meet/Teams logos from <code>src/assets/*.png</code> based on detected service <span class="update-badge">New</span>
+                </li>
+                <li>
+                    <strong>Google "G" Icon:</strong> Proper multicolor Google logo instead of envelope <span class="update-badge">New</span>
+                </li>
+                <li>
+                    <strong>Ultra-Compact Height:</strong> <span class="metric">36px</span> toolbar saves <span class="metric">25-35%</span> vertical space
+                </li>
+                <li>
+                    <strong>Condensed Search:</strong> <span class="metric">180px</span> → <span class="metric">280px</span> on focus
+                </li>
+                <li>
+                    <strong>Icon-Only Utilities:</strong> <span class="metric">28x28px</span> buttons for Import, Profile, Settings, Google
+                </li>
+                <li>
+                    <strong>Smart Tooltips:</strong> All elements have descriptive tooltips
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Platform icons - using actual PNG logos from src/assets/
+        const platformIcons = {
+            none: `<svg class="platform-icon generic" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>`,
+            zoom: `<img class="platform-logo" src="../../src/assets/zoom.png" alt="Zoom">`,
+            meet: `<img class="platform-logo" src="../../src/assets/meet.png" alt="Google Meet">`,
+            teams: `<img class="platform-logo" src="../../src/assets/teams.png" alt="Microsoft Teams">`
+        };
+
+        const platformNames = {
+            none: 'No meeting detected',
+            zoom: 'Zoom meeting detected',
+            meet: 'Google Meet detected',
+            teams: 'Teams meeting detected'
+        };
+
+        let currentPlatform = 'none';
+
+        // Set meeting platform and update icon
+        function setMeetingPlatform(platform) {
+            currentPlatform = platform;
+            const meetingBtn = document.getElementById('meetingBtn');
+            const meetingIcon = document.getElementById('meetingIcon');
+            const meetingTooltip = document.getElementById('meetingTooltip');
+
+            // Update toggle buttons
+            document.querySelectorAll('.toggle-group:first-child .toggle-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Replace icon (handles both SVG and IMG elements)
+            const iconContainer = meetingBtn.querySelector('.platform-icon, .platform-logo, svg:first-child, img:first-child');
+            iconContainer.outerHTML = platformIcons[platform];
+
+            // Update tooltip
+            meetingTooltip.textContent = `Record Meeting (${platformNames[platform]})`;
+
+            // Enable/disable button
+            if (platform === 'none') {
+                meetingBtn.classList.add('disabled');
+            } else {
+                meetingBtn.classList.remove('disabled');
+            }
+        }
+
+        // Toggle Google connection status
+        function toggleGoogleStatus(connected) {
+            const badge = document.getElementById('googleStatus');
+            const tooltip = document.getElementById('googleTooltip');
+            const buttons = document.querySelectorAll('.toggle-group:nth-child(2) .toggle-btn');
+
+            if (connected) {
+                badge.classList.remove('disconnected');
+                tooltip.textContent = 'Google: Connected';
+                buttons[0].classList.add('active');
+                buttons[1].classList.remove('active');
+            } else {
+                badge.classList.add('disconnected');
+                tooltip.textContent = 'Google: Disconnected';
+                buttons[0].classList.remove('active');
+                buttons[1].classList.add('active');
+            }
+        }
+
+        // Toggle filter active state
+        function toggleFilterState() {
+            const filterBtn = document.getElementById('filterBtn');
+            const filterCount = document.getElementById('filterCount');
+            const tooltip = filterBtn.querySelector('.tooltip');
+
+            filterBtn.classList.toggle('has-active');
+
+            if (filterBtn.classList.contains('has-active')) {
+                tooltip.textContent = 'Filters active (3 not synced) - Click to clear';
+            } else {
+                tooltip.textContent = 'Filters (3 not synced)';
+            }
+        }
+
+        // Initialize with no meeting detected
+        setMeetingPlatform('none');
+        document.querySelector('.toggle-group:first-child .toggle-btn').classList.add('active');
+    </script>
+</body>
+</html>

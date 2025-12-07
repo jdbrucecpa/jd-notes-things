@@ -84,51 +84,6 @@ export function applyTheme(theme) {
   }
 }
 
-/**
- * Export settings as JSON file
- */
-export function exportSettings() {
-  const settings = loadSettings();
-  const dataStr = JSON.stringify(settings, null, 2);
-  const dataBlob = new Blob([dataStr], { type: 'application/json' });
-
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(dataBlob);
-  link.download = `jd-notes-settings-${new Date().toISOString().split('T')[0]}.json`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(link.href);
-}
-
-/**
- * Import settings from JSON file
- */
-export function importSettings(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = e => {
-      try {
-        const imported = JSON.parse(e.target.result);
-        const merged = { ...DEFAULT_SETTINGS, ...imported };
-
-        if (saveSettings(merged)) {
-          // Apply theme immediately
-          applyTheme(merged.theme);
-          resolve(merged);
-        } else {
-          reject(new Error('Failed to save imported settings'));
-        }
-      } catch (error) {
-        reject(error);
-      }
-    };
-
-    reader.onerror = () => reject(new Error('Failed to read file'));
-    reader.readAsText(file);
-  });
-}
 
 /**
  * Open settings and switch to a specific tab
@@ -183,9 +138,6 @@ export function initializeSettingsUI() {
   const patternGenerationProviderSelect = document.getElementById(
     'patternGenerationProviderSelect'
   );
-  const exportSettingsBtn = document.getElementById('exportSettingsBtn');
-  const importSettingsBtn = document.getElementById('importSettingsBtn');
-  const importSettingsFile = document.getElementById('importSettingsFile');
   const exportAllSettingsBtn = document.getElementById('exportAllSettingsBtn');
   const importAllSettingsBtn = document.getElementById('importAllSettingsBtn');
   const exportStatus = document.getElementById('exportStatus');
@@ -344,8 +296,20 @@ export function initializeSettingsUI() {
               : 'All links are up to date';
 
           if (refreshLinksStatus) {
-            refreshLinksStatus.textContent = msg;
+            // Create a "see logs" link instead of plain text
+            refreshLinksStatus.innerHTML = `${msg} - <a href="#" class="see-logs-link" style="color: var(--primary-color); text-decoration: underline; cursor: pointer;">see logs</a>`;
             refreshLinksStatus.style.color = 'var(--status-success)';
+
+            // Add click handler to the link
+            const seeLogsLink = refreshLinksStatus.querySelector('.see-logs-link');
+            if (seeLogsLink) {
+              seeLogsLink.addEventListener('click', e => {
+                e.preventDefault();
+                if (window.showLogsWithFilter) {
+                  window.showLogsWithFilter('[datasync]');
+                }
+              });
+            }
           }
 
           // Show detailed toast
@@ -409,40 +373,6 @@ export function initializeSettingsUI() {
         `Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`,
         'success'
       );
-    });
-  }
-
-  // Export settings
-  if (exportSettingsBtn) {
-    exportSettingsBtn.addEventListener('click', () => {
-      exportSettings();
-      window.showToast('Settings exported successfully', 'success');
-    });
-  }
-
-  // Import settings
-  if (importSettingsBtn) {
-    importSettingsBtn.addEventListener('click', () => {
-      importSettingsFile.click();
-    });
-  }
-
-  if (importSettingsFile) {
-    importSettingsFile.addEventListener('change', async e => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      try {
-        await importSettings(file);
-        window.showToast('Settings imported successfully', 'success');
-        loadSettingsIntoUI();
-
-        // Clear file input
-        e.target.value = '';
-      } catch (error) {
-        console.error('Error importing settings:', error);
-        window.showToast('Failed to import settings: ' + error.message, 'error');
-      }
     });
   }
 

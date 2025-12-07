@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JD Notes Things - Minimal Toolbar Design</title>
+    <style>
+        /*
+        ==========================================
+        DESIGN RATIONALE: "AIR & ESSENCE"
+        ==========================================
+
+        Philosophy: Strip away everything non-essential. What remains is pure function.
+
+        Core Principles:
+        1. BREATHING ROOM - 60px toolbar height with generous padding creates zen-like calm
+        2. MONOCHROME PURITY - Pure grayscale (#fff on dark) with single accent (blue) for primary action
+        3. WHISPER INTERACTIONS - 1px stroke icons feel weightless, hover states are subtle (200ms fade)
+        4. PROGRESSIVE DISCLOSURE - Labels hide until needed (hover reveals), reducing visual noise
+        5. INTELLIGENT SPACING - 24px gaps between logical groups, 12px within groups
+        6. STATUS AS SHAPE - Notification dot is only color element besides primary button
+
+        Why this works:
+        - Users spend hours in this app - minimal fatigue from visual noise
+        - Professional aesthetic matches serious work (meeting transcription)
+        - High information density without feeling cramped
+        - Familiar patterns (search left, profile/settings right) reduce cognitive load
+
+        ==========================================
+        */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            padding: 40px;
+            line-height: 1.5;
+        }
+
+        /* Design showcase container */
+        .showcase {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .showcase h1 {
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .showcase h2 {
+            font-size: 32px;
+            font-weight: 300;
+            margin-bottom: 40px;
+            color: #fff;
+        }
+
+        /* Toolbar container with subtle shadow for depth */
+        .toolbar-container {
+            background: #2b2b2b;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            margin-bottom: 60px;
+        }
+
+        /* Main toolbar - extreme horizontal spacing */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+            padding: 0 20px;
+            gap: 24px; /* Generous gap between major sections */
+        }
+
+        /* Left section: Search */
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            max-width: 320px; /* Constrain search width for balance */
+        }
+
+        /* Center section: Actions */
+        .toolbar-center {
+            display: flex;
+            align-items: center;
+            gap: 12px; /* Tighter gap for related actions */
+        }
+
+        /* Right section: Account & Settings */
+        .toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /*
+        SEARCH BOX - Borderless, minimal, ghost-like until focused
+        Extremely subtle border (1px) becomes visible on hover
+        */
+        .search-container {
+            position: relative;
+            width: 100%;
+        }
+
+        .search-box {
+            width: 100%;
+            height: 36px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            padding: 0 12px 0 36px;
+            font-size: 13px;
+            color: #ffffff;
+            transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            outline: none;
+        }
+
+        .search-box::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        .search-box:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .search-box:focus {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Ultra-thin search icon */
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            opacity: 0.4;
+            pointer-events: none;
+        }
+
+        /*
+        FILTER BADGE - Pill-shaped, minimal
+        Shows count when active, subtle presence when not
+        */
+        .filter-badge {
+            position: relative;
+            height: 36px;
+            padding: 0 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .filter-badge:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .filter-badge.active {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.3);
+            color: #60a5fa;
+        }
+
+        .filter-count {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .filter-badge.active .filter-count {
+            background: rgba(59, 130, 246, 0.2);
+        }
+
+        /*
+        DIVIDER - Hairline separator between logical groups
+        Nearly invisible (8% opacity) but provides breathing structure
+        */
+        .divider {
+            width: 1px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.08);
+            margin: 0 8px;
+        }
+
+        /*
+        BUTTONS - Two variants: Primary (blue) and Ghost (transparent)
+        Primary: Vibrant blue for main action
+        Ghost: Whisper presence until hover
+        */
+        .btn {
+            position: relative;
+            height: 36px;
+            padding: 0 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            white-space: nowrap;
+            outline: none;
+        }
+
+        /* Primary action button - only blue element in entire toolbar */
+        .btn-primary {
+            background: #3b82f6;
+            color: #ffffff;
+            box-shadow: 0 1px 3px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        /* Secondary actions - ghost buttons */
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        /* Disabled state - further reduced opacity, no interaction */
+        .btn-secondary:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        /*
+        ICON BUTTONS - Circular, minimal
+        40x40px touch targets despite appearing smaller
+        Icons are 18x18px for crisp rendering
+        */
+        .btn-icon {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            outline: none;
+        }
+
+        .btn-icon:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .btn-icon svg {
+            width: 18px;
+            height: 18px;
+            opacity: 0.7;
+            transition: opacity 200ms;
+        }
+
+        .btn-icon:hover svg {
+            opacity: 1;
+        }
+
+        /*
+        STATUS INDICATOR - Google account connection
+        Green dot signals active connection
+        Positioned absolutely for precise placement
+        */
+        .status-dot {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border: 2px solid #2b2b2b;
+            border-radius: 50%;
+            box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.3);
+        }
+
+        .status-dot.warning {
+            background: #f59e0b;
+            box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.3);
+        }
+
+        /*
+        TOOLTIP - Progressive disclosure
+        Labels appear on hover for icon-only buttons
+        Slide up 4px with fade for polished feel
+        */
+        .tooltip {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%) translateY(4px);
+            background: rgba(0, 0, 0, 0.9);
+            color: #ffffff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 100;
+        }
+
+        .btn-icon:hover .tooltip,
+        .filter-badge:hover .tooltip {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Tooltip arrow */
+        .tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 4px solid transparent;
+            border-top-color: rgba(0, 0, 0, 0.9);
+        }
+
+        /*
+        SVG ICONS - Ultra-thin 1.5px strokes
+        Optimized for 18x18px rendering
+        */
+        .icon-stroke {
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* Demo states section */
+        .states-demo {
+            margin-top: 40px;
+        }
+
+        .states-demo h3 {
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .state-row {
+            background: #2b2b2b;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+        }
+
+        .state-label {
+            font-size: 11px;
+            font-weight: 500;
+            color: #888;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Design notes */
+        .design-notes {
+            margin-top: 60px;
+            padding: 24px;
+            background: rgba(255, 255, 255, 0.02);
+            border-left: 2px solid rgba(59, 130, 246, 0.3);
+            border-radius: 8px;
+        }
+
+        .design-notes h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #60a5fa;
+            margin-bottom: 12px;
+        }
+
+        .design-notes p {
+            font-size: 13px;
+            line-height: 1.7;
+            color: #999;
+            margin-bottom: 8px;
+        }
+
+        .design-notes ul {
+            margin-left: 20px;
+            font-size: 13px;
+            line-height: 1.8;
+            color: #999;
+        }
+
+        .design-notes strong {
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="showcase">
+        <h1>Option 1</h1>
+        <h2>Minimal: Air & Essence</h2>
+
+        <!-- Main toolbar mockup -->
+        <div class="toolbar-container">
+            <div class="toolbar">
+                <!-- Left: Search -->
+                <div class="toolbar-left">
+                    <div class="search-container">
+                        <svg class="search-icon" viewBox="0 0 16 16">
+                            <circle cx="7" cy="7" r="5" class="icon-stroke" />
+                            <path d="M11 11L15 15" class="icon-stroke" />
+                        </svg>
+                        <input type="text" class="search-box" placeholder="Search meetings...">
+                    </div>
+                </div>
+
+                <!-- Center: Actions -->
+                <div class="toolbar-center">
+                    <!-- Not Synced Filter -->
+                    <div class="filter-badge active">
+                        <svg width="14" height="14" viewBox="0 0 16 16">
+                            <path d="M2 8L6 12L14 4" class="icon-stroke" stroke-width="2" />
+                        </svg>
+                        Not Synced
+                        <span class="filter-count">3</span>
+                        <span class="tooltip">Show unsynced meetings</span>
+                    </div>
+
+                    <div class="divider"></div>
+
+                    <!-- Primary: Record In-Person -->
+                    <button class="btn btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 16 16">
+                            <circle cx="8" cy="6" r="3" class="icon-stroke" stroke-width="1.5" />
+                            <path d="M8 9v3M6 12h4" class="icon-stroke" stroke-width="1.5" />
+                            <path d="M5 6c0 1.657 1.343 3 3 3s3-1.343 3-3" class="icon-stroke" stroke-width="1.5" />
+                        </svg>
+                        Record In-Person
+                    </button>
+
+                    <!-- Secondary: Record Zoom (enabled state) -->
+                    <button class="btn btn-secondary">
+                        <svg width="16" height="16" viewBox="0 0 16 16">
+                            <rect x="2" y="5" width="8" height="6" rx="1" class="icon-stroke" stroke-width="1.5" />
+                            <path d="M10 6.5l3.5-2v7l-3.5-2" class="icon-stroke" stroke-width="1.5" />
+                        </svg>
+                        Record Zoom
+                    </button>
+                </div>
+
+                <!-- Right: Account & Settings -->
+                <div class="toolbar-right">
+                    <div class="divider"></div>
+
+                    <!-- Import -->
+                    <button class="btn-icon">
+                        <svg viewBox="0 0 16 16">
+                            <path d="M8 11V3M5 8l3 3 3-3" class="icon-stroke" />
+                            <path d="M3 11v2a1 1 0 001 1h8a1 1 0 001-1v-2" class="icon-stroke" />
+                        </svg>
+                        <span class="tooltip">Import transcripts</span>
+                    </button>
+
+                    <!-- Google Account Status -->
+                    <button class="btn-icon">
+                        <svg viewBox="0 0 16 16">
+                            <path d="M13 8.5V8c0-2.761-2.239-5-5-5S3 5.239 3 8s2.239 5 5 5c1.18 0 2.264-.41 3.119-1.094" class="icon-stroke" />
+                            <path d="M11 12l1.5 1.5L15 11" class="icon-stroke" stroke-width="1.5" />
+                        </svg>
+                        <div class="status-dot"></div>
+                        <span class="tooltip">Google connected</span>
+                    </button>
+
+                    <!-- Profile -->
+                    <button class="btn-icon">
+                        <svg viewBox="0 0 16 16">
+                            <circle cx="8" cy="5" r="2.5" class="icon-stroke" />
+                            <path d="M3 13c0-2.5 2-4 5-4s5 1.5 5 4" class="icon-stroke" />
+                        </svg>
+                        <span class="tooltip">Profile</span>
+                    </button>
+
+                    <!-- Settings -->
+                    <button class="btn-icon">
+                        <svg viewBox="0 0 16 16">
+                            <circle cx="8" cy="8" r="2" class="icon-stroke" />
+                            <path d="M8 1v2M8 13v2M13.364 2.636l-1.414 1.414M4.05 11.95l-1.414 1.414M15 8h-2M3 8H1M13.364 13.364l-1.414-1.414M4.05 4.05L2.636 2.636" class="icon-stroke" />
+                        </svg>
+                        <span class="tooltip">Settings</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- State variations -->
+        <div class="states-demo">
+            <h3>State Variations</h3>
+
+            <!-- Zoom button disabled state -->
+            <div class="state-row">
+                <div class="state-label">Zoom Meeting Not Detected (Disabled State)</div>
+                <div class="toolbar">
+                    <div class="toolbar-center" style="margin: 0 auto;">
+                        <button class="btn btn-primary">
+                            <svg width="16" height="16" viewBox="0 0 16 16">
+                                <circle cx="8" cy="6" r="3" class="icon-stroke" stroke-width="1.5" />
+                                <path d="M8 9v3M6 12h4" class="icon-stroke" stroke-width="1.5" />
+                                <path d="M5 6c0 1.657 1.343 3 3 3s3-1.343 3-3" class="icon-stroke" stroke-width="1.5" />
+                            </svg>
+                            Record In-Person
+                        </button>
+                        <button class="btn btn-secondary" disabled>
+                            <svg width="16" height="16" viewBox="0 0 16 16">
+                                <rect x="2" y="5" width="8" height="6" rx="1" class="icon-stroke" stroke-width="1.5" />
+                                <path d="M10 6.5l3.5-2v7l-3.5-2" class="icon-stroke" stroke-width="1.5" />
+                            </svg>
+                            Record Zoom
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter inactive state -->
+            <div class="state-row">
+                <div class="state-label">Filter Inactive (No Unsynced Meetings)</div>
+                <div class="toolbar">
+                    <div class="toolbar-center" style="margin: 0 auto;">
+                        <div class="filter-badge">
+                            <svg width="14" height="14" viewBox="0 0 16 16">
+                                <path d="M2 8L6 12L14 4" class="icon-stroke" stroke-width="2" />
+                            </svg>
+                            Not Synced
+                            <span class="tooltip">No unsynced meetings</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Google disconnected state -->
+            <div class="state-row">
+                <div class="state-label">Google Account Warning (Connection Issue)</div>
+                <div class="toolbar">
+                    <div class="toolbar-right" style="margin: 0 auto;">
+                        <button class="btn-icon">
+                            <svg viewBox="0 0 16 16">
+                                <path d="M13 8.5V8c0-2.761-2.239-5-5-5S3 5.239 3 8s2.239 5 5 5c1.18 0 2.264-.41 3.119-1.094" class="icon-stroke" />
+                                <path d="M11 12l1.5 1.5L15 11" class="icon-stroke" stroke-width="1.5" />
+                            </svg>
+                            <div class="status-dot warning"></div>
+                            <span class="tooltip">Google reconnect needed</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Design notes -->
+        <div class="design-notes">
+            <h3>Design Philosophy: "Air & Essence"</h3>
+            <p><strong>This design prioritizes calm and clarity through extreme minimalism.</strong></p>
+
+            <p><strong>Key Decisions:</strong></p>
+            <ul>
+                <li><strong>Single color accent:</strong> Only the primary "Record In-Person" button uses blue - everything else is grayscale. This creates immediate visual hierarchy.</li>
+                <li><strong>Ultra-thin strokes:</strong> 1.5px icon strokes feel weightless and modern, reducing visual noise.</li>
+                <li><strong>Progressive disclosure:</strong> Tooltips only appear on hover, keeping the interface clean until needed.</li>
+                <li><strong>Generous spacing:</strong> 60px toolbar height + 24px gaps between groups creates breathing room for long sessions.</li>
+                <li><strong>Subtle interactions:</strong> 200ms cubic-bezier transitions feel refined, not flashy.</li>
+                <li><strong>Status as color:</strong> Green/orange dots are the only other colored elements - they signal important state.</li>
+                <li><strong>Ghost buttons:</strong> Secondary actions fade into background until hovered, reducing competition for attention.</li>
+            </ul>
+
+            <p><strong>Why minimal works for this app:</strong></p>
+            <ul>
+                <li>Users spend hours in meeting recording apps - visual fatigue is real</li>
+                <li>Professional context demands serious aesthetic</li>
+                <li>Clear hierarchy helps users find recording controls instantly</li>
+                <li>Grayscale palette won't distract during live meetings</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

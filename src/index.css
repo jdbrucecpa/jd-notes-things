@@ -134,99 +134,288 @@ body {
   flex: 1;
 }
 
-/* Header Styles */
-.header {
+/* ============================================
+   COMPACT TOOLBAR - Option 4 Design
+   44px height (scaled 20% from 36px), icon-focused, platform-aware
+   ============================================ */
+
+.toolbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 10px 20px;
-  background-color: var(--card-bg);
+  height: 44px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, var(--card-bg) 0%, var(--bg-secondary) 100%);
   border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
   z-index: 100;
+  gap: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 #drag-region {
   -webkit-app-region: drag;
 }
 
-.header-left,
-.header-right {
+/* Fixed-width left section for consistent toolbar layout */
+.toolbar-left {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
+  min-width: 34px; /* Same as icon button width */
+  margin-left: 72px; /* Space for window controls on macOS */
 }
 
-.header-left {
-  margin-left: 60px; /* Add space to avoid overlapping with macOS window controls */
-}
-
-.header-center {
-  flex-grow: 1;
-  max-width: 400px;
-  margin: 0 20px;
-}
-
-.search-container {
+/* Search Box */
+.toolbar-search {
   position: relative;
-  display: flex;
-  align-items: center;
+  width: 216px;
+  transition: width 0.2s ease;
 }
 
-.search-icon {
+.toolbar-search:focus-within {
+  width: 336px;
+}
+
+.toolbar-search-icon {
   position: absolute;
   left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  pointer-events: none;
 }
 
-.search-input {
+.toolbar-search-input {
   width: 100%;
-  padding: 8px 8px 8px 35px;
+  height: 30px;
+  padding: 0 10px 0 34px;
+  border: 1px solid var(--border-color);
   border-radius: 5px;
-  border: 1px solid var(--border-color);
   background-color: var(--bg-secondary);
+  color: var(--text-primary);
   font-size: 14px;
-  -webkit-app-region: no-drag; /* Make input not draggable to allow text selection */
-}
-
-/* RS-1: Not Synced filter toggle button */
-.filter-toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  margin-left: 8px;
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
+  outline: none;
   transition: all 0.2s ease;
   -webkit-app-region: no-drag;
 }
 
-.filter-toggle-btn:hover {
-  background-color: var(--bg-hover);
+.toolbar-search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.toolbar-search-input:focus {
+  border-color: var(--primary-color);
+  background-color: var(--card-bg);
+}
+
+/* Filter Button */
+.toolbar-filter-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  gap: 5px;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-filter-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.toolbar-filter-btn.active {
+  background: rgba(13, 126, 255, 0.15);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.toolbar-filter-icon {
+  flex-shrink: 0;
+}
+
+.toolbar-filter-count {
+  background: #d97706;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 4px;
+  min-width: 17px;
+  text-align: center;
+}
+
+.toolbar-filter-btn.active .toolbar-filter-count {
+  background: var(--primary-color);
+}
+
+/* Hide count when zero */
+.toolbar-filter-count:empty,
+.toolbar-filter-count[data-count="0"] {
+  display: none;
+}
+
+/* Spacer */
+.toolbar-spacer {
+  flex: 1;
+}
+
+/* Vertical Divider */
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-color);
+  margin: 0 5px;
+}
+
+/* Toolbar Action Buttons */
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+}
+
+.toolbar-btn:active {
+  background: var(--card-hover);
+}
+
+/* Primary Button (Quick Record) */
+.toolbar-btn-primary {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: #fff;
+}
+
+.toolbar-btn-primary:hover {
+  background: #0066cc;
+  border-color: #0066cc;
+}
+
+.toolbar-btn-primary:active {
+  background: #0055aa;
+}
+
+/* Secondary Button (Meeting) */
+.toolbar-btn-secondary {
+  background: var(--card-bg);
+  border-color: var(--border-color);
+}
+
+.toolbar-btn-secondary:hover:not(:disabled) {
+  background: var(--bg-secondary);
   border-color: var(--text-secondary);
 }
 
-.filter-toggle-btn.active {
-  background-color: var(--accent-color);
-  border-color: var(--accent-color);
-  color: white;
+.toolbar-btn-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.filter-toggle-btn.active svg {
-  fill: white;
+/* Platform Icon Container */
+.toolbar-platform-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
 }
 
-.filter-toggle-btn svg {
-  flex-shrink: 0;
+.toolbar-platform-icon img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
 }
+
+/* Icon-Only Buttons */
+.toolbar-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.toolbar-icon-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.toolbar-icon-btn:active {
+  background: var(--card-hover);
+}
+
+.toolbar-icon-btn.connected {
+  color: var(--brand-google);
+}
+
+/* Status Badge (for Google button) */
+.toolbar-status-badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 10px;
+  height: 10px;
+  background: var(--text-secondary);
+  border: 2px solid var(--card-bg);
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
+}
+
+.toolbar-icon-btn.connected .toolbar-status-badge {
+  background: #10b981;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.toolbar-status-badge.disconnected {
+  background: #ef4444;
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Legacy class support - redirect to new styles */
+.header { display: none; } /* Hide old header if still present */
+.search-container { display: none; }
+.filter-toggle-btn { display: none; }
 
 .btn {
   padding: 8px 16px;
@@ -279,58 +468,13 @@ body {
   display: none;
 }
 
-.new-note-btn,
-.join-meeting-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 8px;
-  margin-right: 10px;
-  transition: all 0.2s ease;
-  -webkit-app-region: no-drag; /* Make button clickable */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
+/* Legacy button styles - now handled by toolbar-btn classes */
+/* Note: These IDs are reused on .toolbar-btn elements, so don't hide by ID */
 
-.new-note-btn {
-  background: linear-gradient(135deg, #434343 0%, #000000 100%);
-  color: #fff;
-  border: none;
-}
-
-.new-note-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-}
-
-.new-note-btn svg {
-  opacity: 0.9;
-}
-
-.join-meeting-btn {
-  background: linear-gradient(135deg, #4a6fa5 0%, #2e5c8a 100%);
-  color: #fff;
-  border: none;
-}
-
-.join-meeting-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(74, 111, 165, 0.3);
-}
-
-.join-meeting-btn svg {
-  opacity: 0.9;
-}
-
-.join-meeting-btn:disabled {
-  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
-  color: var(--text-secondary);
-  cursor: not-allowed;
-  opacity: 0.7;
-  transform: none;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+.header-left,
+.header-right,
+.header-center {
+  display: none;
 }
 
 /* LLM Provider Selector */
@@ -393,65 +537,18 @@ body {
   box-shadow: 0 0 0 2px rgba(0, 119, 255, 0.1);
 }
 
-/* Unified Google Button (Calendar + Contacts - Phase 6) */
+/* Legacy Google Button - now using .toolbar-icon-btn */
 .google-btn {
-  background-color: var(--card-bg);
-  border: 1px solid var(--border-color);
-  margin-right: 10px;
-  padding: 8px 12px;
-  position: relative;
-  color: var(--text-secondary);
-  transition: all 0.2s ease;
-}
-
-.google-btn:hover {
-  background-color: var(--card-hover);
-}
-
-.google-btn.connected {
-  color: var(--brand-google);
-  border-color: var(--brand-google);
+  /* Styles now handled by .toolbar-icon-btn */
 }
 
 .google-status {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--color-gray-medium);
-  transition: background-color 0.2s ease;
+  /* Styles now handled by .toolbar-status-badge */
 }
 
-.google-btn.connected .google-status {
-  background-color: var(--brand-google);
-}
-
-/* Import Button */
+/* Legacy Import Button - now using .toolbar-icon-btn */
 .import-btn {
-  background-color: var(--card-bg);
-  border: 1px solid var(--border-color);
-  margin-right: 10px;
-  padding: 8px 12px;
-  color: var(--text-secondary);
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.import-btn:hover {
-  background-color: var(--card-hover);
-  color: var(--primary-color);
-}
-
-.import-btn svg {
-  transition: transform 0.2s ease;
-}
-
-.import-btn:hover svg {
-  transform: translateY(2px);
+  /* Styles now handled by .toolbar-icon-btn */
 }
 
 .user-avatar {
@@ -5730,6 +5827,15 @@ body {
 .log-viewer-content .log-line.debug {
   color: var(--text-secondary);
   opacity: 0.8;
+}
+
+.log-viewer-content .log-line.datasync {
+  color: #059669;
+  background: rgba(5, 150, 105, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin: 2px 0;
+  font-weight: 500;
 }
 
 .log-viewer-footer {

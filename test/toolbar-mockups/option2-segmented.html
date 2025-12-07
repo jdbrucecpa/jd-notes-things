@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JD Notes Things - Segmented Toolbar Design</title>
+    <style>
+        /*
+        ============================================
+        DESIGN RATIONALE - SEGMENTED/GROUPED APPROACH
+        ============================================
+
+        Core Principles:
+        1. Visual Segmentation - Toolbar divided into 4 logical zones with pill-shaped containers
+        2. Proximity Grouping - Related functions clustered together with consistent spacing
+        3. Progressive Disclosure - Recording actions are the hero, others support
+        4. Semantic Color - Status indicators use green (active), amber (notification), red (inactive)
+        5. Tactile Affordance - Subtle shadows and hover states create depth
+
+        Layout Structure:
+        [Search & Filters] | [Recording Actions] | [Account Status] | [Utilities]
+
+        Why Segments?
+        - Reduces cognitive load by chunking related functions
+        - Creates clear visual hierarchy without size differences
+        - Pill backgrounds provide touch targets and visual anchoring
+        - Dividers are implicit through background containers
+        - Scalable: easy to add buttons within existing groups
+
+        Design Decisions:
+        - 12px border radius on segments for modern, soft appearance
+        - 16px padding in segments for comfortable touch targets
+        - 8px gap between segment items, 24px between segments
+        - Icon-first design with hover tooltips (not implemented in mockup)
+        - Consistent 20px icon size across all elements
+        - 2px notification dots for status indicators
+        */
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background: #1e1e1e;
+            color: #e0e0e0;
+            padding: 40px;
+        }
+
+        /* Main toolbar container */
+        .toolbar {
+            background: #2b2b2b;
+            border-radius: 12px;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            gap: 24px; /* Spacing between major segments */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Segment containers - pill-shaped backgrounds for grouping */
+        .segment {
+            display: flex;
+            align-items: center;
+            gap: 8px; /* Spacing between items within a segment */
+            background: rgba(255, 255, 255, 0.04); /* Subtle background lift */
+            border-radius: 12px;
+            padding: 8px 16px;
+            transition: background 0.2s ease;
+        }
+
+        /* Hover effect on segments to show interactivity */
+        .segment:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        /* Search segment - left-aligned, flexible width */
+        .search-segment {
+            flex: 1;
+            max-width: 400px;
+            min-width: 280px;
+        }
+
+        /* Recording actions - visual emphasis through primary/secondary styling */
+        .recording-segment {
+            background: rgba(59, 130, 246, 0.08); /* Subtle blue tint for primary actions */
+        }
+
+        .recording-segment:hover {
+            background: rgba(59, 130, 246, 0.12);
+        }
+
+        /* Account segment - single status indicator */
+        .account-segment {
+            padding: 8px 12px;
+        }
+
+        /* Utilities segment - icon-only buttons */
+        .utilities-segment {
+            gap: 4px; /* Tighter spacing for icon-only buttons */
+        }
+
+        /* Search input styling */
+        .search-box {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-box input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 12px 8px 36px; /* Left padding for icon */
+            color: #e0e0e0;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .search-box input:focus {
+            background: rgba(0, 0, 0, 0.4);
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .search-box input::placeholder {
+            color: #888;
+        }
+
+        /* Search icon overlay */
+        .search-icon {
+            position: absolute;
+            left: 10px;
+            width: 18px;
+            height: 18px;
+            opacity: 0.5;
+        }
+
+        /* Filter badge styling */
+        .filter-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(245, 158, 11, 0.15); /* Amber for notification */
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 13px;
+            color: #fbbf24;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .filter-badge:hover {
+            background: rgba(245, 158, 11, 0.25);
+            border-color: rgba(245, 158, 11, 0.5);
+        }
+
+        .filter-badge .badge-count {
+            background: #f59e0b;
+            color: #1e1e1e;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 600;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        /* Button base styling */
+        .btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        /* Primary button - main recording action */
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        /* Secondary button - supporting action */
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: #e0e0e0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Disabled state for Zoom button */
+        .btn-secondary:disabled {
+            background: rgba(255, 255, 255, 0.03);
+            color: #666;
+            border-color: rgba(255, 255, 255, 0.05);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .btn-secondary:disabled:hover {
+            background: rgba(255, 255, 255, 0.03);
+            transform: none;
+        }
+
+        /* Icon-only button for utilities */
+        .btn-icon {
+            background: transparent;
+            color: #a0a0a0;
+            border: 1px solid transparent;
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .btn-icon:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #e0e0e0;
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Account status indicator */
+        .account-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: rgba(16, 185, 129, 0.1); /* Green tint for connected */
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .account-status:hover {
+            background: rgba(16, 185, 129, 0.15);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .account-status .status-icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        .account-status .status-text {
+            font-size: 13px;
+            color: #10b981;
+            font-weight: 500;
+        }
+
+        /* Notification dot */
+        .notification-dot {
+            position: relative;
+        }
+
+        .notification-dot::after {
+            content: '';
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            width: 8px;
+            height: 8px;
+            background: #f59e0b; /* Amber for notifications */
+            border: 2px solid #2b2b2b;
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+        }
+
+        /* Icon sizing */
+        .icon {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+        }
+
+        /* Demo section styling */
+        .demo-section {
+            background: #2b2b2b;
+            border-radius: 12px;
+            padding: 24px;
+            margin-top: 40px;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .demo-section h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #3b82f6;
+        }
+
+        .demo-section p {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #a0a0a0;
+            margin-bottom: 8px;
+        }
+
+        .state-label {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.15);
+            color: #3b82f6;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 20px;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+<body>
+    <!--
+    ============================================
+    JD NOTES THINGS - SEGMENTED TOOLBAR DESIGN
+    ============================================
+
+    Design Competition Entry: Option 2 - Grouped/Segmented
+
+    Key Features:
+    - Clear visual segmentation with pill-shaped containers
+    - Logical grouping reduces cognitive load
+    - Consistent icon sizing and spacing
+    - Semantic color coding for status
+    - Hover states provide feedback
+    - Scalable architecture for future additions
+
+    Visual Hierarchy:
+    1. Recording actions (blue-tinted segment) - primary focus
+    2. Search and filters (left alignment) - discovery tools
+    3. Account status (green indicator) - connection health
+    4. Utilities (right alignment) - secondary actions
+
+    Accessibility:
+    - High contrast ratios for text
+    - Large touch targets (44px minimum)
+    - Clear focus states for keyboard navigation
+    - Semantic HTML structure
+
+    -->
+
+    <div class="state-label">State 1: Zoom Meeting Detected (Enabled)</div>
+
+    <div class="toolbar">
+        <!-- Search & Filters Segment -->
+        <div class="segment search-segment">
+            <div class="search-box">
+                <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <input type="text" placeholder="Search meetings...">
+            </div>
+
+            <div class="filter-badge">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <span>Not Synced</span>
+                <span class="badge-count">3</span>
+            </div>
+        </div>
+
+        <!-- Recording Actions Segment -->
+        <div class="segment recording-segment">
+            <button class="btn btn-primary">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+                Record In-Person Meeting
+            </button>
+
+            <button class="btn btn-secondary">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M15.5 1h-8C6.12 1 5 2.12 5 3.5v17C5 21.88 6.12 23 7.5 23h8c1.38 0 2.5-1.12 2.5-2.5v-17C17 2.12 15.88 1 15.5 1zm-4 21c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4.5-4H7V4h9v14z"/>
+                </svg>
+                Record Zoom Meeting
+            </button>
+        </div>
+
+        <!-- Account Status Segment -->
+        <div class="segment account-segment">
+            <div class="account-status notification-dot">
+                <svg class="status-icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                <span class="status-text">Google Connected</span>
+            </div>
+        </div>
+
+        <!-- Utilities Segment -->
+        <div class="segment utilities-segment">
+            <button class="btn btn-icon" title="Import">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+                </svg>
+            </button>
+
+            <button class="btn btn-icon" title="Profile">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                </svg>
+            </button>
+
+            <button class="btn btn-icon" title="Settings">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="state-label">State 2: No Zoom Meeting Detected (Disabled)</div>
+
+    <div class="toolbar">
+        <!-- Search & Filters Segment -->
+        <div class="segment search-segment">
+            <div class="search-box">
+                <svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+                <input type="text" placeholder="Search meetings...">
+            </div>
+
+            <div class="filter-badge">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <span>Not Synced</span>
+                <span class="badge-count">3</span>
+            </div>
+        </div>
+
+        <!-- Recording Actions Segment -->
+        <div class="segment recording-segment">
+            <button class="btn btn-primary">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                </svg>
+                Record In-Person Meeting
+            </button>
+
+            <button class="btn btn-secondary" disabled>
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M15.5 1h-8C6.12 1 5 2.12 5 3.5v17C5 21.88 6.12 23 7.5 23h8c1.38 0 2.5-1.12 2.5-2.5v-17C17 2.12 15.88 1 15.5 1zm-4 21c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm4.5-4H7V4h9v14z"/>
+                </svg>
+                Record Zoom Meeting
+            </button>
+        </div>
+
+        <!-- Account Status Segment -->
+        <div class="segment account-segment">
+            <div class="account-status notification-dot">
+                <svg class="status-icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                <span class="status-text">Google Connected</span>
+            </div>
+        </div>
+
+        <!-- Utilities Segment -->
+        <div class="segment utilities-segment">
+            <button class="btn btn-icon" title="Import">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+                </svg>
+            </button>
+
+            <button class="btn btn-icon" title="Profile">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                </svg>
+            </button>
+
+            <button class="btn btn-icon" title="Settings">
+                <svg class="icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <div class="demo-section">
+        <h2>Design Features - Segmented/Grouped Approach</h2>
+        <p><strong>Visual Segmentation:</strong> Pill-shaped containers create clear boundaries between functional groups without heavy dividers.</p>
+        <p><strong>Logical Clustering:</strong> Four distinct zones - Search/Filters, Recording Actions (hero), Account Status, and Utilities.</p>
+        <p><strong>Semantic Color Coding:</strong> Blue tint for recording segment emphasizes primary actions, green for connected status, amber for notifications.</p>
+        <p><strong>Consistent Spacing:</strong> 8px gaps within segments, 24px between segments creates visual rhythm and hierarchy.</p>
+        <p><strong>Hover Feedback:</strong> Segments lighten on hover to indicate interactivity, buttons have subtle transforms.</p>
+        <p><strong>Scalability:</strong> Easy to add new buttons within existing segments or create new segments without redesign.</p>
+        <p><strong>Accessibility:</strong> 44px minimum touch targets, high contrast, clear focus states for keyboard navigation.</p>
+    </div>
+</body>
+</html>

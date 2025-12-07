@@ -1444,8 +1444,11 @@ app.whenReady().then(async () => {
 
   // When the window is ready, send the initial meeting detection status
   mainWindow.webContents.on('did-finish-load', () => {
-    // Send the initial meeting detection status
-    mainWindow.webContents.send('meeting-detection-status', { detected: detectedMeeting !== null });
+    // Send the initial meeting detection status with platform info
+    mainWindow.webContents.send('meeting-detection-status', {
+      detected: detectedMeeting !== null,
+      platform: detectedMeeting?.window?.platform || null,
+    });
   });
 
   // On OS X it's common to re-create a window in the app when the
@@ -1997,7 +2000,10 @@ async function initSDK() {
 
     // Send the meeting detected status to the renderer process with toast notification
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('meeting-detection-status', { detected: true });
+      mainWindow.webContents.send('meeting-detection-status', {
+        detected: true,
+        platform: evt.window.platform, // Include platform for UI icon updates
+      });
       // Send toast notification to renderer
       mainWindow.webContents.send('show-toast', {
         message: `${platformName} meeting detected`,
@@ -2090,7 +2096,10 @@ async function initSDK() {
 
     // Send the meeting closed status to the renderer process
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('meeting-detection-status', { detected: false });
+      mainWindow.webContents.send('meeting-detection-status', {
+        detected: false,
+        platform: null,
+      });
     }
   });
 
@@ -5827,10 +5836,40 @@ ipcMain.handle('obsidian:refreshLinks', async () => {
     // Refresh links using VaultStructure's scan method
     const result = vaultStructure.refreshObsidianLinks(syncedMeetings);
 
+    // Log detailed datasync information for each change
+    log.info(`[datasync] ========== Link Refresh Started ==========`);
+    log.info(`[datasync] Scanned ${syncedMeetings.length} synced meetings`);
+
+    if (result.stale.length > 0) {
+      log.info(`[datasync] Found ${result.stale.length} stale link(s):`);
+      for (const item of result.stale) {
+        log.info(`[datasync] Meeting ID: ${item.id}`);
+        log.info(`[datasync]   Title: ${item.title}`);
+        log.info(`[datasync]   Old path: ${item.previousPath}`);
+        log.info(`[datasync]   New path: ${item.newPath}`);
+      }
+    }
+
+    if (result.missing.length > 0) {
+      log.info(`[datasync] Found ${result.missing.length} missing note(s):`);
+      for (const item of result.missing) {
+        log.info(`[datasync] Meeting ID: ${item.id}`);
+        log.info(`[datasync]   Title: ${item.title}`);
+        log.info(`[datasync]   Expected path: ${item.previousPath}`);
+      }
+    }
+
+    if (result.updated === 0 && result.missing.length === 0) {
+      log.info(`[datasync] All ${syncedMeetings.length} links are up to date`);
+    }
+
+    log.info(`[datasync] Summary: ${result.updated} updated, ${result.missing.length} missing`);
+    log.info(`[datasync] ========== Link Refresh Complete ==========`);
+
     // If any links were updated, save the meeting data
     if (result.updated > 0) {
       await fileOperationManager.writeData(data);
-      console.log(`[Obsidian IPC] Saved ${result.updated} updated meeting links`);
+      log.info(`[datasync] Saved ${result.updated} updated meeting links to database`);
     }
 
     return {

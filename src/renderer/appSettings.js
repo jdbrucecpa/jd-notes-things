@@ -84,10 +84,35 @@ function setupEventListeners() {
     ?.addEventListener('change', handleShortcutChange);
 
   // Logs Viewer
-  document.getElementById('refreshLogsBtn')?.addEventListener('click', refreshLogs);
+  document.getElementById('refreshLogsBtn')?.addEventListener('click', () => refreshLogs());
   document.getElementById('clearLogsBtn')?.addEventListener('click', clearLogs);
   document.getElementById('openLogFileBtn')?.addEventListener('click', openLogFile);
-  document.getElementById('logLevelFilter')?.addEventListener('change', refreshLogs);
+  document.getElementById('logLevelFilter')?.addEventListener('change', () => refreshLogs());
+
+  // Text filter - refresh on Enter or after typing stops
+  const logTextFilter = document.getElementById('logTextFilter');
+  if (logTextFilter) {
+    let filterTimeout;
+    logTextFilter.addEventListener('input', () => {
+      clearTimeout(filterTimeout);
+      filterTimeout = setTimeout(() => refreshLogs(), 300); // Debounce 300ms
+    });
+    logTextFilter.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        clearTimeout(filterTimeout);
+        refreshLogs();
+      }
+    });
+  }
+
+  // Clear filter button
+  document.getElementById('clearLogFilterBtn')?.addEventListener('click', () => {
+    const logTextFilter = document.getElementById('logTextFilter');
+    if (logTextFilter) {
+      logTextFilter.value = '';
+    }
+    refreshLogs();
+  });
 }
 
 /**
@@ -176,14 +201,34 @@ async function handleShortcutChange(_event) {
 }
 
 /**
- * Refresh logs viewer
+ * Refresh logs viewer with optional text filter
+ * @param {string} textFilter - Optional text filter to apply
  */
-async function refreshLogs() {
+async function refreshLogs(textFilter = null) {
   try {
-    const logLevelFilter = document.getElementById('logLevelFilter')?.value || 'all';
+    const logLevelFilterSelect = document.getElementById('logLevelFilter');
+    const logLevelFilter = logLevelFilterSelect?.value || 'all';
+    const logTextFilterInput = document.getElementById('logTextFilter');
     const logViewerContent = document.getElementById('logViewerContent');
     const logStats = document.getElementById('logStats');
     const logPath = document.getElementById('logPath');
+
+    // Use provided textFilter or get from input
+    let textFilterValue = textFilter !== null ? textFilter : (logTextFilterInput?.value || '');
+
+    // Handle "datasync" as a special level filter (it's actually a text filter)
+    const isDatasyncLevel = logLevelFilter === 'datasync';
+    const apiLevel = isDatasyncLevel ? 'all' : logLevelFilter;
+
+    // If datasync is selected from dropdown, add it to the text filter
+    if (isDatasyncLevel && !textFilterValue) {
+      textFilterValue = '[datasync]';
+    }
+
+    // Update the input if a filter was provided programmatically
+    if (textFilter !== null && logTextFilterInput) {
+      logTextFilterInput.value = textFilter;
+    }
 
     if (!logViewerContent) return;
 
@@ -191,16 +236,24 @@ async function refreshLogs() {
     logViewerContent.innerHTML =
       '<div style="color: #666; text-align: center; padding: 40px;">Loading logs...</div>';
 
-    const result = await window.electronAPI.appGetLogs({ limit: 1000, level: logLevelFilter });
+    const result = await window.electronAPI.appGetLogs({ limit: 2000, level: apiLevel });
 
     if (result.success) {
-      const { logs, logPath: path, totalLines, filteredLines } = result.data;
+      let { logs, logPath: path, totalLines, filteredLines } = result.data;
+
+      // Apply text filter if specified
+      if (textFilterValue) {
+        const filterLower = textFilterValue.toLowerCase();
+        logs = logs.filter(line => line.toLowerCase().includes(filterLower));
+        filteredLines = logs.length;
+      }
 
       if (logs.length === 0) {
+        const filterMsg = textFilterValue ? ` matching "${textFilterValue}"` : '';
         logViewerContent.innerHTML =
-          '<div style="color: #666; text-align: center; padding: 40px;">No logs found</div>';
+          `<div style="color: #666; text-align: center; padding: 40px;">No logs found${filterMsg}</div>`;
       } else {
-        // Render logs
+        // Render logs with text highlighting if filter is active
         const logsHTML = logs
           .map(line => {
             let className = 'log-line';
@@ -208,8 +261,18 @@ async function refreshLogs() {
             else if (line.includes('[warn]')) className += ' warn';
             else if (line.includes('[info]')) className += ' info';
             else if (line.includes('[debug]')) className += ' debug';
+            // Highlight datasync logs
+            if (line.includes('[datasync]')) className += ' datasync';
 
-            return `<div class="${className}">${escapeHtml(line)}</div>`;
+            let displayLine = escapeHtml(line);
+
+            // Highlight the filter text if present
+            if (textFilterValue) {
+              const regex = new RegExp(`(${escapeRegExp(textFilterValue)})`, 'gi');
+              displayLine = displayLine.replace(regex, '<mark style="background: #ffd700; color: #000;">$1</mark>');
+            }
+
+            return `<div class="${className}">${displayLine}</div>`;
           })
           .join('');
 
@@ -221,7 +284,8 @@ async function refreshLogs() {
 
       // Update stats
       if (logStats) {
-        logStats.textContent = `${filteredLines.toLocaleString()} lines (${totalLines.toLocaleString()} total)`;
+        const filterInfo = textFilterValue ? ` (filtered: "${textFilterValue}")` : '';
+        logStats.textContent = `${filteredLines.toLocaleString()} lines${filterInfo} (${totalLines.toLocaleString()} total)`;
       }
       if (logPath) {
         logPath.textContent = path;
@@ -236,6 +300,13 @@ async function refreshLogs() {
       logViewerContent.innerHTML = `<div style="color: #e74c3c; text-align: center; padding: 40px;">Error: ${error.message}</div>`;
     }
   }
+}
+
+/**
+ * Escape special regex characters in a string
+ */
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
@@ -302,10 +373,42 @@ function showToast(message) {
   }
 }
 
+/**
+ * Navigate to logs tab with a specific filter
+ * @param {string} filter - The text filter to apply, or 'datasync' to use dropdown
+ */
+function showLogsWithFilter(filter) {
+  // Click the logs tab to switch to it
+  const logsTab = document.getElementById('logsSettingsTab');
+  if (logsTab) {
+    logsTab.click();
+  }
+
+  // Set the filter and refresh with a small delay to ensure tab is visible
+  setTimeout(() => {
+    // If filter is [datasync], just set the dropdown (no text filter)
+    if (filter === '[datasync]') {
+      const logLevelFilter = document.getElementById('logLevelFilter');
+      if (logLevelFilter) {
+        logLevelFilter.value = 'datasync';
+      }
+      // Clear text filter
+      const logTextFilter = document.getElementById('logTextFilter');
+      if (logTextFilter) {
+        logTextFilter.value = '';
+      }
+      refreshLogs(); // No text filter, dropdown handles it
+    } else {
+      refreshLogs(filter);
+    }
+  }, 100);
+}
+
 // Export functions
 export { initAppSettingsUI };
 
-// Make refreshLogs globally available for settings.js
+// Make functions globally available for settings.js
 if (typeof window !== 'undefined') {
   window.refreshLogs = refreshLogs;
+  window.showLogsWithFilter = showLogsWithFilter;
 }
