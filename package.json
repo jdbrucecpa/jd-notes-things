@@ -1,7 +1,7 @@
 {
   "name": "jd-notes-things",
   "productName": "jd-notes-things",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "JD Notes Things - AI Meeting Notetaker",
   "main": ".webpack/main",
   "scripts": {
