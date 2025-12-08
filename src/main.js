@@ -12,7 +12,7 @@ const {
 } = require('electron');
 const path = require('node:path');
 const fs = require('fs');
-const { autoUpdater } = require('update-electron-app');
+const { updateElectronApp } = require('update-electron-app');
 const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
 const sdkLogger = require('./sdk-logger');
@@ -1449,7 +1449,7 @@ app.whenReady().then(async () => {
   if (!process.env.ELECTRON_IS_DEV && app.isPackaged) {
     logger.main.info('[AutoUpdater] Initializing auto-updater...');
     try {
-      autoUpdater({
+      updateElectronApp({
         repo: 'jdbrucecpa/jd-notes-things',
         updateInterval: '1 hour',
         notifyUser: true,
@@ -6713,12 +6713,41 @@ ipcMain.handle('settings:checkForUpdates', async () => {
     const feedURL = `https://update.electronjs.org/jdbrucecpa/jd-notes-things/${process.platform}-${process.arch}/${app.getVersion()}`;
     electronAutoUpdater.setFeedURL({ url: feedURL });
 
-    electronAutoUpdater.checkForUpdates();
+    // Wrap the event-based check in a Promise
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        resolve({ success: false, message: 'Update check timed out' });
+      }, 30000);
 
-    return {
-      success: true,
-      message: 'Checking for updates...'
-    };
+      const onUpdateAvailable = () => {
+        cleanup();
+        resolve({ success: true, message: 'Update available! It will be downloaded automatically.' });
+      };
+
+      const onUpdateNotAvailable = () => {
+        cleanup();
+        resolve({ success: true, message: 'You are running the latest version' });
+      };
+
+      const onError = (error) => {
+        cleanup();
+        resolve({ success: false, message: error?.message || 'Update check failed' });
+      };
+
+      const cleanup = () => {
+        clearTimeout(timeout);
+        electronAutoUpdater.removeListener('update-available', onUpdateAvailable);
+        electronAutoUpdater.removeListener('update-not-available', onUpdateNotAvailable);
+        electronAutoUpdater.removeListener('error', onError);
+      };
+
+      electronAutoUpdater.on('update-available', onUpdateAvailable);
+      electronAutoUpdater.on('update-not-available', onUpdateNotAvailable);
+      electronAutoUpdater.on('error', onError);
+
+      electronAutoUpdater.checkForUpdates();
+    });
   } catch (error) {
     logger.main.error('[AutoUpdater] Manual update check failed:', error);
     return {
