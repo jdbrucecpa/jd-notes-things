@@ -140,6 +140,11 @@
       <header class="toolbar" id="drag-region">
         <!-- Fixed-width left section for consistent layout -->
         <div class="toolbar-left" id="toolbarLeft">
+          <button class="toolbar-icon-btn" id="backButton" title="Back" style="display: none;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor"/>
+            </svg>
+          </button>
           <button class="toolbar-icon-btn" id="homeButton" title="Home" style="visibility: hidden;">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill="currentColor"/>
@@ -155,12 +160,75 @@
           <input type="text" class="toolbar-search-input" placeholder="Search..." aria-label="Search meetings">
         </div>
 
-        <!-- Filter Button -->
-        <button class="toolbar-filter-btn" id="notSyncedFilterBtn" title="Filter meetings">
-          <svg class="toolbar-filter-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        <!-- Saved Views Selector (v1.2) -->
+        <div class="views-container">
+          <select class="views-select" id="viewsSelect" title="Saved Views">
+            <option value="">All Meetings</option>
+          </select>
+        </div>
+
+        <!-- Filter Button with Dropdown (v1.2) -->
+        <div class="filter-dropdown-container">
+          <button class="toolbar-filter-btn" id="filterToggleBtn" title="Filter meetings">
+            <svg class="toolbar-filter-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            </svg>
+          </button>
+          <div class="filter-dropdown-panel" id="filterDropdown">
+            <div class="filter-dropdown-header">
+              <span>Filters</span>
+              <button class="filter-clear-btn" id="filterClearAll" title="Clear all filters">Clear</button>
+            </div>
+            <div class="filter-dropdown-body">
+              <!-- Company Filter -->
+              <div class="filter-group">
+                <label class="filter-label">Company</label>
+                <select class="filter-select" id="filterCompany">
+                  <option value="">All Companies</option>
+                </select>
+              </div>
+              <!-- Contact Filter -->
+              <div class="filter-group">
+                <label class="filter-label">Contact</label>
+                <select class="filter-select" id="filterContact">
+                  <option value="">All Contacts</option>
+                </select>
+              </div>
+              <!-- Platform Filter -->
+              <div class="filter-group">
+                <label class="filter-label">Platform</label>
+                <select class="filter-select" id="filterPlatform">
+                  <option value="">All Platforms</option>
+                  <option value="zoom">Zoom</option>
+                  <option value="teams">Microsoft Teams</option>
+                  <option value="google-meet">Google Meet</option>
+                  <option value="in-person">In-Person</option>
+                  <option value="webex">Webex</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </div>
+              <!-- Sync Status Filter -->
+              <div class="filter-group">
+                <label class="filter-label">Sync Status</label>
+                <select class="filter-select" id="filterSyncStatus">
+                  <option value="">All</option>
+                  <option value="synced">Synced to Obsidian</option>
+                  <option value="not-synced">Not Synced</option>
+                </select>
+              </div>
+            </div>
+            <div class="filter-dropdown-footer">
+              <button class="filter-save-view-btn" id="filterSaveView">Save as View</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- v1.2: Recording Widget Toggle Button -->
+        <button class="toolbar-icon-btn" id="toggleWidgetBtn" title="Toggle Recording Widget">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
+            <circle cx="12" cy="12" r="4" fill="currentColor"/>
           </svg>
-          <span class="toolbar-filter-count" id="filterCount">0</span>
         </button>
 
         <!-- Spacer -->
@@ -621,6 +689,72 @@
       </div>
     </div>
 
+    <!-- Save View Modal -->
+    <div class="modal-overlay" id="saveViewModal" style="display: none;">
+      <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+          <h2>Save View</h2>
+          <button class="modal-close" id="closeSaveViewModal">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom: 15px;">Enter a name for this view:</p>
+          <input type="text" id="saveViewNameInput" class="modal-input" placeholder="e.g., Client Meetings" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary);">
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px;">
+          <button class="btn-secondary" id="cancelSaveViewBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Cancel</button>
+          <button class="btn-primary" id="confirmSaveViewBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- v1.2: Edit View Modal -->
+    <div class="modal-overlay" id="editViewModal" style="display: none;">
+      <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header">
+          <h2>Edit View</h2>
+          <button class="modal-close" id="closeEditViewModal">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom: 15px;">Edit the view name:</p>
+          <input type="text" id="editViewNameInput" class="modal-input" placeholder="View name" style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary);">
+          <input type="hidden" id="editViewId">
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px;">
+          <button class="btn-danger" id="deleteViewFromEditBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-right: auto;">Delete</button>
+          <button class="btn-secondary" id="cancelEditViewBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Cancel</button>
+          <button class="btn-primary" id="confirmEditViewBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- v1.2: Manage Views Modal -->
+    <div class="modal-overlay" id="manageViewsModal" style="display: none;">
+      <div class="modal-content" style="max-width: 450px;">
+        <div class="modal-header">
+          <h2>Manage Views</h2>
+          <button class="modal-close" id="closeManageViewsModal">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body" style="max-height: 400px; overflow-y: auto;">
+          <div id="manageViewsList"></div>
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px;">
+          <button class="btn-primary" id="closeManageViewsBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Done</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Template Selection Modal -->
     <div class="modal-overlay" id="templateModal" style="display: none;">
       <div class="modal-content template-modal">
@@ -1057,6 +1191,13 @@
               </svg>
               <span>Keyboard Shortcuts</span>
             </div>
+            <!-- v1.2: Stream Deck Integration -->
+            <div id="streamDeckSettingsTab" class="settings-tab" data-tab="streamdeck">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4 6h4v4H4zm0 8h4v4H4zm6-8h4v4h-4zm0 8h4v4h-4zm6-8h4v4h-4zm0 8h4v4h-4z" fill="currentColor"/>
+              </svg>
+              <span>Stream Deck</span>
+            </div>
             <div id="logsSettingsTab" class="settings-tab" data-tab="logs">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z" fill="currentColor"/>
@@ -1186,6 +1327,18 @@
                 </div>
                 <div class="settings-item-control">
                   <div class="toggle-switch" id="darkModeToggle">
+                    <div class="toggle-switch-thumb"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Show Recording Widget</div>
+                  <div class="settings-item-description">Display a floating widget when meetings are detected for quick recording control</div>
+                </div>
+                <div class="settings-item-control">
+                  <div class="toggle-switch" id="showRecordingWidgetToggle">
                     <div class="toggle-switch-thumb"></div>
                   </div>
                 </div>
@@ -1692,6 +1845,52 @@
                   <li><code>CommandOrControl</code> - Cmd (Mac) or Ctrl (Windows/Linux)</li>
                   <li><code>Shift</code>, <code>Alt</code>, <code>Option</code> - Modifier keys</li>
                   <li>Single letter/number for the key (e.g., <code>R</code>, <code>Q</code>)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- v1.2: Stream Deck Integration -->
+          <div class="settings-panel" id="streamdeckPanel" style="display: none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Stream Deck Integration</h3>
+              <p class="settings-section-description">
+                Control meeting recordings from your Elgato Stream Deck. Enable the WebSocket server to allow Stream Deck plugins to communicate with the app.
+              </p>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Enable Stream Deck</div>
+                  <div class="settings-item-description">Allow Stream Deck plugins to control recordings via WebSocket</div>
+                </div>
+                <div class="settings-item-control">
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="streamDeckEnabled" />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="settings-item" id="streamDeckStatusItem" style="display: none;">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Connection Status</div>
+                  <div class="settings-item-description" id="streamDeckStatusText">Checking...</div>
+                </div>
+                <div class="settings-item-control">
+                  <button class="btn btn-sm" id="refreshStreamDeckStatus">Refresh</button>
+                </div>
+              </div>
+
+              <div class="info-box" id="streamDeckInfoBox" style="display: none;">
+                <strong>WebSocket Endpoint:</strong>
+                <code id="streamDeckEndpoint">ws://localhost:13373/streamdeck</code>
+                <br><br>
+                <strong>Protocol:</strong>
+                <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+                  <li>Send <code>{"action": "startRecording"}</code> to start recording</li>
+                  <li>Send <code>{"action": "stopRecording"}</code> to stop recording</li>
+                  <li>Send <code>{"action": "getStatus"}</code> to get current status</li>
+                  <li>Receive events: <code>connected</code>, <code>recordingStarted</code>, <code>recordingStopped</code>, <code>statusUpdate</code></li>
                 </ul>
               </div>
             </div>

@@ -121,7 +121,11 @@ function initializeTitleBar() {
     menuReload: () => location.reload(),
     menuToggleDevTools: () => {
       // Dev tools toggling needs to be done via main process
-      console.log('Toggle DevTools requested');
+      if (window.electronAPI?.toggleDevTools) {
+        window.electronAPI.toggleDevTools();
+      } else {
+        console.log('Toggle DevTools requested - API not available');
+      }
     },
     menuZoomIn: () => {
       // Zoom is handled by Electron's built-in Ctrl+Plus
@@ -198,14 +202,24 @@ let pastMeetingsByDate = {};
 window.isRecording = false;
 window.currentRecordingId = null;
 
-// Search/filter state
+// Search/filter state (v1.2: Extended with company, contact, platform filters)
 const searchState = {
   query: '',
   filters: {
     dateFrom: null,
     dateTo: null,
     notSynced: false, // RS-1: Filter for meetings not exported to Obsidian
+    company: '', // v1.2: Filter by company/organization
+    contact: '', // v1.2: Filter by contact email
+    platform: '', // v1.2: Filter by platform (zoom, teams, etc.)
+    syncStatus: '', // v1.2: Filter by sync status ('synced', 'not-synced', '')
   },
+};
+
+// v1.2: Saved views state
+const savedViews = {
+  views: [],
+  activeViewId: null,
 };
 
 // Bulk selection state
@@ -1129,31 +1143,116 @@ function createCalendarMeetingCard(meeting) {
   // UI-1: Use platform-specific icon from global config
   const platformName = getPlatformName(meeting.platform);
 
-  // Format the meeting time
+  // Format the meeting date and time
   const startTime = new Date(meeting.startTime);
   const endTime = new Date(meeting.endTime);
+  const dateString = startTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
   const timeString = `${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+  // Build participants list for expanded view
+  const participantsList = meeting.participants && meeting.participants.length > 0
+    ? meeting.participants.map(p => escapeHtml(p.name || p.email || 'Unknown')).join(', ')
+    : 'No participants';
+
+  // v1.2: Parse description - strip HTML and extract key fields
+  let rawDescription = meeting.description || '';
+  let meetingPurpose = '';
+  let contactPhone = '';
+  let cleanDescription = '';
+
+  if (rawDescription) {
+    // Strip HTML tags to get plain text
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = rawDescription;
+    cleanDescription = tempDiv.textContent || tempDiv.innerText || '';
+    cleanDescription = cleanDescription.replace(/\s+/g, ' ').trim();
+
+    // Extract "What is the purpose of this meeting?:" answer
+    // Look for text after the question until we hit another question or field label
+    const purposeMatch = cleanDescription.match(/What is the purpose of this meeting\?:?\s*(.+?)(?=\s*(?:Best Number to Reach You|What is your|How did you|$))/i);
+    if (purposeMatch) {
+      meetingPurpose = purposeMatch[1].trim();
+      // Remove trailing punctuation if it looks like part of another question
+      meetingPurpose = meetingPurpose.replace(/\s*[?:]$/, '').trim();
+    }
+
+    // Extract "Best Number to Reach You:" answer - just the phone number
+    // Handle formats like "Best Number to Reach You?: 1-240-515-0642"
+    const phoneMatch = cleanDescription.match(/Best Number to Reach You[?:]?\s*[?:]?\s*([\d\s\-\(\)\+]+)/i);
+    if (phoneMatch) {
+      contactPhone = phoneMatch[1].trim();
+    }
+
+    // Truncate clean description if too long
+    if (cleanDescription.length > 300) {
+      cleanDescription = cleanDescription.substring(0, 300) + '...';
+    }
+  }
+
+  // v1.2: Unified "Start Recording" button - opens meeting AND starts recording
+  const platform = (meeting.platform || 'unknown').toLowerCase();
+  let startButtonTooltip = 'Create note and start recording';
+  if (meeting.meetingLink) {
+    if (platform === 'zoom') {
+      startButtonTooltip = 'Open Zoom and create note';
+    } else if (platform === 'teams') {
+      startButtonTooltip = 'Open Teams and create note';
+    } else if (platform === 'google-meet') {
+      startButtonTooltip = 'Open Meet and create note';
+    }
+  }
 
   // Sanitize calendar meeting title and IDs to prevent XSS
   // Use placeholder for icon, will be added programmatically after sanitization
   card.innerHTML = sanitizeHtml(`
-    <div class="meeting-icon-container"></div>
-    <div class="meeting-content">
-      <div class="meeting-title">${escapeHtml(meeting.title)}</div>
-      <div class="meeting-time">${escapeHtml(timeString)} • ${escapeHtml(platformName)}</div>
-      <div class="meeting-participants">${meeting.participants.length} participant${meeting.participants.length !== 1 ? 's' : ''}</div>
-    </div>
-    <div class="meeting-actions">
-      ${
-        meeting.meetingLink
-          ? `
-        <button class="join-calendar-meeting-btn" data-id="${escapeHtml(meeting.id)}" data-link="${escapeHtml(meeting.meetingLink)}" title="Join meeting">
+    <div class="meeting-card-main">
+      <div class="meeting-icon-container"></div>
+      <div class="meeting-content">
+        <div class="meeting-title">${escapeHtml(meeting.title)}</div>
+        <div class="meeting-time">${escapeHtml(dateString)} • ${escapeHtml(timeString)} • ${escapeHtml(platformName)}</div>
+        <div class="meeting-participants">${meeting.participants.length} participant${meeting.participants.length !== 1 ? 's' : ''}</div>
+      </div>
+      <div class="meeting-actions">
+        <button class="start-recording-btn" data-id="${escapeHtml(meeting.id)}" data-link="${escapeHtml(meeting.meetingLink || '')}" data-platform="${escapeHtml(platform)}" title="${escapeHtml(startButtonTooltip)}">
         </button>
-      `
-          : ''
-      }
-      <button class="record-calendar-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Record meeting">
-      </button>
+        <div class="meeting-auto-start-toggle-wrapper hidden">
+          <div class="toggle-switch meeting-auto-start-toggle small" data-meeting-id="${escapeHtml(meeting.id)}" title="Auto-start recording">
+            <div class="toggle-switch-thumb"></div>
+          </div>
+        </div>
+        <button class="expand-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Show details">
+        </button>
+      </div>
+    </div>
+    <div class="meeting-card-expanded hidden">
+      ${meetingPurpose ? `
+      <div class="expanded-section meeting-purpose">
+        <div class="expanded-label">Meeting Purpose</div>
+        <div class="expanded-value">${escapeHtml(meetingPurpose)}</div>
+      </div>
+      ` : ''}
+      ${contactPhone ? `
+      <div class="expanded-section contact-phone">
+        <div class="expanded-label">Contact Phone</div>
+        <div class="expanded-value">${escapeHtml(contactPhone)}</div>
+      </div>
+      ` : ''}
+      <div class="expanded-section">
+        <div class="expanded-label">Participants</div>
+        <div class="expanded-value">${escapeHtml(participantsList)}</div>
+      </div>
+      ${cleanDescription ? `
+      <div class="expanded-section">
+        <div class="expanded-label">Description</div>
+        <div class="expanded-value">${escapeHtml(cleanDescription)}</div>
+      </div>
+      ` : ''}
+      ${meeting.meetingLink ? `
+      <div class="expanded-section">
+        <div class="expanded-label">Meeting Link</div>
+        <div class="expanded-value"><a href="#" class="meeting-link-copy" data-link="${escapeHtml(meeting.meetingLink)}">${escapeHtml(meeting.meetingLink)}</a></div>
+      </div>
+      ` : ''}
     </div>
   `);
 
@@ -1190,30 +1289,13 @@ function createCalendarMeetingCard(meeting) {
     iconContainer.appendChild(iconWrapper);
   }
 
-  // Create join button SVG programmatically
-  const joinBtn = card.querySelector('.join-calendar-meeting-btn');
-  if (joinBtn) {
+  // v1.2: Create unified Start Recording button with icon and label
+  const startRecordingBtn = card.querySelector('.start-recording-btn');
+  if (startRecordingBtn) {
+    // Add record icon (circle)
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', '16');
-    svg.setAttribute('height', '16');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('fill', 'none');
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute(
-      'd',
-      'M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z'
-    );
-    path.setAttribute('fill', 'currentColor');
-    svg.appendChild(path);
-    joinBtn.appendChild(svg);
-  }
-
-  // Create record button SVG programmatically
-  const recordBtn = card.querySelector('.record-calendar-meeting-btn');
-  if (recordBtn) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', '16');
-    svg.setAttribute('height', '16');
+    svg.setAttribute('width', '12');
+    svg.setAttribute('height', '12');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('fill', 'none');
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
@@ -1222,7 +1304,168 @@ function createCalendarMeetingCard(meeting) {
     circle.setAttribute('r', '8');
     circle.setAttribute('fill', 'currentColor');
     svg.appendChild(circle);
-    recordBtn.appendChild(svg);
+    startRecordingBtn.appendChild(svg);
+
+    // Add text label
+    const textSpan = document.createElement('span');
+    textSpan.className = 'btn-text';
+    textSpan.textContent = 'Record';
+    startRecordingBtn.appendChild(textSpan);
+
+    // Add click handler - opens meeting link AND creates note
+    startRecordingBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const meetingId = startRecordingBtn.dataset.id;
+      const link = startRecordingBtn.dataset.link;
+      const btnPlatform = startRecordingBtn.dataset.platform;
+
+      // Show loading state
+      const originalContent = startRecordingBtn.innerHTML;
+      startRecordingBtn.disabled = true;
+      startRecordingBtn.innerHTML = `
+        <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      `;
+
+      try {
+        // Step 1: Open the meeting link (if it exists)
+        if (link && window.electronAPI?.openExternal) {
+          if (btnPlatform === 'zoom' && link.includes('zoom.us')) {
+            // Convert to zoommtg: protocol to open in Zoom app
+            try {
+              const url = new URL(link);
+              const zoomMeetingId = url.pathname.match(/\/j\/(\d+)/)?.[1];
+              const pwd = url.searchParams.get('pwd');
+              if (zoomMeetingId) {
+                let zoomLink = `zoommtg://zoom.us/join?confno=${zoomMeetingId}`;
+                if (pwd) {
+                  zoomLink += `&pwd=${pwd}`;
+                }
+                window.electronAPI.openExternal(zoomLink);
+              } else {
+                window.electronAPI.openExternal(link);
+              }
+            } catch (err) {
+              console.warn('Failed to parse Zoom link, opening in browser:', err);
+              window.electronAPI.openExternal(link);
+            }
+          } else {
+            // For Teams, Meet, and other platforms - open in browser
+            window.electronAPI.openExternal(link);
+          }
+        }
+
+        // Step 2: Create a new note with the calendar meeting info
+        const calendarMeeting = calendarMeetings.find(m => m.id === meetingId);
+        if (calendarMeeting) {
+          await createNewMeeting(calendarMeeting);
+          showToast('Meeting note created', 'success');
+        }
+      } catch (error) {
+        console.error('Error creating meeting note:', error);
+        showToast('Failed: ' + error.message, 'error');
+        startRecordingBtn.disabled = false;
+        startRecordingBtn.innerHTML = originalContent;
+      }
+    });
+  }
+
+  // Create expand button SVG programmatically (chevron down)
+  const expandBtn = card.querySelector('.expand-meeting-btn');
+  if (expandBtn) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '16');
+    svg.setAttribute('height', '16');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.classList.add('expand-icon');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', 'M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z');
+    path.setAttribute('fill', 'currentColor');
+    svg.appendChild(path);
+    expandBtn.appendChild(svg);
+
+    // Add click handler for expand/collapse
+    expandBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const expandedSection = card.querySelector('.meeting-card-expanded');
+      const icon = expandBtn.querySelector('.expand-icon');
+      if (expandedSection) {
+        const isExpanded = !expandedSection.classList.contains('hidden');
+        expandedSection.classList.toggle('hidden', isExpanded);
+        card.classList.toggle('expanded', !isExpanded);
+        if (icon) {
+          icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(180deg)';
+        }
+      }
+    });
+  }
+
+  // Add click handler for meeting link copy
+  const meetingLinkCopy = card.querySelector('.meeting-link-copy');
+  if (meetingLinkCopy) {
+    meetingLinkCopy.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      const link = meetingLinkCopy.dataset.link;
+      if (link) {
+        navigator.clipboard.writeText(link).then(() => {
+          showToast('Meeting link copied to clipboard', 'success');
+        }).catch(() => {
+          showToast('Failed to copy link', 'error');
+        });
+      }
+    });
+  }
+
+  // v1.2: Per-meeting auto-start toggle (inline with buttons)
+  // Only show when global auto-start is enabled
+  const autoStartWrapper = card.querySelector('.meeting-auto-start-toggle-wrapper');
+  const autoStartToggle = card.querySelector('.meeting-auto-start-toggle');
+  if (autoStartWrapper && autoStartToggle) {
+    // Read from settings object (stored as JSON under 'jd-notes-settings')
+    let globalAutoStart = false;
+    try {
+      const settingsStr = localStorage.getItem('jd-notes-settings');
+      if (settingsStr) {
+        const settings = JSON.parse(settingsStr);
+        globalAutoStart = settings.autoStartRecording === true;
+      }
+    } catch (e) {
+      console.warn('[Calendar] Failed to read settings:', e);
+    }
+
+    if (globalAutoStart) {
+      // Show the toggle and default to enabled (matching global setting)
+      autoStartWrapper.classList.remove('hidden');
+      autoStartToggle.classList.add('active');
+
+      // Check for existing override from main process
+      const meetingId = meeting.id;
+      if (window.electronAPI?.appGetMeetingAutoStart) {
+        window.electronAPI.appGetMeetingAutoStart(meetingId).then(result => {
+          if (result.success && result.data.hasOverride) {
+            if (result.data.enabled) {
+              autoStartToggle.classList.add('active');
+            } else {
+              autoStartToggle.classList.remove('active');
+            }
+          }
+        });
+      }
+
+      // Add click handler only when toggle is visible
+      autoStartToggle.addEventListener('click', e => {
+        e.stopPropagation();
+        const isActive = autoStartToggle.classList.toggle('active');
+        const meetingId = autoStartToggle.dataset.meetingId;
+        if (window.electronAPI?.appSetMeetingAutoStart) {
+          window.electronAPI.appSetMeetingAutoStart(meetingId, isActive);
+        }
+      });
+    }
+    // If global auto-start is off, the wrapper stays hidden (has 'hidden' class from HTML)
   }
 
   return card;
@@ -1628,7 +1871,8 @@ function setupAutoSaveHandler() {
       editorElement.dispatchEvent(new Event('input'));
     }, 500);
   } else {
-    console.warn('Editor element not found for auto-save setup');
+    // This is expected when editor view is not visible
+    console.log('[Auto-save] Editor element not visible - skipping setup');
   }
 }
 
@@ -1697,8 +1941,8 @@ function setupObsidianLinkAutoSave() {
 }
 
 // Function to create a new meeting
-async function createNewMeeting() {
-  console.log('Creating new note...');
+async function createNewMeeting(calendarMeeting = null) {
+  console.log('Creating new note...', calendarMeeting ? `from calendar: ${calendarMeeting.title}` : '');
 
   // Save any existing note before creating a new one
   if (currentEditingMeetingId) {
@@ -1713,23 +1957,32 @@ async function createNewMeeting() {
   const id = 'meeting-' + Date.now();
   console.log('Generated new meeting ID:', id);
 
-  // Current date and time
-  const now = new Date();
+  // Use calendar meeting info if provided, otherwise use current time
+  const now = calendarMeeting ? new Date(calendarMeeting.startTime) : new Date();
+  const title = calendarMeeting ? calendarMeeting.title : 'New Note';
+  const platform = calendarMeeting ? calendarMeeting.platform : 'in-person';
+  const participants = calendarMeeting ? calendarMeeting.participants : [];
+
+  // Format participants for the template
+  const participantsText = participants.length > 0
+    ? participants.map(p => `• ${p.name || p.email}`).join('\n')
+    : '• ';
 
   // Generate the template for the content
-  const template = `# Meeting Title\n• New Note\n\n# Meeting Date and Time\n• ${now.toLocaleString()}\n\n# Participants\n• \n\n# Description\n• \n\nChat with meeting transcript: `;
+  const template = `# Meeting Title\n• ${title}\n\n# Meeting Date and Time\n• ${now.toLocaleString()}\n\n# Participants\n${participantsText}\n\n# Description\n• \n\nChat with meeting transcript: `;
 
   // Create a new meeting object - ensure it's of type document
   const newMeeting = {
     id: id,
     type: 'document', // Explicitly set as document type, not calendar
-    title: 'New Note',
+    title: title,
     subtitle: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     hasDemo: false,
     date: now.toISOString(),
-    participants: [],
+    participants: participants,
     content: template, // Set the content directly
-    platform: 'in-person', // UI-1: Explicitly set in-person platform for in-person button
+    platform: platform,
+    calendarEventId: calendarMeeting ? calendarMeeting.id : null, // Link to calendar event
   };
 
   // Log what we're adding
@@ -1817,20 +2070,110 @@ async function createNewMeeting() {
  * @returns {Array} - Filtered array of meetings
  */
 function filterMeetings(meetings) {
-  if (
-    !searchState.query &&
-    !searchState.filters.dateFrom &&
-    !searchState.filters.dateTo &&
-    !searchState.filters.notSynced
-  ) {
+  const { filters } = searchState;
+
+  // v1.2: Check if any filters are active
+  const hasActiveFilters =
+    searchState.query ||
+    filters.dateFrom ||
+    filters.dateTo ||
+    filters.notSynced ||
+    filters.company ||
+    filters.contact ||
+    filters.platform ||
+    filters.syncStatus;
+
+  if (!hasActiveFilters) {
     return meetings; // No filters active, return all meetings
   }
 
   return meetings.filter(meeting => {
-    // RS-1: Not synced to Obsidian filter
-    if (searchState.filters.notSynced) {
+    // RS-1: Not synced to Obsidian filter (legacy)
+    if (filters.notSynced) {
       if (meeting.obsidianLink) {
         return false; // Has been synced, exclude it
+      }
+    }
+
+    // v1.2: Sync status filter
+    if (filters.syncStatus) {
+      const isSynced = !!(meeting.obsidianLink || meeting.vaultPath);
+      if (filters.syncStatus === 'synced' && !isSynced) {
+        return false;
+      }
+      if (filters.syncStatus === 'not-synced' && isSynced) {
+        return false;
+      }
+    }
+
+    // v1.2: Company/organization filter
+    // Check meeting-level company OR participant companies from Google Contacts
+    if (filters.company) {
+      const meetingCompany = meeting.organization || meeting.company || '';
+      let hasMatchingCompany = meetingCompany.toLowerCase() === filters.company.toLowerCase();
+
+      // Also check participant companies from Google Contacts cache
+      if (!hasMatchingCompany && googleContactsCache) {
+        // Check meeting.participants array
+        if (meeting.participants && Array.isArray(meeting.participants)) {
+          hasMatchingCompany = meeting.participants.some(p => {
+            if (p.email) {
+              const contact = googleContactsCache.get(p.email.toLowerCase());
+              return contact?.company?.toLowerCase() === filters.company.toLowerCase();
+            }
+            return false;
+          });
+        }
+        // Also check meeting.participantEmails array
+        if (!hasMatchingCompany && meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+          hasMatchingCompany = meeting.participantEmails.some(email => {
+            if (email) {
+              const contact = googleContactsCache.get(email.toLowerCase());
+              return contact?.company?.toLowerCase() === filters.company.toLowerCase();
+            }
+            return false;
+          });
+        }
+      }
+
+      if (!hasMatchingCompany) {
+        return false;
+      }
+    }
+
+    // v1.2: Contact filter (check if contact is a participant)
+    if (filters.contact) {
+      let hasContact = false;
+      if (meeting.participants && Array.isArray(meeting.participants)) {
+        hasContact = meeting.participants.some(p =>
+          p.email?.toLowerCase() === filters.contact.toLowerCase()
+        );
+      }
+      if (!hasContact && meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+        hasContact = meeting.participantEmails.some(email =>
+          email?.toLowerCase() === filters.contact.toLowerCase()
+        );
+      }
+      if (!hasContact) {
+        return false;
+      }
+    }
+
+    // v1.2: Platform filter
+    if (filters.platform) {
+      const meetingPlatform = (meeting.platform || '').toLowerCase().trim();
+      const knownPlatforms = ['zoom', 'teams', 'google-meet', 'in-person', 'webex'];
+
+      if (filters.platform.toLowerCase() === 'unknown') {
+        // "Unknown" matches empty, blank, or any platform not in the known list
+        if (meetingPlatform && knownPlatforms.includes(meetingPlatform)) {
+          return false;
+        }
+      } else {
+        // Match specific platform
+        if (meetingPlatform !== filters.platform.toLowerCase()) {
+          return false;
+        }
       }
     }
 
@@ -1866,18 +2209,18 @@ function filterMeetings(meetings) {
     }
 
     // Date range filter
-    if (searchState.filters.dateFrom || searchState.filters.dateTo) {
+    if (filters.dateFrom || filters.dateTo) {
       const meetingDate = new Date(meeting.date);
 
-      if (searchState.filters.dateFrom) {
-        const fromDate = new Date(searchState.filters.dateFrom);
+      if (filters.dateFrom) {
+        const fromDate = new Date(filters.dateFrom);
         if (meetingDate < fromDate) {
           return false;
         }
       }
 
-      if (searchState.filters.dateTo) {
-        const toDate = new Date(searchState.filters.dateTo);
+      if (filters.dateTo) {
+        const toDate = new Date(filters.dateTo);
         toDate.setHours(23, 59, 59, 999); // Include the entire day
         if (meetingDate > toDate) {
           return false;
@@ -1888,6 +2231,661 @@ function filterMeetings(meetings) {
     return true; // Passed all filters
   });
 }
+
+/**
+ * v1.2: Cache for Google Contacts (populated on filter dropdown update)
+ */
+let googleContactsCache = null;
+
+/**
+ * v1.2: Load Google Contacts for filter matching
+ */
+async function loadGoogleContactsForFilters() {
+  if (googleContactsCache) return googleContactsCache;
+
+  try {
+    if (window.electronAPI?.contactsGetAllContacts) {
+      const result = await window.electronAPI.contactsGetAllContacts(false);
+      if (result.success && result.contacts) {
+        // Build a map of email -> contact info
+        const contactMap = new Map();
+        result.contacts.forEach(contact => {
+          if (contact.emails && contact.emails.length > 0) {
+            contact.emails.forEach(email => {
+              contactMap.set(email.toLowerCase(), {
+                name: contact.name || email,
+                company: contact.organization || null,
+              });
+            });
+          }
+        });
+        googleContactsCache = contactMap;
+        return contactMap;
+      }
+    }
+  } catch (error) {
+    console.warn('[Filters] Failed to load Google Contacts:', error);
+  }
+  return new Map();
+}
+
+/**
+ * v1.2: Extract unique companies from meetings (using Google Contacts data)
+ * Excludes the user's own company/domain
+ */
+async function extractUniqueCompanies(meetings, contactsMap, userProfile = null) {
+  const companies = new Set();
+
+  // Get user's domain to exclude
+  const userDomain = userProfile?.email?.split('@')[1]?.toLowerCase();
+  const userCompany = userProfile?.company?.toLowerCase();
+
+  meetings.forEach(meeting => {
+    // Check meeting-level organization/company
+    if (meeting.organization) {
+      companies.add(meeting.organization);
+    }
+    if (meeting.company) {
+      companies.add(meeting.company);
+    }
+
+    // Look up company from Google Contacts for each participant
+    if (contactsMap && meeting.participants && Array.isArray(meeting.participants)) {
+      meeting.participants.forEach(p => {
+        if (p.email) {
+          // Skip user's own email/domain
+          const emailDomain = p.email.split('@')[1]?.toLowerCase();
+          if (userDomain && emailDomain === userDomain) return;
+
+          const contact = contactsMap.get(p.email.toLowerCase());
+          if (contact?.company) {
+            companies.add(contact.company);
+          }
+        }
+      });
+    }
+    if (contactsMap && meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+      meeting.participantEmails.forEach(email => {
+        if (email) {
+          // Skip user's own email/domain
+          const emailDomain = email.split('@')[1]?.toLowerCase();
+          if (userDomain && emailDomain === userDomain) return;
+
+          const contact = contactsMap.get(email.toLowerCase());
+          if (contact?.company) {
+            companies.add(contact.company);
+          }
+        }
+      });
+    }
+  });
+
+  // Remove user's own company if present
+  if (userCompany) {
+    for (const company of companies) {
+      if (company.toLowerCase() === userCompany) {
+        companies.delete(company);
+      }
+    }
+  }
+
+  return Array.from(companies).sort();
+}
+
+/**
+ * v1.2: Extract unique contacts from meetings (using Google Contacts names)
+ * Excludes the user's own contact and contacts from user's domain
+ */
+async function extractUniqueContacts(meetings, contactsMap, userProfile = null) {
+  const contacts = new Map(); // email -> name
+
+  // Get user's email and domain to exclude
+  const userEmail = userProfile?.email?.toLowerCase();
+  const userDomain = userEmail?.split('@')[1];
+
+  meetings.forEach(meeting => {
+    if (meeting.participants && Array.isArray(meeting.participants)) {
+      meeting.participants.forEach(p => {
+        if (p.email && !contacts.has(p.email.toLowerCase())) {
+          const emailLower = p.email.toLowerCase();
+
+          // Skip user's own email
+          if (userEmail && emailLower === userEmail) return;
+
+          // Skip emails from user's own domain
+          const emailDomain = emailLower.split('@')[1];
+          if (userDomain && emailDomain === userDomain) return;
+
+          // Try to get name from Google Contacts first
+          const googleContact = contactsMap?.get(emailLower);
+          const name = googleContact?.name || p.name || p.email;
+          contacts.set(emailLower, { email: p.email, name });
+        }
+      });
+    }
+    if (meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+      meeting.participantEmails.forEach(email => {
+        if (email && !contacts.has(email.toLowerCase())) {
+          const emailLower = email.toLowerCase();
+
+          // Skip user's own email
+          if (userEmail && emailLower === userEmail) return;
+
+          // Skip emails from user's own domain
+          const emailDomain = emailLower.split('@')[1];
+          if (userDomain && emailDomain === userDomain) return;
+
+          // Try to get name from Google Contacts
+          const googleContact = contactsMap?.get(emailLower);
+          const name = googleContact?.name || email;
+          contacts.set(emailLower, { email, name });
+        }
+      });
+    }
+  });
+
+  return Array.from(contacts.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * v1.2: Update filter dropdowns with available options
+ */
+async function updateFilterDropdowns() {
+  const allMeetings = [...upcomingMeetings, ...pastMeetings];
+
+  // Load Google Contacts for name/company lookups
+  const contactsMap = await loadGoogleContactsForFilters();
+
+  // Get user profile to exclude user's own email/domain/company from filters
+  let userProfile = null;
+  try {
+    const result = await window.electronAPI.getUserProfile();
+    if (result.success && result.profile) {
+      userProfile = result.profile;
+    }
+  } catch (error) {
+    console.warn('Could not get user profile for filter exclusion:', error);
+  }
+
+  // Update company dropdown (with companies from Google Contacts, excluding user's company)
+  const companySelect = document.getElementById('filterCompany');
+  if (companySelect) {
+    const companies = await extractUniqueCompanies(allMeetings, contactsMap, userProfile);
+    const currentValue = companySelect.value;
+    companySelect.innerHTML = '<option value="">All Companies</option>';
+    companies.forEach(company => {
+      const option = document.createElement('option');
+      option.value = company;
+      option.textContent = company;
+      companySelect.appendChild(option);
+    });
+    companySelect.value = currentValue;
+  }
+
+  // Update contact dropdown (with names from Google Contacts, excluding user and colleagues)
+  const contactSelect = document.getElementById('filterContact');
+  if (contactSelect) {
+    const contacts = await extractUniqueContacts(allMeetings, contactsMap, userProfile);
+    const currentValue = contactSelect.value;
+    contactSelect.innerHTML = '<option value="">All Contacts</option>';
+    contacts.forEach(contact => {
+      const option = document.createElement('option');
+      option.value = contact.email;
+      option.textContent = contact.name;
+      contactSelect.appendChild(option);
+    });
+    contactSelect.value = currentValue;
+  }
+}
+
+/**
+ * v1.2: Count active filters for badge display
+ */
+function countActiveFilters() {
+  let count = 0;
+  const { filters } = searchState;
+
+  if (filters.company) count++;
+  if (filters.contact) count++;
+  if (filters.platform) count++;
+  if (filters.syncStatus) count++;
+  if (filters.notSynced) count++; // legacy
+
+  return count;
+}
+
+/**
+ * v1.2: Update filter count badge
+ */
+function updateFilterCountBadge() {
+  const count = countActiveFilters();
+  const badge = document.getElementById('filterCount');
+  const btn = document.getElementById('filterToggleBtn');
+
+  if (badge) {
+    badge.textContent = count > 0 ? count : '';
+    badge.setAttribute('data-count', count);
+  }
+
+  if (btn) {
+    btn.classList.toggle('active', count > 0);
+  }
+}
+
+/**
+ * v1.2: Clear all filters
+ */
+function clearAllFilters() {
+  searchState.filters.company = '';
+  searchState.filters.contact = '';
+  searchState.filters.platform = '';
+  searchState.filters.syncStatus = '';
+  searchState.filters.notSynced = false;
+
+  // Reset dropdowns
+  const companySelect = document.getElementById('filterCompany');
+  const contactSelect = document.getElementById('filterContact');
+  const platformSelect = document.getElementById('filterPlatform');
+  const syncSelect = document.getElementById('filterSyncStatus');
+
+  if (companySelect) companySelect.value = '';
+  if (contactSelect) contactSelect.value = '';
+  if (platformSelect) platformSelect.value = '';
+  if (syncSelect) syncSelect.value = '';
+
+  // Clear active view
+  savedViews.activeViewId = null;
+  const viewsSelect = document.getElementById('viewsSelect');
+  if (viewsSelect) viewsSelect.value = '';
+
+  updateFilterCountBadge();
+  renderMeetings();
+}
+
+// ===================================================================
+// v1.2: Saved Views Management
+// ===================================================================
+
+/**
+ * Load saved views from localStorage
+ */
+function loadSavedViews() {
+  try {
+    const stored = localStorage.getItem('savedViews');
+    if (stored) {
+      const data = JSON.parse(stored);
+      savedViews.views = data.views || [];
+      savedViews.activeViewId = data.activeViewId || null;
+    }
+  } catch (error) {
+    console.error('Failed to load saved views:', error);
+  }
+}
+
+/**
+ * Save views to localStorage
+ */
+function saveSavedViews() {
+  try {
+    localStorage.setItem('savedViews', JSON.stringify(savedViews));
+  } catch (error) {
+    console.error('Failed to save views:', error);
+  }
+}
+
+/**
+ * Update the views dropdown with available views
+ */
+function updateViewsDropdown() {
+  const viewsSelect = document.getElementById('viewsSelect');
+  if (!viewsSelect) return;
+
+  // Preserve current value
+  const currentValue = viewsSelect.value;
+
+  // Build options
+  viewsSelect.innerHTML = '<option value="">All Meetings</option>';
+
+  // Add predefined views
+  const notSyncedOption = document.createElement('option');
+  notSyncedOption.value = '__not-synced__';
+  notSyncedOption.textContent = 'Not Synced to Obsidian';
+  viewsSelect.appendChild(notSyncedOption);
+
+  // Add separator if there are custom views
+  if (savedViews.views.length > 0) {
+    const separator = document.createElement('option');
+    separator.disabled = true;
+    separator.textContent = '──────────';
+    viewsSelect.appendChild(separator);
+  }
+
+  // Add custom views
+  savedViews.views.forEach(view => {
+    const option = document.createElement('option');
+    option.value = view.id;
+    option.textContent = view.name;
+    viewsSelect.appendChild(option);
+  });
+
+  // v1.2: Add "Manage Views" option if there are custom views
+  if (savedViews.views.length > 0) {
+    const manageSeparator = document.createElement('option');
+    manageSeparator.disabled = true;
+    manageSeparator.textContent = '──────────';
+    viewsSelect.appendChild(manageSeparator);
+
+    const manageOption = document.createElement('option');
+    manageOption.value = '__manage__';
+    manageOption.textContent = '⚙ Manage Views...';
+    viewsSelect.appendChild(manageOption);
+  }
+
+  // Restore value
+  viewsSelect.value = currentValue;
+}
+
+/**
+ * Apply a saved view
+ */
+function applyView(viewId) {
+  // v1.2: Handle "Manage Views" option
+  if (viewId === '__manage__') {
+    openManageViewsModal();
+    // Reset dropdown to previous value
+    const viewsSelect = document.getElementById('viewsSelect');
+    if (viewsSelect) viewsSelect.value = savedViews.activeViewId || '';
+    return;
+  }
+
+  savedViews.activeViewId = viewId;
+
+  // Handle predefined views
+  if (viewId === '__not-synced__') {
+    clearAllFilters();
+    searchState.filters.syncStatus = 'not-synced';
+    searchState.filters.notSynced = true;
+
+    const syncSelect = document.getElementById('filterSyncStatus');
+    if (syncSelect) syncSelect.value = 'not-synced';
+
+    savedViews.activeViewId = viewId;
+    updateFilterCountBadge();
+    renderMeetings();
+    return;
+  }
+
+  // Handle "All Meetings" (clear filters)
+  if (!viewId) {
+    clearAllFilters();
+    return;
+  }
+
+  // Find and apply custom view
+  const view = savedViews.views.find(v => v.id === viewId);
+  if (!view) {
+    console.warn('View not found:', viewId);
+    return;
+  }
+
+  // Apply view filters
+  searchState.filters.company = view.filters.company || '';
+  searchState.filters.contact = view.filters.contact || '';
+  searchState.filters.platform = view.filters.platform || '';
+  searchState.filters.syncStatus = view.filters.syncStatus || '';
+  searchState.filters.notSynced = view.filters.syncStatus === 'not-synced';
+
+  // Update dropdowns
+  const companySelect = document.getElementById('filterCompany');
+  const contactSelect = document.getElementById('filterContact');
+  const platformSelect = document.getElementById('filterPlatform');
+  const syncSelect = document.getElementById('filterSyncStatus');
+
+  if (companySelect) companySelect.value = searchState.filters.company;
+  if (contactSelect) contactSelect.value = searchState.filters.contact;
+  if (platformSelect) platformSelect.value = searchState.filters.platform;
+  if (syncSelect) syncSelect.value = searchState.filters.syncStatus;
+
+  updateFilterCountBadge();
+  renderMeetings();
+}
+
+/**
+ * Save current filters as a new view
+ */
+async function saveCurrentFiltersAsView() {
+  // Show the save view modal instead of prompt()
+  const modal = document.getElementById('saveViewModal');
+  const input = document.getElementById('saveViewNameInput');
+  const confirmBtn = document.getElementById('confirmSaveViewBtn');
+  const cancelBtn = document.getElementById('cancelSaveViewBtn');
+  const closeBtn = document.getElementById('closeSaveViewModal');
+
+  if (!modal || !input) {
+    console.error('Save view modal elements not found');
+    showToast('Error: Could not open save dialog', 'error');
+    return;
+  }
+
+  // Clear previous input
+  input.value = '';
+
+  // Show modal
+  modal.style.display = 'flex';
+  input.focus();
+
+  // Create a promise to wait for user input
+  return new Promise(resolve => {
+    const cleanup = () => {
+      modal.style.display = 'none';
+      confirmBtn?.removeEventListener('click', handleConfirm);
+      cancelBtn?.removeEventListener('click', handleCancel);
+      closeBtn?.removeEventListener('click', handleCancel);
+      input?.removeEventListener('keydown', handleKeydown);
+      modal?.removeEventListener('click', handleOverlayClick);
+    };
+
+    const handleConfirm = () => {
+      const name = input.value.trim();
+      if (!name) {
+        input.focus();
+        return;
+      }
+
+      // Create new view
+      const view = {
+        id: 'view-' + Date.now(),
+        name: name,
+        filters: {
+          company: searchState.filters.company,
+          contact: searchState.filters.contact,
+          platform: searchState.filters.platform,
+          syncStatus: searchState.filters.syncStatus,
+        },
+        createdAt: new Date().toISOString(),
+      };
+
+      // Add to views
+      savedViews.views.push(view);
+      savedViews.activeViewId = view.id;
+
+      // Save and update UI
+      saveSavedViews();
+      updateViewsDropdown();
+
+      // Select the new view
+      const viewsSelect = document.getElementById('viewsSelect');
+      if (viewsSelect) viewsSelect.value = view.id;
+
+      // Close filter dropdown
+      const filterDropdown = document.getElementById('filterDropdown');
+      if (filterDropdown) filterDropdown.classList.remove('show');
+
+      cleanup();
+      showToast('View saved successfully', 'success');
+      resolve(true);
+    };
+
+    const handleCancel = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    const handleKeydown = e => {
+      if (e.key === 'Enter') {
+        handleConfirm();
+      } else if (e.key === 'Escape') {
+        handleCancel();
+      }
+    };
+
+    const handleOverlayClick = e => {
+      if (e.target === modal) {
+        handleCancel();
+      }
+    };
+
+    confirmBtn?.addEventListener('click', handleConfirm);
+    cancelBtn?.addEventListener('click', handleCancel);
+    closeBtn?.addEventListener('click', handleCancel);
+    input?.addEventListener('keydown', handleKeydown);
+    modal?.addEventListener('click', handleOverlayClick);
+  });
+}
+
+/**
+ * Delete a saved view
+ */
+function deleteView(viewId) {
+  const index = savedViews.views.findIndex(v => v.id === viewId);
+  if (index === -1) return;
+
+  savedViews.views.splice(index, 1);
+
+  if (savedViews.activeViewId === viewId) {
+    savedViews.activeViewId = null;
+    clearAllFilters();
+  }
+
+  saveSavedViews();
+  updateViewsDropdown();
+}
+
+/**
+ * v1.2: Open the Manage Views modal
+ */
+function openManageViewsModal() {
+  const modal = document.getElementById('manageViewsModal');
+  const listContainer = document.getElementById('manageViewsList');
+  if (!modal || !listContainer) return;
+
+  // Build the list of views
+  if (savedViews.views.length === 0) {
+    listContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No saved views yet.</p>';
+  } else {
+    listContainer.innerHTML = savedViews.views.map(view => `
+      <div class="manage-view-item" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; background: var(--bg-secondary);">
+        <div>
+          <div style="font-weight: 500; color: var(--text-primary);">${escapeHtml(view.name)}</div>
+          <div style="font-size: 12px; color: var(--text-secondary);">
+            ${view.filters.company ? `Company: ${escapeHtml(view.filters.company)}` : ''}
+            ${view.filters.platform ? `Platform: ${escapeHtml(view.filters.platform)}` : ''}
+            ${view.filters.syncStatus ? `Sync: ${escapeHtml(view.filters.syncStatus)}` : ''}
+            ${!view.filters.company && !view.filters.platform && !view.filters.syncStatus ? 'No filters' : ''}
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="edit-view-btn" data-view-id="${escapeHtml(view.id)}" style="padding: 6px 12px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary); cursor: pointer;">Edit</button>
+          <button class="delete-view-btn" data-view-id="${escapeHtml(view.id)}" style="padding: 6px 12px; border: 1px solid #ef4444; border-radius: 4px; background: transparent; color: #ef4444; cursor: pointer;">Delete</button>
+        </div>
+      </div>
+    `).join('');
+
+    // Attach event listeners
+    listContainer.querySelectorAll('.edit-view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const viewId = btn.dataset.viewId;
+        closeModal('manageViewsModal');
+        openEditViewModal(viewId);
+      });
+    });
+
+    listContainer.querySelectorAll('.delete-view-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const viewId = btn.dataset.viewId;
+        const view = savedViews.views.find(v => v.id === viewId);
+        if (confirm(`Delete the view "${view?.name || 'this view'}"?`)) {
+          deleteView(viewId);
+          // Refresh the modal
+          openManageViewsModal();
+          showToast('View deleted', 'success');
+        }
+      });
+    });
+  }
+
+  modal.style.display = 'flex';
+}
+
+/**
+ * v1.2: Open the Edit View modal
+ */
+function openEditViewModal(viewId) {
+  const view = savedViews.views.find(v => v.id === viewId);
+  if (!view) return;
+
+  const modal = document.getElementById('editViewModal');
+  const input = document.getElementById('editViewNameInput');
+  const idInput = document.getElementById('editViewId');
+
+  if (!modal || !input || !idInput) return;
+
+  input.value = view.name;
+  idInput.value = view.id;
+  modal.style.display = 'flex';
+  input.focus();
+  input.select();
+}
+
+/**
+ * v1.2: Save the edited view
+ */
+function saveEditedView() {
+  const input = document.getElementById('editViewNameInput');
+  const idInput = document.getElementById('editViewId');
+  if (!input || !idInput) return;
+
+  const viewId = idInput.value;
+  const newName = input.value.trim();
+
+  if (!newName) {
+    showToast('Please enter a view name', 'error');
+    return;
+  }
+
+  const view = savedViews.views.find(v => v.id === viewId);
+  if (view) {
+    view.name = newName;
+    saveSavedViews();
+    updateViewsDropdown();
+    showToast('View updated', 'success');
+  }
+
+  closeModal('editViewModal');
+}
+
+/**
+ * v1.2: Close a modal by ID
+ */
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) modal.style.display = 'none';
+}
+
+// Expose deleteView globally for onclick handlers
+window.deleteView = deleteView;
+window.openManageViewsModal = openManageViewsModal;
+window.openEditViewModal = openEditViewModal;
 
 /**
  * Update the filter count badge in the toolbar
@@ -2244,6 +3242,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('Data loaded, rendering meetings...');
   renderMeetings();
 
+  // Listen for auto-start setting changes to re-render calendar with toggle visibility
+  window.addEventListener('autoStartSettingChanged', () => {
+    console.log('Auto-start setting changed, re-rendering meetings...');
+    renderMeetings();
+  });
+
   // Initially show home view
   showHomeView();
 
@@ -2569,6 +3573,50 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadMeetingsDataFromFile();
   });
 
+  // v1.2: Listen for widget create-and-record request
+  window.electronAPI.onWidgetCreateAndRecord(async data => {
+    const { calendarMeetingId } = data;
+    console.log('[Widget] Create and record requested:', calendarMeetingId);
+
+    try {
+      // Find the calendar meeting
+      const calendarMeeting = calendarMeetings.find(m => m.id === calendarMeetingId);
+
+      // Create the meeting note (this also starts recording)
+      await createNewMeeting(calendarMeeting || null);
+
+      // Send success response back to main process
+      window.electronAPI.sendWidgetRecordingResult({
+        success: true,
+        meetingTitle: calendarMeeting?.title || 'New Meeting',
+      });
+    } catch (error) {
+      console.error('[Widget] Failed to create meeting:', error);
+      window.electronAPI.sendWidgetRecordingResult({
+        success: false,
+        error: error.message,
+      });
+    }
+  });
+
+  // v1.2: Listen for widget stop recording request - just click the record button
+  window.electronAPI.onWidgetStopRecording(async () => {
+    console.log('[Widget] Stop recording requested - clicking record button');
+
+    const recordButton = document.getElementById('recordButton');
+    if (recordButton && window.isRecording) {
+      // Simulate clicking the stop button
+      recordButton.click();
+      window.electronAPI.sendWidgetStopRecordingResult({ success: true });
+    } else {
+      console.log('[Widget] No active recording or button not found');
+      window.electronAPI.sendWidgetStopRecordingResult({
+        success: false,
+        error: 'No active recording',
+      });
+    }
+  });
+
   // Add event listeners for buttons
   console.log('[EventListeners] Setting up Record In-person Meeting button...');
   const newNoteBtn = document.getElementById('newNoteBtn');
@@ -2654,6 +3702,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // v1.2: Toggle Recording Widget button handler
+  const toggleWidgetBtn = document.getElementById('toggleWidgetBtn');
+  if (toggleWidgetBtn) {
+    toggleWidgetBtn.addEventListener('click', async () => {
+      console.log('[Widget] Toggle button clicked');
+      if (window.electronAPI?.toggleRecordingWidget) {
+        try {
+          const result = await window.electronAPI.toggleRecordingWidget();
+          console.log('[Widget] Toggle result:', result);
+        } catch (error) {
+          console.error('[Widget] Error toggling widget:', error);
+        }
+      }
+    });
+  }
+
   // Search input handler - debounced for performance
   // Support both old (.search-input) and new (.toolbar-search-input) selectors
   const searchInput = document.querySelector('.toolbar-search-input') || document.querySelector('.search-input');
@@ -2678,11 +3742,145 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // RS-1: Not Synced filter button click handler
-  const notSyncedFilterBtn = document.getElementById('notSyncedFilterBtn');
-  if (notSyncedFilterBtn) {
-    notSyncedFilterBtn.addEventListener('click', () => {
-      window.toggleNotSyncedFilter();
+  // v1.2: Filter dropdown toggle and handlers
+  const filterToggleBtn = document.getElementById('filterToggleBtn');
+  const filterDropdown = document.getElementById('filterDropdown');
+
+  if (filterToggleBtn && filterDropdown) {
+    // Toggle dropdown on button click
+    filterToggleBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      filterDropdown.classList.toggle('show');
+
+      // Update dropdowns when opening
+      if (filterDropdown.classList.contains('show')) {
+        updateFilterDropdowns();
+      }
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.filter-dropdown-container')) {
+        filterDropdown.classList.remove('show');
+      }
+    });
+
+    // Filter change handlers
+    const filterCompany = document.getElementById('filterCompany');
+    const filterContact = document.getElementById('filterContact');
+    const filterPlatform = document.getElementById('filterPlatform');
+    const filterSyncStatus = document.getElementById('filterSyncStatus');
+    const filterClearAll = document.getElementById('filterClearAll');
+
+    if (filterCompany) {
+      filterCompany.addEventListener('change', () => {
+        searchState.filters.company = filterCompany.value;
+        updateFilterCountBadge();
+        renderMeetings();
+      });
+    }
+
+    if (filterContact) {
+      filterContact.addEventListener('change', () => {
+        searchState.filters.contact = filterContact.value;
+        updateFilterCountBadge();
+        renderMeetings();
+      });
+    }
+
+    if (filterPlatform) {
+      filterPlatform.addEventListener('change', () => {
+        searchState.filters.platform = filterPlatform.value;
+        updateFilterCountBadge();
+        renderMeetings();
+      });
+    }
+
+    if (filterSyncStatus) {
+      filterSyncStatus.addEventListener('change', () => {
+        searchState.filters.syncStatus = filterSyncStatus.value;
+        // Also update legacy notSynced flag for compatibility
+        searchState.filters.notSynced = filterSyncStatus.value === 'not-synced';
+        updateFilterCountBadge();
+        renderMeetings();
+      });
+    }
+
+    if (filterClearAll) {
+      filterClearAll.addEventListener('click', () => {
+        clearAllFilters();
+      });
+    }
+
+    // Save View button
+    const filterSaveView = document.getElementById('filterSaveView');
+    if (filterSaveView) {
+      filterSaveView.addEventListener('click', () => {
+        saveCurrentFiltersAsView();
+      });
+    }
+  }
+
+  // v1.2: Views dropdown handler
+  const viewsSelect = document.getElementById('viewsSelect');
+  if (viewsSelect) {
+    viewsSelect.addEventListener('change', () => {
+      applyView(viewsSelect.value);
+    });
+
+    // Initialize views on load
+    loadSavedViews();
+    updateViewsDropdown();
+  }
+
+  // v1.2: Edit View Modal event handlers
+  const editViewModal = document.getElementById('editViewModal');
+  if (editViewModal) {
+    const closeEditViewModal = document.getElementById('closeEditViewModal');
+    const cancelEditViewBtn = document.getElementById('cancelEditViewBtn');
+    const confirmEditViewBtn = document.getElementById('confirmEditViewBtn');
+    const deleteViewFromEditBtn = document.getElementById('deleteViewFromEditBtn');
+    const editViewNameInput = document.getElementById('editViewNameInput');
+
+    const closeEditModal = () => closeModal('editViewModal');
+
+    closeEditViewModal?.addEventListener('click', closeEditModal);
+    cancelEditViewBtn?.addEventListener('click', closeEditModal);
+    confirmEditViewBtn?.addEventListener('click', saveEditedView);
+
+    editViewNameInput?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') saveEditedView();
+      else if (e.key === 'Escape') closeEditModal();
+    });
+
+    deleteViewFromEditBtn?.addEventListener('click', () => {
+      const viewId = document.getElementById('editViewId')?.value;
+      const view = savedViews.views.find(v => v.id === viewId);
+      if (confirm(`Delete the view "${view?.name || 'this view'}"?`)) {
+        deleteView(viewId);
+        closeEditModal();
+        showToast('View deleted', 'success');
+      }
+    });
+
+    editViewModal.addEventListener('click', e => {
+      if (e.target === editViewModal) closeEditModal();
+    });
+  }
+
+  // v1.2: Manage Views Modal event handlers
+  const manageViewsModal = document.getElementById('manageViewsModal');
+  if (manageViewsModal) {
+    const closeManageViewsModal = document.getElementById('closeManageViewsModal');
+    const closeManageViewsBtn = document.getElementById('closeManageViewsBtn');
+
+    const closeManageModal = () => closeModal('manageViewsModal');
+
+    closeManageViewsModal?.addEventListener('click', closeManageModal);
+    closeManageViewsBtn?.addEventListener('click', closeManageModal);
+
+    manageViewsModal.addEventListener('click', e => {
+      if (e.target === manageViewsModal) closeManageModal();
     });
   }
 
@@ -2705,33 +3903,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    // Check if join calendar meeting button was clicked
-    if (e.target.closest('.join-calendar-meeting-btn')) {
-      e.stopPropagation();
-      const joinBtn = e.target.closest('.join-calendar-meeting-btn');
-      const meetingLink = joinBtn.dataset.link;
-
-      if (meetingLink) {
-        // Open the meeting link in the default browser
-        window.electronAPI.openExternal(meetingLink);
-      }
-      return;
-    }
-
-    // Check if record calendar meeting button was clicked
-    if (e.target.closest('.record-calendar-meeting-btn')) {
-      e.stopPropagation();
-      const recordBtn = e.target.closest('.record-calendar-meeting-btn');
-      const meetingId = recordBtn.dataset.id;
-
-      console.log('Record calendar meeting:', meetingId);
-
-      // Create a new note for this meeting
-      const _noteId = await createNewMeeting();
-
-      // TODO: Future enhancement - associate calendar meeting with this note
-      // Could store calendar meeting ID in the note metadata
-
+    // v1.2: Unified start recording button (replaces separate join + record buttons)
+    // Note: The click handler is now attached directly to the button in createCalendarMeetingCard
+    // This delegation handler is kept for backwards compatibility
+    if (e.target.closest('.start-recording-btn')) {
+      // Handler is attached directly, just stop propagation
       return;
     }
 
@@ -2971,7 +4147,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     console.log('[EventListeners] Click listener added successfully to backButton');
   } else {
-    console.error('[EventListeners] ERROR: backButton element not found in DOM!');
+    console.log('[EventListeners] backButton element not found - this may be expected if toolbar was redesigned');
   }
 
   // Google button event listener (unified Calendar + Contacts)

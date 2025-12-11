@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Recording Widget</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html, body {
+        background: transparent;
+        overflow: visible;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      }
+
+      .widget-wrapper {
+        position: relative;
+        display: inline-block;
+      }
+
+      .widget-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: rgba(24, 24, 27, 0.95);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(12px);
+        -webkit-app-region: drag;
+        padding: 12px 10px;
+        gap: 8px;
+        width: 64px;
+      }
+
+      /* Timer display */
+      .timer-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .timer-display {
+        font-size: 11px;
+        font-weight: 600;
+        color: #fff;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.5px;
+      }
+
+      /* Divider */
+      .divider {
+        width: 32px;
+        height: 1px;
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      /* Control buttons */
+      .widget-controls {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        -webkit-app-region: no-drag;
+      }
+
+      .control-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.6);
+      }
+
+      .control-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: #fff;
+      }
+
+      .control-btn.pinned {
+        color: #10b981;
+        background: rgba(16, 185, 129, 0.15);
+      }
+
+      .control-btn.pinned:hover {
+        background: rgba(16, 185, 129, 0.25);
+      }
+
+      /* Record/Stop button */
+      .record-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+        background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+        color: #fff;
+      }
+
+      .record-btn:hover {
+        transform: scale(1.05);
+        background: linear-gradient(180deg, #f87171 0%, #ef4444 100%);
+      }
+
+      .record-btn .record-icon {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #fff;
+      }
+
+      .record-btn .stop-icon {
+        display: none;
+        width: 14px;
+        height: 14px;
+        background: #fff;
+        border-radius: 3px;
+      }
+
+      .record-btn.recording .record-icon {
+        display: none;
+      }
+
+      .record-btn.recording .stop-icon {
+        display: block;
+      }
+
+      /* Recording state */
+      .widget-container.recording {
+        border-color: rgba(239, 68, 68, 0.3);
+      }
+
+      .widget-container.recording .timer-display {
+        color: #ef4444;
+      }
+
+      /* Status dot */
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.25);
+        transition: all 0.2s ease;
+      }
+
+      .widget-container.recording .status-dot {
+        background: #ef4444;
+        animation: pulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+
+      /* Close button */
+      .close-btn {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(60, 60, 60, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.6);
+        cursor: pointer;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        -webkit-app-region: no-drag;
+        transition: all 0.15s ease;
+      }
+
+      .close-btn:hover {
+        background: rgba(239, 68, 68, 0.9);
+        color: #fff;
+      }
+
+      .widget-wrapper:hover .close-btn {
+        display: flex;
+      }
+
+      /* Info tooltip */
+      .info-tooltip {
+        position: absolute;
+        right: 70px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(24, 24, 27, 0.98);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        padding: 12px;
+        width: 220px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        display: none;
+        z-index: 100;
+        -webkit-app-region: no-drag;
+      }
+
+      .info-tooltip.show {
+        display: block;
+      }
+
+      .info-tooltip::after {
+        content: '';
+        position: absolute;
+        right: -8px;
+        top: 50%;
+        transform: translateY(-50%);
+        border: 8px solid transparent;
+        border-left-color: rgba(255, 255, 255, 0.15);
+      }
+
+      .info-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #fff;
+        margin-bottom: 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .info-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .info-row:last-child {
+        margin-bottom: 0;
+      }
+
+      .info-row svg {
+        width: 12px;
+        height: 12px;
+        flex-shrink: 0;
+        opacity: 0.6;
+      }
+
+      .info-label {
+        color: rgba(255, 255, 255, 0.5);
+        min-width: 50px;
+      }
+
+      .info-value {
+        color: #fff;
+      }
+
+      .info-platform {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 6px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        font-size: 10px;
+        text-transform: capitalize;
+      }
+
+      .info-platform.zoom { color: #2D8CFF; }
+      .info-platform.teams { color: #6264A7; }
+      .info-platform.meet { color: #00897B; }
+      .info-platform.in-person { color: #10b981; }
+
+      .info-hint {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.4);
+        text-align: center;
+      }
+
+      /* Meeting selection mode */
+      .widget-container.select-mode {
+        width: 220px;
+        padding: 12px;
+      }
+
+      .widget-container.select-mode .timer-section,
+      .widget-container.select-mode .divider,
+      .widget-container.select-mode .widget-controls {
+        display: none;
+      }
+
+      .meeting-select {
+        display: none;
+        flex-direction: column;
+        gap: 8px;
+        width: 100%;
+        -webkit-app-region: no-drag;
+      }
+
+      .widget-container.select-mode .meeting-select {
+        display: flex;
+      }
+
+      .select-title {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.6);
+        text-align: center;
+        margin-bottom: 4px;
+      }
+
+      .meeting-option {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-align: left;
+        color: #fff;
+      }
+
+      .meeting-option:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+
+      .meeting-option-title {
+        font-size: 12px;
+        font-weight: 500;
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .meeting-option-time {
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.5);
+      }
+
+      .cancel-btn {
+        background: none;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.6);
+        padding: 8px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 11px;
+        transition: all 0.15s ease;
+      }
+
+      .cancel-btn:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="widget-wrapper">
+      <!-- Info tooltip (shows on hover of info button) -->
+      <div class="info-tooltip" id="infoTooltip">
+        <div class="info-title" id="infoTitle">Meeting Title</div>
+        <div class="info-row">
+          <span class="info-label">Time:</span>
+          <span class="info-value" id="infoTime">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Platform:</span>
+          <span class="info-platform" id="infoPlatform">--</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Participants:</span>
+          <span class="info-value" id="infoParticipants">--</span>
+        </div>
+        <div class="info-hint">Click to open in app</div>
+      </div>
+
+      <div class="widget-container" id="widgetContainer">
+        <!-- Timer section -->
+        <div class="timer-section">
+          <div class="status-dot" id="statusDot"></div>
+          <div class="timer-display" id="timerDisplay">00:00</div>
+        </div>
+
+        <!-- Divider -->
+        <div class="divider"></div>
+
+        <!-- Controls -->
+        <div class="widget-controls">
+          <!-- Info button -->
+          <button class="control-btn" id="infoBtn" title="Meeting info">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 16v-4M12 8h.01"/>
+            </svg>
+          </button>
+
+          <!-- Pin button -->
+          <button class="control-btn pinned" id="pinBtn" title="Always on top">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+            </svg>
+          </button>
+
+          <!-- Record/Stop button -->
+          <button class="record-btn" id="recordBtn" title="Start recording">
+            <div class="record-icon"></div>
+            <div class="stop-icon"></div>
+          </button>
+        </div>
+
+        <!-- Meeting selection (hidden by default) -->
+        <div class="meeting-select" id="meetingSelect">
+          <div class="select-title">Select a meeting:</div>
+          <div id="meetingOptions"></div>
+          <button class="cancel-btn" id="cancelBtn">Cancel</button>
+        </div>
+      </div>
+
+      <!-- Close button -->
+      <button class="close-btn" id="closeBtn" title="Close">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <script>
+      // Widget state (display only - actual state comes from main app)
+      let isRecording = false;
+      let recordingStartTime = null;
+      let timerInterval = null;
+      let currentMeetingId = null;
+      let currentMeetingInfo = null; // Store meeting info for tooltip
+      let isAlwaysOnTop = true;
+
+      // DOM elements
+      const widgetContainer = document.getElementById('widgetContainer');
+      const timerDisplay = document.getElementById('timerDisplay');
+      const statusDot = document.getElementById('statusDot');
+      const recordBtn = document.getElementById('recordBtn');
+      const infoBtn = document.getElementById('infoBtn');
+      const infoTooltip = document.getElementById('infoTooltip');
+      const pinBtn = document.getElementById('pinBtn');
+      const closeBtn = document.getElementById('closeBtn');
+      const meetingSelect = document.getElementById('meetingSelect');
+      const meetingOptions = document.getElementById('meetingOptions');
+      const cancelBtn = document.getElementById('cancelBtn');
+
+      // Format time as MM:SS or HH:MM:SS
+      function formatTime(seconds) {
+        const hrs = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        const secs = seconds % 60;
+
+        if (hrs > 0) {
+          return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      }
+
+      // Update timer display
+      function updateTimer() {
+        if (recordingStartTime) {
+          const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+          timerDisplay.textContent = formatTime(elapsed);
+        }
+      }
+
+      // Start recording - just tells main app
+      async function startRecording() {
+        try {
+          const result = await window.widgetAPI.startRecording(currentMeetingId);
+          // UI update will come from sync-state event
+        } catch (error) {
+          console.error('Failed to start recording:', error);
+        }
+      }
+
+      // Stop recording - just tells main app
+      async function stopRecording() {
+        try {
+          const result = await window.widgetAPI.stopRecording();
+          // UI update will come from sync-state event
+        } catch (error) {
+          console.error('Failed to stop recording:', error);
+        }
+      }
+
+      // Update UI based on state from main app
+      function updateUI() {
+        if (isRecording) {
+          recordBtn.classList.add('recording');
+          recordBtn.title = 'Stop recording';
+          widgetContainer.classList.add('recording');
+        } else {
+          recordBtn.classList.remove('recording');
+          recordBtn.title = 'Start recording';
+          widgetContainer.classList.remove('recording');
+          timerDisplay.textContent = '00:00';
+        }
+      }
+
+      // Update pin button state
+      function updatePinButton() {
+        if (isAlwaysOnTop) {
+          pinBtn.classList.add('pinned');
+          pinBtn.title = 'Always on top (click to disable)';
+        } else {
+          pinBtn.classList.remove('pinned');
+          pinBtn.title = 'Click to keep on top';
+        }
+      }
+
+      // Update info tooltip with meeting data
+      function updateInfoTooltip(meetingInfo) {
+        currentMeetingInfo = meetingInfo;
+
+        if (!meetingInfo) {
+          document.getElementById('infoTitle').textContent = 'No meeting';
+          document.getElementById('infoTime').textContent = '--';
+          document.getElementById('infoPlatform').textContent = '--';
+          document.getElementById('infoPlatform').className = 'info-platform';
+          document.getElementById('infoParticipants').textContent = '--';
+          return;
+        }
+
+        document.getElementById('infoTitle').textContent = meetingInfo.title || 'Untitled Meeting';
+
+        // Format time
+        if (meetingInfo.startTime) {
+          const start = new Date(meetingInfo.startTime);
+          document.getElementById('infoTime').textContent = start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else {
+          document.getElementById('infoTime').textContent = '--';
+        }
+
+        // Platform
+        const platform = meetingInfo.platform || 'in-person';
+        document.getElementById('infoPlatform').textContent = platform;
+        document.getElementById('infoPlatform').className = 'info-platform ' + platform.toLowerCase();
+
+        // Participants
+        const participants = meetingInfo.participants || [];
+        if (participants.length > 0) {
+          const names = participants.slice(0, 3).map(p => p.name || p.email?.split('@')[0] || 'Unknown');
+          let text = names.join(', ');
+          if (participants.length > 3) {
+            text += ` +${participants.length - 3}`;
+          }
+          document.getElementById('infoParticipants').textContent = text;
+        } else {
+          document.getElementById('infoParticipants').textContent = 'None';
+        }
+      }
+
+      // Show meeting selection
+      function showMeetingSelect(meetings) {
+        meetingOptions.innerHTML = '';
+        meetings.forEach(meeting => {
+          const option = document.createElement('button');
+          option.className = 'meeting-option';
+          const startTime = new Date(meeting.startTime);
+          option.innerHTML = `
+            <div class="meeting-option-title">${meeting.title}</div>
+            <div class="meeting-option-time">${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          `;
+          option.addEventListener('click', () => selectMeeting(meeting));
+          meetingOptions.appendChild(option);
+        });
+        widgetContainer.classList.add('select-mode');
+      }
+
+      // Select a meeting
+      function selectMeeting(meeting) {
+        currentMeetingId = meeting.id;
+        currentMeetingInfo = meeting;
+        updateInfoTooltip(meeting);
+        widgetContainer.classList.remove('select-mode');
+        startRecording();
+      }
+
+      // Event listeners
+      recordBtn.addEventListener('click', () => {
+        if (isRecording) {
+          stopRecording();
+        } else {
+          startRecording();
+        }
+      });
+
+      // Info button - show tooltip on hover, open meeting on click
+      infoBtn.addEventListener('mouseenter', () => {
+        infoTooltip.classList.add('show');
+      });
+
+      infoBtn.addEventListener('mouseleave', () => {
+        infoTooltip.classList.remove('show');
+      });
+
+      infoBtn.addEventListener('click', () => {
+        // Open the meeting in the main app
+        window.widgetAPI.openMeeting(currentMeetingId);
+      });
+
+      pinBtn.addEventListener('click', async () => {
+        try {
+          const result = await window.widgetAPI.toggleAlwaysOnTop();
+          if (result.success) {
+            isAlwaysOnTop = result.alwaysOnTop;
+            updatePinButton();
+          }
+        } catch (error) {
+          console.error('Failed to toggle always-on-top:', error);
+        }
+      });
+
+      closeBtn.addEventListener('click', () => {
+        window.widgetAPI.hideWidget();
+      });
+
+      cancelBtn.addEventListener('click', () => {
+        widgetContainer.classList.remove('select-mode');
+        window.widgetAPI.hideWidget();
+      });
+
+      // Listen for updates from main process
+      window.widgetAPI.onUpdate((event, data) => {
+        if (data.type === 'show') {
+          if (data.meetings && data.meetings.length > 1) {
+            showMeetingSelect(data.meetings);
+          } else if (data.meeting) {
+            currentMeetingId = data.meeting.id;
+            currentMeetingInfo = data.meeting;
+            updateInfoTooltip(data.meeting);
+          }
+        } else if (data.type === 'show-standalone') {
+          widgetContainer.classList.remove('select-mode');
+          currentMeetingId = null;
+          currentMeetingInfo = null;
+          updateInfoTooltip(null);
+        } else if (data.type === 'recording-started') {
+          isRecording = true;
+          recordingStartTime = data.startTime || Date.now();
+          if (data.meetingInfo) {
+            currentMeetingInfo = data.meetingInfo;
+            updateInfoTooltip(data.meetingInfo);
+          }
+          updateUI();
+          if (timerInterval) clearInterval(timerInterval);
+          timerInterval = setInterval(updateTimer, 1000);
+        } else if (data.type === 'recording-stopped') {
+          isRecording = false;
+          recordingStartTime = null;
+          if (timerInterval) {
+            clearInterval(timerInterval);
+            timerInterval = null;
+          }
+          updateUI();
+        } else if (data.type === 'sync-state') {
+          isRecording = data.isRecording;
+          if (isRecording && data.startTime) {
+            recordingStartTime = data.startTime;
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(updateTimer, 1000);
+          }
+          if (data.meetingInfo) {
+            currentMeetingId = data.meetingInfo.id;
+            currentMeetingInfo = data.meetingInfo;
+            updateInfoTooltip(data.meetingInfo);
+          }
+          widgetContainer.classList.remove('select-mode');
+          updateUI();
+        } else if (data.type === 'always-on-top-changed') {
+          isAlwaysOnTop = data.enabled;
+          updatePinButton();
+        } else if (data.type === 'meeting-info-update') {
+          // Update meeting info when it changes
+          if (data.meetingInfo) {
+            currentMeetingInfo = data.meetingInfo;
+            updateInfoTooltip(data.meetingInfo);
+          }
+        }
+      });
+
+      // Request initial state sync
+      window.widgetAPI.requestSync();
+    </script>
+  </body>
+</html>

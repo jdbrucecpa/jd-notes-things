@@ -173,10 +173,12 @@ class SpeakerMatcher {
       if (bestParticipant && bestCount >= 2) {
         // Require at least 2 matches for confidence
         // Find the email for this participant if available
+        // Pass other participant emails for company disambiguation
         const participantEmail = this.findEmailForParticipant(
           bestParticipant,
           participantEmails,
-          contacts
+          contacts,
+          { otherParticipantEmails: participantEmails }
         );
 
         mapping[speakerLabel] = {
@@ -199,24 +201,90 @@ class SpeakerMatcher {
 
   /**
    * SM-1: Find email address for a participant by name
+   * Enhanced to use company information as a hint for disambiguation
    * @param {string} participantName - Name from SDK
    * @param {Array} participantEmails - Available participant emails
    * @param {Map} contacts - Contact information
+   * @param {Object} options - Optional hints for disambiguation
+   * @param {string} options.companyHint - Company name to prefer when multiple contacts match
+   * @param {Array} options.otherParticipantEmails - Other participant emails to infer company context
    * @returns {string|null} Email if found
    */
-  findEmailForParticipant(participantName, participantEmails, contacts) {
+  findEmailForParticipant(participantName, participantEmails, contacts, options = {}) {
     if (!participantName) return null;
 
     const nameLower = participantName.toLowerCase();
+    const { companyHint, otherParticipantEmails = [] } = options;
+
+    // Collect all matching contacts
+    const matches = [];
 
     // Try to find by contact name
     for (const [email, contact] of contacts) {
       if (contact.name && contact.name.toLowerCase() === nameLower) {
-        return email;
+        matches.push({ email, contact, matchType: 'full-name' });
+      } else if (contact.givenName && contact.givenName.toLowerCase() === nameLower.split(' ')[0]) {
+        matches.push({ email, contact, matchType: 'first-name' });
       }
-      if (contact.givenName && contact.givenName.toLowerCase() === nameLower.split(' ')[0]) {
-        return email;
+    }
+
+    // If we have multiple matches, try to disambiguate using company
+    if (matches.length > 1) {
+      console.log(`[SpeakerMatcher] Found ${matches.length} contacts matching "${participantName}", attempting disambiguation`);
+
+      // Try explicit company hint first
+      if (companyHint) {
+        const companyMatch = matches.find(m =>
+          m.contact.organization?.toLowerCase() === companyHint.toLowerCase()
+        );
+        if (companyMatch) {
+          console.log(`[SpeakerMatcher] Disambiguated using company hint "${companyHint}" -> ${companyMatch.email}`);
+          return companyMatch.email;
+        }
       }
+
+      // Try to infer company from other participants in the meeting
+      if (otherParticipantEmails.length > 0) {
+        // Find companies of other participants
+        const otherCompanies = new Set();
+        for (const otherEmail of otherParticipantEmails) {
+          const otherContact = contacts.get(otherEmail);
+          if (otherContact?.organization) {
+            otherCompanies.add(otherContact.organization.toLowerCase());
+          }
+          // Also try to infer company from email domain
+          const domain = otherEmail.split('@')[1]?.toLowerCase();
+          if (domain && !domain.includes('gmail') && !domain.includes('yahoo') && !domain.includes('hotmail') && !domain.includes('outlook')) {
+            otherCompanies.add(domain);
+          }
+        }
+
+        if (otherCompanies.size > 0) {
+          // Prefer contact from the same company as other participants
+          for (const match of matches) {
+            const matchCompany = match.contact.organization?.toLowerCase();
+            const matchDomain = match.email.split('@')[1]?.toLowerCase();
+
+            if ((matchCompany && otherCompanies.has(matchCompany)) ||
+                (matchDomain && otherCompanies.has(matchDomain))) {
+              console.log(`[SpeakerMatcher] Disambiguated using other participant company context -> ${match.email}`);
+              return match.email;
+            }
+          }
+        }
+      }
+
+      // Prefer full-name matches over first-name matches
+      const fullNameMatch = matches.find(m => m.matchType === 'full-name');
+      if (fullNameMatch) {
+        console.log(`[SpeakerMatcher] Defaulting to full name match -> ${fullNameMatch.email}`);
+        return fullNameMatch.email;
+      }
+    }
+
+    // Return first match if we have any
+    if (matches.length > 0) {
+      return matches[0].email;
     }
 
     // Try to find by extracting name from email

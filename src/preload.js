@@ -44,6 +44,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRecordingStateChange: callback =>
     ipcRenderer.on('recording-state-change', (_, data) => callback(data)),
   onRecordingEnded: callback => ipcRenderer.on('recording-ended', (_, data) => callback(data)),
+  // v1.2: Recording Widget IPC
+  onWidgetCreateAndRecord: callback =>
+    ipcRenderer.on('widget:create-and-record', (_, data) => callback(data)),
+  onWidgetStopRecording: callback =>
+    ipcRenderer.on('widget:stop-recording-request', () => callback()),
+  sendWidgetRecordingResult: result => ipcRenderer.send('widget:recording-result', result),
+  sendWidgetStopRecordingResult: result => ipcRenderer.send('widget:stop-recording-result', result),
+  showRecordingWidget: meetingInfo => ipcRenderer.send('widget:show', meetingInfo),
+  toggleRecordingWidget: () => ipcRenderer.invoke('widget:toggle'),
+  widgetToggleAlwaysOnTop: enabled => ipcRenderer.invoke('widget:toggleAlwaysOnTop', enabled),
+  widgetGetState: () => ipcRenderer.invoke('widget:getState'),
   onParticipantsUpdated: callback =>
     ipcRenderer.on('participants-updated', (_, meetingId) => callback(meetingId)),
   onVideoFrame: callback => ipcRenderer.on('video-frame', (_, data) => callback(data)),
@@ -140,6 +151,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) =>
     ipcRenderer.invoke('speakers:updateMapping', { meetingId, speakerLabel, participantEmail }),
   openExternal: url => ipcRenderer.send('open-external', url),
+  toggleDevTools: () => ipcRenderer.send('toggle-dev-tools'),
   // Speaker Mapping (SM-2)
   speakerMappingGetAll: () => ipcRenderer.invoke('speakerMapping:getAll'),
   speakerMappingGetSuggestions: speakerIds =>
@@ -199,6 +211,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Desktop App Polish (Phase 10.7)
   appGetSettings: () => ipcRenderer.invoke('app:getSettings'),
   appUpdateSettings: updates => ipcRenderer.invoke('app:updateSettings', updates),
+  appSetMeetingAutoStart: (meetingId, enabled) => ipcRenderer.invoke('app:setMeetingAutoStart', meetingId, enabled),
+  appGetMeetingAutoStart: meetingId => ipcRenderer.invoke('app:getMeetingAutoStart', meetingId),
+  appGetStreamDeckStatus: () => ipcRenderer.invoke('app:getStreamDeckStatus'),
   appGetLogs: options => ipcRenderer.invoke('app:getLogs', options),
   appClearLogs: () => ipcRenderer.invoke('app:clearLogs'),
   appOpenLogFile: () => ipcRenderer.invoke('app:openLogFile'),

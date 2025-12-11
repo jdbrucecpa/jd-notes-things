@@ -130,6 +130,7 @@ export function initializeSettingsUI() {
   // Control elements
   const darkModeToggle = document.getElementById('darkModeToggle');
   const autoStartToggle = document.getElementById('autoStartToggle');
+  const showRecordingWidgetToggle = document.getElementById('showRecordingWidgetToggle');
   const debugModeToggle = document.getElementById('debugModeToggle');
   const vaultPathInput = document.getElementById('vaultPathInput');
   const browseVaultPathBtn = document.getElementById('browseVaultPathBtn');
@@ -190,6 +191,7 @@ export function initializeSettingsUI() {
       { buttonId: 'patternsSettingsTab', contentId: 'patternsPanel' },
       { buttonId: 'notificationsSettingsTab', contentId: 'notificationsPanel' },
       { buttonId: 'shortcutsSettingsTab', contentId: 'shortcutsPanel' },
+      { buttonId: 'streamDeckSettingsTab', contentId: 'streamdeckPanel' },
       { buttonId: 'logsSettingsTab', contentId: 'logsPanel' },
       { buttonId: 'advancedSettingsTab', contentId: 'advancedPanel' },
       { buttonId: 'aboutSettingsTab', contentId: 'aboutPanel' },
@@ -216,6 +218,9 @@ export function initializeSettingsUI() {
       } else if (buttonId === 'vocabularySettingsTab') {
         console.log('[Settings] Vocabulary tab clicked, loading vocabulary');
         loadVocabulary();
+      } else if (buttonId === 'streamDeckSettingsTab') {
+        console.log('[Settings] Stream Deck tab clicked, loading status');
+        loadStreamDeckSettings();
       }
     }
   );
@@ -241,6 +246,24 @@ export function initializeSettingsUI() {
     autoStartToggle.addEventListener('click', () => {
       const isActive = autoStartToggle.classList.toggle('active');
       updateSetting('autoStartRecording', isActive);
+      // Sync to main process
+      if (window.electronAPI?.appUpdateSettings) {
+        window.electronAPI.appUpdateSettings({ autoStartRecording: isActive });
+      }
+      // Notify calendar to re-render with updated toggle visibility
+      window.dispatchEvent(new CustomEvent('autoStartSettingChanged', { detail: { enabled: isActive } }));
+    });
+  }
+
+  // Show recording widget toggle
+  if (showRecordingWidgetToggle) {
+    showRecordingWidgetToggle.addEventListener('click', () => {
+      const isActive = showRecordingWidgetToggle.classList.toggle('active');
+      updateSetting('showRecordingWidget', isActive);
+      // Also update main process settings
+      if (window.electronAPI?.appUpdateSettings) {
+        window.electronAPI.appUpdateSettings({ showRecordingWidget: isActive });
+      }
     });
   }
 
@@ -557,6 +580,15 @@ export function initializeSettingsUI() {
         autoStartToggle.classList.add('active');
       } else {
         autoStartToggle.classList.remove('active');
+      }
+    }
+
+    if (showRecordingWidgetToggle) {
+      // Default to true if not set
+      if (currentSettings.showRecordingWidget !== false) {
+        showRecordingWidgetToggle.classList.add('active');
+      } else {
+        showRecordingWidgetToggle.classList.remove('active');
       }
     }
 
@@ -1174,3 +1206,118 @@ window.deleteKeyword = deleteKeyword;
 document.addEventListener('DOMContentLoaded', () => {
   initializeVocabularyUI();
 });
+
+// ===================================================================
+// v1.2: Stream Deck Settings
+// ===================================================================
+
+/**
+ * Load Stream Deck settings and status
+ */
+async function loadStreamDeckSettings() {
+  console.log('[Settings] Loading Stream Deck settings...');
+
+  const enabledToggle = document.getElementById('streamDeckEnabled');
+  const statusItem = document.getElementById('streamDeckStatusItem');
+  const infoBox = document.getElementById('streamDeckInfoBox');
+  const refreshBtn = document.getElementById('refreshStreamDeckStatus');
+
+  try {
+    // Load app settings to get current Stream Deck enabled state
+    const settingsResult = await window.electronAPI.appGetSettings();
+    if (settingsResult.success && settingsResult.data) {
+      const enabled = settingsResult.data.streamDeck?.enabled || false;
+      if (enabledToggle) {
+        enabledToggle.checked = enabled;
+      }
+
+      // Show/hide additional info based on enabled state
+      if (statusItem) statusItem.style.display = enabled ? 'flex' : 'none';
+      if (infoBox) infoBox.style.display = enabled ? 'block' : 'none';
+
+      // If enabled, load status
+      if (enabled) {
+        await refreshStreamDeckStatus();
+      }
+    }
+  } catch (error) {
+    console.error('[Settings] Error loading Stream Deck settings:', error);
+  }
+
+  // Set up toggle handler
+  if (enabledToggle) {
+    enabledToggle.addEventListener('change', async () => {
+      const enabled = enabledToggle.checked;
+      console.log('[Settings] Stream Deck enabled:', enabled);
+
+      try {
+        await window.electronAPI.appUpdateSettings({
+          streamDeck: { enabled }
+        });
+
+        // Show/hide additional info
+        if (statusItem) statusItem.style.display = enabled ? 'flex' : 'none';
+        if (infoBox) infoBox.style.display = enabled ? 'block' : 'none';
+
+        if (enabled) {
+          await refreshStreamDeckStatus();
+          window.showToast?.('Stream Deck integration enabled', 'success');
+        } else {
+          window.showToast?.('Stream Deck integration disabled', 'info');
+        }
+      } catch (error) {
+        console.error('[Settings] Error updating Stream Deck settings:', error);
+        window.showToast?.('Failed to update Stream Deck settings', 'error');
+        // Revert toggle
+        enabledToggle.checked = !enabled;
+      }
+    });
+  }
+
+  // Set up refresh button
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      refreshStreamDeckStatus();
+    });
+  }
+}
+
+/**
+ * Refresh Stream Deck connection status
+ */
+async function refreshStreamDeckStatus() {
+  const statusText = document.getElementById('streamDeckStatusText');
+
+  try {
+    const result = await window.electronAPI.appGetStreamDeckStatus();
+
+    if (result.success && result.data) {
+      const { enabled, connectedClients, wsEndpoint } = result.data;
+
+      if (statusText) {
+        if (!enabled) {
+          statusText.textContent = 'Disabled';
+          statusText.style.color = 'var(--text-secondary)';
+        } else if (connectedClients > 0) {
+          statusText.textContent = `Connected (${connectedClients} client${connectedClients !== 1 ? 's' : ''})`;
+          statusText.style.color = 'var(--status-success)';
+        } else {
+          statusText.textContent = 'Enabled, waiting for connections...';
+          statusText.style.color = 'var(--status-warning)';
+        }
+      }
+
+      // Update endpoint display
+      const endpointEl = document.getElementById('streamDeckEndpoint');
+      if (endpointEl && wsEndpoint) {
+        endpointEl.textContent = wsEndpoint;
+      }
+    }
+  } catch (error) {
+    console.error('[Settings] Error refreshing Stream Deck status:', error);
+    if (statusText) {
+      statusText.textContent = 'Error checking status';
+      statusText.style.color = 'var(--status-error)';
+    }
+  }
+}

@@ -278,13 +278,17 @@ let googleContacts = null;
 let speakerMatcher = null;
 
 let mainWindow;
+let recordingWidget = null; // Floating recording widget window (v1.2)
 let tray = null; // System tray icon (Phase 10.7)
 let isRecording = false; // Track recording state for UI updates (Phase 10.7)
 let sdkReady = false; // Track when SDK is fully initialized (after restart workaround)
+let recordingStartTime = null; // Track when recording started for widget timer (v1.2)
+let currentRecordingMeetingTitle = null; // Track current meeting title for widget (v1.2)
 
 // Meeting monitor state
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
 const autoStartedMeetings = new Set(); // Track meetings we've auto-started recording
+const meetingAutoStartOverrides = new Map(); // v1.2: Per-meeting auto-start overrides (meetingId -> boolean)
 let meetingMonitorInterval = null;
 
 // ===================================================================
@@ -300,6 +304,8 @@ let appSettings = {
     enableToasts: true,
     enableSounds: true,
     minimizeToTray: true,
+    showRecordingWidget: true, // v1.2: Show floating widget when meeting detected
+    autoStartRecording: false, // v1.2: Auto-start recording when calendar meeting begins
   },
   shortcuts: {
     startStopRecording: 'CommandOrControl+Shift+R',
@@ -307,6 +313,10 @@ let appSettings = {
     stopRecording: 'CommandOrControl+Shift+S',
   },
   windowBounds: null, // Will store {x, y, width, height, displayId}
+  transcriptionProvider: 'assemblyai', // v1.2: Default transcription provider
+  streamDeck: {
+    enabled: false, // v1.2: Enable Stream Deck WebSocket integration
+  },
 };
 
 // Settings file path (Phase 10.7) - stored in config/ directory
@@ -338,6 +348,7 @@ function loadAppSettings() {
         ...savedSettings,
         notifications: { ...appSettings.notifications, ...savedSettings.notifications },
         shortcuts: { ...appSettings.shortcuts, ...savedSettings.shortcuts },
+        streamDeck: { ...appSettings.streamDeck, ...savedSettings.streamDeck },
       };
       logger.main.info('App settings loaded successfully');
     }
@@ -869,6 +880,9 @@ async function checkUpcomingMeetings() {
     const meetings = await googleCalendar.getUpcomingMeetings(2); // Next 2 hours
     const now = new Date();
 
+    // v1.2: Find meetings that are starting now (within 2-minute window)
+    const meetingsStartingNow = [];
+
     for (const meeting of meetings) {
       const startTime = new Date(meeting.startTime);
       const timeUntilStart = startTime - now;
@@ -888,15 +902,57 @@ async function checkUpcomingMeetings() {
         notifiedMeetings.add(meeting.id);
       }
 
-      // Auto-start recording when meeting starts (within 1 minute window)
+      // Collect meetings starting within the auto-start window
       if (
         minutesUntilStart <= 0 &&
-        minutesUntilStart >= -1 &&
+        minutesUntilStart >= -2 &&
         !autoStartedMeetings.has(meeting.id)
       ) {
-        logger.monitor.info(`Auto-starting recording for: ${meeting.title}`);
-        await autoStartRecording(meeting);
-        autoStartedMeetings.add(meeting.id);
+        meetingsStartingNow.push(meeting);
+      }
+    }
+
+    // v1.2: Handle meetings starting now based on settings
+    if (meetingsStartingNow.length > 0 && !isRecording) {
+      const globalAutoStartEnabled = appSettings.notifications?.autoStartRecording || appSettings.autoStartRecording;
+      // Check both old location (notifications) and new location (top-level) for showRecordingWidget
+      const showWidget = appSettings.showRecordingWidget !== undefined
+        ? appSettings.showRecordingWidget
+        : (appSettings.notifications?.showRecordingWidget ?? true);
+
+      if (meetingsStartingNow.length > 1) {
+        // Multiple overlapping meetings - show widget with selection
+        logger.monitor.info(`Multiple meetings starting: ${meetingsStartingNow.map(m => m.title).join(', ')}`);
+        if (showWidget) {
+          showRecordingWidget(meetingsStartingNow);
+        }
+        // Mark all as prompted so we don't keep prompting
+        meetingsStartingNow.forEach(m => autoStartedMeetings.add(m.id));
+      } else {
+        // Single meeting
+        const meeting = meetingsStartingNow[0];
+
+        // v1.2: Check for per-meeting auto-start override
+        const meetingOverride = meetingAutoStartOverrides.get(meeting.id);
+        const autoStartEnabled = meetingOverride !== undefined ? meetingOverride : globalAutoStartEnabled;
+
+        if (autoStartEnabled) {
+          // Auto-start recording
+          logger.monitor.info(`Auto-starting recording for: ${meeting.title} (override: ${meetingOverride !== undefined})`);
+          await autoStartRecording(meeting);
+          autoStartedMeetings.add(meeting.id);
+
+          // Show widget with recording status
+          if (showWidget) {
+            showRecordingWidget(meeting);
+            updateWidgetRecordingState(true, meeting.title);
+          }
+        } else if (showWidget) {
+          // Show widget to prompt user
+          logger.monitor.info(`Showing widget prompt for: ${meeting.title}`);
+          showRecordingWidget(meeting);
+          autoStartedMeetings.add(meeting.id);
+        }
       }
     }
 
@@ -1122,6 +1178,138 @@ const createWindow = () => {
     }
   });
 };
+
+// ===================================================================
+// Recording Widget Window (v1.2 - Krisp-style floating widget)
+// ===================================================================
+
+/**
+ * Create the floating recording widget window
+ */
+function createRecordingWidget() {
+  if (recordingWidget && !recordingWidget.isDestroyed()) {
+    return recordingWidget;
+  }
+
+  // Position widget in bottom-right corner near system tray
+  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+  const widgetWidth = 90; // Vertical compact widget
+  const widgetHeight = 220;
+  const margin = 20;
+
+  recordingWidget = new BrowserWindow({
+    width: widgetWidth,
+    height: widgetHeight,
+    x: screenWidth - widgetWidth - margin,
+    y: screenHeight - widgetHeight - margin,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    skipTaskbar: true,
+    show: false,
+    webPreferences: {
+      preload: RECORDING_WIDGET_PRELOAD_WEBPACK_ENTRY,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  // Load the widget HTML using webpack entry
+  recordingWidget.loadURL(RECORDING_WIDGET_WEBPACK_ENTRY);
+
+  // Hide widget when it loses focus (optional - can be changed in settings)
+  recordingWidget.on('blur', () => {
+    // Keep visible if recording
+    if (!isRecording) {
+      // Don't auto-hide, let user close manually
+    }
+  });
+
+  recordingWidget.on('closed', () => {
+    recordingWidget = null;
+  });
+
+  return recordingWidget;
+}
+
+/**
+ * Show the recording widget with meeting info
+ * v1.2: Enhanced to support standalone mode (no meeting info required)
+ * @param {Object|Array|null} meetingInfo - Single meeting, array of meetings, or null for standalone mode
+ */
+function showRecordingWidget(meetingInfo = null) {
+  // In standalone mode, always allow showing widget regardless of settings
+  // Only check settings when triggered by meeting detection
+  if (meetingInfo && !appSettings.notifications?.showRecordingWidget) {
+    logger.main.debug('[Widget] Recording widget disabled in settings');
+    return;
+  }
+
+  const widget = createRecordingWidget();
+
+  const sendUpdate = () => {
+    if (meetingInfo === null) {
+      // v1.2: Standalone mode - widget is ready but no meeting selected
+      widget.webContents.send('widget:update', {
+        type: 'show-standalone',
+      });
+    } else if (Array.isArray(meetingInfo) && meetingInfo.length > 1) {
+      widget.webContents.send('widget:update', {
+        type: 'show',
+        meetings: meetingInfo,
+      });
+    } else {
+      const meeting = Array.isArray(meetingInfo) ? meetingInfo[0] : meetingInfo;
+      widget.webContents.send('widget:update', {
+        type: 'show',
+        meeting: meeting,
+      });
+    }
+  };
+
+  widget.once('ready-to-show', () => {
+    widget.show();
+    sendUpdate();
+  });
+
+  if (widget.isVisible()) {
+    // Widget already visible, just update content
+    sendUpdate();
+  }
+}
+
+/**
+ * Hide the recording widget
+ */
+function hideRecordingWidget() {
+  if (recordingWidget && !recordingWidget.isDestroyed()) {
+    recordingWidget.hide();
+  }
+}
+
+/**
+ * Update widget with recording state
+ */
+function updateWidgetRecordingState(recording, meetingTitle = null) {
+  if (recordingWidget && !recordingWidget.isDestroyed()) {
+    if (recording) {
+      recordingStartTime = Date.now();
+      currentRecordingMeetingTitle = meetingTitle;
+      recordingWidget.webContents.send('widget:update', {
+        type: 'recording-started',
+        startTime: recordingStartTime,
+        meetingTitle: meetingTitle,
+      });
+    } else {
+      recordingWidget.webContents.send('widget:update', {
+        type: 'recording-stopped',
+      });
+      recordingStartTime = null;
+      currentRecordingMeetingTitle = null;
+    }
+  }
+}
 
 /**
  * Initialize default config files on first launch (both dev and prod)
@@ -1423,10 +1611,61 @@ app.whenReady().then(async () => {
     }
   });
 
+  // v1.2: Configure Stream Deck WebSocket integration
+  expressApp.configureStreamDeck({
+    onStartRecording: async () => {
+      try {
+        // Check if we have a detected meeting to record
+        if (!detectedMeeting) {
+          return { success: false, error: 'No meeting detected' };
+        }
+        // Use the same logic as the record button
+        mainWindow.webContents.send('start-recording-from-calendar', {
+          title: detectedMeeting.window?.title || 'Meeting',
+          platform: detectedMeeting.window?.platform || 'unknown',
+        });
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    onStopRecording: async () => {
+      try {
+        // Stop recording via IPC to renderer
+        mainWindow.webContents.send('stop-recording-request');
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    },
+    getStatus: () => ({
+      isRecording,
+      meetingTitle: currentRecordingMeetingTitle,
+      meetingDetected: detectedMeeting !== null,
+      platform: detectedMeeting?.window?.platform || null,
+    }),
+  });
+
+  // v1.2: Handle WebSocket upgrade for Stream Deck
+  expressServer.on('upgrade', (request, socket, head) => {
+    if (request.url.startsWith('/streamdeck')) {
+      expressApp.handleStreamDeckUpgrade(request, socket, head);
+    }
+  });
+
+  // v1.2: Enable/disable Stream Deck based on settings (will be loaded after loadAppSettings)
+  // Initial state will be set after loadAppSettings() is called below
+
   // Phase 10.7: Desktop App Polish
   // Load app settings from disk
   loadAppSettings();
   logger.main.info('[Phase 10.7] App settings loaded');
+
+  // v1.2: Enable Stream Deck based on loaded settings
+  expressApp.setStreamDeckEnabled(appSettings.streamDeck?.enabled || false);
+  if (appSettings.streamDeck?.enabled) {
+    logger.main.info('[v1.2] Stream Deck WebSocket integration enabled');
+  }
 
   // v1.1: Load user profile
   loadUserProfile();
@@ -2190,6 +2429,9 @@ async function initSDK() {
       // Update recording state and tray menu (Phase 10.7)
       isRecording = false;
       updateSystemTrayMenu();
+
+      // v1.2: Notify Stream Deck clients
+      expressApp.updateStreamDeckRecordingState(false, null);
 
       // Wait for file to be fully written before starting transcription
       setTimeout(async () => {
@@ -6908,6 +7150,23 @@ ipcMain.handle('app:updateSettings', async (event, updates) => {
       // Register new shortcuts
       registerGlobalShortcuts();
     }
+    // v1.2: Stream Deck settings
+    if (updates.streamDeck) {
+      appSettings.streamDeck = { ...appSettings.streamDeck, ...updates.streamDeck };
+      // Enable/disable Stream Deck WebSocket integration
+      expressApp.setStreamDeckEnabled(appSettings.streamDeck.enabled);
+      logger.ipc.info(
+        `[IPC] Stream Deck integration ${appSettings.streamDeck.enabled ? 'enabled' : 'disabled'}`
+      );
+    }
+
+    // v1.2: Top-level boolean settings (from General settings tab)
+    if (updates.showRecordingWidget !== undefined) {
+      appSettings.showRecordingWidget = updates.showRecordingWidget;
+    }
+    if (updates.autoStartRecording !== undefined) {
+      appSettings.autoStartRecording = updates.autoStartRecording;
+    }
 
     // Save to disk
     saveAppSettings();
@@ -6916,6 +7175,52 @@ ipcMain.handle('app:updateSettings', async (event, updates) => {
     return { success: true, data: appSettings };
   } catch (error) {
     logger.ipc.error('[IPC] app:updateSettings failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// v1.2: Get Stream Deck status
+ipcMain.handle('app:getStreamDeckStatus', async () => {
+  try {
+    const status = expressApp.getStreamDeckStatus();
+    return {
+      success: true,
+      data: {
+        enabled: status.enabled,
+        connectedClients: status.connectedClients,
+        port: 13373,
+        wsEndpoint: 'ws://localhost:13373/streamdeck',
+      },
+    };
+  } catch (error) {
+    logger.ipc.error('[IPC] app:getStreamDeckStatus failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// v1.2: Per-meeting auto-start settings
+ipcMain.handle('app:setMeetingAutoStart', async (event, meetingId, enabled) => {
+  try {
+    if (enabled === null) {
+      // Remove override (use global setting)
+      meetingAutoStartOverrides.delete(meetingId);
+    } else {
+      meetingAutoStartOverrides.set(meetingId, enabled);
+    }
+    logger.ipc.info(`[IPC] Per-meeting auto-start set for ${meetingId}: ${enabled}`);
+    return { success: true };
+  } catch (error) {
+    logger.ipc.error('[IPC] app:setMeetingAutoStart failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('app:getMeetingAutoStart', async (event, meetingId) => {
+  try {
+    const override = meetingAutoStartOverrides.get(meetingId);
+    return { success: true, data: { hasOverride: override !== undefined, enabled: override } };
+  } catch (error) {
+    logger.ipc.error('[IPC] app:getMeetingAutoStart failed:', error);
     return { success: false, error: error.message };
   }
 });
@@ -7193,6 +7498,14 @@ ipcMain.on('open-external', (event, url) => {
   require('electron').shell.openExternal(url);
 });
 
+// Handle toggle-dev-tools IPC (for custom titlebar menu)
+ipcMain.on('toggle-dev-tools', event => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) {
+    win.webContents.toggleDevTools();
+  }
+});
+
 // ===================================================================
 // Window Control IPC Handlers (Custom Title Bar)
 // ===================================================================
@@ -7223,6 +7536,159 @@ ipcMain.handle('window:isMaximized', () => {
     return mainWindow.isMaximized();
   }
   return false;
+});
+
+// ===================================================================
+// Recording Widget IPC Handlers (v1.2)
+// ===================================================================
+
+// Hide the recording widget
+ipcMain.on('widget:hide', () => {
+  hideRecordingWidget();
+});
+
+// Open meeting in main app from widget
+ipcMain.on('widget:open-meeting', (_event, meetingId) => {
+  logger.main.info('[Widget] Open meeting requested:', meetingId);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    // Show and focus the main window
+    mainWindow.show();
+    mainWindow.focus();
+    // Tell renderer to open the meeting note
+    if (meetingId) {
+      mainWindow.webContents.send('open-meeting-note', meetingId);
+    }
+  }
+});
+
+// Request state sync from widget
+ipcMain.on('widget:request-sync', (_event) => {
+  if (recordingWidget && !recordingWidget.isDestroyed()) {
+    recordingWidget.webContents.send('widget:update', {
+      type: 'sync-state',
+      isRecording: isRecording,
+      startTime: recordingStartTime,
+      meetingTitle: currentRecordingMeetingTitle,
+    });
+  }
+});
+
+// Start recording from widget
+ipcMain.handle('widget:start-recording', async (event, meetingId) => {
+  logger.main.info('[Widget] Start recording requested for meeting:', meetingId);
+
+  try {
+    // Get transcription provider from settings
+    const transcriptionProvider = appSettings.transcriptionProvider || 'assemblyai';
+
+    // Use the existing manual recording flow
+    // First, we need to create a meeting note if meetingId is a calendar event ID
+    const result = await new Promise((resolve) => {
+      // Emit to main window to create meeting and start recording
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('widget:create-and-record', {
+          calendarMeetingId: meetingId,
+          transcriptionProvider: transcriptionProvider,
+        });
+
+        // Listen for response
+        ipcMain.once('widget:recording-result', (e, res) => {
+          resolve(res);
+        });
+
+        // Timeout after 30 seconds
+        setTimeout(() => resolve({ success: false, error: 'Timeout waiting for recording to start' }), 30000);
+      } else {
+        resolve({ success: false, error: 'Main window not available' });
+      }
+    });
+
+    if (result.success) {
+      updateWidgetRecordingState(true, result.meetingTitle);
+    }
+
+    return result;
+  } catch (error) {
+    logger.main.error('[Widget] Failed to start recording:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Stop recording from widget - just tells renderer to click the stop button
+ipcMain.handle('widget:stop-recording', async () => {
+  logger.main.info('[Widget] Stop recording requested');
+
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      // Tell renderer to stop recording using its existing logic
+      mainWindow.webContents.send('widget:stop-recording-request');
+
+      const result = await new Promise((resolve) => {
+        ipcMain.once('widget:stop-recording-result', (e, res) => {
+          resolve(res);
+        });
+        // Timeout after 30 seconds
+        setTimeout(() => resolve({ success: false, error: 'Timeout' }), 30000);
+      });
+
+      if (result.success) {
+        updateWidgetRecordingState(false);
+      }
+
+      return result;
+    }
+
+    return { success: false, error: 'Main window not available' };
+  } catch (error) {
+    logger.main.error('[Widget] Failed to stop recording:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Show recording widget (called from main window or auto-start logic)
+ipcMain.on('widget:show', (event, meetingInfo) => {
+  showRecordingWidget(meetingInfo);
+});
+
+// v1.2: Toggle widget visibility (show/hide)
+ipcMain.handle('widget:toggle', () => {
+  if (recordingWidget && !recordingWidget.isDestroyed() && recordingWidget.isVisible()) {
+    hideRecordingWidget();
+    return { success: true, visible: false };
+  } else {
+    showRecordingWidget(null); // Show in standalone mode
+    return { success: true, visible: true };
+  }
+});
+
+// v1.2: Toggle always-on-top setting for widget
+ipcMain.handle('widget:toggleAlwaysOnTop', (event, enabled) => {
+  if (recordingWidget && !recordingWidget.isDestroyed()) {
+    const newState = typeof enabled === 'boolean' ? enabled : !recordingWidget.isAlwaysOnTop();
+    recordingWidget.setAlwaysOnTop(newState);
+    logger.main.info(`[Widget] Always-on-top ${newState ? 'enabled' : 'disabled'}`);
+
+    // Notify widget of the change
+    recordingWidget.webContents.send('widget:update', {
+      type: 'always-on-top-changed',
+      enabled: newState,
+    });
+
+    return { success: true, alwaysOnTop: newState };
+  }
+  return { success: false, error: 'Widget not available' };
+});
+
+// v1.2: Get widget state (visibility, always-on-top)
+ipcMain.handle('widget:getState', () => {
+  if (recordingWidget && !recordingWidget.isDestroyed()) {
+    return {
+      success: true,
+      visible: recordingWidget.isVisible(),
+      alwaysOnTop: recordingWidget.isAlwaysOnTop(),
+    };
+  }
+  return { success: true, visible: false, alwaysOnTop: true };
 });
 
 // Handler to get active recording ID for a note
@@ -7555,6 +8021,9 @@ ipcMain.handle(
           // Update recording state and tray menu (Phase 10.7)
           isRecording = true;
           updateSystemTrayMenu();
+
+          // v1.2: Notify Stream Deck clients
+          expressApp.updateStreamDeckRecordingState(true, currentRecordingMeetingTitle);
 
           return {
             success: true,

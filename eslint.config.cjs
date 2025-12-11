@@ -49,6 +49,9 @@ module.exports = [
         // Webpack DefinePlugin globals injected by Electron Forge
         MAIN_WINDOW_WEBPACK_ENTRY: 'readonly',
         MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: 'readonly',
+        // v1.2: Recording widget entry points
+        RECORDING_WIDGET_WEBPACK_ENTRY: 'readonly',
+        RECORDING_WIDGET_PRELOAD_WEBPACK_ENTRY: 'readonly',
       },
     },
   },

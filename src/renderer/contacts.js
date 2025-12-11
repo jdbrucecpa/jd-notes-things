@@ -485,6 +485,11 @@ async function loadContactMeetings(email) {
             contact: selectedContact,
             contactEmail: email,
           };
+          // Show back button
+          const backButton = document.getElementById('backButton');
+          if (backButton) {
+            backButton.style.display = 'flex';
+          }
           // Close contacts and open meeting
           closeContactsView();
           // Trigger meeting detail view
@@ -657,6 +662,11 @@ export function getNavigationContext() {
  */
 export function clearNavigationContext() {
   navigationContext = null;
+  // Hide back button
+  const backButton = document.getElementById('backButton');
+  if (backButton) {
+    backButton.style.display = 'none';
+  }
 }
 
 /**
@@ -669,6 +679,11 @@ export function returnToContact() {
     selectContact(navigationContext.contact);
     // Clear context after returning
     navigationContext = null;
+    // Hide back button
+    const backButton = document.getElementById('backButton');
+    if (backButton) {
+      backButton.style.display = 'none';
+    }
   }
 }
 

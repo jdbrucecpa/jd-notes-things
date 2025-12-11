@@ -73,6 +73,14 @@ module.exports = {
                 js: './src/preload.js',
               },
             },
+            {
+              html: './src/widget.html',
+              js: './src/widget.js',
+              name: 'recording_widget',
+              preload: {
+                js: './src/widgetPreload.js',
+              },
+            },
           ],
         },
       },

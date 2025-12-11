@@ -52,6 +52,8 @@ export function sanitizeHtml(dirty, options = {}) {
       'id',
       'data-id',
       'data-tab',
+      'data-link',
+      'data-meeting-id',
       // SVG attributes
       'viewBox',
       'width',

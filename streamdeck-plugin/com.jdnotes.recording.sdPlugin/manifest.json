@@ -1,0 +1,62 @@
+{
+  "Name": "JD Notes Recording",
+  "Version": "1.0.0",
+  "Author": "JD Notes",
+  "Description": "Control JD Notes meeting recording from your Stream Deck",
+  "Category": "JD Notes",
+  "CategoryIcon": "imgs/plugin-icon",
+  "Icon": "imgs/plugin-icon",
+  "URL": "https://github.com/your-username/jd-notes-things",
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "6.0"
+  },
+  "OS": [
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "Nodejs": {
+    "Version": "20",
+    "Debug": "enabled"
+  },
+  "Actions": [
+    {
+      "Name": "Toggle Recording",
+      "UUID": "com.jdnotes.recording.toggle",
+      "Icon": "imgs/action-record",
+      "Tooltip": "Start or stop recording in JD Notes",
+      "States": [
+        {
+          "Image": "imgs/action-record",
+          "TitleAlignment": "bottom",
+          "Title": "Record"
+        },
+        {
+          "Image": "imgs/action-stop",
+          "TitleAlignment": "bottom",
+          "Title": "Stop"
+        }
+      ]
+    },
+    {
+      "Name": "Status",
+      "UUID": "com.jdnotes.recording.status",
+      "Icon": "imgs/action-status",
+      "Tooltip": "Shows current recording status",
+      "States": [
+        {
+          "Image": "imgs/action-status-idle",
+          "TitleAlignment": "bottom",
+          "Title": "Idle"
+        },
+        {
+          "Image": "imgs/action-status-recording",
+          "TitleAlignment": "bottom",
+          "Title": "Recording"
+        }
+      ]
+    }
+  ]
+}
