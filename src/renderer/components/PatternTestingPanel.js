@@ -8,6 +8,7 @@
  */
 
 import * as monaco from 'monaco-editor';
+import { notifySuccess, notifyError } from '../utils/notificationHelper.js';
 
 let editor = null;
 let currentMode = null;
@@ -412,13 +413,13 @@ async function savePatternConfig() {
       throw new Error(response.error);
     }
 
-    window.showToast('Pattern configuration saved successfully', 'success');
+    notifySuccess('Pattern configuration saved successfully');
 
     // Re-test with new patterns
     await testCurrentSample();
   } catch (error) {
     console.error('[PatternTestingPanel] Failed to save config:', error);
-    window.showToast(`Failed to save: ${error.message}`, 'error');
+    notifyError(error, { prefix: 'Failed to save:' });
   } finally {
     if (saveBtn) {
       saveBtn.disabled = false;

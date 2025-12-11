@@ -7,6 +7,7 @@ import * as monaco from 'monaco-editor';
 import { createModal } from './utils/modalHelper.js';
 import { callIpc } from './utils/ipcWrapper.js';
 import { initializeTabs } from './utils/tabHelper.js';
+import { notifySuccess, notifyError, notifyWarning } from './utils/notificationHelper.js';
 
 let routingEditor = null;
 let routingConfig = null;
@@ -340,10 +341,10 @@ async function refreshRouting() {
 
   try {
     await loadRouting();
-    window.showToast('Configuration refreshed successfully', 'success');
+    notifySuccess('Configuration refreshed successfully');
   } catch (error) {
     console.error('[RoutingEditor] Failed to refresh:', error);
-    window.showToast('Failed to refresh: ' + error.message, 'error');
+    notifyError(error, { prefix: 'Failed to refresh:' });
   }
 }
 
@@ -420,9 +421,9 @@ async function validateRouting() {
 
     // Custom validation result handling
     if (response.valid) {
-      window.showToast('Routing configuration is valid ✓', 'success');
+      notifySuccess('Routing configuration is valid ✓');
     } else {
-      window.showToast(`Validation errors: ${response.errors.join(', ')}`, 'error');
+      notifyError(`Validation errors: ${response.errors.join(', ')}`);
     }
   } catch {
     // Error already logged and toast shown by callIpc
@@ -437,7 +438,7 @@ async function runRoutingTest() {
 
   const emailInput = document.getElementById('routingTestEmailInput');
   if (!emailInput || !emailInput.value.trim()) {
-    window.showToast('Please enter at least one email address', 'warning');
+    notifyWarning('Please enter at least one email address');
     return;
   }
 
@@ -447,7 +448,7 @@ async function runRoutingTest() {
     .filter(e => e.length > 0);
 
   if (emails.length === 0) {
-    window.showToast('Please enter valid email addresses', 'warning');
+    notifyWarning('Please enter valid email addresses');
     return;
   }
 
@@ -542,18 +543,18 @@ async function createNewOrganization() {
 
       // Validate
       if (!id) {
-        window.showToast('Organization ID is required', 'error');
+        notifyError('Organization ID is required');
         throw new Error('Validation failed'); // Prevent modal from closing
       }
 
       if (!vaultPath) {
-        window.showToast('Vault path is required', 'error');
+        notifyError('Vault path is required');
         throw new Error('Validation failed'); // Prevent modal from closing
       }
 
       // Validate ID format (lowercase with hyphens)
       if (!/^[a-z0-9-]+$/.test(id)) {
-        window.showToast('Organization ID must be lowercase alphanumeric with hyphens', 'error');
+        notifyError('Organization ID must be lowercase alphanumeric with hyphens');
         throw new Error('Validation failed'); // Prevent modal from closing
       }
 
@@ -611,7 +612,7 @@ async function deleteOrganization() {
 
   // Prevent deleting internal
   if (type === 'internal') {
-    window.showToast('Cannot delete the internal organization', 'error');
+    notifyError('Cannot delete the internal organization');
     return;
   }
 

@@ -25,6 +25,7 @@ import {
   notifyInfo,
   notifyWarning,
 } from './renderer/utils/notificationHelper.js';
+import { populateSelect, addSeparator, addOption } from './renderer/utils/dropdownHelper.js';
 
 // Import platform logo images
 import zoomLogo from './assets/zoom.png';
@@ -2460,30 +2461,22 @@ async function updateFilterDropdowns() {
   const companySelect = document.getElementById('filterCompany');
   if (companySelect) {
     const companies = await extractUniqueCompanies(allMeetings, contactsMap, userProfile);
-    const currentValue = companySelect.value;
-    companySelect.innerHTML = '<option value="">All Companies</option>';
-    companies.forEach(company => {
-      const option = document.createElement('option');
-      option.value = company;
-      option.textContent = company;
-      companySelect.appendChild(option);
+    populateSelect(companySelect, companies, {
+      defaultLabel: 'All Companies',
+      preserveValue: true,
     });
-    companySelect.value = currentValue;
   }
 
   // Update contact dropdown (with names from Google Contacts, excluding user and colleagues)
   const contactSelect = document.getElementById('filterContact');
   if (contactSelect) {
     const contacts = await extractUniqueContacts(allMeetings, contactsMap, userProfile);
-    const currentValue = contactSelect.value;
-    contactSelect.innerHTML = '<option value="">All Contacts</option>';
-    contacts.forEach(contact => {
-      const option = document.createElement('option');
-      option.value = contact.email;
-      option.textContent = contact.name;
-      contactSelect.appendChild(option);
+    populateSelect(contactSelect, contacts, {
+      defaultLabel: 'All Contacts',
+      valueKey: 'email',
+      textKey: 'name',
+      preserveValue: true,
     });
-    contactSelect.value = currentValue;
   }
 }
 
@@ -2592,42 +2585,25 @@ function updateViewsDropdown() {
   // Preserve current value
   const currentValue = viewsSelect.value;
 
-  // Build options
-  viewsSelect.innerHTML = '<option value="">All Meetings</option>';
+  // Clear and add default option
+  viewsSelect.innerHTML = '';
+  addOption(viewsSelect, '', 'All Meetings');
 
   // Add predefined views
-  const notSyncedOption = document.createElement('option');
-  notSyncedOption.value = '__not-synced__';
-  notSyncedOption.textContent = 'Not Synced to Obsidian';
-  viewsSelect.appendChild(notSyncedOption);
+  addOption(viewsSelect, '__not-synced__', 'Not Synced to Obsidian');
 
-  // Add separator if there are custom views
+  // Add separator and custom views if there are any
   if (savedViews.views.length > 0) {
-    const separator = document.createElement('option');
-    separator.disabled = true;
-    separator.textContent = '──────────';
-    viewsSelect.appendChild(separator);
-  }
+    addSeparator(viewsSelect);
 
-  // Add custom views
-  savedViews.views.forEach(view => {
-    const option = document.createElement('option');
-    option.value = view.id;
-    option.textContent = view.name;
-    viewsSelect.appendChild(option);
-  });
+    // Add custom views
+    savedViews.views.forEach(view => {
+      addOption(viewsSelect, view.id, view.name);
+    });
 
-  // v1.2: Add "Manage Views" option if there are custom views
-  if (savedViews.views.length > 0) {
-    const manageSeparator = document.createElement('option');
-    manageSeparator.disabled = true;
-    manageSeparator.textContent = '──────────';
-    viewsSelect.appendChild(manageSeparator);
-
-    const manageOption = document.createElement('option');
-    manageOption.value = '__manage__';
-    manageOption.textContent = '⚙ Manage Views...';
-    viewsSelect.appendChild(manageOption);
+    // v1.2: Add "Manage Views" option
+    addSeparator(viewsSelect);
+    addOption(viewsSelect, '__manage__', '⚙ Manage Views...');
   }
 
   // Restore value
@@ -2712,7 +2688,7 @@ async function saveCurrentFiltersAsView() {
 
   if (!modal || !input) {
     console.error('Save view modal elements not found');
-    showToast('Error: Could not open save dialog', 'error');
+    notifyError('Could not open save dialog');
     return;
   }
 
@@ -2771,7 +2747,7 @@ async function saveCurrentFiltersAsView() {
       if (filterDropdown) filterDropdown.classList.remove('show');
 
       cleanup();
-      showToast('View saved successfully', 'success');
+      notifySuccess('View saved successfully');
       resolve(true);
     };
 
@@ -2872,7 +2848,7 @@ function openManageViewsModal() {
           deleteView(viewId);
           // Refresh the modal
           openManageViewsModal();
-          showToast('View deleted', 'success');
+          notifySuccess('View deleted');
         }
       });
     });
@@ -2913,7 +2889,7 @@ function saveEditedView() {
   const newName = input.value.trim();
 
   if (!newName) {
-    showToast('Please enter a view name', 'error');
+    notifyError('Please enter a view name');
     return;
   }
 
@@ -2922,7 +2898,7 @@ function saveEditedView() {
     view.name = newName;
     saveSavedViews();
     updateViewsDropdown();
-    showToast('View updated', 'success');
+    notifySuccess('View updated');
   }
 
   closeModal('editViewModal');
@@ -3362,7 +3338,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Listen for toast notifications from main process
   window.electronAPI.onShowToast(data => {
     console.log('Received toast from main process:', data);
-    showToast(data.message, data.type || 'info');
+    const type = data.type || 'info';
+    switch (type) {
+      case 'success':
+        notifySuccess(data.message);
+        break;
+      case 'error':
+        notifyError(data.message);
+        break;
+      case 'warning':
+        notifyWarning(data.message);
+        break;
+      default:
+        notifyInfo(data.message);
+    }
   });
 
   // Listen for authentication expiration notifications
@@ -3529,18 +3518,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
 
           // Show a toast notification
-          window.showToast('Recording stopped', 'info');
+          notifyInfo('Recording stopped');
         } else {
           console.error('[Phase 10.7] Failed to stop recording:', result.error);
-          alert('Failed to stop recording: ' + result.error);
+          notifyError(result.error, { prefix: 'Failed to stop recording:' });
         }
       } catch (error) {
-        console.error('[Phase 10.7] Error stopping recording:', error);
-        alert('Error stopping recording: ' + error.message);
+        notifyError(error, { prefix: 'Error stopping recording:', context: 'Recording' });
       }
     } else {
       console.warn('[Phase 10.7] No active recording to stop');
-      alert('No active recording to stop');
+      notifyWarning('No active recording to stop');
     }
   });
 
@@ -3739,7 +3727,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           joinButton.textContent = originalText;
 
           // Show a little toast message
-          window.showToast('No active meeting detected', 'info');
+          notifyInfo('No active meeting detected');
         }
       } catch (error) {
         console.error('Error joining meeting:', error);
@@ -3749,7 +3737,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         joinButton.textContent = originalText;
 
         // Show error toast
-        window.showToast('Error joining meeting', 'error');
+        notifyError('Error joining meeting');
       }
     } else {
       // Fallback for direct call
@@ -3924,7 +3912,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (confirm(`Delete the view "${view?.name || 'this view'}"?`)) {
         deleteView(viewId);
         closeEditModal();
-        showToast('View deleted', 'success');
+        notifySuccess('View deleted');
       }
     });
 
@@ -3997,7 +3985,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (result.success) {
           console.log('Meeting synced to Obsidian successfully');
-          showToast('Meeting synced to Obsidian!', 'success');
+          notifySuccess('Meeting synced to Obsidian!');
 
           // Update local meeting data
           const meeting = [...pastMeetings, ...meetingsData.pastMeetings].find(
@@ -4012,14 +4000,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           renderMeetings();
         } else {
           console.error('Failed to sync to Obsidian:', result.error);
-          showToast(`Sync failed: ${result.error}`, 'error');
+          notifyError(result.error, { prefix: 'Sync failed:' });
           syncBtn.disabled = false;
           syncBtn.classList.remove('syncing');
           syncBtn.innerHTML = originalSvg;
         }
       } catch (error) {
         console.error('Error syncing to Obsidian:', error);
-        showToast(`Sync error: ${error.message}`, 'error');
+        notifyError(error, { prefix: 'Sync error:' });
         syncBtn.disabled = false;
         syncBtn.classList.remove('syncing');
         syncBtn.innerHTML = originalSvg;
@@ -4273,16 +4261,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         localStorage.getItem('transcriptionProvider')
       );
 
-      // Show confirmation toast using global showToast
+      // Show confirmation toast
       const providerNames = {
         recallai: 'Recall.ai',
         assemblyai: 'AssemblyAI',
         deepgram: 'Deepgram',
       };
-      showToast(
-        `Transcription provider changed to ${providerNames[newProvider] || newProvider}`,
-        'success'
-      );
+      notifySuccess(`Transcription provider changed to ${providerNames[newProvider] || newProvider}`);
     });
   }
 
@@ -4513,19 +4498,19 @@ document.addEventListener('DOMContentLoaded', async () => {
               console.log('Manual recording stopped successfully');
 
               // Show a little toast message
-              window.showToast('Recording stopped. Transcript saved.', 'success');
+              notifySuccess('Recording stopped. Transcript saved.');
 
               // The recording-completed event handler will take care of refreshing the content
             } else {
               console.error('Failed to stop recording:', result.error);
-              alert('Failed to stop recording: ' + result.error);
+              notifyError(result.error, { prefix: 'Failed to stop recording:' });
             }
 
             // Reset recording ID
             window.currentRecordingId = null;
           } catch (error) {
             console.error('Error stopping recording:', error);
-            alert('Error stopping recording: ' + (error.message || error));
+            notifyError(error, { prefix: 'Error stopping recording:' });
             recordButton.disabled = false;
           }
         } else {
@@ -4608,11 +4593,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (result.success) {
         console.log('Manual recording started with ID:', result.recordingId);
         window.currentRecordingId = result.recordingId;
-        window.showToast('Recording started...', 'info');
+        notifyInfo('Recording started...');
       } else {
         // If starting failed, revert UI
         console.error('Failed to start recording:', result.error);
-        alert('Failed to start recording: ' + result.error);
+        notifyError(result.error, { prefix: 'Failed to start recording:' });
         window.isRecording = false;
         recordButton.classList.remove('recording');
         recordIcon.style.display = 'block';
@@ -4620,7 +4605,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch (error) {
       console.error('Error starting recording:', error);
-      alert('Error starting recording: ' + (error.message || error));
+      notifyError(error, { prefix: 'Error starting recording:' });
 
       // Reset UI state
       window.isRecording = false;
@@ -5030,12 +5015,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const emails = [...selectedNewOrgDomains];
 
     if (!name) {
-      window.showToast('Please enter an organization name', 'error');
+      notifyError('Please enter an organization name');
       return;
     }
 
     if (!slug) {
-      window.showToast('Please enter a folder name', 'error');
+      notifyError('Please enter a folder name');
       return;
     }
 
@@ -5058,7 +5043,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       );
 
       if (result.success) {
-        window.showToast(`Created ${name} and added ${emails.length} domain(s)`, 'success');
+        notifySuccess(`Created ${name} and added ${emails.length} domain(s)`);
 
         // Set as routing override
         routingOverride = {
@@ -5075,14 +5060,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Note: No need to show create rule prompt since domains were already added
       } else {
-        window.showToast(
-          `Failed to create organization: ${result.error || 'Unknown error'}`,
-          'error'
-        );
+        notifyError(result.error || 'Unknown error', { prefix: 'Failed to create organization:' });
       }
     } catch (error) {
       console.error('[Templates] Error creating organization:', error);
-      window.showToast(`Error: ${error.message}`, 'error');
+      notifyError(error);
     } finally {
       createBtn.disabled = false;
       createBtn.textContent = originalText;
@@ -5281,17 +5263,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       );
 
       if (result.success) {
-        window.showToast(
-          `Added ${selectedDomainsForRule.size} domain(s) to ${routingOverride.organization}`,
-          'success'
-        );
+        notifySuccess(`Added ${selectedDomainsForRule.size} domain(s) to ${routingOverride.organization}`);
         hideCreateRulePrompt();
       } else {
-        window.showToast('Failed to create routing rule', 'error');
+        notifyError('Failed to create routing rule');
       }
     } catch (error) {
       console.error('[Templates] Error creating routing rule:', error);
-      window.showToast(`Error: ${error.message}`, 'error');
+      notifyError(error);
     } finally {
       createBtn.disabled = false;
       createBtn.textContent = originalText;
@@ -5471,7 +5450,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Show success toast with export status
         const exportStatus = result.exported ? ' and exported to Obsidian' : '';
         const message = `Generated ${result.summaries.length} summaries successfully${exportStatus}!`;
-        window.showToast(message, 'success');
+        notifySuccess(message);
 
         // Update meeting data (summaries already saved by backend, but update obsidianLink if exported)
         const meeting = [...upcomingMeetings, ...pastMeetings].find(
@@ -5831,13 +5810,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (validFiles.length > 0) {
         handleFilePaths(validFiles);
         if (validFiles.length < files.length) {
-          showToast(
-            `Imported ${validFiles.length} of ${files.length} files (filtered unsupported formats)`,
-            'info'
-          );
+          notifyInfo(`Imported ${validFiles.length} of ${files.length} files (filtered unsupported formats)`);
         }
       } else {
-        showToast('No supported transcript files found in folder', 'warning');
+        notifyWarning('No supported transcript files found in folder');
       }
     }
   });
@@ -5972,7 +5948,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const response = await window.electronAPI.readTranscriptFile(file.path);
 
     if (!response.success) {
-      showToast('Failed to read file for preview: ' + response.error, 'error');
+      notifyError(response.error, { prefix: 'Failed to read file for preview:' });
       return;
     }
 
@@ -6059,7 +6035,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const fileTypes = [];
     if (audioFiles.length > 0) fileTypes.push(`${audioFiles.length} audio`);
     if (transcriptFiles.length > 0) fileTypes.push(`${transcriptFiles.length} transcript`);
-    showToast(`Importing ${fileTypes.join(' and ')} file${totalFiles > 1 ? 's' : ''}...`);
+    notifyInfo(`Importing ${fileTypes.join(' and ')} file${totalFiles > 1 ? 's' : ''}...`);
 
     // Listen for progress updates
     window.electronAPI.onImportProgress(progress => {
@@ -6134,26 +6110,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         const message = `Successfully imported ${successCount} of ${totalFiles} file${totalFiles > 1 ? 's' : ''}!`;
 
         if (failCount > 0) {
-          showToast(`${message} (${failCount} failed)`, 'warning');
+          notifyWarning(`${message} (${failCount} failed)`);
           if (errors.length > 0) {
             console.error('Import errors:', errors);
           }
         } else {
-          showToast(message, 'success');
+          notifySuccess(message);
         }
 
         // Reload meetings data to show imported meetings
         await loadMeetingsDataFromFile();
         renderMeetings();
       } else {
-        showToast(`Import failed: All ${totalFiles} file(s) failed`, 'error');
+        notifyError(`Import failed: All ${totalFiles} file(s) failed`);
         if (errors.length > 0) {
           console.error('Import errors:', errors);
         }
       }
     } catch (error) {
       console.error('Import error:', error);
-      showToast('Import failed: ' + error.message, 'error');
+      notifyError(error, { prefix: 'Import failed:' });
     } finally {
       backgroundImportRunning = false;
       updateBackgroundImportIndicator();
@@ -6249,17 +6225,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           // Show success message
           const message = isRepublish ? 'Republished to Obsidian!' : 'Published to Obsidian!';
-          window.showToast(message, 'success');
+          notifySuccess(message);
 
           // Update button to show "Republish"
           updateObsidianButton(meeting);
         } else {
-          alert('Export failed: ' + result.error);
+          notifyError(result.error, { prefix: 'Export failed:' });
           obsidianButton.querySelector('#obsidianButtonText').textContent = originalText;
         }
       } catch (error) {
         console.error('Export error:', error);
-        alert('Export error: ' + error.message);
+        notifyError(error, { prefix: 'Export error:' });
         obsidianButton.querySelector('#obsidianButtonText').textContent = originalText;
       } finally {
         obsidianButton.disabled = false;

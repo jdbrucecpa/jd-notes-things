@@ -4,6 +4,7 @@
  */
 
 import { escapeHtml } from './security.js';
+import { notifySuccess, notifyInfo, notifyError } from './utils/notificationHelper.js';
 
 // Current state
 let currentMeetingId = null;
@@ -92,10 +93,7 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
         };
       }
       if (dupResult.autoMerge.length > 0) {
-        window.showToast?.(
-          `Auto-merged ${dupResult.autoMerge.length} duplicate speaker(s)`,
-          'info'
-        );
+        notifyInfo(`Auto-merged ${dupResult.autoMerge.length} duplicate speaker(s)`);
       }
     }
 
@@ -266,7 +264,7 @@ function mergeSpeakers(fromSpeaker, toSpeaker, suggestionItem) {
 
   // Update stats
   updateMappingStats();
-  window.showToast?.(`Merged "${fromSpeaker}" → "${toSpeaker}"`, 'success');
+  notifySuccess(`Merged "${fromSpeaker}" → "${toSpeaker}"`);
 }
 
 /**
@@ -487,7 +485,7 @@ function confirmMergeSelected() {
 
   // Update stats
   updateMappingStats();
-  window.showToast?.(`Merged ${speakersToMerge.length} speaker(s) → "${targetSpeaker}"`, 'success');
+  notifySuccess(`Merged ${speakersToMerge.length} speaker(s) → "${targetSpeaker}"`);
 }
 
 /**
@@ -744,7 +742,7 @@ function setupModalEventListeners(onComplete) {
         // SM-3.6: Show appropriate message based on whether Obsidian files were updated
         const mappingCount = Object.keys(allMappings).length;
         const obsidianMsg = result.obsidianUpdated ? ' (Obsidian files updated)' : '';
-        window.showToast(`Applied ${mappingCount} speaker mappings${obsidianMsg}`, 'success');
+        notifySuccess(`Applied ${mappingCount} speaker mappings${obsidianMsg}`);
 
         // Call completion callback and wait for it
         if (onComplete) {
@@ -754,11 +752,11 @@ function setupModalEventListeners(onComplete) {
         closeModal();
       } else {
         console.error('[SpeakerMapping] Failed to apply mappings:', result.error);
-        window.showToast(`Failed to apply mappings: ${result.error}`, 'error');
+        notifyError(`Failed to apply mappings: ${result.error}`);
       }
     } catch (error) {
       console.error('[SpeakerMapping] Error applying mappings:', error);
-      window.showToast('Error applying mappings', 'error');
+      notifyError(error, { prefix: 'Error applying mappings:' });
     } finally {
       applyBtn.disabled = false;
       applyBtn.textContent = 'Apply Mappings';

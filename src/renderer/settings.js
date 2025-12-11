@@ -14,6 +14,7 @@ import {
   updateEditorTheme as updatePatternEditorTheme,
 } from './components/PatternTestingPanel.js';
 import { initializeTabs } from './utils/tabHelper.js';
+import { notifySuccess, notifyError, notifyInfo } from './utils/notificationHelper.js';
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -287,14 +288,14 @@ export function initializeSettingsUI() {
           if (vaultPathInput) {
             vaultPathInput.value = result.path;
           }
-          window.showToast('Vault path updated successfully', 'success');
+          notifySuccess('Vault path updated successfully');
         } else if (result.error) {
-          window.showToast(`Failed to update vault path: ${result.error}`, 'error');
+          notifyError(`Failed to update vault path: ${result.error}`);
         }
         // If canceled (success: false, no error), do nothing
       } catch (error) {
         console.error('[Settings] Error choosing vault path:', error);
-        window.showToast('Failed to update vault path', 'error');
+        notifyError(error, { prefix: 'Failed to update vault path:' });
       }
     });
   }
@@ -338,19 +339,16 @@ export function initializeSettingsUI() {
 
           // Show detailed toast
           if (result.updated > 0) {
-            window.showToast(
-              `${msg}. ${result.missing.length} notes not found in vault.`,
-              'success'
-            );
+            notifySuccess(`${msg}. ${result.missing.length} notes not found in vault.`);
           } else {
-            window.showToast(msg, 'success');
+            notifySuccess(msg);
           }
         } else {
           if (refreshLinksStatus) {
             refreshLinksStatus.textContent = result.error || 'Failed';
             refreshLinksStatus.style.color = 'var(--status-error)';
           }
-          window.showToast(`Failed to refresh links: ${result.error}`, 'error');
+          notifyError(`Failed to refresh links: ${result.error}`);
         }
       } catch (error) {
         console.error('[Settings] Error refreshing Obsidian links:', error);
@@ -358,7 +356,7 @@ export function initializeSettingsUI() {
           refreshLinksStatus.textContent = 'Error';
           refreshLinksStatus.style.color = 'var(--status-error)';
         }
-        window.showToast('Failed to refresh Obsidian links', 'error');
+        notifyError(error, { prefix: 'Failed to refresh Obsidian links:' });
       } finally {
         // Re-enable button
         refreshObsidianLinksBtn.disabled = false;
@@ -371,10 +369,7 @@ export function initializeSettingsUI() {
   if (autoSummaryProviderSelect) {
     autoSummaryProviderSelect.addEventListener('change', e => {
       updateSetting('autoSummaryProvider', e.target.value);
-      window.showToast(
-        `Auto-summary provider changed to ${e.target.options[e.target.selectedIndex].text}`,
-        'success'
-      );
+      notifySuccess(`Auto-summary provider changed to ${e.target.options[e.target.selectedIndex].text}`);
     });
   }
 
@@ -382,10 +377,7 @@ export function initializeSettingsUI() {
   if (templateSummaryProviderSelect) {
     templateSummaryProviderSelect.addEventListener('change', e => {
       updateSetting('templateSummaryProvider', e.target.value);
-      window.showToast(
-        `Template summary provider changed to ${e.target.options[e.target.selectedIndex].text}`,
-        'success'
-      );
+      notifySuccess(`Template summary provider changed to ${e.target.options[e.target.selectedIndex].text}`);
     });
   }
 
@@ -393,10 +385,7 @@ export function initializeSettingsUI() {
   if (patternGenerationProviderSelect) {
     patternGenerationProviderSelect.addEventListener('change', e => {
       updateSetting('patternGenerationProvider', e.target.value);
-      window.showToast(
-        `Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`,
-        'success'
-      );
+      notifySuccess(`Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`);
     });
   }
 
@@ -421,7 +410,7 @@ export function initializeSettingsUI() {
 
         if (result.success) {
           const sizeKB = (result.size / 1024).toFixed(1);
-          window.showToast(`Settings exported successfully (${sizeKB} KB)`, 'success');
+          notifySuccess(`Settings exported successfully (${sizeKB} KB)`);
 
           if (exportStatus) {
             exportStatus.innerHTML = `<span style="color: #27ae60;">Export complete:</span> ${result.manifest.included.length} files exported`;
@@ -430,14 +419,14 @@ export function initializeSettingsUI() {
             }
           }
         } else {
-          window.showToast('Export failed: ' + result.error, 'error');
+          notifyError('Export failed: ' + result.error);
           if (exportStatus) {
             exportStatus.innerHTML = `<span style="color: #e74c3c;">Export failed:</span> ${result.error}`;
           }
         }
       } catch (error) {
         console.error('Error exporting settings:', error);
-        window.showToast('Export failed: ' + error.message, 'error');
+        notifyError(error, { prefix: 'Export failed:' });
         if (exportStatus) {
           exportStatus.innerHTML = `<span style="color: #e74c3c;">Export failed:</span> ${error.message}`;
         }
@@ -468,7 +457,7 @@ export function initializeSettingsUI() {
         }
 
         if (result.success) {
-          window.showToast(`Settings imported: ${result.imported.length} files`, 'success');
+          notifySuccess(`Settings imported: ${result.imported.length} files`);
 
           if (exportStatus) {
             let statusHtml = `<span style="color: #27ae60;">Import complete:</span> ${result.imported.length} files imported`;
@@ -484,14 +473,14 @@ export function initializeSettingsUI() {
           // Reload UI to reflect imported settings
           loadSettingsIntoUI();
         } else {
-          window.showToast('Import failed: ' + result.error, 'error');
+          notifyError('Import failed: ' + result.error);
           if (exportStatus) {
             exportStatus.innerHTML = `<span style="color: #e74c3c;">Import failed:</span> ${result.error}`;
           }
         }
       } catch (error) {
         console.error('Error importing settings:', error);
-        window.showToast('Import failed: ' + error.message, 'error');
+        notifyError(error, { prefix: 'Import failed:' });
         if (exportStatus) {
           exportStatus.innerHTML = `<span style="color: #e74c3c;">Import failed:</span> ${error.message}`;
         }
@@ -629,8 +618,6 @@ export function initializeSettingsUI() {
     }
   }
 
-  // Use global showToast from renderer.js (available via window.showToast)
-
   // Initial load
   loadSettingsIntoUI();
 
@@ -704,7 +691,7 @@ async function saveUserProfile() {
           statusEl.textContent = '';
         }, 2000);
       }
-      window.showToast?.('Profile saved successfully', 'success');
+      notifySuccess('Profile saved successfully');
       console.log('[Settings] Saved user profile');
     } else {
       throw new Error(result.error || 'Failed to save profile');
@@ -715,7 +702,7 @@ async function saveUserProfile() {
       statusEl.textContent = 'Error saving';
       statusEl.style.color = 'var(--status-error)';
     }
-    window.showToast?.('Failed to save profile: ' + error.message, 'error');
+    notifyError(error, { prefix: 'Failed to save profile:' });
   }
 }
 
@@ -744,11 +731,11 @@ async function loadVocabulary() {
       await loadClientSlugs();
     } else {
       console.error('[Vocabulary] Failed to load config:', result.error);
-      window.showToast?.('Failed to load vocabulary: ' + result.error, 'error');
+      notifyError('Failed to load vocabulary: ' + result.error);
     }
   } catch (error) {
     console.error('[Vocabulary] Error loading vocabulary:', error);
-    window.showToast?.('Error loading vocabulary', 'error');
+    notifyError(error, { prefix: 'Error loading vocabulary:' });
   }
 }
 
@@ -894,7 +881,7 @@ async function addSpelling() {
   const toValue = toInput?.value?.trim();
 
   if (!fromValue || !toValue) {
-    window.showToast?.('Please enter both incorrect and correct spellings', 'error');
+    notifyError('Please enter both incorrect and correct spellings');
     return;
   }
 
@@ -919,13 +906,13 @@ async function addSpelling() {
       fromInput.value = '';
       toInput.value = '';
       await loadVocabulary();
-      window.showToast?.('Spelling correction added', 'success');
+      notifySuccess('Spelling correction added');
     } else {
-      window.showToast?.('Failed to add spelling: ' + result.error, 'error');
+      notifyError('Failed to add spelling: ' + result.error);
     }
   } catch (error) {
     console.error('[Vocabulary] Error adding spelling:', error);
-    window.showToast?.('Error adding spelling correction', 'error');
+    notifyError(error, { prefix: 'Error adding spelling correction:' });
   }
 }
 
@@ -940,7 +927,7 @@ async function addKeyword() {
   const intensifier = parseInt(intensifierInput?.value) || 5;
 
   if (!word) {
-    window.showToast?.('Please enter a word', 'error');
+    notifyError('Please enter a word');
     return;
   }
 
@@ -960,13 +947,13 @@ async function addKeyword() {
       wordInput.value = '';
       intensifierInput.value = '5';
       await loadVocabulary();
-      window.showToast?.('Keyword boost added', 'success');
+      notifySuccess('Keyword boost added');
     } else {
-      window.showToast?.('Failed to add keyword: ' + result.error, 'error');
+      notifyError('Failed to add keyword: ' + result.error);
     }
   } catch (error) {
     console.error('[Vocabulary] Error adding keyword:', error);
-    window.showToast?.('Error adding keyword boost', 'error');
+    notifyError(error, { prefix: 'Error adding keyword boost:' });
   }
 }
 
@@ -986,20 +973,20 @@ async function deleteSpelling(to) {
           );
         await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
         await loadVocabulary();
-        window.showToast?.('Spelling correction removed', 'success');
+        notifySuccess('Spelling correction removed');
       }
     } else {
       const result = await window.electronAPI.vocabularyRemoveGlobalSpelling(to);
       if (result.success) {
         await loadVocabulary();
-        window.showToast?.('Spelling correction removed', 'success');
+        notifySuccess('Spelling correction removed');
       } else {
-        window.showToast?.('Failed to remove spelling: ' + result.error, 'error');
+        notifyError('Failed to remove spelling: ' + result.error);
       }
     }
   } catch (error) {
     console.error('[Vocabulary] Error deleting spelling:', error);
-    window.showToast?.('Error removing spelling correction', 'error');
+    notifyError(error, { prefix: 'Error removing spelling correction:' });
   }
 }
 
@@ -1016,20 +1003,20 @@ async function deleteKeyword(word) {
         ].keyword_boosts.filter(kb => kb.word !== word);
         await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
         await loadVocabulary();
-        window.showToast?.('Keyword boost removed', 'success');
+        notifySuccess('Keyword boost removed');
       }
     } else {
       const result = await window.electronAPI.vocabularyRemoveGlobalKeyword(word);
       if (result.success) {
         await loadVocabulary();
-        window.showToast?.('Keyword boost removed', 'success');
+        notifySuccess('Keyword boost removed');
       } else {
-        window.showToast?.('Failed to remove keyword: ' + result.error, 'error');
+        notifyError('Failed to remove keyword: ' + result.error);
       }
     }
   } catch (error) {
     console.error('[Vocabulary] Error deleting keyword:', error);
-    window.showToast?.('Error removing keyword boost', 'error');
+    notifyError(error, { prefix: 'Error removing keyword boost:' });
   }
 }
 
@@ -1084,7 +1071,7 @@ function initializeVocabularyUI() {
           document.getElementById('vocabularyClientSelect').value = normalizedSlug;
           selectedClientSlug = normalizedSlug;
           renderVocabularyUI();
-          window.showToast?.(`Created vocabulary for "${normalizedSlug}"`, 'success');
+          notifySuccess(`Created vocabulary for "${normalizedSlug}"`);
         } else {
           document.getElementById('vocabularyClientSelect').value = normalizedSlug;
           selectedClientSlug = normalizedSlug;
@@ -1122,7 +1109,7 @@ function initializeVocabularyUI() {
     reloadBtn.addEventListener('click', async () => {
       await window.electronAPI.vocabularyReload();
       await loadVocabulary();
-      window.showToast?.('Vocabulary reloaded from disk', 'success');
+      notifySuccess('Vocabulary reloaded from disk');
     });
   }
 
@@ -1141,7 +1128,7 @@ function initializeVocabularyUI() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        window.showToast?.('Vocabulary exported', 'success');
+        notifySuccess('Vocabulary exported');
       }
     });
   }
@@ -1185,10 +1172,10 @@ function initializeVocabularyUI() {
               }
               await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
               await loadVocabulary();
-              window.showToast?.('Vocabulary imported and merged', 'success');
+              notifySuccess('Vocabulary imported and merged');
             } catch (error) {
               console.error('[Vocabulary] Import error:', error);
-              window.showToast?.('Failed to import vocabulary: ' + error.message, 'error');
+              notifyError(error, { prefix: 'Failed to import vocabulary:' });
             }
           };
           reader.readAsText(file);
@@ -1262,13 +1249,13 @@ async function loadStreamDeckSettings() {
 
         if (enabled) {
           await refreshStreamDeckStatus();
-          window.showToast?.('Stream Deck integration enabled', 'success');
+          notifySuccess('Stream Deck integration enabled');
         } else {
-          window.showToast?.('Stream Deck integration disabled', 'info');
+          notifyInfo('Stream Deck integration disabled');
         }
       } catch (error) {
         console.error('[Settings] Error updating Stream Deck settings:', error);
-        window.showToast?.('Failed to update Stream Deck settings', 'error');
+        notifyError(error, { prefix: 'Failed to update Stream Deck settings:' });
         // Revert toggle
         enabledToggle.checked = !enabled;
       }

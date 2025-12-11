@@ -68,14 +68,8 @@ const {
 const {
   withValidation,
   validateIpcInput,
-  // Reserved for future IPC validation rollout (Phase 9 security hardening)
-  saveMeetingsDataSchema: _saveMeetingsDataSchema,
-  googleAuthenticateSchema: _googleAuthenticateSchema,
   templatesGenerateSummariesSchema,
   llmSwitchProviderSchema,
-  obsidianExportMeetingSchema: _obsidianExportMeetingSchema,
-  importFileSchema: _importFileSchema,
-  importBatchSchema: _importBatchSchema,
   // v1.2: Widget schemas
   widgetStartRecordingSchema,
   widgetToggleAlwaysOnTopSchema,
@@ -4135,22 +4129,21 @@ async function initializeGoogleServices(forceReinitialize = false) {
 // ===================================================================
 
 // Get Google OAuth authorization URL (for both Calendar + Contacts)
-ipcMain.handle('google:getAuthUrl', async () => {
-  try {
+ipcMain.handle(
+  'google:getAuthUrl',
+  createIpcHandler(async () => {
     if (!googleAuth) {
       return { success: false, error: 'GoogleAuth not initialized' };
     }
     const authUrl = googleAuth.getAuthUrl();
     return { success: true, authUrl };
-  } catch (error) {
-    console.error('[Google IPC] Failed to get auth URL:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Authenticate with authorization code (with CSRF protection)
-ipcMain.handle('google:authenticate', async (event, { code, state }) => {
-  try {
+ipcMain.handle(
+  'google:authenticate',
+  createIpcHandler(async (_event, { code, state }) => {
     console.log('[Google IPC] Authenticating with code and state');
     if (!googleAuth) {
       return { success: false, error: 'GoogleAuth not initialized' };
@@ -4166,29 +4159,25 @@ ipcMain.handle('google:authenticate', async (event, { code, state }) => {
     }
 
     return { success: true };
-  } catch (error) {
-    console.error('[Google IPC] Authentication failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Check if user is authenticated
-ipcMain.handle('google:isAuthenticated', async () => {
-  try {
+ipcMain.handle(
+  'google:isAuthenticated',
+  createIpcHandler(async () => {
     if (!googleAuth) {
       return { success: true, authenticated: false };
     }
     const authenticated = googleAuth.isAuthenticated();
     return { success: true, authenticated };
-  } catch (error) {
-    console.error('[Google IPC] Error checking authentication:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Get authentication status (includes contact count, etc.)
-ipcMain.handle('google:getStatus', async () => {
-  try {
+ipcMain.handle(
+  'google:getStatus',
+  createIpcHandler(async () => {
     const authenticated = googleAuth && googleAuth.isAuthenticated();
     const contactCount = googleContacts ? googleContacts.contactCount : 0;
     const calendarReady = googleCalendar && googleCalendar.isAuthenticated();
@@ -4201,15 +4190,13 @@ ipcMain.handle('google:getStatus', async () => {
       contactsReady,
       contactCount,
     };
-  } catch (error) {
-    console.error('[Google IPC] Error getting status:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Sign out and clear tokens
-ipcMain.handle('google:signOut', async () => {
-  try {
+ipcMain.handle(
+  'google:signOut',
+  createIpcHandler(async () => {
     console.log('[Google IPC] Signing out');
     if (googleAuth) {
       await googleAuth.revokeAuthentication();
@@ -4221,11 +4208,8 @@ ipcMain.handle('google:signOut', async () => {
     speakerMatcher = null;
 
     return { success: true };
-  } catch (error) {
-    console.error('[Google IPC] Failed to sign out:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Open OAuth window for Google authentication
 ipcMain.handle('google:openAuthWindow', async () => {

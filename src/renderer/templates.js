@@ -5,6 +5,7 @@
 
 import * as monaco from 'monaco-editor';
 import { initializeTabs } from './utils/tabHelper.js';
+import { notifyInfo, notifyError } from './utils/notificationHelper.js';
 
 let editor = null;
 let currentTemplateId = null;
@@ -201,7 +202,7 @@ async function selectTemplate(templateId) {
     console.log('[TemplateEditor] Template loaded successfully');
   } catch (error) {
     console.error('[TemplateEditor] Failed to load template:', error);
-    window.showToast('Failed to load template: ' + error.message, 'error');
+    notifyError(error, { prefix: 'Failed to load template:' });
   }
 }
 
@@ -256,7 +257,7 @@ function updatePreview() {
  * Create new template
  */
 function createNewTemplate() {
-  window.showToast('Create new template feature coming soon', 'info');
+  notifyInfo('Create new template feature coming soon');
   // TODO: Implement create new template
 }
 
@@ -265,7 +266,7 @@ function createNewTemplate() {
  */
 function deleteTemplate() {
   if (!currentTemplateId) return;
-  window.showToast('Delete template feature coming soon', 'info');
+  notifyInfo('Delete template feature coming soon');
   // TODO: Implement delete template
 }
 
@@ -274,7 +275,7 @@ function deleteTemplate() {
  */
 function saveTemplate() {
   if (!currentTemplateId) return;
-  window.showToast('Save template feature coming soon', 'info');
+  notifyInfo('Save template feature coming soon');
   // TODO: Implement save template (needs IPC handler)
 }
 

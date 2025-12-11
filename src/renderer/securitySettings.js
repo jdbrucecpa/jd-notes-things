@@ -5,6 +5,8 @@
  * Note: File encryption removed - Obsidian requires plain text markdown files
  */
 
+import { notifySuccess, notifyError, notifyInfo } from './utils/notificationHelper.js';
+
 let currentEditingKey = null;
 
 /**
@@ -161,9 +163,7 @@ async function handleMigration() {
 
     const { migrated, failed, skipped } = result.data;
 
-    showToast(
-      `Migration complete: ${migrated.length} migrated, ${failed.length} failed, ${skipped.length} skipped`
-    );
+    notifySuccess(`Migration complete: ${migrated.length} migrated, ${failed.length} failed, ${skipped.length} skipped`);
 
     if (failed.length > 0) {
       console.error('[SecuritySettings] Migration failures:', failed);
@@ -173,7 +173,7 @@ async function handleMigration() {
     await loadAPIKeys();
   } catch (error) {
     console.error('[SecuritySettings] Migration failed:', error);
-    showToast('Migration failed: ' + error.message);
+    notifyError(error, { prefix: 'Migration failed:' });
     btn.disabled = false;
     btn.textContent = 'Migrate Keys from .env';
   }
@@ -239,7 +239,7 @@ window.saveAPIKey = async function (keyName) {
   const value = input.value.trim();
 
   if (!value) {
-    showToast('Key value cannot be empty');
+    notifyError('Key value cannot be empty');
     return;
   }
 
@@ -252,14 +252,14 @@ window.saveAPIKey = async function (keyName) {
       throw new Error(result.error || 'Failed to save key');
     }
 
-    showToast(`${keyName} saved successfully`);
+    notifySuccess(`${keyName} saved successfully`);
 
     // Remove edit row and reload keys
     await window.cancelEditAPIKey();
     await loadAPIKeys();
   } catch (error) {
     console.error(`[SecuritySettings] Failed to save key ${keyName}:`, error);
-    showToast('Failed to save key: ' + error.message);
+    notifyError(error, { prefix: 'Failed to save key:' });
     input.disabled = false;
   }
 };
@@ -283,18 +283,18 @@ window.cancelEditAPIKey = async function () {
  */
 window.testAPIKey = async function (keyName) {
   try {
-    showToast(`Testing ${keyName}...`);
+    notifyInfo(`Testing ${keyName}...`);
 
     const result = await window.electronAPI.keysTest(keyName);
 
     if (result.success) {
-      showToast(`✓ ${keyName} format is valid`);
+      notifySuccess(`✓ ${keyName} format is valid`);
     } else {
-      showToast(`✗ ${keyName} validation failed: ${result.message || result.error}`);
+      notifyError(`✗ ${keyName} validation failed: ${result.message || result.error}`);
     }
   } catch (error) {
     console.error(`[SecuritySettings] Failed to test key ${keyName}:`, error);
-    showToast('Test failed: ' + error.message);
+    notifyError(error, { prefix: 'Test failed:' });
   }
 };
 
@@ -313,29 +313,12 @@ window.deleteAPIKey = async function (keyName) {
       throw new Error(result.error || 'Failed to delete key');
     }
 
-    showToast(`${keyName} deleted successfully`);
+    notifySuccess(`${keyName} deleted successfully`);
 
     // Reload keys table
     await loadAPIKeys();
   } catch (error) {
     console.error(`[SecuritySettings] Failed to delete key ${keyName}:`, error);
-    showToast('Failed to delete key: ' + error.message);
+    notifyError(error, { prefix: 'Failed to delete key:' });
   }
 };
-
-/**
- * Show toast notification
- */
-function showToast(message) {
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.textContent = message;
-  document.body.appendChild(toast);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    setTimeout(() => {
-      document.body.removeChild(toast);
-    }, 300);
-  }, 3000);
-}
