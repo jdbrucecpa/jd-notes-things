@@ -1146,6 +1146,19 @@ const createWindow = () => {
       mainWindow.hide();
       return false;
     }
+    // If minimizeToTray is disabled, clean up widget and tray before closing
+    if (!app.isQuitting && !appSettings.notifications.minimizeToTray) {
+      // Close the recording widget if open
+      if (recordingWidget && !recordingWidget.isDestroyed()) {
+        recordingWidget.close();
+        recordingWidget = null;
+      }
+      // Destroy the tray icon
+      if (tray && !tray.isDestroyed()) {
+        tray.destroy();
+        tray = null;
+      }
+    }
   });
 
   // Allow the debug panel header to act as a drag region
@@ -1192,8 +1205,9 @@ function createRecordingWidget() {
   }
 
   // Position widget in bottom-right corner near system tray
+  // Widget is 90px but tooltip expands 220px to the left + padding
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
-  const widgetWidth = 90; // Vertical compact widget
+  const widgetWidth = 350; // Wide enough for tooltip (220px) + widget (90px) + margins
   const widgetHeight = 220;
   const margin = 20;
 
@@ -1588,27 +1602,18 @@ app.whenReady().then(async () => {
     console.log('[Webhook Server] Listening on http://localhost:13373');
     console.log('[Webhook Server] Endpoint: http://localhost:13373/webhook/recall');
 
-    // Start tunnel automatically (if configured)
+    // Tunnel disabled - webhooks not currently used
+    // To re-enable, uncomment the tunnelManager.start() call below
+    console.log('[Webhook Server] Tunnel disabled - webhooks not in use');
+    /*
     try {
       const webhookUrl = await tunnelManager.start(13373);
-
-      // Store webhook URL globally so server.js can access it
       global.webhookUrl = `${webhookUrl}/webhook/recall`;
-
-      console.log('\n' + '='.repeat(70));
-      console.log('🌐 TUNNEL ESTABLISHED');
-      console.log('='.repeat(70));
       console.log(`Public Webhook URL: ${global.webhookUrl}`);
-      console.log(`\nWebhook URL will be automatically included in upload tokens.`);
-      console.log('='.repeat(70) + '\n');
     } catch (error) {
-      console.log('\n' + '⚠'.repeat(35));
-      console.log('⚠️  TUNNEL NOT AVAILABLE');
-      console.log('⚠'.repeat(35));
-      console.log('Webhooks will not work until tunnel is available.');
-      console.log('Error:', error.message);
-      console.log('⚠'.repeat(35) + '\n');
+      console.log('Tunnel not available:', error.message);
     }
+    */
   });
 
   // v1.2: Configure Stream Deck WebSocket integration
@@ -1616,15 +1621,18 @@ app.whenReady().then(async () => {
     onStartRecording: async () => {
       try {
         // Check if we have a detected meeting to record
-        if (!detectedMeeting) {
-          return { success: false, error: 'No meeting detected' };
+        if (detectedMeeting) {
+          // Use the same logic as the record button for detected meetings
+          mainWindow.webContents.send('start-recording-from-calendar', {
+            title: detectedMeeting.window?.title || 'Meeting',
+            platform: detectedMeeting.window?.platform || 'unknown',
+          });
+          return { success: true, meetingTitle: detectedMeeting.window?.title };
+        } else {
+          // No meeting detected - start a quick meeting using the same function as tray menu
+          await startQuickRecord();
+          return { success: true, meetingTitle: 'Quick Meeting' };
         }
-        // Use the same logic as the record button
-        mainWindow.webContents.send('start-recording-from-calendar', {
-          title: detectedMeeting.window?.title || 'Meeting',
-          platform: detectedMeeting.window?.platform || 'unknown',
-        });
-        return { success: true };
       } catch (error) {
         return { success: false, error: error.message };
       }
@@ -1632,7 +1640,7 @@ app.whenReady().then(async () => {
     onStopRecording: async () => {
       try {
         // Stop recording via IPC to renderer
-        mainWindow.webContents.send('stop-recording-request');
+        mainWindow.webContents.send('stop-recording-requested');
         return { success: true };
       } catch (error) {
         return { success: false, error: error.message };
@@ -1738,6 +1746,13 @@ app.on('window-all-closed', () => {
 // Cleanup resources when app quits (Phase 9: Memory Leak Prevention)
 app.on('before-quit', async () => {
   console.log('[App] Cleaning up resources before quit...');
+
+  // Destroy tray icon to prevent ghost icon in system tray
+  if (tray && !tray.isDestroyed()) {
+    tray.destroy();
+    tray = null;
+    console.log('[Tray] Destroyed tray icon');
+  }
 
   // Stop meeting monitor
   if (meetingMonitorInterval) {
@@ -2429,6 +2444,9 @@ async function initSDK() {
       // Update recording state and tray menu (Phase 10.7)
       isRecording = false;
       updateSystemTrayMenu();
+
+      // v1.2: Update widget with recording state
+      updateWidgetRecordingState(false);
 
       // v1.2: Notify Stream Deck clients
       expressApp.updateStreamDeckRecordingState(false, null);
@@ -8022,12 +8040,16 @@ ipcMain.handle(
           isRecording = true;
           updateSystemTrayMenu();
 
+          // v1.2: Update widget with recording state
+          updateWidgetRecordingState(true, meeting.title);
+
           // v1.2: Notify Stream Deck clients
-          expressApp.updateStreamDeckRecordingState(true, currentRecordingMeetingTitle);
+          expressApp.updateStreamDeckRecordingState(true, meeting.title);
 
           return {
             success: true,
             recordingId: key,
+            meetingTitle: meeting.title,
           };
         } catch (startRecordingError) {
           console.error('✗ RecallAI SDK startRecording failed:', startRecordingError);

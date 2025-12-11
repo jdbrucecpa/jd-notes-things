@@ -54,6 +54,7 @@ export function sanitizeHtml(dirty, options = {}) {
       'data-tab',
       'data-link',
       'data-meeting-id',
+      'data-platform',
       // SVG attributes
       'viewBox',
       'width',

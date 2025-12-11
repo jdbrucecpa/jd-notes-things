@@ -1292,6 +1292,11 @@ function createCalendarMeetingCard(meeting) {
   // v1.2: Create unified Start Recording button with icon and label
   const startRecordingBtn = card.querySelector('.start-recording-btn');
   if (startRecordingBtn) {
+    // Set data attributes programmatically to avoid DOMPurify stripping issues
+    startRecordingBtn.dataset.id = meeting.id;
+    startRecordingBtn.dataset.link = meeting.meetingLink || '';
+    startRecordingBtn.dataset.platform = platform;
+
     // Add record icon (circle)
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', '12');
@@ -1361,6 +1366,11 @@ function createCalendarMeetingCard(meeting) {
         if (calendarMeeting) {
           await createNewMeeting(calendarMeeting);
           showToast('Meeting note created', 'success');
+        } else {
+          console.error('[Record Btn] Calendar meeting not found! meetingId:', meetingId);
+          showToast('Meeting not found', 'error');
+          startRecordingBtn.disabled = false;
+          startRecordingBtn.innerHTML = originalContent;
         }
       } catch (error) {
         console.error('Error creating meeting note:', error);

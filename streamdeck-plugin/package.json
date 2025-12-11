@@ -1,0 +1,21 @@
+{
+  "name": "com.jdnotes.recording",
+  "version": "1.0.0",
+  "description": "Stream Deck plugin for JD Notes recording control",
+  "main": "com.jdnotes.recording.sdPlugin/bin/plugin.js",
+  "type": "module",
+  "scripts": {
+    "build": "npx esbuild src/plugin.ts --bundle --platform=node --target=node20 --format=cjs --outfile=com.jdnotes.recording.sdPlugin/bin/plugin.js",
+    "watch": "npm run build -- --watch",
+    "install-plugin": "npm run build && install-plugin.bat"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "^1.2.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.2"
+  }
+}

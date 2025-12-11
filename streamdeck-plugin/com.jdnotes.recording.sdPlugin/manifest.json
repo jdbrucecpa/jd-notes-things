@@ -6,10 +6,10 @@
   "Category": "JD Notes",
   "CategoryIcon": "imgs/plugin-icon",
   "Icon": "imgs/plugin-icon",
-  "URL": "https://github.com/your-username/jd-notes-things",
+  "URL": "https://github.com/jdbrucecpa/jd-notes-things",
   "SDKVersion": 2,
   "Software": {
-    "MinimumVersion": "6.0"
+    "MinimumVersion": "6.5"
   },
   "OS": [
     {
@@ -21,6 +21,7 @@
     "Version": "20",
     "Debug": "enabled"
   },
+  "CodePath": "bin/plugin.js",
   "Actions": [
     {
       "Name": "Toggle Recording",
@@ -45,11 +46,13 @@
       "UUID": "com.jdnotes.recording.status",
       "Icon": "imgs/action-status",
       "Tooltip": "Shows current recording status",
+      "SupportedInMultiActions": false,
+      "DisableAutomaticStates": true,
       "States": [
         {
           "Image": "imgs/action-status-idle",
           "TitleAlignment": "bottom",
-          "Title": "Idle"
+          "Title": "Ready"
         },
         {
           "Image": "imgs/action-status-recording",
