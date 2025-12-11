@@ -1,15 +1,14 @@
 /**
  * Zod validation schemas for IPC handlers
- * Prevents malformed data from crashing the main process
+ * Only includes schemas that are actively used
  */
 
 const { z } = require('zod');
 
 /**
- * Common field schemas
+ * Common field schemas (used by other schemas)
  */
 const meetingIdSchema = z.string().min(1, 'Meeting ID cannot be empty');
-const emailSchema = z.string().email('Invalid email format');
 const templateIdSchema = z.string().min(1, 'Template ID cannot be empty');
 const providerSchema = z.enum(['openai', 'anthropic', 'azure']);
 
@@ -24,85 +23,59 @@ const transcriptEntrySchema = z.object({
   words: z.array(z.any()).optional(),
 });
 
-/**
- * Participant schema
- */
-const participantSchema = z.object({
-  name: z.string().optional(),
-  email: emailSchema.optional(),
-  organization: z.string().optional(),
-  role: z.string().optional(),
+// ===================================================
+// Speaker Mapping Schemas (actively used)
+// ===================================================
+
+const speakerMappingGetSuggestionsSchema = z.object({
+  speakerIds: z.array(z.string()),
 });
 
-/**
- * Meeting data schema
- */
-const meetingDataSchema = z.object({
-  id: meetingIdSchema,
-  title: z.string().min(1, 'Meeting title cannot be empty'),
-  date: z.string(),
-  content: z.string().optional(),
-  transcript: z.array(transcriptEntrySchema).optional(),
-  participants: z.array(participantSchema).optional(),
-  participantEmails: z.array(emailSchema).optional(),
-  platform: z.string().optional(),
-  duration: z.union([z.string(), z.number()]).optional(),
-  obsidianLink: z.string().optional(),
-  summaries: z
-    .array(
-      z.object({
-        templateId: z.string(),
-        templateName: z.string(),
-        content: z.string(),
-      })
-    )
+const speakerMappingDeleteSchema = z.object({
+  speakerId: z.string().min(1),
+});
+
+const speakerMappingExtractSchema = z.object({
+  transcript: z.array(transcriptEntrySchema),
+});
+
+const speakerMappingDetectDuplicatesSchema = z.object({
+  speakers: z.array(z.string()),
+});
+
+const speakerMappingApplySchema = z.object({
+  meetingId: meetingIdSchema,
+  mappings: z.record(
+    z.string(),
+    z.object({
+      contactName: z.string(),
+      contactEmail: z.string().nullable().optional(),
+      obsidianLink: z.string().optional(),
+      merged: z.boolean().optional(),
+      autoMerged: z.boolean().optional(),
+    })
+  ),
+  options: z
+    .object({
+      useWikiLinks: z.boolean().optional(),
+    })
     .optional(),
 });
 
-/**
- * IPC Handler Schemas
- */
-
-// saveMeetingsData
-const saveMeetingsDataSchema = z.object({
-  upcomingMeetings: z.array(meetingDataSchema),
-  pastMeetings: z.array(meetingDataSchema),
+const speakerMappingImportSchema = z.object({
+  data: z.record(z.string(), z.any()),
+  merge: z.boolean().optional(),
 });
 
-// google:authenticate
-const googleAuthenticateSchema = z.object({
-  code: z.string().min(1, 'Authorization code cannot be empty'),
-});
+// ===================================================
+// Template Schemas (actively used)
+// ===================================================
 
-// calendar:getUpcomingMeetings
-const calendarGetUpcomingMeetingsSchema = z.object({
-  hoursAhead: z.number().int().positive().max(168).optional().default(24), // Max 1 week
-});
-
-// contacts:fetchContacts
-const contactsFetchContactsSchema = z.object({
-  forceRefresh: z.boolean().optional().default(false),
-});
-
-// speakers:matchSpeakers
-const speakersMatchSpeakersSchema = z.object({
-  transcript: z.array(transcriptEntrySchema),
-  participantEmails: z.array(emailSchema),
-});
-
-// templates:getById
-const templatesGetByIdSchema = z.object({
-  templateId: templateIdSchema,
-});
-
-// templates:estimateCost
 const templatesEstimateCostSchema = z.object({
   templateIds: z.array(templateIdSchema),
   transcript: z.array(transcriptEntrySchema),
 });
 
-// templates:generateSummaries
-// CS-4.4: Added optional routingOverride for manual destination selection
 const routingOverrideSchema = z
   .object({
     type: z.enum(['client', 'industry', 'internal', 'unfiled']),
@@ -120,72 +93,234 @@ const templatesGenerateSummariesSchema = z.object({
   routingOverride: routingOverrideSchema,
 });
 
-// llm:switchProvider
+// ===================================================
+// LLM Schema (actively used)
+// ===================================================
+
 const llmSwitchProviderSchema = z.object({
   provider: providerSchema,
 });
 
-// obsidian:exportMeeting
-const obsidianExportMeetingSchema = z.object({
-  meetingId: meetingIdSchema,
+// ===================================================
+// Vocabulary Schemas (actively used)
+// ===================================================
+
+const vocabularySpellingSchema = z.object({
+  from: z.union([z.string(), z.array(z.string())]),
+  to: z.string().min(1),
 });
 
-// recording:getActiveId
-const recordingGetActiveIdSchema = z.object({
-  noteId: z.string().min(1, 'Note ID cannot be empty'),
+const vocabularyKeywordSchema = z.object({
+  word: z.string().min(1),
+  intensifier: z.number().int().min(1).max(10).optional(),
 });
 
-// recording:startManual
-const recordingStartManualSchema = z.object({
-  meetingTitle: z.string().min(1, 'Meeting title cannot be empty').optional(),
-  participantEmails: z.array(emailSchema).optional(),
+const vocabularyClientSpellingSchema = z.object({
+  clientSlug: z.string().min(1),
+  from: z.union([z.string(), z.array(z.string())]),
+  to: z.string().min(1),
 });
 
-// import:importFile
+const vocabularyClientKeywordSchema = z.object({
+  clientSlug: z.string().min(1),
+  word: z.string().min(1),
+  intensifier: z.number().int().min(1).max(10).optional(),
+});
+
+const vocabularyRemoveSpellingSchema = z.object({
+  to: z.string().min(1),
+});
+
+const vocabularyRemoveKeywordSchema = z.object({
+  word: z.string().min(1),
+});
+
+// ===================================================
+// Pattern Schemas (actively used)
+// ===================================================
+
+const patternsTestParseSchema = z.object({
+  content: z.string(),
+  filePath: z.string(),
+});
+
+const patternsSaveConfigSchema = z.object({
+  configYaml: z.string(),
+});
+
+// ===================================================
+// Import Schemas (actively used)
+// ===================================================
+
+const filePathSchema = z.string().min(1, 'File path cannot be empty');
+
 const importFileSchema = z.object({
-  filePath: z.string().min(1, 'File path cannot be empty'),
-  metadata: z
-    .object({
-      title: z.string().optional(),
-      date: z.string().optional(),
-      participants: z.array(participantSchema).optional(),
-    })
-    .optional(),
-  templateIds: z.array(templateIdSchema).optional(),
+  filePath: filePathSchema,
+  options: z.object({}).passthrough().optional(),
 });
 
-// import:importBatch
 const importBatchSchema = z.object({
-  files: z.array(
-    z.object({
-      filePath: z.string(),
-      metadata: z
-        .object({
-          title: z.string().optional(),
-          date: z.string().optional(),
-          participants: z.array(participantSchema).optional(),
-        })
-        .optional(),
-    })
-  ),
-  templateIds: z.array(templateIdSchema).optional(),
+  filePaths: z.array(filePathSchema),
+  options: z.object({}).passthrough().optional(),
+});
+
+const importTranscribeAudioSchema = z.object({
+  filePath: filePathSchema,
+  provider: z.string().optional(),
+  options: z.object({}).passthrough().optional(),
+});
+
+const importAudioFileSchema = z.object({
+  filePath: filePathSchema,
+  provider: z.string().optional(),
+  options: z.object({}).passthrough().optional(),
 });
 
 // ===================================================
-// v1.2: Widget IPC Schemas
+// Google Auth Schemas
 // ===================================================
 
-// widget:start-recording - meetingId is optional (can record without a meeting selected)
+const googleAuthenticateSchema = z.object({
+  code: z.string().min(1, 'Authorization code cannot be empty'),
+  state: z.string().min(1, 'State parameter cannot be empty'),
+});
+
+// ===================================================
+// Speaker Matching Schemas
+// ===================================================
+
+const speakersMatchSchema = z.object({
+  transcript: z.array(transcriptEntrySchema),
+  participantEmails: z.array(z.string()).optional(),
+  options: z.object({}).passthrough().optional(),
+  recordingId: z.string().optional(),
+});
+
+const speakersUpdateMappingSchema = z.object({
+  meetingId: meetingIdSchema,
+  speakerLabel: z.string().min(1, 'Speaker label cannot be empty'),
+  participantEmail: z.string().email('Invalid email format'),
+});
+
+const speakerMappingAddSchema = z.object({
+  speakerId: z.string().min(1, 'Speaker ID cannot be empty'),
+  contact: z.object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+  }),
+  sourceContext: z.string().optional(),
+});
+
+const speakerMappingApplyToTranscriptSchema = z.object({
+  transcript: z.array(transcriptEntrySchema),
+  mappings: z.record(z.string(), z.any()),
+  options: z.object({}).passthrough().optional(),
+});
+
+// ===================================================
+// Routing Schemas
+// ===================================================
+
+const routingTypeSchema = z.enum(['client', 'industry', 'internal']);
+
+const routingAddOrganizationSchema = z.object({
+  type: routingTypeSchema,
+  id: z.string().min(1, 'Organization ID cannot be empty'),
+  vaultPath: z.string().min(1, 'Vault path cannot be empty'),
+  emails: z.array(z.string()).optional(),
+  contacts: z.array(z.string()).optional(),
+});
+
+const routingAddEmailsSchema = z.object({
+  type: routingTypeSchema,
+  slug: z.string().min(1, 'Slug cannot be empty'),
+  emails: z.array(z.string()).optional(),
+  contacts: z.array(z.string()).optional(),
+});
+
+const routingDeleteOrganizationSchema = z.object({
+  type: routingTypeSchema,
+  id: z.string().min(1, 'Organization ID cannot be empty'),
+});
+
+// ===================================================
+// Simple Input Schemas (strings, booleans, etc.)
+// ===================================================
+
+const stringIdSchema = z.string().min(1, 'ID cannot be empty');
+const optionalStringSchema = z.string().optional();
+const booleanSchema = z.boolean();
+const optionalBooleanSchema = z.boolean().optional();
+const hoursAheadSchema = z.number().int().min(1).max(168).optional();
+
+// Contact-related schemas
+const contactSchema = z.object({
+  name: z.string().optional(),
+  email: z.string().optional(),
+  company: z.string().optional(),
+  phone: z.string().optional(),
+});
+
+const contactPageOptionsSchema = z.object({
+  createCompanyPage: z.boolean().optional(),
+}).optional();
+
+// Settings/config schemas
+const userProfileSchema = z.object({
+  name: z.string().optional(),
+  email: z.string().optional(),
+  company: z.string().optional(),
+  role: z.string().optional(),
+}).passthrough();
+
+const appSettingsSchema = z.object({}).passthrough();
+
+const logsOptionsSchema = z.object({
+  lines: z.number().int().min(1).max(10000).optional(),
+  level: z.string().optional(),
+}).optional();
+
+// Key management schemas
+const keyNameSchema = z.string().min(1, 'Key name cannot be empty');
+
+// Import schemas
+const importOptionsSchema = z.object({
+  overwriteSettings: z.boolean().optional(),
+  importMeetings: z.boolean().optional(),
+  importTemplates: z.boolean().optional(),
+}).optional();
+
+// Vocabulary config schema (for bulk save)
+const vocabularyConfigSchema = z.object({}).passthrough();
+
+// Meeting field update schema
+const updateMeetingFieldSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+  field: z.enum(['platform', 'title', 'status']),
+  value: z.string(),
+});
+
+// Per-meeting auto-start schema
+const meetingAutoStartSchema = z.object({
+  meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
+  enabled: z.boolean().nullable(),
+});
+
+// Transcription provider schema
+const transcriptionProviderSchema = z.enum(['assemblyai', 'deepgram', 'recallai']).optional();
+
+// ===================================================
+// Widget Schemas (actively used)
+// ===================================================
+
 const widgetStartRecordingSchema = z
   .string()
   .min(1, 'Meeting ID cannot be empty')
   .nullable()
   .optional();
 
-// widget:toggleAlwaysOnTop
 const widgetToggleAlwaysOnTopSchema = z.boolean();
 
-// widget:show - meetingInfo for showing widget with meeting context
 const widgetMeetingInfoSchema = z
   .object({
     id: z.string().optional(),
@@ -206,8 +341,12 @@ const widgetMeetingInfoSchema = z
   .nullable()
   .optional();
 
+// ===================================================
+// Helper Functions
+// ===================================================
+
 /**
- * Validation helper function
+ * Validate IPC input against a schema
  * @param {z.ZodSchema} schema - Zod schema to validate against
  * @param {any} data - Data to validate
  * @returns {object} Validated data
@@ -218,9 +357,7 @@ function validateIpcInput(schema, data) {
     return schema.parse(data);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const issues = error.issues
-        .map(issue => `${issue.path.join('.')}: ${issue.message}`)
-        .join(', ');
+      const issues = error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join(', ');
       throw new Error(`IPC Input Validation Failed: ${issues}`);
     }
     throw error;
@@ -241,33 +378,72 @@ function withValidation(schema, handler) {
 }
 
 module.exports = {
-  // Schemas
-  meetingIdSchema,
-  emailSchema,
-  templateIdSchema,
-  providerSchema,
-  transcriptEntrySchema,
-  participantSchema,
-  meetingDataSchema,
-  saveMeetingsDataSchema,
+  // Speaker mapping schemas
+  speakerMappingGetSuggestionsSchema,
+  speakerMappingDeleteSchema,
+  speakerMappingExtractSchema,
+  speakerMappingDetectDuplicatesSchema,
+  speakerMappingApplySchema,
+  speakerMappingImportSchema,
+  speakerMappingAddSchema,
+  speakerMappingApplyToTranscriptSchema,
+  // Speaker matching schemas
+  speakersMatchSchema,
+  speakersUpdateMappingSchema,
+  // Google auth schemas
   googleAuthenticateSchema,
-  calendarGetUpcomingMeetingsSchema,
-  contactsFetchContactsSchema,
-  speakersMatchSpeakersSchema,
-  templatesGetByIdSchema,
+  // Routing schemas
+  routingAddOrganizationSchema,
+  routingAddEmailsSchema,
+  routingDeleteOrganizationSchema,
+  // Template schemas
   templatesEstimateCostSchema,
   templatesGenerateSummariesSchema,
+  // LLM schema
   llmSwitchProviderSchema,
-  obsidianExportMeetingSchema,
-  recordingGetActiveIdSchema,
-  recordingStartManualSchema,
+  // Vocabulary schemas
+  vocabularySpellingSchema,
+  vocabularyKeywordSchema,
+  vocabularyClientSpellingSchema,
+  vocabularyClientKeywordSchema,
+  vocabularyRemoveSpellingSchema,
+  vocabularyRemoveKeywordSchema,
+  // Pattern schemas
+  patternsTestParseSchema,
+  patternsSaveConfigSchema,
+  // Import schemas
   importFileSchema,
   importBatchSchema,
-  // v1.2: Widget schemas
+  importTranscribeAudioSchema,
+  importAudioFileSchema,
+  // Widget schemas
   widgetStartRecordingSchema,
   widgetToggleAlwaysOnTopSchema,
   widgetMeetingInfoSchema,
-
+  // Simple input schemas
+  stringIdSchema,
+  optionalStringSchema,
+  booleanSchema,
+  optionalBooleanSchema,
+  hoursAheadSchema,
+  // Contact schemas
+  contactSchema,
+  contactPageOptionsSchema,
+  // Settings/config schemas
+  userProfileSchema,
+  appSettingsSchema,
+  logsOptionsSchema,
+  // Key management schemas
+  keyNameSchema,
+  // Import options schema
+  importOptionsSchema,
+  // Vocabulary config schema
+  vocabularyConfigSchema,
+  // Meeting update schemas
+  updateMeetingFieldSchema,
+  meetingAutoStartSchema,
+  // Transcription provider schema
+  transcriptionProviderSchema,
   // Helpers
   validateIpcInput,
   withValidation,

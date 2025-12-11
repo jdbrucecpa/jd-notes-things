@@ -53,27 +53,78 @@ const {
 } = require('./shared/constants');
 // IPC Input Validation - Phase 9 Security Hardening
 // ===================================================
-// To add validation to remaining IPC handlers, follow this pattern:
-//
-// Before:
-//   ipcMain.handle('my:handler', async (event, data) => { ... });
-//
-// After:
-//   ipcMain.handle('my:handler', withValidation(myHandlerSchema, async (event, data) => { ... }));
-//
-// All schemas are defined in src/main/validation/ipcSchemas.js
-// Validated handlers: templates:generateSummaries, llm:switchProvider
-// Remaining handlers (34): Apply the same pattern using appropriate schemas
+// Zod validation schemas protect against malformed IPC data.
+// Pattern: ipcMain.handle('name', withValidation(schema, handler))
+// Schemas: src/main/validation/ipcSchemas.js
+// Currently validated: speaker mapping, vocabulary, patterns, templates, llm, widget
 // ===================================================
 const {
   withValidation,
   validateIpcInput,
+  // Speaker mapping schemas
+  speakerMappingGetSuggestionsSchema,
+  speakerMappingDeleteSchema,
+  speakerMappingExtractSchema,
+  speakerMappingDetectDuplicatesSchema,
+  speakerMappingApplySchema,
+  speakerMappingImportSchema,
+  speakerMappingAddSchema,
+  speakerMappingApplyToTranscriptSchema,
+  // Speaker matching schemas
+  speakersMatchSchema,
+  speakersUpdateMappingSchema,
+  // Google auth schemas
+  googleAuthenticateSchema,
+  // Routing schemas
+  routingAddOrganizationSchema,
+  routingAddEmailsSchema,
+  routingDeleteOrganizationSchema,
+  // Template schemas
+  templatesEstimateCostSchema,
   templatesGenerateSummariesSchema,
+  // LLM schemas
   llmSwitchProviderSchema,
+  // Vocabulary schemas
+  vocabularySpellingSchema,
+  vocabularyKeywordSchema,
+  vocabularyClientSpellingSchema,
+  vocabularyClientKeywordSchema,
+  vocabularyRemoveSpellingSchema,
+  vocabularyRemoveKeywordSchema,
+  // Pattern schemas
+  patternsTestParseSchema,
+  patternsSaveConfigSchema,
+  // Import schemas
+  importFileSchema,
+  importBatchSchema,
+  importTranscribeAudioSchema,
+  importAudioFileSchema,
   // v1.2: Widget schemas
   widgetStartRecordingSchema,
   widgetToggleAlwaysOnTopSchema,
   widgetMeetingInfoSchema,
+  // Simple input schemas
+  stringIdSchema,
+  optionalStringSchema,
+  optionalBooleanSchema,
+  hoursAheadSchema,
+  // Contact schemas
+  contactSchema,
+  // Settings/config schemas
+  userProfileSchema,
+  appSettingsSchema,
+  logsOptionsSchema,
+  // Key management schemas
+  keyNameSchema,
+  // Import options schema
+  importOptionsSchema,
+  // Vocabulary config schema
+  vocabularyConfigSchema,
+  // Meeting update schemas
+  updateMeetingFieldSchema,
+  meetingAutoStartSchema,
+  // Transcription provider schema
+  transcriptionProviderSchema,
 } = require('./main/validation/ipcSchemas');
 require('dotenv').config();
 
@@ -3993,16 +4044,17 @@ ipcMain.handle('saveMeetingsData', async (event, data) => {
 
 // Update a single field on a meeting (UI-1: Platform changes in metadata tab)
 ipcMain.handle('updateMeetingField', async (event, meetingId, field, value) => {
+  // Validate inputs
+  try {
+    validateIpcInput(updateMeetingFieldSchema, { meetingId, field, value });
+  } catch (validationError) {
+    console.error('[IPC] Validation failed for updateMeetingField:', validationError.message);
+    return { success: false, error: validationError.message };
+  }
+
   console.log(
     `[IPC] updateMeetingField called: meetingId=${meetingId}, field=${field}, value=${value}`
   );
-
-  // Allowlist of fields that can be updated via this handler
-  const allowedFields = ['platform', 'title', 'status'];
-  if (!allowedFields.includes(field)) {
-    console.error(`[IPC] Field '${field}' is not allowed to be updated via updateMeetingField`);
-    return { success: false, error: `Field '${field}' is not allowed` };
-  }
 
   try {
     await fileOperationManager.scheduleOperation(async currentData => {
@@ -4057,10 +4109,13 @@ ipcMain.handle('recall:deleteAllRecordings', async () => {
 });
 
 // Delete a specific recording
-ipcMain.handle('recall:deleteRecording', async (_event, recordingId) => {
-  console.log(`[Recall IPC] Deleting recording: ${recordingId}`);
-  return await deleteRecallRecording(recordingId);
-});
+ipcMain.handle(
+  'recall:deleteRecording',
+  withValidation(stringIdSchema, async (_event, recordingId) => {
+    console.log(`[Recall IPC] Deleting recording: ${recordingId}`);
+    return await deleteRecallRecording(recordingId);
+  })
+);
 
 // ===================================================================
 // Centralized Google Services Initialization
@@ -4143,22 +4198,27 @@ ipcMain.handle(
 // Authenticate with authorization code (with CSRF protection)
 ipcMain.handle(
   'google:authenticate',
-  createIpcHandler(async (_event, { code, state }) => {
+  withValidation(googleAuthenticateSchema, async (_event, { code, state }) => {
     console.log('[Google IPC] Authenticating with code and state');
     if (!googleAuth) {
       return { success: false, error: 'GoogleAuth not initialized' };
     }
 
-    // Pass state parameter for CSRF validation
-    await googleAuth.getTokenFromCode(code, state);
+    try {
+      // Pass state parameter for CSRF validation
+      await googleAuth.getTokenFromCode(code, state);
 
-    // Use centralized initialization to prevent race conditions
-    if (googleAuth.isAuthenticated()) {
-      await initializeGoogleServices();
-      console.log('[Google IPC] Successfully authenticated Google Calendar + Contacts');
+      // Use centralized initialization to prevent race conditions
+      if (googleAuth.isAuthenticated()) {
+        await initializeGoogleServices();
+        console.log('[Google IPC] Successfully authenticated Google Calendar + Contacts');
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('[Google IPC] Authentication error:', error);
+      return { success: false, error: error.message };
     }
-
-    return { success: true };
   })
 );
 
@@ -4329,118 +4389,132 @@ ipcMain.handle('google:openAuthWindow', async () => {
 // ===================================================================
 
 // Get upcoming calendar meetings
-ipcMain.handle('calendar:getUpcomingMeetings', async (event, hoursAhead = 24) => {
-  try {
-    console.log(`[Calendar IPC] Fetching upcoming meetings (${hoursAhead} hours ahead)`);
+ipcMain.handle(
+  'calendar:getUpcomingMeetings',
+  withValidation(hoursAheadSchema, async (event, hoursAhead = 24) => {
+    try {
+      console.log(`[Calendar IPC] Fetching upcoming meetings (${hoursAhead} hours ahead)`);
 
-    // Check if calendar is initialized and authenticated
-    if (!googleCalendar || !googleCalendar.isAuthenticated()) {
-      console.log('[Calendar IPC] Calendar not authenticated - returning empty array');
-      return { success: true, meetings: [] };
+      // Check if calendar is initialized and authenticated
+      if (!googleCalendar || !googleCalendar.isAuthenticated()) {
+        console.log('[Calendar IPC] Calendar not authenticated - returning empty array');
+        return { success: true, meetings: [] };
+      }
+
+      const meetings = await googleCalendar.getUpcomingMeetings(hoursAhead);
+      console.log(`[Calendar IPC] Found ${meetings.length} upcoming meetings`);
+      return { success: true, meetings };
+    } catch (error) {
+      console.error('[Calendar IPC] Failed to fetch meetings:', error);
+      return { success: false, error: error.message };
     }
-
-    const meetings = await googleCalendar.getUpcomingMeetings(hoursAhead);
-    console.log(`[Calendar IPC] Found ${meetings.length} upcoming meetings`);
-    return { success: true, meetings };
-  } catch (error) {
-    console.error('[Calendar IPC] Failed to fetch meetings:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // ===================================================================
 // Google Contacts & Speaker Matching Service-Specific IPC Handlers
 // ===================================================================
 
 // Fetch/refresh contacts from Google
-ipcMain.handle('contacts:fetchContacts', async (event, forceRefresh = false) => {
-  try {
-    console.log('[Contacts IPC] Fetching contacts (forceRefresh:', forceRefresh, ')');
-    if (!googleContacts || !googleContacts.isAuthenticated()) {
-      throw new Error('Google Contacts not authenticated');
-    }
+ipcMain.handle(
+  'contacts:fetchContacts',
+  withValidation(optionalBooleanSchema, async (event, forceRefresh = false) => {
+    try {
+      console.log('[Contacts IPC] Fetching contacts (forceRefresh:', forceRefresh, ')');
+      if (!googleContacts || !googleContacts.isAuthenticated()) {
+        throw new Error('Google Contacts not authenticated');
+      }
 
-    const contacts = await googleContacts.fetchAllContacts(forceRefresh);
-    return {
-      success: true,
-      contactCount: contacts.length,
-      lastFetch: googleContacts.lastFetch,
-    };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to fetch contacts:', error);
-    return { success: false, error: error.message };
-  }
-});
+      const contacts = await googleContacts.fetchAllContacts(forceRefresh);
+      return {
+        success: true,
+        contactCount: contacts.length,
+        lastFetch: googleContacts.lastFetch,
+      };
+    } catch (error) {
+      console.error('[Contacts IPC] Failed to fetch contacts:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Search contacts by query string (name or email)
-ipcMain.handle('contacts:searchContacts', async (event, query) => {
-  try {
-    console.log('[Contacts IPC] Searching contacts for:', query);
-    if (!googleContacts || !googleContacts.isAuthenticated()) {
-      throw new Error('Google Contacts not authenticated');
+ipcMain.handle(
+  'contacts:searchContacts',
+  withValidation(optionalStringSchema, async (event, query) => {
+    try {
+      console.log('[Contacts IPC] Searching contacts for:', query);
+      if (!googleContacts || !googleContacts.isAuthenticated()) {
+        throw new Error('Google Contacts not authenticated');
+      }
+
+      if (!query || query.trim().length === 0) {
+        return { success: true, contacts: [] };
+      }
+
+      // Fetch all contacts (uses cache if available)
+      const allContacts = await googleContacts.fetchAllContacts(false);
+      const normalizedQuery = query.toLowerCase().trim();
+
+      // Filter contacts by name or email matching query
+      const matchingContacts = allContacts.filter(contact => {
+        const nameMatch = contact.name && contact.name.toLowerCase().includes(normalizedQuery);
+        const emailMatch =
+          contact.emails &&
+          contact.emails.some(email => email.toLowerCase().includes(normalizedQuery));
+        return nameMatch || emailMatch;
+      });
+
+      console.log(`[Contacts IPC] Found ${matchingContacts.length} contacts matching "${query}"`);
+      return {
+        success: true,
+        contacts: matchingContacts.slice(0, 50), // Limit to 50 results
+      };
+    } catch (error) {
+      console.error('[Contacts IPC] Failed to search contacts:', error);
+      return { success: false, error: error.message };
     }
-
-    if (!query || query.trim().length === 0) {
-      return { success: true, contacts: [] };
-    }
-
-    // Fetch all contacts (uses cache if available)
-    const allContacts = await googleContacts.fetchAllContacts(false);
-    const normalizedQuery = query.toLowerCase().trim();
-
-    // Filter contacts by name or email matching query
-    const matchingContacts = allContacts.filter(contact => {
-      const nameMatch = contact.name && contact.name.toLowerCase().includes(normalizedQuery);
-      const emailMatch =
-        contact.emails &&
-        contact.emails.some(email => email.toLowerCase().includes(normalizedQuery));
-      return nameMatch || emailMatch;
-    });
-
-    console.log(`[Contacts IPC] Found ${matchingContacts.length} contacts matching "${query}"`);
-    return {
-      success: true,
-      contacts: matchingContacts.slice(0, 50), // Limit to 50 results
-    };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to search contacts:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Get all contacts with full data (CS-1)
-ipcMain.handle('contacts:getAllContacts', async (event, forceRefresh = false) => {
-  try {
-    console.log('[Contacts IPC] Getting all contacts (forceRefresh:', forceRefresh, ')');
-    if (!googleContacts || !googleContacts.isAuthenticated()) {
-      throw new Error('Google Contacts not authenticated');
+ipcMain.handle(
+  'contacts:getAllContacts',
+  withValidation(optionalBooleanSchema, async (event, forceRefresh = false) => {
+    try {
+      console.log('[Contacts IPC] Getting all contacts (forceRefresh:', forceRefresh, ')');
+      if (!googleContacts || !googleContacts.isAuthenticated()) {
+        throw new Error('Google Contacts not authenticated');
+      }
+
+      const allContacts = await googleContacts.fetchAllContacts(forceRefresh);
+
+      // Sort by name
+      allContacts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+      console.log(`[Contacts IPC] Returning ${allContacts.length} contacts`);
+      return {
+        success: true,
+        contacts: allContacts,
+        lastFetch: googleContacts.lastFetch,
+      };
+    } catch (error) {
+      console.error('[Contacts IPC] Failed to get all contacts:', error);
+      return { success: false, error: error.message };
     }
-
-    const allContacts = await googleContacts.fetchAllContacts(forceRefresh);
-
-    // Sort by name
-    allContacts.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
-    console.log(`[Contacts IPC] Returning ${allContacts.length} contacts`);
-    return {
-      success: true,
-      contacts: allContacts,
-      lastFetch: googleContacts.lastFetch,
-    };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to get all contacts:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Get meetings for a specific contact (CS-1)
-ipcMain.handle('contacts:getMeetingsForContact', async (event, contactEmail) => {
-  try {
-    console.log('[Contacts IPC] Getting meetings for contact:', contactEmail);
+ipcMain.handle(
+  'contacts:getMeetingsForContact',
+  withValidation(optionalStringSchema, async (event, contactEmail) => {
+    try {
+      console.log('[Contacts IPC] Getting meetings for contact:', contactEmail);
 
-    if (!contactEmail) {
-      return { success: true, meetings: [] };
-    }
+      if (!contactEmail) {
+        return { success: true, meetings: [] };
+      }
 
     // Load meetings from storage
     const meetingsPath = require('path').join(app.getPath('userData'), 'meetings.json');
@@ -4503,80 +4577,93 @@ ipcMain.handle('contacts:getMeetingsForContact', async (event, contactEmail) => 
         obsidianLink: m.obsidianLink,
       })),
     };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to get meetings for contact:', error);
-    return { success: false, error: error.message };
-  }
-});
+    } catch (error) {
+      console.error('[Contacts IPC] Failed to get meetings for contact:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // CS-3: Create contact page in Obsidian
-ipcMain.handle('contacts:createContactPage', async (event, contact, options = {}) => {
-  try {
-    console.log('[Contacts IPC] Creating contact page for:', contact.name);
+ipcMain.handle(
+  'contacts:createContactPage',
+  withValidation(contactSchema, async (event, contact) => {
+    try {
+      console.log('[Contacts IPC] Creating contact page for:', contact.name);
 
-    if (!vaultStructure || !vaultStructure.vaultBasePath) {
-      return { success: false, error: 'Vault path not configured' };
+      if (!vaultStructure || !vaultStructure.vaultBasePath) {
+        return { success: false, error: 'Vault path not configured' };
+      }
+
+      const result = vaultStructure.createContactPage(contact, {});
+      return result;
+    } catch (error) {
+      console.error('[Contacts IPC] Failed to create contact page:', error);
+      return { success: false, error: error.message };
     }
-
-    const result = vaultStructure.createContactPage(contact, options);
-    return result;
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to create contact page:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // CS-3: Check if contact page exists
-ipcMain.handle('contacts:contactPageExists', async (event, contactName) => {
-  try {
-    if (!vaultStructure || !vaultStructure.vaultBasePath) {
-      return { success: false, exists: false, error: 'Vault path not configured' };
-    }
+ipcMain.handle(
+  'contacts:contactPageExists',
+  withValidation(stringIdSchema, async (event, contactName) => {
+    try {
+      if (!vaultStructure || !vaultStructure.vaultBasePath) {
+        return { success: false, exists: false, error: 'Vault path not configured' };
+      }
 
-    const exists = vaultStructure.contactPageExists(contactName);
-    return { success: true, exists };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to check contact page:', error);
-    return { success: false, exists: false, error: error.message };
-  }
-});
+      const exists = vaultStructure.contactPageExists(contactName);
+      return { success: true, exists };
+    } catch (error) {
+      console.error('[Contacts IPC] Failed to check contact page:', error);
+      return { success: false, exists: false, error: error.message };
+    }
+  })
+);
 
 // CS-3: Create company page in Obsidian
-ipcMain.handle('contacts:createCompanyPage', async (event, company, options = {}) => {
-  try {
-    console.log('[Contacts IPC] Creating company page for:', company.name);
+ipcMain.handle(
+  'contacts:createCompanyPage',
+  withValidation(contactSchema, async (event, company) => {
+    try {
+      console.log('[Contacts IPC] Creating company page for:', company.name);
 
-    if (!vaultStructure || !vaultStructure.vaultBasePath) {
-      return { success: false, error: 'Vault path not configured' };
+      if (!vaultStructure || !vaultStructure.vaultBasePath) {
+        return { success: false, error: 'Vault path not configured' };
+      }
+
+      const result = vaultStructure.createCompanyPage(company, {});
+      return result;
+    } catch (error) {
+      console.error('[Contacts IPC] Failed to create company page:', error);
+      return { success: false, error: error.message };
     }
-
-    const result = vaultStructure.createCompanyPage(company, options);
-    return result;
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to create company page:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // CS-3: Check if company page exists
-ipcMain.handle('contacts:companyPageExists', async (event, companyName) => {
-  try {
-    if (!vaultStructure || !vaultStructure.vaultBasePath) {
-      return { success: false, exists: false, error: 'Vault path not configured' };
-    }
+ipcMain.handle(
+  'contacts:companyPageExists',
+  withValidation(stringIdSchema, async (event, companyName) => {
+    try {
+      if (!vaultStructure || !vaultStructure.vaultBasePath) {
+        return { success: false, exists: false, error: 'Vault path not configured' };
+      }
 
-    const exists = vaultStructure.companyPageExists(companyName);
-    return { success: true, exists };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to check company page:', error);
-    return { success: false, exists: false, error: error.message };
-  }
-});
+      const exists = vaultStructure.companyPageExists(companyName);
+      return { success: true, exists };
+    } catch (error) {
+      console.error('[Contacts IPC] Failed to check company page:', error);
+      return { success: false, exists: false, error: error.message };
+    }
+  })
+);
 
 // Match speakers to participants
 ipcMain.handle(
   'speakers:matchSpeakers',
-  async (event, { transcript, participantEmails, options, recordingId }) => {
+  withValidation(speakersMatchSchema, async (event, { transcript, participantEmails, options, recordingId }) => {
     try {
       console.log('[Speakers IPC] Matching speakers to participants');
       if (!speakerMatcher) {
@@ -4614,13 +4701,13 @@ ipcMain.handle(
       console.error('[Speakers IPC] Failed to match speakers:', error);
       return { success: false, error: error.message };
     }
-  }
+  })
 );
 
 // Update speaker mapping manually (for corrections)
 ipcMain.handle(
   'speakers:updateMapping',
-  async (event, { meetingId, speakerLabel, participantEmail }) => {
+  withValidation(speakersUpdateMappingSchema, async (event, { meetingId, speakerLabel, participantEmail }) => {
     try {
       console.log(
         `[Speakers IPC] Updating speaker mapping: ${speakerLabel} -> ${participantEmail}`
@@ -4680,7 +4767,7 @@ ipcMain.handle(
       console.error('[Speakers IPC] Failed to update mapping:', error);
       return { success: false, error: error.message };
     }
-  }
+  })
 );
 
 // ===================================================================
@@ -4699,20 +4786,23 @@ ipcMain.handle('speakerMapping:getAll', async () => {
 });
 
 // Get suggestions for speaker IDs (auto-suggest from known mappings)
-ipcMain.handle('speakerMapping:getSuggestions', async (event, { speakerIds }) => {
-  try {
-    const suggestions = speakerMappingService.getSuggestions(speakerIds);
-    return { success: true, suggestions };
-  } catch (error) {
-    console.error('[SpeakerMapping IPC] Failed to get suggestions:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'speakerMapping:getSuggestions',
+  withValidation(speakerMappingGetSuggestionsSchema, async (event, { speakerIds }) => {
+    try {
+      const suggestions = speakerMappingService.getSuggestions(speakerIds);
+      return { success: true, suggestions };
+    } catch (error) {
+      console.error('[SpeakerMapping IPC] Failed to get suggestions:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Add or update a speaker mapping
 ipcMain.handle(
   'speakerMapping:addMapping',
-  async (event, { speakerId, contact, sourceContext }) => {
+  withValidation(speakerMappingAddSchema, async (event, { speakerId, contact, sourceContext }) => {
     try {
       const mapping = await speakerMappingService.addMapping(speakerId, contact, sourceContext);
       return { success: true, mapping };
@@ -4720,57 +4810,66 @@ ipcMain.handle(
       console.error('[SpeakerMapping IPC] Failed to add mapping:', error);
       return { success: false, error: error.message };
     }
-  }
+  })
 );
 
 // Delete a speaker mapping
-ipcMain.handle('speakerMapping:deleteMapping', async (event, { speakerId }) => {
-  try {
-    const deleted = await speakerMappingService.deleteMapping(speakerId);
-    return { success: true, deleted };
-  } catch (error) {
-    console.error('[SpeakerMapping IPC] Failed to delete mapping:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'speakerMapping:deleteMapping',
+  withValidation(speakerMappingDeleteSchema, async (event, { speakerId }) => {
+    try {
+      const deleted = await speakerMappingService.deleteMapping(speakerId);
+      return { success: true, deleted };
+    } catch (error) {
+      console.error('[SpeakerMapping IPC] Failed to delete mapping:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Extract unique speaker IDs from a transcript
-ipcMain.handle('speakerMapping:extractSpeakerIds', async (event, { transcript }) => {
-  try {
-    const speakerIds = speakerMappingService.extractUniqueSpeakerIds(transcript);
+ipcMain.handle(
+  'speakerMapping:extractSpeakerIds',
+  withValidation(speakerMappingExtractSchema, async (event, { transcript }) => {
+    try {
+      const speakerIds = speakerMappingService.extractUniqueSpeakerIds(transcript);
 
-    // v1.1: Get auto-suggestions from user profile (single speaker = user)
-    const profileSuggestions = speakerMappingService.getAutoSuggestionsFromProfile(
-      speakerIds,
-      userProfile
-    );
+      // v1.1: Get auto-suggestions from user profile (single speaker = user)
+      const profileSuggestions = speakerMappingService.getAutoSuggestionsFromProfile(
+        speakerIds,
+        userProfile
+      );
 
-    return {
-      success: true,
-      speakerIds,
-      profileSuggestions, // New: suggestions based on user profile
-    };
-  } catch (error) {
-    console.error('[SpeakerMapping IPC] Failed to extract speaker IDs:', error);
-    return { success: false, error: error.message };
-  }
-});
+      return {
+        success: true,
+        speakerIds,
+        profileSuggestions, // New: suggestions based on user profile
+      };
+    } catch (error) {
+      console.error('[SpeakerMapping IPC] Failed to extract speaker IDs:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Detect duplicate speakers
-ipcMain.handle('speakerMapping:detectDuplicates', async (event, { speakers }) => {
-  try {
-    const duplicates = speakerMappingService.detectDuplicateSpeakers(speakers);
-    return { success: true, ...duplicates };
-  } catch (error) {
-    console.error('[SpeakerMapping IPC] Failed to detect duplicates:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'speakerMapping:detectDuplicates',
+  withValidation(speakerMappingDetectDuplicatesSchema, async (event, { speakers }) => {
+    try {
+      const duplicates = speakerMappingService.detectDuplicateSpeakers(speakers);
+      return { success: true, ...duplicates };
+    } catch (error) {
+      console.error('[SpeakerMapping IPC] Failed to detect duplicates:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Apply mappings to a transcript
 ipcMain.handle(
   'speakerMapping:applyToTranscript',
-  async (event, { transcript, mappings, options }) => {
+  withValidation(speakerMappingApplyToTranscriptSchema, async (event, { transcript, mappings, options }) => {
     try {
       const updatedTranscript = speakerMappingService.applyMappingsToTranscript(
         transcript,
@@ -4782,13 +4881,15 @@ ipcMain.handle(
       console.error('[SpeakerMapping IPC] Failed to apply mappings:', error);
       return { success: false, error: error.message };
     }
-  }
+  })
 );
 
 // Apply mappings to a meeting and save
-ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappings, options }) => {
-  try {
-    console.log(`[SpeakerMapping IPC] Applying mappings to meeting ${meetingId}`);
+ipcMain.handle(
+  'speakerMapping:applyToMeeting',
+  withValidation(speakerMappingApplySchema, async (event, { meetingId, mappings, options }) => {
+    try {
+      console.log(`[SpeakerMapping IPC] Applying mappings to meeting ${meetingId}`);
 
     // Load meeting data
     const data = await fileOperationManager.readMeetingsData();
@@ -5025,7 +5126,8 @@ ipcMain.handle('speakerMapping:applyToMeeting', async (event, { meetingId, mappi
     console.error('[SpeakerMapping IPC] Failed to apply mappings to meeting:', error);
     return { success: false, error: error.message };
   }
-});
+  })
+);
 
 // Get statistics about speaker mappings
 ipcMain.handle('speakerMapping:getStats', async () => {
@@ -5050,15 +5152,18 @@ ipcMain.handle('speakerMapping:export', async () => {
 });
 
 // Import mappings from backup
-ipcMain.handle('speakerMapping:import', async (event, { data, merge }) => {
-  try {
-    await speakerMappingService.importMappings(data, merge);
-    return { success: true };
-  } catch (error) {
-    console.error('[SpeakerMapping IPC] Failed to import mappings:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'speakerMapping:import',
+  withValidation(speakerMappingImportSchema, async (event, { data, merge }) => {
+    try {
+      await speakerMappingService.importMappings(data, merge);
+      return { success: true };
+    } catch (error) {
+      console.error('[SpeakerMapping IPC] Failed to import mappings:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // ===================================================================
 // End Google Integration IPC Handlers
@@ -5081,59 +5186,68 @@ ipcMain.handle('templates:getAll', async () => {
 });
 
 // Get template by ID
-ipcMain.handle('templates:getById', async (event, templateId) => {
-  try {
-    console.log('[Template IPC] Getting template:', templateId);
-    const template = templateManager.getTemplate(templateId);
-    if (!template) {
-      return { success: false, error: 'Template not found' };
+ipcMain.handle(
+  'templates:getById',
+  withValidation(stringIdSchema, async (event, templateId) => {
+    try {
+      console.log('[Template IPC] Getting template:', templateId);
+      const template = templateManager.getTemplate(templateId);
+      if (!template) {
+        return { success: false, error: 'Template not found' };
+      }
+      return { success: true, template };
+    } catch (error) {
+      console.error('[Template IPC] Failed to get template:', error);
+      return { success: false, error: error.message };
     }
-    return { success: true, template };
-  } catch (error) {
-    console.error('[Template IPC] Failed to get template:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Get template raw file content for editing (Phase 10.3)
-ipcMain.handle('templates:getContent', async (event, templateId) => {
-  try {
-    console.log('[Template IPC] Getting template content:', templateId);
-    const template = templateManager.getTemplate(templateId);
-    if (!template) {
-      return { success: false, error: 'Template not found' };
+ipcMain.handle(
+  'templates:getContent',
+  withValidation(stringIdSchema, async (event, templateId) => {
+    try {
+      console.log('[Template IPC] Getting template content:', templateId);
+      const template = templateManager.getTemplate(templateId);
+      if (!template) {
+        return { success: false, error: 'Template not found' };
+      }
+
+      // Read raw file content
+      const filePath =
+        template.filePath ||
+        path.join(templateManager.templatesPath, `${templateId}${template.format}`);
+      const content = fs.readFileSync(filePath, 'utf8');
+
+      return { success: true, content };
+    } catch (error) {
+      console.error('[Template IPC] Failed to get template content:', error);
+      return { success: false, error: error.message };
     }
-
-    // Read raw file content
-    const filePath =
-      template.filePath ||
-      path.join(templateManager.templatesPath, `${templateId}${template.format}`);
-    const content = fs.readFileSync(filePath, 'utf8');
-
-    return { success: true, content };
-  } catch (error) {
-    console.error('[Template IPC] Failed to get template content:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Estimate cost for templates
-ipcMain.handle('templates:estimateCost', async (event, { templateIds, transcript, provider }) => {
-  try {
-    console.log(
-      '[Template IPC] Estimating cost for',
-      templateIds.length,
-      'templates',
-      'with provider:',
-      provider
-    );
-    const estimate = templateManager.estimateCost(templateIds, transcript, provider);
-    return { success: true, estimate };
-  } catch (error) {
-    console.error('[Template IPC] Failed to estimate cost:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'templates:estimateCost',
+  withValidation(templatesEstimateCostSchema, async (event, { templateIds, transcript, provider }) => {
+    try {
+      console.log(
+        '[Template IPC] Estimating cost for',
+        templateIds.length,
+        'templates',
+        'with provider:',
+        provider
+      );
+      const estimate = templateManager.estimateCost(templateIds, transcript, provider);
+      return { success: true, estimate };
+    } catch (error) {
+      console.error('[Template IPC] Failed to estimate cost:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Generate summaries using multiple templates
 ipcMain.handle(
@@ -5373,9 +5487,11 @@ ipcMain.handle(
 );
 
 // CS-4: Preview routing for a meeting (used in template modal)
-ipcMain.handle('routing:previewMeetingRoute', async (event, meetingId) => {
-  try {
-    console.log('[Routing IPC] Preview routing for meeting:', meetingId);
+ipcMain.handle(
+  'routing:previewMeetingRoute',
+  withValidation(stringIdSchema, async (event, meetingId) => {
+    try {
+      console.log('[Routing IPC] Preview routing for meeting:', meetingId);
 
     if (!routingEngine) {
       console.error('[Routing IPC] Routing engine not initialized');
@@ -5526,9 +5642,10 @@ ipcMain.handle('routing:previewMeetingRoute', async (event, meetingId) => {
       orgCount: 0,
       participantEmails: [],
       matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
-    };
-  }
-});
+      };
+    }
+  })
+);
 
 // CS-4.4: Get all available destinations for manual override
 ipcMain.handle('routing:getAllDestinations', async () => {
@@ -5629,7 +5746,7 @@ function buildRoutingReason(route, matchResults, participantEmails, orgName) {
 // Add new organization to routing config
 ipcMain.handle(
   'routing:addOrganization',
-  createIpcHandler(async (event, { type, id, vaultPath, emails, contacts }) => {
+  withValidation(routingAddOrganizationSchema, async (event, { type, id, vaultPath, emails, contacts }) => {
     console.log('[Routing IPC] Adding new organization:', type, id);
 
     const routingPath = getRoutingConfigPath();
@@ -5692,7 +5809,7 @@ ipcMain.handle(
 // CS-4.5: Add emails/domains to existing organization
 ipcMain.handle(
   'routing:addEmailsToOrganization',
-  createIpcHandler(async (event, { type, slug, emails, contacts }) => {
+  withValidation(routingAddEmailsSchema, async (event, { type, slug, emails, contacts }) => {
     console.log('[Routing IPC] Adding emails to organization:', type, slug);
 
     const routingPath = getRoutingConfigPath();
@@ -5760,7 +5877,7 @@ ipcMain.handle(
 // Delete organization from routing config
 ipcMain.handle(
   'routing:deleteOrganization',
-  createIpcHandler(async (event, { type, id }) => {
+  withValidation(routingDeleteOrganizationSchema, async (event, { type, id }) => {
     console.log('[Routing IPC] Deleting organization:', type, id);
 
     const routingPath = getRoutingConfigPath();
@@ -5901,81 +6018,102 @@ ipcMain.handle('vocabulary:getClientSlugs', async () => {
 });
 
 // Add global spelling correction
-ipcMain.handle('vocabulary:addGlobalSpelling', async (event, { from, to }) => {
-  try {
-    vocabularyService.addGlobalSpellingCorrection(from, to);
-    return { success: true };
-  } catch (error) {
-    console.error('[Vocabulary IPC] Error adding global spelling:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'vocabulary:addGlobalSpelling',
+  withValidation(vocabularySpellingSchema, async (event, { from, to }) => {
+    try {
+      vocabularyService.addGlobalSpellingCorrection(from, to);
+      return { success: true };
+    } catch (error) {
+      console.error('[Vocabulary IPC] Error adding global spelling:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Add global keyword boost
-ipcMain.handle('vocabulary:addGlobalKeyword', async (event, { word, intensifier }) => {
-  try {
-    vocabularyService.addGlobalKeywordBoost(word, intensifier || 5);
-    return { success: true };
-  } catch (error) {
-    console.error('[Vocabulary IPC] Error adding global keyword:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'vocabulary:addGlobalKeyword',
+  withValidation(vocabularyKeywordSchema, async (event, { word, intensifier }) => {
+    try {
+      vocabularyService.addGlobalKeywordBoost(word, intensifier || 5);
+      return { success: true };
+    } catch (error) {
+      console.error('[Vocabulary IPC] Error adding global keyword:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Add client spelling correction
-ipcMain.handle('vocabulary:addClientSpelling', async (event, { clientSlug, from, to }) => {
-  try {
-    vocabularyService.addClientSpellingCorrection(clientSlug, from, to);
-    return { success: true };
-  } catch (error) {
-    console.error('[Vocabulary IPC] Error adding client spelling:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'vocabulary:addClientSpelling',
+  withValidation(vocabularyClientSpellingSchema, async (event, { clientSlug, from, to }) => {
+    try {
+      vocabularyService.addClientSpellingCorrection(clientSlug, from, to);
+      return { success: true };
+    } catch (error) {
+      console.error('[Vocabulary IPC] Error adding client spelling:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Add client keyword boost
-ipcMain.handle('vocabulary:addClientKeyword', async (event, { clientSlug, word, intensifier }) => {
-  try {
-    vocabularyService.addClientKeywordBoost(clientSlug, word, intensifier || 5);
-    return { success: true };
-  } catch (error) {
-    console.error('[Vocabulary IPC] Error adding client keyword:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'vocabulary:addClientKeyword',
+  withValidation(vocabularyClientKeywordSchema, async (event, { clientSlug, word, intensifier }) => {
+    try {
+      vocabularyService.addClientKeywordBoost(clientSlug, word, intensifier || 5);
+      return { success: true };
+    } catch (error) {
+      console.error('[Vocabulary IPC] Error adding client keyword:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Remove global spelling correction
-ipcMain.handle('vocabulary:removeGlobalSpelling', async (event, { to }) => {
-  try {
-    const removed = vocabularyService.removeGlobalSpellingCorrection(to);
-    return { success: true, removed };
-  } catch (error) {
-    console.error('[Vocabulary IPC] Error removing global spelling:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'vocabulary:removeGlobalSpelling',
+  withValidation(vocabularyRemoveSpellingSchema, async (event, { to }) => {
+    try {
+      const removed = vocabularyService.removeGlobalSpellingCorrection(to);
+      return { success: true, removed };
+    } catch (error) {
+      console.error('[Vocabulary IPC] Error removing global spelling:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Remove global keyword boost
-ipcMain.handle('vocabulary:removeGlobalKeyword', async (event, { word }) => {
-  try {
-    const removed = vocabularyService.removeGlobalKeywordBoost(word);
-    return { success: true, removed };
-  } catch (error) {
-    console.error('[Vocabulary IPC] Error removing global keyword:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'vocabulary:removeGlobalKeyword',
+  withValidation(vocabularyRemoveKeywordSchema, async (event, { word }) => {
+    try {
+      const removed = vocabularyService.removeGlobalKeywordBoost(word);
+      return { success: true, removed };
+    } catch (error) {
+      console.error('[Vocabulary IPC] Error removing global keyword:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Save full vocabulary configuration (for bulk updates)
-ipcMain.handle('vocabulary:saveConfig', async (event, config) => {
-  try {
-    vocabularyService.save(config);
-    return { success: true };
-  } catch (error) {
-    console.error('[Vocabulary IPC] Error saving config:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'vocabulary:saveConfig',
+  withValidation(vocabularyConfigSchema, async (event, config) => {
+    try {
+      vocabularyService.save(config);
+      return { success: true };
+    } catch (error) {
+      console.error('[Vocabulary IPC] Error saving config:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Reload vocabulary from disk
 ipcMain.handle('vocabulary:reload', async () => {
@@ -6053,9 +6191,11 @@ ipcMain.handle(
 // ===================================================================
 
 // Export a meeting to Obsidian vault
-ipcMain.handle('obsidian:exportMeeting', async (event, meetingId) => {
-  try {
-    console.log('[Obsidian IPC] Export requested for meeting:', meetingId);
+ipcMain.handle(
+  'obsidian:exportMeeting',
+  withValidation(stringIdSchema, async (event, meetingId) => {
+    try {
+      console.log('[Obsidian IPC] Export requested for meeting:', meetingId);
 
     // Load meeting data
     const data = await fileOperationManager.readMeetingsData();
@@ -6077,12 +6217,13 @@ ipcMain.handle('obsidian:exportMeeting', async (event, meetingId) => {
       await fileOperationManager.writeData(data);
     }
 
-    return result;
-  } catch (error) {
-    console.error('[Obsidian IPC] Export failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+      return result;
+    } catch (error) {
+      console.error('[Obsidian IPC] Export failed:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Get export status/configuration
 ipcMain.handle('obsidian:getStatus', async () => {
@@ -6179,10 +6320,12 @@ ipcMain.handle('obsidian:refreshLinks', async () => {
 // ===================================================================
 
 // Import a single file
-ipcMain.handle('import:importFile', async (event, { filePath, options }) => {
-  if (!importManager) {
-    return { success: false, error: 'Import manager not initialized' };
-  }
+ipcMain.handle(
+  'import:importFile',
+  withValidation(importFileSchema, async (event, { filePath, options }) => {
+    if (!importManager) {
+      return { success: false, error: 'Import manager not initialized' };
+    }
 
   try {
     const result = await importManager.importFile(filePath, {
@@ -6206,15 +6349,18 @@ ipcMain.handle('import:importFile', async (event, { filePath, options }) => {
     console.error('[Import] Import file failed:', error);
     return { success: false, error: error.message };
   }
-});
+  })
+);
 
 // Import multiple files in batch
-ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
-  if (!importManager) {
-    return {
-      success: false,
-      error: 'Import manager not initialized',
-      total: filePaths.length,
+ipcMain.handle(
+  'import:importBatch',
+  withValidation(importBatchSchema, async (event, { filePaths, options }) => {
+    if (!importManager) {
+      return {
+        success: false,
+        error: 'Import manager not initialized',
+        total: filePaths.length,
       successful: 0,
       failed: filePaths.length,
       meetings: [],
@@ -6295,7 +6441,8 @@ ipcMain.handle('import:importBatch', async (event, { filePaths, options }) => {
       };
     }
   }
-});
+  })
+);
 
 // Get import manager status (IM-1: updated to include audio formats)
 ipcMain.handle('import:getStatus', async () => {
@@ -6307,12 +6454,14 @@ ipcMain.handle('import:getStatus', async () => {
 });
 
 // IM-1.4: Transcribe audio file using selected provider
-ipcMain.handle('import:transcribeAudio', async (event, { filePath, provider, options = {} }) => {
-  console.log(`[Import] Transcribing audio file: ${filePath} with provider: ${provider}`);
+ipcMain.handle(
+  'import:transcribeAudio',
+  withValidation(importTranscribeAudioSchema, async (event, { filePath, provider, options = {} }) => {
+    console.log(`[Import] Transcribing audio file: ${filePath} with provider: ${provider}`);
 
-  if (!transcriptionService) {
-    return { success: false, error: 'Transcription service not initialized' };
-  }
+    if (!transcriptionService) {
+      return { success: false, error: 'Transcription service not initialized' };
+    }
 
   // Validate provider
   const validProviders = ['assemblyai', 'deepgram'];
@@ -6374,10 +6523,13 @@ ipcMain.handle('import:transcribeAudio', async (event, { filePath, provider, opt
     console.error('[Import] Audio transcription failed:', error);
     return { success: false, error: error.message };
   }
-});
+  })
+);
 
 // IM-1.5: Import audio file (transcribe then import as meeting)
-ipcMain.handle('import:importAudioFile', async (event, { filePath, provider, options = {} }) => {
+ipcMain.handle(
+  'import:importAudioFile',
+  withValidation(importAudioFileSchema, async (event, { filePath, provider, options = {} }) => {
   console.log(`[Import] Importing audio file: ${filePath}`);
 
   if (!importManager) {
@@ -6582,7 +6734,8 @@ ipcMain.handle('import:importAudioFile', async (event, { filePath, provider, opt
     console.error('[Import] Audio import failed:', error);
     return { success: false, error: error.message };
   }
-});
+  })
+);
 
 /**
  * Format seconds to HH:MM:SS timestamp
@@ -6750,20 +6903,25 @@ ipcMain.handle('import:selectFolder', async () => {
 // ===================================================================
 
 // Read transcript file content (for import preview)
-ipcMain.handle('patterns:readFile', async (event, filePath) => {
-  try {
-    const content = fs.readFileSync(filePath, 'utf8');
-    return { success: true, content };
-  } catch (error) {
-    logger.main.error('[Patterns] Failed to read file:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'patterns:readFile',
+  withValidation(stringIdSchema, async (event, filePath) => {
+    try {
+      const content = fs.readFileSync(filePath, 'utf8');
+      return { success: true, content };
+    } catch (error) {
+      logger.main.error('[Patterns] Failed to read file:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Test parsing with given patterns and sample text
-ipcMain.handle('patterns:testParse', async (event, { content, filePath }) => {
-  try {
-    const parser = new TranscriptParser();
+ipcMain.handle(
+  'patterns:testParse',
+  withValidation(patternsTestParseSchema, async (event, { content, filePath }) => {
+    try {
+      const parser = new TranscriptParser();
 
     // Parse the content (determine format from file extension or content)
     let result;
@@ -6803,7 +6961,8 @@ ipcMain.handle('patterns:testParse', async (event, { content, filePath }) => {
     logger.main.error('[Patterns] Failed to test parse:', error);
     return { success: false, error: error.message };
   }
-});
+  })
+);
 
 // Get current pattern configuration
 ipcMain.handle('patterns:getConfig', async () => {
@@ -6880,9 +7039,11 @@ settings:
 });
 
 // Save pattern configuration with validation
-ipcMain.handle('patterns:saveConfig', async (event, { configYaml }) => {
-  try {
-    const configPath = path.join(app.getPath('userData'), 'config', 'transcript-patterns.yaml');
+ipcMain.handle(
+  'patterns:saveConfig',
+  withValidation(patternsSaveConfigSchema, async (event, { configYaml }) => {
+    try {
+      const configPath = path.join(app.getPath('userData'), 'config', 'transcript-patterns.yaml');
 
     // Parse YAML to validate syntax
     let parsedConfig;
@@ -6933,7 +7094,8 @@ ipcMain.handle('patterns:saveConfig', async (event, { configYaml }) => {
     logger.main.error('[Patterns] Failed to save config:', error);
     return { success: false, error: error.message };
   }
-});
+  })
+);
 
 // AI Pattern Generation removed (Phase 10.8.3 removed)
 
@@ -7101,39 +7263,37 @@ ipcMain.handle('settings:getUserProfile', async () => {
 });
 
 // Save user profile (v1.1)
-ipcMain.handle('settings:saveUserProfile', async (event, profile) => {
-  try {
-    // Validate input
-    if (!profile || typeof profile !== 'object') {
-      return { success: false, error: 'Invalid profile data' };
+ipcMain.handle(
+  'settings:saveUserProfile',
+  withValidation(userProfileSchema, async (event, profile) => {
+    try {
+      // Update profile with validated fields
+      userProfile = {
+        name: String(profile.name || '').trim(),
+        email: String(profile.email || '').trim(),
+        title: String(profile.title || '').trim(),
+        organization: String(profile.organization || '').trim(),
+        context: String(profile.context || '').trim(),
+      };
+
+      // Save to disk
+      saveUserProfile();
+
+      logger.main.info('[v1.1] User profile saved:', {
+        name: userProfile.name,
+        email: userProfile.email,
+        title: userProfile.title,
+        organization: userProfile.organization,
+        hasContext: !!userProfile.context,
+      });
+
+      return { success: true, profile: userProfile };
+    } catch (error) {
+      logger.ipc.error('[IPC] settings:saveUserProfile failed:', error);
+      return { success: false, error: error.message };
     }
-
-    // Update profile with validated fields
-    userProfile = {
-      name: String(profile.name || '').trim(),
-      email: String(profile.email || '').trim(),
-      title: String(profile.title || '').trim(),
-      organization: String(profile.organization || '').trim(),
-      context: String(profile.context || '').trim(),
-    };
-
-    // Save to disk
-    saveUserProfile();
-
-    logger.main.info('[v1.1] User profile saved:', {
-      name: userProfile.name,
-      email: userProfile.email,
-      title: userProfile.title,
-      organization: userProfile.organization,
-      hasContext: !!userProfile.context,
-    });
-
-    return { success: true, profile: userProfile };
-  } catch (error) {
-    logger.ipc.error('[IPC] settings:saveUserProfile failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // ===================================================================
 // Phase 10.7: Desktop App Polish IPC Handlers
@@ -7150,10 +7310,12 @@ ipcMain.handle('app:getSettings', async () => {
 });
 
 // Update app settings
-ipcMain.handle('app:updateSettings', async (event, updates) => {
-  try {
-    // Merge updates into current settings
-    if (updates.recordingQuality) {
+ipcMain.handle(
+  'app:updateSettings',
+  withValidation(appSettingsSchema, async (event, updates) => {
+    try {
+      // Merge updates into current settings
+      if (updates.recordingQuality) {
       appSettings.recordingQuality = {
         ...appSettings.recordingQuality,
         ...updates.recordingQuality,
@@ -7194,12 +7356,13 @@ ipcMain.handle('app:updateSettings', async (event, updates) => {
     saveAppSettings();
     logger.ipc.info('[IPC] app:updateSettings - Settings updated successfully');
 
-    return { success: true, data: appSettings };
-  } catch (error) {
-    logger.ipc.error('[IPC] app:updateSettings failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+      return { success: true, data: appSettings };
+    } catch (error) {
+      logger.ipc.error('[IPC] app:updateSettings failed:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // v1.2: Get Stream Deck status
 ipcMain.handle('app:getStreamDeckStatus', async () => {
@@ -7223,6 +7386,9 @@ ipcMain.handle('app:getStreamDeckStatus', async () => {
 // v1.2: Per-meeting auto-start settings
 ipcMain.handle('app:setMeetingAutoStart', async (event, meetingId, enabled) => {
   try {
+    // Validate inputs
+    validateIpcInput(meetingAutoStartSchema, { meetingId, enabled });
+
     if (enabled === null) {
       // Remove override (use global setting)
       meetingAutoStartOverrides.delete(meetingId);
@@ -7237,20 +7403,25 @@ ipcMain.handle('app:setMeetingAutoStart', async (event, meetingId, enabled) => {
   }
 });
 
-ipcMain.handle('app:getMeetingAutoStart', async (event, meetingId) => {
-  try {
-    const override = meetingAutoStartOverrides.get(meetingId);
-    return { success: true, data: { hasOverride: override !== undefined, enabled: override } };
-  } catch (error) {
-    logger.ipc.error('[IPC] app:getMeetingAutoStart failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'app:getMeetingAutoStart',
+  withValidation(stringIdSchema, async (event, meetingId) => {
+    try {
+      const override = meetingAutoStartOverrides.get(meetingId);
+      return { success: true, data: { hasOverride: override !== undefined, enabled: override } };
+    } catch (error) {
+      logger.ipc.error('[IPC] app:getMeetingAutoStart failed:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Get application logs (Phase 10.7)
-ipcMain.handle('app:getLogs', async (event, options = {}) => {
-  try {
-    const { limit = 1000, level = 'all' } = options;
+ipcMain.handle(
+  'app:getLogs',
+  withValidation(logsOptionsSchema, async (event, options = {}) => {
+    try {
+      const { limit = 1000, level = 'all' } = options || {};
 
     // Read log file
     const logPath = log.transports.file.getFile().path;
@@ -7280,11 +7451,12 @@ ipcMain.handle('app:getLogs', async (event, options = {}) => {
         filteredLines: filteredLogs.length,
       },
     };
-  } catch (error) {
-    logger.ipc.error('[IPC] app:getLogs failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+    } catch (error) {
+      logger.ipc.error('[IPC] app:getLogs failed:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Clear logs (Phase 10.7)
 ipcMain.handle('app:clearLogs', async () => {
@@ -7356,21 +7528,26 @@ ipcMain.handle('settings:export', async () => {
 });
 
 // Settings Import - SE-2
-ipcMain.handle('settings:importValidate', async (event, zipPath) => {
-  try {
-    const settingsExportService = require('./main/services/settingsExportService');
-    const validation = await settingsExportService.validateImportFile(zipPath);
-    return { success: true, data: validation };
-  } catch (error) {
-    logger.ipc.error('[IPC] settings:importValidate failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'settings:importValidate',
+  withValidation(stringIdSchema, async (event, zipPath) => {
+    try {
+      const settingsExportService = require('./main/services/settingsExportService');
+      const validation = await settingsExportService.validateImportFile(zipPath);
+      return { success: true, data: validation };
+    } catch (error) {
+      logger.ipc.error('[IPC] settings:importValidate failed:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
-ipcMain.handle('settings:import', async (event, options = {}) => {
-  try {
-    const { dialog } = require('electron');
-    const settingsExportService = require('./main/services/settingsExportService');
+ipcMain.handle(
+  'settings:import',
+  withValidation(importOptionsSchema, async (event, options = {}) => {
+    try {
+      const { dialog } = require('electron');
+      const settingsExportService = require('./main/services/settingsExportService');
 
     // Show open dialog
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -7391,14 +7568,15 @@ ipcMain.handle('settings:import', async (event, options = {}) => {
       return { success: false, error: `Invalid settings file: ${validation.error}` };
     }
 
-    // Import with provided options
-    const importResult = await settingsExportService.importFromZip(zipPath, options);
-    return importResult;
-  } catch (error) {
-    logger.ipc.error('[IPC] settings:import failed:', error);
-    return { success: false, error: error.message };
-  }
-});
+      // Import with provided options
+      const importResult = await settingsExportService.importFromZip(zipPath, options || {});
+      return importResult;
+    } catch (error) {
+      logger.ipc.error('[IPC] settings:import failed:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // ===================================================================
 // End Settings IPC Handlers
@@ -7435,43 +7613,52 @@ ipcMain.handle('keys:list', async () => {
 });
 
 // Get a specific API key
-ipcMain.handle('keys:get', async (event, keyName) => {
-  try {
-    const value = await keyManagementService.getKey(keyName);
-    return { success: true, data: value };
-  } catch (error) {
-    log.error(`[IPC] keys:get failed for ${keyName}:`, error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'keys:get',
+  withValidation(keyNameSchema, async (event, keyName) => {
+    try {
+      const value = await keyManagementService.getKey(keyName);
+      return { success: true, data: value };
+    } catch (error) {
+      log.error(`[IPC] keys:get failed for ${keyName}:`, error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Set an API key
-ipcMain.handle('keys:set', async (event, keyName, value) => {
-  try {
-    // Validate key format
-    const validation = keyManagementService.validateKey(keyName, value);
-    if (!validation.valid) {
-      return { success: false, error: validation.message };
-    }
+ipcMain.handle(
+  'keys:set',
+  withValidation(keyNameSchema, async (event, keyName, value) => {
+    try {
+      // Validate key format
+      const validation = keyManagementService.validateKey(keyName, value);
+      if (!validation.valid) {
+        return { success: false, error: validation.message };
+      }
 
-    await keyManagementService.setKey(keyName, value);
-    return { success: true };
-  } catch (error) {
-    log.error(`[IPC] keys:set failed for ${keyName}:`, error);
-    return { success: false, error: error.message };
-  }
-});
+      await keyManagementService.setKey(keyName, value);
+      return { success: true };
+    } catch (error) {
+      log.error(`[IPC] keys:set failed for ${keyName}:`, error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Delete an API key
-ipcMain.handle('keys:delete', async (event, keyName) => {
-  try {
-    const deleted = await keyManagementService.deleteKey(keyName);
-    return { success: true, data: deleted };
-  } catch (error) {
-    log.error(`[IPC] keys:delete failed for ${keyName}:`, error);
-    return { success: false, error: error.message };
-  }
-});
+ipcMain.handle(
+  'keys:delete',
+  withValidation(keyNameSchema, async (event, keyName) => {
+    try {
+      const deleted = await keyManagementService.deleteKey(keyName);
+      return { success: true, data: deleted };
+    } catch (error) {
+      log.error(`[IPC] keys:delete failed for ${keyName}:`, error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Migrate keys from .env to Credential Manager
 ipcMain.handle('keys:migrate', async () => {
@@ -7486,22 +7673,25 @@ ipcMain.handle('keys:migrate', async () => {
 });
 
 // Test an API key by making a test request
-ipcMain.handle('keys:test', async (event, keyName) => {
-  try {
-    // This is a placeholder - actual implementation would test the key with the service
-    // For now, we just validate format
-    const value = await keyManagementService.getKey(keyName);
-    if (!value) {
-      return { success: false, error: 'Key not found' };
-    }
+ipcMain.handle(
+  'keys:test',
+  withValidation(keyNameSchema, async (event, keyName) => {
+    try {
+      // This is a placeholder - actual implementation would test the key with the service
+      // For now, we just validate format
+      const value = await keyManagementService.getKey(keyName);
+      if (!value) {
+        return { success: false, error: 'Key not found' };
+      }
 
-    const validation = keyManagementService.validateKey(keyName, value);
-    return { success: validation.valid, message: validation.message };
-  } catch (error) {
-    log.error(`[IPC] keys:test failed for ${keyName}:`, error);
-    return { success: false, error: error.message };
-  }
-});
+      const validation = keyManagementService.validateKey(keyName, value);
+      return { success: validation.valid, message: validation.message };
+    } catch (error) {
+      log.error(`[IPC] keys:test failed for ${keyName}:`, error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // ===================================================================
 // End Key Management IPC Handlers
@@ -7746,29 +7936,32 @@ ipcMain.handle('widget:getState', () => {
 });
 
 // Handler to get active recording ID for a note
-ipcMain.handle('getActiveRecordingId', async (event, noteId) => {
-  console.log(`getActiveRecordingId called for note: ${noteId}`);
+ipcMain.handle(
+  'getActiveRecordingId',
+  withValidation(optionalStringSchema, async (event, noteId) => {
+    console.log(`getActiveRecordingId called for note: ${noteId}`);
 
-  try {
-    // If noteId is provided, get recording for that specific note
-    if (noteId) {
-      const recordingInfo = activeRecordings.getForNote(noteId);
+    try {
+      // If noteId is provided, get recording for that specific note
+      if (noteId) {
+        const recordingInfo = activeRecordings.getForNote(noteId);
+        return {
+          success: true,
+          data: recordingInfo,
+        };
+      }
+
+      // Otherwise return all active recordings
       return {
         success: true,
-        data: recordingInfo,
+        data: activeRecordings.getAll(),
       };
+    } catch (error) {
+      console.error('Error getting active recording ID:', error);
+      return { success: false, error: error.message };
     }
-
-    // Otherwise return all active recordings
-    return {
-      success: true,
-      data: activeRecordings.getAll(),
-    };
-  } catch (error) {
-    console.error('Error getting active recording ID:', error);
-    return { success: false, error: error.message };
-  }
-});
+  })
+);
 
 // Handle deleting a meeting
 ipcMain.handle('deleteMeeting', async (event, meetingId) => {
@@ -7839,6 +8032,13 @@ ipcMain.handle('deleteMeeting', async (event, meetingId) => {
 
 // Handle generating AI summary for a meeting (non-streaming)
 ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
+  // Validate meetingId
+  try {
+    validateIpcInput(stringIdSchema, meetingId);
+  } catch (validationError) {
+    return { success: false, error: validationError.message };
+  }
+
   console.log(`Manual summary generation requested for meeting: ${meetingId}`);
 
   return await withProviderSwitch(
@@ -8386,9 +8586,11 @@ ipcMain.on('webhook-upload-failed', async (event, { recordingId, error }) => {
 });
 
 // Handle generating AI summary with streaming
-ipcMain.handle('generateMeetingSummaryStreaming', async (event, meetingId) => {
-  try {
-    console.log(`Streaming summary generation requested for meeting: ${meetingId}`);
+ipcMain.handle(
+  'generateMeetingSummaryStreaming',
+  withValidation(stringIdSchema, async (event, meetingId) => {
+    try {
+      console.log(`Streaming summary generation requested for meeting: ${meetingId}`);
 
     // Read current data
     const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
@@ -8463,18 +8665,21 @@ ipcMain.handle('generateMeetingSummaryStreaming', async (event, meetingId) => {
     // Final notification to renderer
     mainWindow.webContents.send('summary-generated', meetingId);
 
-    return {
-      success: true,
-      summary,
-    };
-  } catch (error) {
-    console.error('Error generating streaming summary:', error);
-    return { success: false, error: error.message };
-  }
-});
+      return {
+        success: true,
+        summary,
+      };
+    } catch (error) {
+      console.error('Error generating streaming summary:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Handle manual transcript fetch for a meeting
-ipcMain.handle('fetchTranscript', async (event, meetingId) => {
+ipcMain.handle(
+  'fetchTranscript',
+  withValidation(stringIdSchema, async (event, meetingId) => {
   try {
     console.log(`[IPC] Manual transcript fetch requested for meeting: ${meetingId}`);
 
@@ -8522,11 +8727,12 @@ ipcMain.handle('fetchTranscript', async (event, meetingId) => {
       success: true,
       message: 'Transcript fetch started - check logs for progress',
     };
-  } catch (error) {
-    console.error('[IPC] Error starting transcript fetch:', error);
-    return { success: false, error: error.message };
-  }
-});
+    } catch (error) {
+      console.error('[IPC] Error starting transcript fetch:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // Handle loading meetings data
 ipcMain.handle('loadMeetingsData', async () => {
@@ -10363,9 +10569,12 @@ ipcMain.handle('checkForDetectedMeeting', async () => {
 });
 
 // Function to join the detected meeting
-ipcMain.handle('joinDetectedMeeting', async (event, transcriptionProvider = 'recallai') => {
-  return joinDetectedMeeting(transcriptionProvider);
-});
+ipcMain.handle(
+  'joinDetectedMeeting',
+  withValidation(transcriptionProviderSchema, async (event, transcriptionProvider = 'recallai') => {
+    return joinDetectedMeeting(transcriptionProvider);
+  })
+);
 
 // Function to handle joining a detected meeting
 async function joinDetectedMeeting(transcriptionProvider = 'recallai') {
