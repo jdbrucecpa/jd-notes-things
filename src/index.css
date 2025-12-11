@@ -1905,7 +1905,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   padding: 5px;
 }
 
-/* Template Selection Modal (Phase 4) */
+/* Modal Overlay (consolidated from multiple sources) */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -1916,11 +1916,13 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 10000;
   backdrop-filter: blur(4px);
 }
 
-.modal-content {
+/* .modal-content is used by HTML modals, .modal-dialog is used by modalHelper.js */
+.modal-content,
+.modal-dialog {
   background: var(--card-bg);
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -1929,6 +1931,19 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   max-height: 80vh;
   display: flex;
   flex-direction: column;
+  border: 1px solid var(--border-color);
+  animation: modalSlideIn 0.2s ease-out;
+}
+
+@keyframes modalSlideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .template-modal {
@@ -1943,10 +1958,12 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   align-items: center;
 }
 
-.modal-header h2 {
+.modal-header h2,
+.modal-header h3 {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .modal-close {
@@ -2778,12 +2795,14 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .btn-secondary {
-  background: var(--bg-secondary);
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
   color: var(--text-primary);
 }
 
 .btn-secondary:hover {
-  background: var(--border-color);
+  background: var(--bg-secondary);
+  border-color: var(--text-secondary);
 }
 
 .btn-primary {
@@ -2793,17 +2812,32 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 
 .btn-primary:hover {
   filter: brightness(0.85);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
 }
 
 .btn-primary:disabled {
   background: var(--border-color);
   cursor: not-allowed;
   opacity: 0.6;
+  transform: none;
+  box-shadow: none;
 }
 
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;
+}
+
+.btn-danger {
+  background: var(--color-error);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  filter: brightness(0.85);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
 }
 
 /* Import Modal (Phase 8) */
@@ -3654,7 +3688,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 
 .contacts-full-page {
   position: fixed;
-  top: 0;
+  top: 32px; /* Below the title bar */
   left: 0;
   right: 0;
   bottom: 0;
@@ -5124,106 +5158,9 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   color: var(--text-secondary);
 }
 
-.btn-primary {
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 6px;
-  border: none;
-  background: var(--primary-color);
-  color: #fff;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
+/* Button styles consolidated in ".btn" section above */
 
-.btn-primary:hover {
-  filter: brightness(0.85);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 122, 255, 0.3);
-}
-
-/* Modal Dialogs for Add/Delete Organization */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  backdrop-filter: blur(4px);
-}
-
-.modal-dialog {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  width: 90%;
-  max-width: 500px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  animation: modalSlideIn 0.2s ease-out;
-}
-
-@keyframes modalSlideIn {
-  from {
-    transform: translateY(-20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.modal-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.modal-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.modal-close {
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 24px;
-  cursor: pointer;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.modal-close:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.modal-body {
-  padding: 24px;
-}
-
-.modal-footer {
-  padding: 16px 24px;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-}
+/* Modal Dialogs for Add/Delete Organization - styles consolidated in "Template Selection Modal (Phase 4)" section */
 
 .form-group {
   margin-bottom: 20px;
@@ -5262,40 +5199,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   font-style: italic;
 }
 
-.btn-secondary {
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-secondary:hover {
-  background: var(--bg-secondary);
-  border-color: var(--text-secondary);
-}
-
-.btn-danger {
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 6px;
-  border: none;
-  background: var(--color-error);
-  color: #fff;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-danger:hover {
-  filter: brightness(0.85);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
-}
+/* .btn-secondary and .btn-danger consolidated in ".btn" section above */
 
 /* ==========================================
    Meeting Detail View (Phase 10.5)

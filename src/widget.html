@@ -610,7 +610,8 @@
 
       pinBtn.addEventListener('click', async () => {
         try {
-          const result = await window.widgetAPI.toggleAlwaysOnTop();
+          const newState = !isAlwaysOnTop;
+          const result = await window.widgetAPI.toggleAlwaysOnTop(newState);
           if (result.success) {
             isAlwaysOnTop = result.alwaysOnTop;
             updatePinButton();
