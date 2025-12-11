@@ -41,12 +41,14 @@ Control JD Notes meeting recording from your Elgato Stream Deck.
 ### Toggle Recording Action
 
 Add this action to toggle recording on/off:
+
 - Press when **not recording**: Creates a new note and starts recording
 - Press when **recording**: Stops the current recording
 
 ### Status Action
 
 Add this action to see the current recording status:
+
 - Shows "Ready" when connected and not recording
 - Shows elapsed time (MM:SS) when recording
 - Shows "Offline" when JD Notes is not connected

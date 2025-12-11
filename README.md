@@ -242,6 +242,7 @@ The app uses auto-updates via GitHub Releases. To create a new release:
    ```
 
 The GitHub Actions workflow will automatically:
+
 - Build the Windows installer
 - Create a GitHub Release with the Squirrel artifacts
 - Users with the app installed will receive the update automatically

@@ -5,6 +5,7 @@ const { Webhook } = require('svix');
 const app = express();
 
 require('dotenv').config();
+const { SERVER_PORT, SERVER_HOST } = require('./shared/constants');
 
 // Key management service reference (will be set by main.js)
 let keyManagementService = null;
@@ -258,6 +259,14 @@ function handleStreamDeckUpgrade(request, socket, _head) {
     return false; // Not a Stream Deck request
   }
 
+  // Security: Validate origin - only allow localhost connections
+  const origin = request.headers.origin;
+  if (origin && !origin.match(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/)) {
+    console.warn('[StreamDeck] Rejected connection from non-localhost origin:', origin);
+    socket.end('HTTP/1.1 403 Forbidden\r\n\r\n');
+    return true;
+  }
+
   // Verify WebSocket handshake
   const key = request.headers['sec-websocket-key'];
   if (!key) {
@@ -274,10 +283,10 @@ function handleStreamDeckUpgrade(request, socket, _head) {
   // Send upgrade response
   socket.write(
     'HTTP/1.1 101 Switching Protocols\r\n' +
-    'Upgrade: websocket\r\n' +
-    'Connection: Upgrade\r\n' +
-    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
-    '\r\n'
+      'Upgrade: websocket\r\n' +
+      'Connection: Upgrade\r\n' +
+      `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
+      '\r\n'
   );
 
   // Create client object
@@ -296,7 +305,7 @@ function handleStreamDeckUpgrade(request, socket, _head) {
   });
 
   // Handle incoming data
-  socket.on('data', (buffer) => {
+  socket.on('data', buffer => {
     try {
       const message = decodeWebSocketFrame(buffer);
       if (message) {
@@ -310,10 +319,12 @@ function handleStreamDeckUpgrade(request, socket, _head) {
   // Handle disconnect
   socket.on('close', () => {
     streamDeckClients.delete(client);
-    console.log(`[StreamDeck] Client disconnected: ${client.id} (total: ${streamDeckClients.size})`);
+    console.log(
+      `[StreamDeck] Client disconnected: ${client.id} (total: ${streamDeckClients.size})`
+    );
   });
 
-  socket.on('error', (error) => {
+  socket.on('error', error => {
     console.error(`[StreamDeck] Socket error for ${client.id}:`, error.message);
     streamDeckClients.delete(client);
   });
@@ -493,8 +504,9 @@ app.get('/streamdeck/health', (req, res) => {
 });
 
 if (require.main === module) {
-  app.listen(13373, () => {
-    console.log(`Server listening on http://localhost:13373`);
+  // Security: explicitly bind to localhost only
+  app.listen(SERVER_PORT, SERVER_HOST, () => {
+    console.log(`Server listening on http://${SERVER_HOST}:${SERVER_PORT}`);
   });
 }
 

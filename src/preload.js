@@ -211,7 +211,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Desktop App Polish (Phase 10.7)
   appGetSettings: () => ipcRenderer.invoke('app:getSettings'),
   appUpdateSettings: updates => ipcRenderer.invoke('app:updateSettings', updates),
-  appSetMeetingAutoStart: (meetingId, enabled) => ipcRenderer.invoke('app:setMeetingAutoStart', meetingId, enabled),
+  appSetMeetingAutoStart: (meetingId, enabled) =>
+    ipcRenderer.invoke('app:setMeetingAutoStart', meetingId, enabled),
   appGetMeetingAutoStart: meetingId => ipcRenderer.invoke('app:getMeetingAutoStart', meetingId),
   appGetStreamDeckStatus: () => ipcRenderer.invoke('app:getStreamDeckStatus'),
   appGetLogs: options => ipcRenderer.invoke('app:getLogs', options),

@@ -60,7 +60,8 @@ class MetadataExtractor {
       dateConfidence = 'none'; // Using today's date as last resort
     }
 
-    const finalTitle = titleFromFilename || titleFromFolder || titleFromContent || 'Imported Meeting';
+    const finalTitle =
+      titleFromFilename || titleFromFolder || titleFromContent || 'Imported Meeting';
 
     return {
       date: finalDate,
@@ -82,7 +83,13 @@ class MetadataExtractor {
             : dateFromFile
               ? 'file_mtime'
               : 'default',
-        title: titleFromFilename ? 'high' : titleFromFolder ? 'high' : titleFromContent ? 'medium' : 'low',
+        title: titleFromFilename
+          ? 'high'
+          : titleFromFolder
+            ? 'high'
+            : titleFromContent
+              ? 'medium'
+              : 'low',
         titleSource: titleFromFilename
           ? 'filename'
           : titleFromFolder
@@ -392,11 +399,7 @@ class MetadataExtractor {
       const folderName = path.basename(parentDir);
 
       // Skip if it's a root-level import folder
-      if (
-        folderName === 'transcript-to-import' ||
-        folderName === 'imports' ||
-        folderName === '.'
-      ) {
+      if (folderName === 'transcript-to-import' || folderName === 'imports' || folderName === '.') {
         return participants;
       }
 

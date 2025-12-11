@@ -469,7 +469,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 
 /* Hide count when zero */
 .toolbar-filter-count:empty,
-.toolbar-filter-count[data-count="0"] {
+.toolbar-filter-count[data-count='0'] {
   display: none;
 }
 
@@ -768,14 +768,25 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 /* Legacy class support - redirect to new styles */
-.header { display: none; } /* Hide old header if still present */
-.search-container { display: none; }
-.filter-toggle-btn { display: none; }
+.header {
+  display: none;
+} /* Hide old header if still present */
+.search-container {
+  display: none;
+}
+.filter-toggle-btn {
+  display: none;
+}
 
 .btn {
   padding: 8px 16px;

@@ -45,6 +45,12 @@ const expressApp = require('./server');
 expressApp.setKeyManagementService(keyManagementService);
 const tunnelManager = require('./main/services/tunnelManager');
 const log = require('electron-log');
+const {
+  SERVER_PORT,
+  SERVER_HOST,
+  WS_STREAMDECK_ENDPOINT,
+  WEBHOOK_RECALL_PATH,
+} = require('./shared/constants');
 // IPC Input Validation - Phase 9 Security Hardening
 // ===================================================
 // To add validation to remaining IPC handlers, follow this pattern:
@@ -61,6 +67,7 @@ const log = require('electron-log');
 // ===================================================
 const {
   withValidation,
+  validateIpcInput,
   // Reserved for future IPC validation rollout (Phase 9 security hardening)
   saveMeetingsDataSchema: _saveMeetingsDataSchema,
   googleAuthenticateSchema: _googleAuthenticateSchema,
@@ -69,6 +76,10 @@ const {
   obsidianExportMeetingSchema: _obsidianExportMeetingSchema,
   importFileSchema: _importFileSchema,
   importBatchSchema: _importBatchSchema,
+  // v1.2: Widget schemas
+  widgetStartRecordingSchema,
+  widgetToggleAlwaysOnTopSchema,
+  widgetMeetingInfoSchema,
 } = require('./main/validation/ipcSchemas');
 require('dotenv').config();
 
@@ -84,8 +95,6 @@ const logger = {
   main: log.scope('Main'),
   monitor: log.scope('MeetingMonitor'),
   ipc: log.scope('IPC'),
-  recording: log.scope('Recording'),
-  webhook: log.scope('Webhook'),
 };
 
 // ===================================================================
@@ -914,15 +923,19 @@ async function checkUpcomingMeetings() {
 
     // v1.2: Handle meetings starting now based on settings
     if (meetingsStartingNow.length > 0 && !isRecording) {
-      const globalAutoStartEnabled = appSettings.notifications?.autoStartRecording || appSettings.autoStartRecording;
+      const globalAutoStartEnabled =
+        appSettings.notifications?.autoStartRecording || appSettings.autoStartRecording;
       // Check both old location (notifications) and new location (top-level) for showRecordingWidget
-      const showWidget = appSettings.showRecordingWidget !== undefined
-        ? appSettings.showRecordingWidget
-        : (appSettings.notifications?.showRecordingWidget ?? true);
+      const showWidget =
+        appSettings.showRecordingWidget !== undefined
+          ? appSettings.showRecordingWidget
+          : (appSettings.notifications?.showRecordingWidget ?? true);
 
       if (meetingsStartingNow.length > 1) {
         // Multiple overlapping meetings - show widget with selection
-        logger.monitor.info(`Multiple meetings starting: ${meetingsStartingNow.map(m => m.title).join(', ')}`);
+        logger.monitor.info(
+          `Multiple meetings starting: ${meetingsStartingNow.map(m => m.title).join(', ')}`
+        );
         if (showWidget) {
           showRecordingWidget(meetingsStartingNow);
         }
@@ -934,11 +947,14 @@ async function checkUpcomingMeetings() {
 
         // v1.2: Check for per-meeting auto-start override
         const meetingOverride = meetingAutoStartOverrides.get(meeting.id);
-        const autoStartEnabled = meetingOverride !== undefined ? meetingOverride : globalAutoStartEnabled;
+        const autoStartEnabled =
+          meetingOverride !== undefined ? meetingOverride : globalAutoStartEnabled;
 
         if (autoStartEnabled) {
           // Auto-start recording
-          logger.monitor.info(`Auto-starting recording for: ${meeting.title} (override: ${meetingOverride !== undefined})`);
+          logger.monitor.info(
+            `Auto-starting recording for: ${meeting.title} (override: ${meetingOverride !== undefined})`
+          );
           await autoStartRecording(meeting);
           autoStartedMeetings.add(meeting.id);
 
@@ -1598,17 +1614,18 @@ app.whenReady().then(async () => {
   startMeetingMonitor();
 
   // Start Express server for webhook endpoint
-  expressServer = expressApp.listen(13373, async () => {
-    console.log('[Webhook Server] Listening on http://localhost:13373');
-    console.log('[Webhook Server] Endpoint: http://localhost:13373/webhook/recall');
+  // Security: explicitly bind to localhost only (not 0.0.0.0)
+  expressServer = expressApp.listen(SERVER_PORT, SERVER_HOST, async () => {
+    console.log(`[Webhook Server] Listening on http://${SERVER_HOST}:${SERVER_PORT}`);
+    console.log(`[Webhook Server] Endpoint: http://localhost:${SERVER_PORT}${WEBHOOK_RECALL_PATH}`);
 
     // Tunnel disabled - webhooks not currently used
     // To re-enable, uncomment the tunnelManager.start() call below
     console.log('[Webhook Server] Tunnel disabled - webhooks not in use');
     /*
     try {
-      const webhookUrl = await tunnelManager.start(13373);
-      global.webhookUrl = `${webhookUrl}/webhook/recall`;
+      const webhookUrl = await tunnelManager.start(SERVER_PORT);
+      global.webhookUrl = `${webhookUrl}${WEBHOOK_RECALL_PATH}`;
       console.log(`Public Webhook URL: ${global.webhookUrl}`);
     } catch (error) {
       console.log('Tunnel not available:', error.message);
@@ -6961,7 +6978,7 @@ ipcMain.handle('settings:checkForUpdates', async () => {
   if (process.env.ELECTRON_IS_DEV || !app.isPackaged) {
     return {
       success: false,
-      message: 'Auto-updates are not available in development mode'
+      message: 'Auto-updates are not available in development mode',
     };
   }
 
@@ -6974,7 +6991,7 @@ ipcMain.handle('settings:checkForUpdates', async () => {
     electronAutoUpdater.setFeedURL({ url: feedURL });
 
     // Wrap the event-based check in a Promise
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const timeout = setTimeout(() => {
         cleanup();
         resolve({ success: false, message: 'Update check timed out' });
@@ -6982,7 +6999,10 @@ ipcMain.handle('settings:checkForUpdates', async () => {
 
       const onUpdateAvailable = () => {
         cleanup();
-        resolve({ success: true, message: 'Update available! It will be downloaded automatically.' });
+        resolve({
+          success: true,
+          message: 'Update available! It will be downloaded automatically.',
+        });
       };
 
       const onUpdateNotAvailable = () => {
@@ -6990,7 +7010,7 @@ ipcMain.handle('settings:checkForUpdates', async () => {
         resolve({ success: true, message: 'You are running the latest version' });
       };
 
-      const onError = (error) => {
+      const onError = error => {
         cleanup();
         resolve({ success: false, message: error?.message || 'Update check failed' });
       };
@@ -7012,7 +7032,7 @@ ipcMain.handle('settings:checkForUpdates', async () => {
     logger.main.error('[AutoUpdater] Manual update check failed:', error);
     return {
       success: false,
-      message: error.message
+      message: error.message,
     };
   }
 });
@@ -7206,8 +7226,8 @@ ipcMain.handle('app:getStreamDeckStatus', async () => {
       data: {
         enabled: status.enabled,
         connectedClients: status.connectedClients,
-        port: 13373,
-        wsEndpoint: 'ws://localhost:13373/streamdeck',
+        port: SERVER_PORT,
+        wsEndpoint: WS_STREAMDECK_ENDPOINT,
       },
     };
   } catch (error) {
@@ -7567,20 +7587,23 @@ ipcMain.on('widget:hide', () => {
 
 // Open meeting in main app from widget
 ipcMain.on('widget:open-meeting', (_event, meetingId) => {
+  // Validate input - meetingId should be a non-empty string
+  if (typeof meetingId !== 'string' || !meetingId.trim()) {
+    logger.main.warn('[Widget] Invalid meetingId for open-meeting:', meetingId);
+    return;
+  }
   logger.main.info('[Widget] Open meeting requested:', meetingId);
   if (mainWindow && !mainWindow.isDestroyed()) {
     // Show and focus the main window
     mainWindow.show();
     mainWindow.focus();
     // Tell renderer to open the meeting note
-    if (meetingId) {
-      mainWindow.webContents.send('open-meeting-note', meetingId);
-    }
+    mainWindow.webContents.send('open-meeting-note', meetingId);
   }
 });
 
 // Request state sync from widget
-ipcMain.on('widget:request-sync', (_event) => {
+ipcMain.on('widget:request-sync', _event => {
   if (recordingWidget && !recordingWidget.isDestroyed()) {
     recordingWidget.webContents.send('widget:update', {
       type: 'sync-state',
@@ -7593,6 +7616,14 @@ ipcMain.on('widget:request-sync', (_event) => {
 
 // Start recording from widget
 ipcMain.handle('widget:start-recording', async (event, meetingId) => {
+  // Validate meetingId - can be null/undefined (for new recordings) or a valid string
+  try {
+    validateIpcInput(widgetStartRecordingSchema, meetingId);
+  } catch (validationError) {
+    logger.main.warn('[Widget] Invalid meetingId:', validationError.message);
+    return { success: false, error: validationError.message };
+  }
+
   logger.main.info('[Widget] Start recording requested for meeting:', meetingId);
 
   try {
@@ -7601,7 +7632,7 @@ ipcMain.handle('widget:start-recording', async (event, meetingId) => {
 
     // Use the existing manual recording flow
     // First, we need to create a meeting note if meetingId is a calendar event ID
-    const result = await new Promise((resolve) => {
+    const result = await new Promise(resolve => {
       // Emit to main window to create meeting and start recording
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('widget:create-and-record', {
@@ -7615,7 +7646,10 @@ ipcMain.handle('widget:start-recording', async (event, meetingId) => {
         });
 
         // Timeout after 30 seconds
-        setTimeout(() => resolve({ success: false, error: 'Timeout waiting for recording to start' }), 30000);
+        setTimeout(
+          () => resolve({ success: false, error: 'Timeout waiting for recording to start' }),
+          30000
+        );
       } else {
         resolve({ success: false, error: 'Main window not available' });
       }
@@ -7641,7 +7675,7 @@ ipcMain.handle('widget:stop-recording', async () => {
       // Tell renderer to stop recording using its existing logic
       mainWindow.webContents.send('widget:stop-recording-request');
 
-      const result = await new Promise((resolve) => {
+      const result = await new Promise(resolve => {
         ipcMain.once('widget:stop-recording-result', (e, res) => {
           resolve(res);
         });
@@ -7665,6 +7699,16 @@ ipcMain.handle('widget:stop-recording', async () => {
 
 // Show recording widget (called from main window or auto-start logic)
 ipcMain.on('widget:show', (event, meetingInfo) => {
+  // Validate meetingInfo if provided
+  if (meetingInfo !== null && meetingInfo !== undefined) {
+    try {
+      validateIpcInput(widgetMeetingInfoSchema, meetingInfo);
+    } catch (validationError) {
+      logger.main.warn('[Widget] Invalid meetingInfo, showing without context:', validationError.message);
+      showRecordingWidget(null);
+      return;
+    }
+  }
   showRecordingWidget(meetingInfo);
 });
 
@@ -7681,8 +7725,16 @@ ipcMain.handle('widget:toggle', () => {
 
 // v1.2: Toggle always-on-top setting for widget
 ipcMain.handle('widget:toggleAlwaysOnTop', (event, enabled) => {
+  // Validate input - must be a boolean
+  try {
+    validateIpcInput(widgetToggleAlwaysOnTopSchema, enabled);
+  } catch (validationError) {
+    logger.main.warn('[Widget] Invalid enabled value:', validationError.message);
+    return { success: false, error: validationError.message };
+  }
+
   if (recordingWidget && !recordingWidget.isDestroyed()) {
-    const newState = typeof enabled === 'boolean' ? enabled : !recordingWidget.isAlwaysOnTop();
+    const newState = enabled;
     recordingWidget.setAlwaysOnTop(newState);
     logger.main.info(`[Widget] Always-on-top ${newState ? 'enabled' : 'disabled'}`);
 
@@ -8958,7 +9010,9 @@ async function processParticipantJoin(evt) {
         }
         if (!meeting.participantEmails.includes(participantEmail)) {
           meeting.participantEmails.push(participantEmail);
-          console.log(`[ParticipantJoin] Added ${participantEmail} to participantEmails for routing`);
+          console.log(
+            `[ParticipantJoin] Added ${participantEmail} to participantEmails for routing`
+          );
         }
       }
 

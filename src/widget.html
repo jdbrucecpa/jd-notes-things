@@ -2,6 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
     <title>Recording Widget</title>
     <style>
       * {
@@ -444,6 +445,13 @@
       const meetingOptions = document.getElementById('meetingOptions');
       const cancelBtn = document.getElementById('cancelBtn');
 
+      // Escape HTML to prevent XSS
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
       // Format time as MM:SS or HH:MM:SS
       function formatTime(seconds) {
         const hrs = Math.floor(seconds / 3600);
@@ -559,7 +567,7 @@
           option.className = 'meeting-option';
           const startTime = new Date(meeting.startTime);
           option.innerHTML = `
-            <div class="meeting-option-title">${meeting.title}</div>
+            <div class="meeting-option-title">${escapeHtml(meeting.title || 'Untitled')}</div>
             <div class="meeting-option-time">${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
           `;
           option.addEventListener('click', () => selectMeeting(meeting));

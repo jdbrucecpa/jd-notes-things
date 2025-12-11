@@ -84,7 +84,6 @@ export function applyTheme(theme) {
   }
 }
 
-
 /**
  * Open settings and switch to a specific tab
  */
@@ -251,7 +250,9 @@ export function initializeSettingsUI() {
         window.electronAPI.appUpdateSettings({ autoStartRecording: isActive });
       }
       // Notify calendar to re-render with updated toggle visibility
-      window.dispatchEvent(new CustomEvent('autoStartSettingChanged', { detail: { enabled: isActive } }));
+      window.dispatchEvent(
+        new CustomEvent('autoStartSettingChanged', { detail: { enabled: isActive } })
+      );
     });
   }
 
@@ -1252,7 +1253,7 @@ async function loadStreamDeckSettings() {
 
       try {
         await window.electronAPI.appUpdateSettings({
-          streamDeck: { enabled }
+          streamDeck: { enabled },
         });
 
         // Show/hide additional info

@@ -14,7 +14,9 @@ export async function initializeSecurityPanel() {
   console.log('[SecuritySettings] Initializing security panel...');
 
   // Expose window functions immediately
-  console.log('[SecuritySettings] Exposing window.editAPIKey, window.testAPIKey, window.deleteAPIKey, window.saveAPIKey, window.cancelEditAPIKey');
+  console.log(
+    '[SecuritySettings] Exposing window.editAPIKey, window.testAPIKey, window.deleteAPIKey, window.saveAPIKey, window.cancelEditAPIKey'
+  );
 
   // Load API keys
   await loadAPIKeys();
@@ -64,14 +66,14 @@ async function loadAPIKeys() {
     const keys = result.data;
 
     // Check if migration is needed (any keys in .env but not in credential manager)
-    const needsMigration = keys.some((key) => !key.hasValue);
+    const needsMigration = keys.some(key => !key.hasValue);
     showMigrationNotice(needsMigration);
 
     console.log('[SecuritySettings] Rendering', keys.length, 'API keys');
 
     // Render keys table
     const htmlContent = keys
-      .map((key) => {
+      .map(key => {
         const statusClass = key.hasValue ? 'stored' : 'missing';
         const statusText = key.hasValue ? 'Stored' : 'Not Set';
 
@@ -109,8 +111,14 @@ async function loadAPIKeys() {
 
     tableBody.innerHTML = htmlContent;
 
-    console.log('[SecuritySettings] Table HTML set. First row sample:', htmlContent.substring(0, 300));
-    console.log('[SecuritySettings] Number of buttons in DOM:', document.querySelectorAll('.api-key-action-btn').length);
+    console.log(
+      '[SecuritySettings] Table HTML set. First row sample:',
+      htmlContent.substring(0, 300)
+    );
+    console.log(
+      '[SecuritySettings] Number of buttons in DOM:',
+      document.querySelectorAll('.api-key-action-btn').length
+    );
   } catch (error) {
     console.error('[SecuritySettings] Failed to load API keys:', error);
     tableBody.innerHTML = `

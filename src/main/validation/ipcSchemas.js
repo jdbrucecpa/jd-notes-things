@@ -171,6 +171,41 @@ const importBatchSchema = z.object({
   templateIds: z.array(templateIdSchema).optional(),
 });
 
+// ===================================================
+// v1.2: Widget IPC Schemas
+// ===================================================
+
+// widget:start-recording - meetingId is optional (can record without a meeting selected)
+const widgetStartRecordingSchema = z
+  .string()
+  .min(1, 'Meeting ID cannot be empty')
+  .nullable()
+  .optional();
+
+// widget:toggleAlwaysOnTop
+const widgetToggleAlwaysOnTopSchema = z.boolean();
+
+// widget:show - meetingInfo for showing widget with meeting context
+const widgetMeetingInfoSchema = z
+  .object({
+    id: z.string().optional(),
+    title: z.string().max(500).optional(),
+    startTime: z.union([z.string(), z.number(), z.date()]).optional(),
+    endTime: z.union([z.string(), z.number(), z.date()]).optional(),
+    platform: z.string().optional(),
+    meetingLink: z.string().url().optional().nullable(),
+    participants: z
+      .array(
+        z.object({
+          name: z.string().optional(),
+          email: z.string().optional(),
+        })
+      )
+      .optional(),
+  })
+  .nullable()
+  .optional();
+
 /**
  * Validation helper function
  * @param {z.ZodSchema} schema - Zod schema to validate against
@@ -228,6 +263,10 @@ module.exports = {
   recordingStartManualSchema,
   importFileSchema,
   importBatchSchema,
+  // v1.2: Widget schemas
+  widgetStartRecordingSchema,
+  widgetToggleAlwaysOnTopSchema,
+  widgetMeetingInfoSchema,
 
   // Helpers
   validateIpcInput,

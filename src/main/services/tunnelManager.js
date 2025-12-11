@@ -1,12 +1,13 @@
 const localtunnel = require('localtunnel');
 require('dotenv').config();
+const { SERVER_PORT } = require('../../shared/constants');
 
 class TunnelManager {
   constructor() {
     this.tunnel = null;
     this.url = null;
     this.connected = false;
-    this.port = 13373;
+    this.port = SERVER_PORT;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 5000; // 5 seconds
@@ -20,7 +21,7 @@ class TunnelManager {
    * @param {number} port - Local port to expose
    * @returns {Promise<string>} Public URL
    */
-  async start(port = 13373) {
+  async start(port = SERVER_PORT) {
     this.port = port;
     return this._createTunnel();
   }
@@ -39,7 +40,7 @@ class TunnelManager {
 
       const options = {
         port: this.port,
-        local_host: '127.0.0.1'  // Explicitly use IPv4 localhost
+        local_host: '127.0.0.1', // Explicitly use IPv4 localhost
       };
       if (subdomain) {
         options.subdomain = subdomain;
@@ -124,7 +125,9 @@ class TunnelManager {
     }
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error(`[Tunnel] Max reconnect attempts (${this.maxReconnectAttempts}) reached. Giving up.`);
+      console.error(
+        `[Tunnel] Max reconnect attempts (${this.maxReconnectAttempts}) reached. Giving up.`
+      );
       return;
     }
 
@@ -132,7 +135,9 @@ class TunnelManager {
     this.reconnectAttempts++;
 
     const delay = this.reconnectDelay * this.reconnectAttempts; // Exponential backoff
-    console.log(`[Tunnel] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay / 1000}s...`);
+    console.log(
+      `[Tunnel] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay / 1000}s...`
+    );
 
     setTimeout(async () => {
       this.isReconnecting = false;

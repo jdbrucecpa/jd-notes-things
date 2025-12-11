@@ -19,6 +19,12 @@ import {
 import { initAppSettingsUI } from './renderer/appSettings.js';
 import { initContactsPage, openContactsView } from './renderer/contacts.js';
 import { initQuickSearch } from './renderer/quickSearch.js';
+import {
+  notifySuccess,
+  notifyError,
+  notifyInfo,
+  notifyWarning,
+} from './renderer/utils/notificationHelper.js';
 
 // Import platform logo images
 import zoomLogo from './assets/zoom.png';
@@ -58,7 +64,7 @@ function initializeTitleBar() {
   let activeSubmenu = null;
 
   if (titlebarMenuBtn && titlebarDropdown) {
-    titlebarMenuBtn.addEventListener('click', (e) => {
+    titlebarMenuBtn.addEventListener('click', e => {
       e.stopPropagation();
       titlebarDropdown.classList.toggle('show');
       // Hide any open submenu
@@ -87,7 +93,7 @@ function initializeTitleBar() {
     });
 
     // Close menu when clicking outside
-    document.addEventListener('click', (e) => {
+    document.addEventListener('click', e => {
       if (!e.target.closest('.titlebar-left')) {
         titlebarDropdown.classList.remove('show');
         if (activeSubmenu) {
@@ -174,8 +180,9 @@ function initializeTitleBar() {
   const titlebarTitle = document.getElementById('titlebarTitle');
   if (titlebarTitle) {
     // Check if we're in dev mode by looking at the background color
-    const isDev = document.body.style.backgroundColor === 'rgb(74, 26, 26)' ||
-                  window.location.href.includes('localhost');
+    const isDev =
+      document.body.style.backgroundColor === 'rgb(74, 26, 26)' ||
+      window.location.href.includes('localhost');
     if (isDev) {
       titlebarTitle.textContent = 'JD Notes Things Dev';
     }
@@ -810,7 +817,8 @@ window.clearSearch = function () {
   searchState.filters.notSynced = false;
 
   // Clear search input (support both old and new selectors)
-  const searchInput = document.querySelector('.toolbar-search-input') || document.querySelector('.search-input');
+  const searchInput =
+    document.querySelector('.toolbar-search-input') || document.querySelector('.search-input');
   if (searchInput) {
     searchInput.value = '';
   }
@@ -865,7 +873,7 @@ async function syncAllUnsyncedMeetings() {
   );
 
   if (unsyncedMeetings.length === 0) {
-    showToast('No meetings to sync', 'info');
+    notifyInfo('No meetings to sync');
     return;
   }
 
@@ -911,17 +919,15 @@ async function syncAllUnsyncedMeetings() {
 
   // Show summary
   if (failCount === 0) {
-    showToast(
-      `Successfully synced ${successCount} meeting${successCount !== 1 ? 's' : ''} to Obsidian!`,
-      'success'
+    notifySuccess(
+      `Successfully synced ${successCount} meeting${successCount !== 1 ? 's' : ''} to Obsidian!`
     );
   } else if (successCount > 0) {
-    showToast(
-      `Synced ${successCount} of ${unsyncedMeetings.length} meetings (${failCount} failed)`,
-      'warning'
+    notifyWarning(
+      `Synced ${successCount} of ${unsyncedMeetings.length} meetings (${failCount} failed)`
     );
   } else {
-    showToast(`Failed to sync all ${failCount} meetings`, 'error');
+    notifyError(`Failed to sync all ${failCount} meetings`);
   }
 
   // Re-render to update UI
@@ -1146,16 +1152,21 @@ function createCalendarMeetingCard(meeting) {
   // Format the meeting date and time
   const startTime = new Date(meeting.startTime);
   const endTime = new Date(meeting.endTime);
-  const dateString = startTime.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+  const dateString = startTime.toLocaleDateString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
   const timeString = `${startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
   // Build participants list for expanded view
-  const participantsList = meeting.participants && meeting.participants.length > 0
-    ? meeting.participants.map(p => escapeHtml(p.name || p.email || 'Unknown')).join(', ')
-    : 'No participants';
+  const participantsList =
+    meeting.participants && meeting.participants.length > 0
+      ? meeting.participants.map(p => escapeHtml(p.name || p.email || 'Unknown')).join(', ')
+      : 'No participants';
 
   // v1.2: Parse description - strip HTML and extract key fields
-  let rawDescription = meeting.description || '';
+  const rawDescription = meeting.description || '';
   let meetingPurpose = '';
   let contactPhone = '';
   let cleanDescription = '';
@@ -1169,7 +1180,9 @@ function createCalendarMeetingCard(meeting) {
 
     // Extract "What is the purpose of this meeting?:" answer
     // Look for text after the question until we hit another question or field label
-    const purposeMatch = cleanDescription.match(/What is the purpose of this meeting\?:?\s*(.+?)(?=\s*(?:Best Number to Reach You|What is your|How did you|$))/i);
+    const purposeMatch = cleanDescription.match(
+      /What is the purpose of this meeting\?:?\s*(.+?)(?=\s*(?:Best Number to Reach You|What is your|How did you|$))/i
+    );
     if (purposeMatch) {
       meetingPurpose = purposeMatch[1].trim();
       // Remove trailing punctuation if it looks like part of another question
@@ -1178,7 +1191,9 @@ function createCalendarMeetingCard(meeting) {
 
     // Extract "Best Number to Reach You:" answer - just the phone number
     // Handle formats like "Best Number to Reach You?: 1-240-515-0642"
-    const phoneMatch = cleanDescription.match(/Best Number to Reach You[?:]?\s*[?:]?\s*([\d\s\-\(\)\+]+)/i);
+    const phoneMatch = cleanDescription.match(
+      /Best Number to Reach You[?:]?\s*[?:]?\s*([\d\s()+.-]+)/i
+    );
     if (phoneMatch) {
       contactPhone = phoneMatch[1].trim();
     }
@@ -1225,34 +1240,50 @@ function createCalendarMeetingCard(meeting) {
       </div>
     </div>
     <div class="meeting-card-expanded hidden">
-      ${meetingPurpose ? `
+      ${
+        meetingPurpose
+          ? `
       <div class="expanded-section meeting-purpose">
         <div class="expanded-label">Meeting Purpose</div>
         <div class="expanded-value">${escapeHtml(meetingPurpose)}</div>
       </div>
-      ` : ''}
-      ${contactPhone ? `
+      `
+          : ''
+      }
+      ${
+        contactPhone
+          ? `
       <div class="expanded-section contact-phone">
         <div class="expanded-label">Contact Phone</div>
         <div class="expanded-value">${escapeHtml(contactPhone)}</div>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
       <div class="expanded-section">
         <div class="expanded-label">Participants</div>
         <div class="expanded-value">${escapeHtml(participantsList)}</div>
       </div>
-      ${cleanDescription ? `
+      ${
+        cleanDescription
+          ? `
       <div class="expanded-section">
         <div class="expanded-label">Description</div>
         <div class="expanded-value">${escapeHtml(cleanDescription)}</div>
       </div>
-      ` : ''}
-      ${meeting.meetingLink ? `
+      `
+          : ''
+      }
+      ${
+        meeting.meetingLink
+          ? `
       <div class="expanded-section">
         <div class="expanded-label">Meeting Link</div>
         <div class="expanded-value"><a href="#" class="meeting-link-copy" data-link="${escapeHtml(meeting.meetingLink)}">${escapeHtml(meeting.meetingLink)}</a></div>
       </div>
-      ` : ''}
+      `
+          : ''
+      }
     </div>
   `);
 
@@ -1365,16 +1396,15 @@ function createCalendarMeetingCard(meeting) {
         const calendarMeeting = calendarMeetings.find(m => m.id === meetingId);
         if (calendarMeeting) {
           await createNewMeeting(calendarMeeting);
-          showToast('Meeting note created', 'success');
+          notifySuccess('Meeting note created');
         } else {
           console.error('[Record Btn] Calendar meeting not found! meetingId:', meetingId);
-          showToast('Meeting not found', 'error');
+          notifyError('Meeting not found');
           startRecordingBtn.disabled = false;
           startRecordingBtn.innerHTML = originalContent;
         }
       } catch (error) {
-        console.error('Error creating meeting note:', error);
-        showToast('Failed: ' + error.message, 'error');
+        notifyError(error, { prefix: 'Failed:', context: 'RecordBtn' });
         startRecordingBtn.disabled = false;
         startRecordingBtn.innerHTML = originalContent;
       }
@@ -1420,11 +1450,14 @@ function createCalendarMeetingCard(meeting) {
       e.stopPropagation();
       const link = meetingLinkCopy.dataset.link;
       if (link) {
-        navigator.clipboard.writeText(link).then(() => {
-          showToast('Meeting link copied to clipboard', 'success');
-        }).catch(() => {
-          showToast('Failed to copy link', 'error');
-        });
+        navigator.clipboard
+          .writeText(link)
+          .then(() => {
+            notifySuccess('Meeting link copied to clipboard');
+          })
+          .catch(() => {
+            notifyError('Failed to copy link');
+          });
       }
     });
   }
@@ -1952,7 +1985,10 @@ function setupObsidianLinkAutoSave() {
 
 // Function to create a new meeting
 async function createNewMeeting(calendarMeeting = null) {
-  console.log('Creating new note...', calendarMeeting ? `from calendar: ${calendarMeeting.title}` : '');
+  console.log(
+    'Creating new note...',
+    calendarMeeting ? `from calendar: ${calendarMeeting.title}` : ''
+  );
 
   // Save any existing note before creating a new one
   if (currentEditingMeetingId) {
@@ -1974,9 +2010,8 @@ async function createNewMeeting(calendarMeeting = null) {
   const participants = calendarMeeting ? calendarMeeting.participants : [];
 
   // Format participants for the template
-  const participantsText = participants.length > 0
-    ? participants.map(p => `• ${p.name || p.email}`).join('\n')
-    : '• ';
+  const participantsText =
+    participants.length > 0 ? participants.map(p => `• ${p.name || p.email}`).join('\n') : '• ';
 
   // Generate the template for the content
   const template = `# Meeting Title\n• ${title}\n\n# Meeting Date and Time\n• ${now.toLocaleString()}\n\n# Participants\n${participantsText}\n\n# Description\n• \n\nChat with meeting transcript: `;
@@ -2135,7 +2170,11 @@ function filterMeetings(meetings) {
           });
         }
         // Also check meeting.participantEmails array
-        if (!hasMatchingCompany && meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+        if (
+          !hasMatchingCompany &&
+          meeting.participantEmails &&
+          Array.isArray(meeting.participantEmails)
+        ) {
           hasMatchingCompany = meeting.participantEmails.some(email => {
             if (email) {
               const contact = googleContactsCache.get(email.toLowerCase());
@@ -2155,13 +2194,13 @@ function filterMeetings(meetings) {
     if (filters.contact) {
       let hasContact = false;
       if (meeting.participants && Array.isArray(meeting.participants)) {
-        hasContact = meeting.participants.some(p =>
-          p.email?.toLowerCase() === filters.contact.toLowerCase()
+        hasContact = meeting.participants.some(
+          p => p.email?.toLowerCase() === filters.contact.toLowerCase()
         );
       }
       if (!hasContact && meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
-        hasContact = meeting.participantEmails.some(email =>
-          email?.toLowerCase() === filters.contact.toLowerCase()
+        hasContact = meeting.participantEmails.some(
+          email => email?.toLowerCase() === filters.contact.toLowerCase()
         );
       }
       if (!hasContact) {
@@ -2791,9 +2830,12 @@ function openManageViewsModal() {
 
   // Build the list of views
   if (savedViews.views.length === 0) {
-    listContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No saved views yet.</p>';
+    listContainer.innerHTML =
+      '<p style="color: var(--text-secondary); text-align: center;">No saved views yet.</p>';
   } else {
-    listContainer.innerHTML = savedViews.views.map(view => `
+    listContainer.innerHTML = savedViews.views
+      .map(
+        view => `
       <div class="manage-view-item" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px; background: var(--bg-secondary);">
         <div>
           <div style="font-weight: 500; color: var(--text-primary);">${escapeHtml(view.name)}</div>
@@ -2809,7 +2851,9 @@ function openManageViewsModal() {
           <button class="delete-view-btn" data-view-id="${escapeHtml(view.id)}" style="padding: 6px 12px; border: 1px solid #ef4444; border-radius: 4px; background: transparent; color: #ef4444; cursor: pointer;">Delete</button>
         </div>
       </div>
-    `).join('');
+    `
+      )
+      .join('');
 
     // Attach event listeners
     listContainer.querySelectorAll('.edit-view-btn').forEach(btn => {
@@ -2939,7 +2983,12 @@ function updateMeetingButtonPlatform(platform) {
   console.log('[Toolbar] meetingBtn found:', !!meetingBtn);
 
   if (!iconContainer || !meetingBtn) {
-    console.warn('[Toolbar] Missing elements - iconContainer:', !!iconContainer, 'meetingBtn:', !!meetingBtn);
+    console.warn(
+      '[Toolbar] Missing elements - iconContainer:',
+      !!iconContainer,
+      'meetingBtn:',
+      !!meetingBtn
+    );
     return;
   }
 
@@ -3272,7 +3321,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Update the Meeting button with platform-specific icon
     updateMeetingButtonPlatform(data.detected ? data.platform : null);
-    console.log('[Toolbar] Updated meeting button, detected:', data.detected, 'platform:', data.platform);
+    console.log(
+      '[Toolbar] Updated meeting button, detected:',
+      data.detected,
+      'platform:',
+      data.platform
+    );
   });
 
   // SDK initialization state - disable record button until SDK is ready
@@ -3730,7 +3784,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Search input handler - debounced for performance
   // Support both old (.search-input) and new (.toolbar-search-input) selectors
-  const searchInput = document.querySelector('.toolbar-search-input') || document.querySelector('.search-input');
+  const searchInput =
+    document.querySelector('.toolbar-search-input') || document.querySelector('.search-input');
   const debouncedSearch = debounce(query => {
     console.log('Search query:', query);
     searchState.query = query.trim();
@@ -3758,7 +3813,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (filterToggleBtn && filterDropdown) {
     // Toggle dropdown on button click
-    filterToggleBtn.addEventListener('click', (e) => {
+    filterToggleBtn.addEventListener('click', e => {
       e.stopPropagation();
       filterDropdown.classList.toggle('show');
 
@@ -3769,7 +3824,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
+    document.addEventListener('click', e => {
       if (!e.target.closest('.filter-dropdown-container')) {
         filterDropdown.classList.remove('show');
       }
@@ -4157,7 +4212,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     console.log('[EventListeners] Click listener added successfully to backButton');
   } else {
-    console.log('[EventListeners] backButton element not found - this may be expected if toolbar was redesigned');
+    console.log(
+      '[EventListeners] backButton element not found - this may be expected if toolbar was redesigned'
+    );
   }
 
   // Google button event listener (unified Calendar + Contacts)

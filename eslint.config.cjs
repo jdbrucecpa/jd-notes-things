@@ -13,6 +13,8 @@ module.exports = [
       'out/**',
       'dist/**',
       'vault/**',
+      // Stream Deck plugin bundled output (generated from TypeScript)
+      'streamdeck-plugin/com.jdnotes.recording.sdPlugin/bin/**',
     ],
   },
   // Base recommended rules

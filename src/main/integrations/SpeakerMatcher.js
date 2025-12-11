@@ -230,15 +230,19 @@ class SpeakerMatcher {
 
     // If we have multiple matches, try to disambiguate using company
     if (matches.length > 1) {
-      console.log(`[SpeakerMatcher] Found ${matches.length} contacts matching "${participantName}", attempting disambiguation`);
+      console.log(
+        `[SpeakerMatcher] Found ${matches.length} contacts matching "${participantName}", attempting disambiguation`
+      );
 
       // Try explicit company hint first
       if (companyHint) {
-        const companyMatch = matches.find(m =>
-          m.contact.organization?.toLowerCase() === companyHint.toLowerCase()
+        const companyMatch = matches.find(
+          m => m.contact.organization?.toLowerCase() === companyHint.toLowerCase()
         );
         if (companyMatch) {
-          console.log(`[SpeakerMatcher] Disambiguated using company hint "${companyHint}" -> ${companyMatch.email}`);
+          console.log(
+            `[SpeakerMatcher] Disambiguated using company hint "${companyHint}" -> ${companyMatch.email}`
+          );
           return companyMatch.email;
         }
       }
@@ -254,7 +258,13 @@ class SpeakerMatcher {
           }
           // Also try to infer company from email domain
           const domain = otherEmail.split('@')[1]?.toLowerCase();
-          if (domain && !domain.includes('gmail') && !domain.includes('yahoo') && !domain.includes('hotmail') && !domain.includes('outlook')) {
+          if (
+            domain &&
+            !domain.includes('gmail') &&
+            !domain.includes('yahoo') &&
+            !domain.includes('hotmail') &&
+            !domain.includes('outlook')
+          ) {
             otherCompanies.add(domain);
           }
         }
@@ -265,9 +275,13 @@ class SpeakerMatcher {
             const matchCompany = match.contact.organization?.toLowerCase();
             const matchDomain = match.email.split('@')[1]?.toLowerCase();
 
-            if ((matchCompany && otherCompanies.has(matchCompany)) ||
-                (matchDomain && otherCompanies.has(matchDomain))) {
-              console.log(`[SpeakerMatcher] Disambiguated using other participant company context -> ${match.email}`);
+            if (
+              (matchCompany && otherCompanies.has(matchCompany)) ||
+              (matchDomain && otherCompanies.has(matchDomain))
+            ) {
+              console.log(
+                `[SpeakerMatcher] Disambiguated using other participant company context -> ${match.email}`
+              );
               return match.email;
             }
           }

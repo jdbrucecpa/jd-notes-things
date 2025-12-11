@@ -214,7 +214,7 @@ async function refreshLogs(textFilter = null) {
     const logPath = document.getElementById('logPath');
 
     // Use provided textFilter or get from input
-    let textFilterValue = textFilter !== null ? textFilter : (logTextFilterInput?.value || '');
+    let textFilterValue = textFilter !== null ? textFilter : logTextFilterInput?.value || '';
 
     // Handle "datasync" as a special level filter (it's actually a text filter)
     const isDatasyncLevel = logLevelFilter === 'datasync';
@@ -251,8 +251,7 @@ async function refreshLogs(textFilter = null) {
 
       if (logs.length === 0) {
         const filterMsg = textFilterValue ? ` matching "${textFilterValue}"` : '';
-        logViewerContent.innerHTML =
-          `<div style="color: #666; text-align: center; padding: 40px;">No logs found${filterMsg}</div>`;
+        logViewerContent.innerHTML = `<div style="color: #666; text-align: center; padding: 40px;">No logs found${filterMsg}</div>`;
       } else {
         // Render logs with text highlighting if filter is active
         const logsHTML = logs
@@ -270,7 +269,10 @@ async function refreshLogs(textFilter = null) {
             // Highlight the filter text if present
             if (textFilterValue) {
               const regex = new RegExp(`(${escapeRegExp(textFilterValue)})`, 'gi');
-              displayLine = displayLine.replace(regex, '<mark style="background: #ffd700; color: #000;">$1</mark>');
+              displayLine = displayLine.replace(
+                regex,
+                '<mark style="background: #ffd700; color: #000;">$1</mark>'
+              );
             }
 
             return `<div class="${className}">${displayLine}</div>`;
