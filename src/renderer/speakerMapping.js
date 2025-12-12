@@ -48,10 +48,14 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
   const extractStart = performance.now();
   const result = await window.electronAPI.speakerMappingExtractIds(transcript);
   const speakerIds = result.success ? result.speakerIds : [];
+  const existingMappings = result.success ? result.existingMappings || {} : {};
   const profileSuggestions = result.success ? result.profileSuggestions || {} : {};
   console.log(
     `[SpeakerMapping] Extract IDs took ${(performance.now() - extractStart).toFixed(0)}ms, found ${speakerIds.length} IDs`
   );
+  if (Object.keys(existingMappings).length > 0) {
+    console.log(`[SpeakerMapping] Existing transcript mappings:`, existingMappings);
+  }
   if (Object.keys(profileSuggestions).length > 0) {
     console.log(`[SpeakerMapping] Profile suggestions:`, profileSuggestions);
   }
@@ -107,18 +111,42 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
     const suggestStart = performance.now();
     const suggestionsResult =
       await window.electronAPI.speakerMappingGetSuggestions(filteredSpeakerIds);
-    const storedSuggestions = suggestionsResult.success ? suggestionsResult.suggestions : {};
+    let storedSuggestions = suggestionsResult.success ? suggestionsResult.suggestions : {};
     console.log(
       `[SpeakerMapping] Get suggestions took ${(performance.now() - suggestStart).toFixed(0)}ms`
     );
 
-    // Merge profile suggestions with stored suggestions (profile takes precedence for single speaker)
+    // Filter out stored mappings for generic speaker IDs like "Speaker A", "Speaker B", etc.
+    // These are not consistent across transcripts and shouldn't be reused
+    const genericSpeakerPattern = /^speaker\s*[a-z0-9]$/i;
+    storedSuggestions = Object.fromEntries(
+      Object.entries(storedSuggestions).filter(([speakerId]) => {
+        const isGeneric = genericSpeakerPattern.test(speakerId);
+        if (isGeneric) {
+          console.log(`[SpeakerMapping] Ignoring stored mapping for generic speaker: ${speakerId}`);
+        }
+        return !isGeneric;
+      })
+    );
+
+    // Build suggestions with priority: existingMappings > profileSuggestions > storedSuggestions
     const suggestions = { ...storedSuggestions };
+
+    // Add profile suggestions (higher priority than stored)
     for (const [speakerId, profileSuggestion] of Object.entries(profileSuggestions)) {
-      // Profile suggestion (single speaker = user) takes precedence
       suggestions[speakerId] = {
         ...profileSuggestion,
         isProfileSuggestion: true,
+      };
+    }
+
+    // Add existing transcript mappings (highest priority - what's currently displayed)
+    for (const [speakerId, speakerName] of Object.entries(existingMappings)) {
+      suggestions[speakerId] = {
+        contactName: speakerName,
+        contactEmail: null,
+        obsidianLink: `[[${speakerName}]]`,
+        isExistingMapping: true,
       };
     }
 

@@ -4837,7 +4837,8 @@ ipcMain.handle(
   'speakerMapping:extractSpeakerIds',
   withValidation(speakerMappingExtractSchema, async (event, { transcript }) => {
     try {
-      const speakerIds = speakerMappingService.extractUniqueSpeakerIds(transcript);
+      const result = speakerMappingService.extractUniqueSpeakerIds(transcript);
+      const { speakerIds, existingMappings } = result;
 
       // v1.1: Get auto-suggestions from user profile (single speaker = user)
       const profileSuggestions = speakerMappingService.getAutoSuggestionsFromProfile(
@@ -4848,7 +4849,8 @@ ipcMain.handle(
       return {
         success: true,
         speakerIds,
-        profileSuggestions, // New: suggestions based on user profile
+        existingMappings, // New: mappings already in the transcript (speaker → speakerName)
+        profileSuggestions, // Suggestions based on user profile
       };
     } catch (error) {
       console.error('[SpeakerMapping IPC] Failed to extract speaker IDs:', error);
@@ -5066,8 +5068,15 @@ ipcMain.handle(
     await fileOperationManager.writeData(data);
 
     // Persist each mapping to the service for future auto-suggest
+    // But skip generic speaker IDs like "Speaker A", "Speaker B" which are not consistent across transcripts
     if (mappings) {
+      const genericSpeakerPattern = /^speaker\s*[a-z0-9]$/i;
       for (const [speakerId, mapping] of Object.entries(mappings)) {
+        // Skip saving mappings for generic speaker IDs
+        if (genericSpeakerPattern.test(speakerId)) {
+          console.log(`[SpeakerMapping IPC] Not persisting mapping for generic speaker: ${speakerId}`);
+          continue;
+        }
         await speakerMappingService.addMapping(
           speakerId,
           {

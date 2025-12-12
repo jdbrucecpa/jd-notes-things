@@ -193,22 +193,39 @@ class SpeakerMappingService {
    * Extract unique speaker IDs from a transcript
    * Returns ALL unique speakers so user can remap any speaker to a contact
    * Filters out header content like "summary", "introduction", etc.
+   * Also returns existing speaker mappings from the transcript data
    * @param {Array} transcript - Transcript utterances
-   * @returns {string[]} Array of unique speaker IDs
+   * @returns {Object} { speakerIds: string[], existingMappings: {speakerId: speakerName} }
    */
   extractUniqueSpeakerIds(transcript) {
-    if (!Array.isArray(transcript)) return [];
+    if (!Array.isArray(transcript)) return { speakerIds: [], existingMappings: {} };
 
     const speakers = new Set();
+    const existingMappings = {}; // Map of speaker (original) → speakerName (current display)
+
     for (const utterance of transcript) {
-      const speaker = utterance.speaker || utterance.speakerName;
-      if (speaker && !this.isHeaderContent(speaker)) {
-        speakers.add(speaker);
+      // Use the original speaker ID (what was assigned by transcription service)
+      const speakerId = utterance.speaker;
+      const speakerName = utterance.speakerName;
+
+      if (speakerId && !this.isHeaderContent(speakerId)) {
+        speakers.add(speakerId);
+
+        // If there's a different speakerName, record the existing mapping
+        if (speakerName && speakerName !== speakerId) {
+          existingMappings[speakerId] = speakerName;
+        }
+      } else if (speakerName && !this.isHeaderContent(speakerName)) {
+        // Fall back to speakerName if no speaker field
+        speakers.add(speakerName);
       }
     }
 
     // Return all unique speakers - user should be able to remap any speaker to a contact
-    return Array.from(speakers).sort();
+    return {
+      speakerIds: Array.from(speakers).sort(),
+      existingMappings,
+    };
   }
 
   /**
@@ -433,10 +450,10 @@ class SpeakerMappingService {
     }
 
     // Get unique speakers
-    const speakers = this.extractUniqueSpeakerIds(transcript);
+    const { speakerIds } = this.extractUniqueSpeakerIds(transcript);
 
     // Get suggestions (will only suggest if single speaker)
-    const suggestions = this.getAutoSuggestionsFromProfile(speakers, userProfile);
+    const suggestions = this.getAutoSuggestionsFromProfile(speakerIds, userProfile);
 
     // If no suggestions, return unchanged
     if (Object.keys(suggestions).length === 0) {

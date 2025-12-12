@@ -2845,6 +2845,11 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   font-size: 12px;
 }
 
+.btn-xs {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
 .btn-danger {
   background: var(--color-error);
   color: #fff;
@@ -5342,6 +5347,75 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   color: var(--text-secondary);
 }
 
+/* Meeting Info Edit Mode */
+.meeting-info-edit-mode {
+  padding: 4px 0;
+}
+
+.meeting-info-edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.meeting-info-edit-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.meeting-info-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.meeting-info-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.meeting-info-edit-fields .edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.meeting-info-edit-fields .edit-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.meeting-info-edit-fields .edit-field input,
+.meeting-info-edit-fields .edit-field select {
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.meeting-info-edit-fields .edit-field input:focus,
+.meeting-info-edit-fields .edit-field select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(var(--primary-color-rgb), 0.1);
+}
+
+.vault-path-edit-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.vault-path-edit-row input {
+  flex: 1;
+}
+
 /* Participants Card */
 .meeting-participants-card {
   background: var(--card-bg);
@@ -5349,6 +5423,26 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   border-radius: 12px;
   padding: 20px 24px;
   margin-bottom: 20px;
+}
+
+.meeting-participants-card .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.meeting-participants-card .card-header .card-title {
+  margin: 0;
+}
+
+.meeting-participants-card .card-header .icon-btn {
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.meeting-participants-card .card-header .icon-btn:hover {
+  opacity: 1;
 }
 
 .card-title {
@@ -5415,6 +5509,175 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   font-size: 11px;
   color: var(--text-tertiary, #888);
   font-style: italic;
+}
+
+/* Participant name link and checkmark */
+.participant-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.participant-name-link {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-decoration-color: var(--text-secondary);
+  text-underline-offset: 2px;
+}
+
+.participant-name-link:hover {
+  text-decoration-color: var(--text-primary);
+}
+
+.linked-check {
+  color: var(--color-success, #4CAF50);
+  flex-shrink: 0;
+}
+
+/* Participant edit input */
+.participant-edit-input {
+  padding: 4px 8px;
+  border: 1px solid var(--primary-color);
+  border-radius: 4px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  width: 100%;
+}
+
+.participant-edit-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+}
+
+/* Change button - styled like toolbar buttons */
+.participant-actions .change-btn {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.participant-actions .change-btn:hover {
+  background: var(--bg-secondary);
+  border-color: var(--text-secondary);
+}
+
+/* Participants edit mode */
+.participants-list.edit-mode .participant-item {
+  padding: 8px 12px;
+}
+
+.participant-item .participant-actions {
+  display: none;
+  gap: 4px;
+}
+
+.participants-list.edit-mode .participant-item .participant-actions {
+  display: flex;
+}
+
+.participant-item .participant-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  opacity: 0.6;
+}
+
+.participant-item .participant-actions .icon-btn:hover {
+  opacity: 1;
+  background: var(--bg-secondary);
+}
+
+.participant-item .participant-actions .icon-btn.remove-btn:hover {
+  color: var(--color-error);
+}
+
+/* Add participant button in edit mode */
+.add-participant-row {
+  display: none;
+  padding: 12px;
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  justify-content: center;
+}
+
+.participants-list.edit-mode .add-participant-row {
+  display: flex;
+}
+
+.add-participant-row .btn {
+  padding: 6px 16px;
+}
+
+/* Participant contact search dropdown */
+.participant-contact-search {
+  position: relative;
+  flex: 1;
+}
+
+.participant-contact-input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.participant-contact-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.participant-contact-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  max-height: 200px;
+  overflow-y: auto;
+  display: none;
+}
+
+.participant-contact-dropdown.show {
+  display: block;
+}
+
+.participant-contact-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.participant-contact-option:hover {
+  background: var(--bg-secondary);
+}
+
+.participant-contact-option .option-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.participant-contact-option .option-email {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* Tabbed Content */

@@ -57,7 +57,24 @@ function initializeTitleBar() {
 
   if (closeBtn) {
     closeBtn.addEventListener('click', async () => {
-      // Check if a recording is in progress
+      // Check if minimize-to-tray is enabled
+      let minimizeToTray = false;
+      try {
+        const settingsResult = await window.electronAPI.appGetSettings();
+        if (settingsResult.success) {
+          minimizeToTray = settingsResult.data?.notifications?.minimizeToTray ?? false;
+        }
+      } catch (err) {
+        console.error('Error getting settings:', err);
+      }
+
+      // If minimize-to-tray is enabled, just let main process handle it (hides window, doesn't stop recording)
+      if (minimizeToTray) {
+        window.electronAPI.windowClose();
+        return;
+      }
+
+      // Check if a recording is in progress (only when actually closing)
       if (window.isRecording) {
         const confirmed = confirm(
           'A recording is in progress. Do you want to stop the recording and close the app?'
@@ -127,7 +144,8 @@ function initializeTitleBar() {
       if (newNoteBtn) newNoteBtn.click();
     },
     menuImport: () => {
-      openImportModal();
+      const importBtn = document.getElementById('importBtn');
+      if (importBtn) importBtn.click();
     },
     menuSettings: () => {
       openSettingsTab('general');

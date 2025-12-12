@@ -341,55 +341,98 @@
           </div>
 
           <!-- Meeting Info Card -->
-          <div class="meeting-info-card">
-            <div class="meeting-title-row">
-              <h1 class="meeting-title" id="meetingDetailTitle">Meeting Title</h1>
-              <button class="icon-btn" id="editMeetingTitleBtn" title="Edit title">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/>
-                </svg>
-              </button>
-            </div>
+          <div class="meeting-info-card" id="meetingInfoCard">
+            <!-- View Mode -->
+            <div class="meeting-info-view-mode" id="meetingInfoViewMode">
+              <div class="meeting-title-row">
+                <h1 class="meeting-title" id="meetingDetailTitle">Meeting Title</h1>
+                <button class="icon-btn" id="editMeetingInfoBtn" title="Edit meeting info">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/>
+                  </svg>
+                </button>
+              </div>
 
-            <div class="meeting-meta-row">
-              <span class="meeting-meta-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M19 4H18V2H16V4H8V2H6V4H5C3.89 4 3.01 4.9 3.01 6L3 20C3 21.1 3.89 22 5 22H19C20.1 22 21 21.1 21 20V6C21 4.9 20.1 4 19 4ZM19 20H5V10H19V20Z" fill="currentColor"/>
-                </svg>
-                <span id="meetingDetailDateTime">Jan 15, 2025 at 3:00 PM</span>
-              </span>
-              <span class="meeting-meta-item">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor"/>
-                </svg>
-                <span id="meetingDetailParticipantCount">3 participants</span>
-              </span>
-              <!-- UI-1: Platform indicator -->
-              <span class="meeting-meta-item" id="meetingDetailPlatform">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
-                </svg>
-                <span id="meetingDetailPlatformText">Meeting</span>
-              </span>
-              <span class="meeting-meta-item" id="meetingDetailObsidianStatus">
+              <div class="meeting-meta-row">
+                <span class="meeting-meta-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 4H18V2H16V4H8V2H6V4H5C3.89 4 3.01 4.9 3.01 6L3 20C3 21.1 3.89 22 5 22H19C20.1 22 21 21.1 21 20V6C21 4.9 20.1 4 19 4ZM19 20H5V10H19V20Z" fill="currentColor"/>
+                  </svg>
+                  <span id="meetingDetailDateTime">Jan 15, 2025 at 3:00 PM</span>
+                </span>
+                <span class="meeting-meta-item">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor"/>
+                  </svg>
+                  <span id="meetingDetailParticipantCount">3 participants</span>
+                </span>
+                <span class="meeting-meta-item" id="meetingDetailPlatform">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+                  </svg>
+                  <span id="meetingDetailPlatformText">Meeting</span>
+                </span>
+                <span class="meeting-meta-item" id="meetingDetailObsidianStatus">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" fill="currentColor"/>
+                  </svg>
+                  <span id="meetingDetailObsidianStatusText">Not synced</span>
+                </span>
+              </div>
+
+              <div class="meeting-vault-path" id="meetingVaultPathDisplay">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" fill="currentColor"/>
                 </svg>
-                <span id="meetingDetailObsidianStatusText">Not synced</span>
-              </span>
+                <span id="meetingDetailVaultPath">clients/acme-corp/meetings/2025-01-15-kickoff.md</span>
+              </div>
             </div>
 
-            <div class="meeting-vault-path">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" fill="currentColor"/>
-              </svg>
-              <span id="meetingDetailVaultPath">clients/acme-corp/meetings/2025-01-15-kickoff.md</span>
+            <!-- Edit Mode -->
+            <div class="meeting-info-edit-mode" id="meetingInfoEditMode" style="display: none;">
+              <div class="meeting-info-edit-header">
+                <h3>Edit Meeting Info</h3>
+                <div class="meeting-info-edit-actions">
+                  <button class="btn btn-secondary btn-sm" id="cancelMeetingInfoEditBtn">Cancel</button>
+                  <button class="btn btn-primary btn-sm" id="saveMeetingInfoBtn">Save</button>
+                </div>
+              </div>
+              <div class="meeting-info-edit-fields">
+                <div class="edit-field">
+                  <label for="editMeetingTitle">Title</label>
+                  <input type="text" id="editMeetingTitle" placeholder="Meeting title..." />
+                </div>
+                <div class="edit-field">
+                  <label for="editMeetingPlatform">Platform</label>
+                  <select id="editMeetingPlatform">
+                    <option value="unknown">Unknown / Other</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="teams">Microsoft Teams</option>
+                    <option value="google-meet">Google Meet</option>
+                    <option value="in-person">In-Person Meeting</option>
+                  </select>
+                </div>
+                <div class="edit-field">
+                  <label for="editMeetingVaultPath">Vault Path</label>
+                  <div class="vault-path-edit-row">
+                    <input type="text" id="editMeetingVaultPath" placeholder="clients/acme-corp/meetings/..." />
+                    <button class="btn btn-danger btn-sm" id="unlinkMeetingBtn" title="Remove Obsidian sync">Unlink</button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
           <!-- Participants Card -->
           <div class="meeting-participants-card">
-            <h3 class="card-title">Participants</h3>
+            <div class="card-header">
+              <h3 class="card-title">Participants</h3>
+              <button class="icon-btn" id="editParticipantsBtn" title="Edit participants">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/>
+                </svg>
+              </button>
+            </div>
             <div class="participants-list" id="meetingDetailParticipants">
               <!-- Participants will be dynamically inserted -->
             </div>
@@ -475,39 +518,6 @@
                     <label>Recording ID</label>
                     <input type="text" id="metadataRecordingId" readonly />
                   </div>
-                  <div class="metadata-field">
-                    <label>Platform</label>
-                    <select id="metadataPlatform" class="metadata-select">
-                      <option value="unknown">Unknown / Other</option>
-                      <option value="zoom">Zoom</option>
-                      <option value="teams">Microsoft Teams</option>
-                      <option value="google-meet">Google Meet</option>
-                      <option value="in-person">In-Person Meeting</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="metadata-section">
-                  <h4>Obsidian Vault Link</h4>
-                  <div class="metadata-field">
-                    <label>Vault Path (editable)</label>
-                    <input type="text" id="metadataVaultPath" placeholder="clients/acme-corp/meetings/..." />
-                    <button class="btn-secondary" id="saveVaultPathBtn">Save Path</button>
-                    <button class="btn-secondary btn-danger" id="unlinkObsidianBtn" title="Remove Obsidian sync and mark as unsynced">Unlink</button>
-                  </div>
-                </div>
-
-                <div class="metadata-section">
-                  <h4>Participant Management</h4>
-                  <div class="participants-editor" id="participantsEditor">
-                    <!-- Editable participants list -->
-                  </div>
-                  <button class="btn-secondary" id="addParticipantBtn">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/>
-                    </svg>
-                    Add Participant
-                  </button>
                 </div>
               </div>
             </div>

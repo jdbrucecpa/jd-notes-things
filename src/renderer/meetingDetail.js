@@ -70,6 +70,10 @@ export function initializeMeetingDetail(meetingId, meeting, onBack, onUpdate) {
   currentMeeting = meeting;
   currentMeetingId = meetingId;
 
+  // Reset edit modes when viewing a new meeting
+  exitMeetingInfoEditMode();
+  participantsEditMode = false;
+
   // Store update callback for speaker editing
   window._meetingDetailUpdateCallback = onUpdate;
 
@@ -108,10 +112,34 @@ function setupEventListeners(onBack, onUpdate) {
     { buttonId: 'metadataTabBtn', contentId: 'metadataTab' },
   ]);
 
-  // Edit title button
-  const editTitleBtn = document.getElementById('editMeetingTitleBtn');
-  if (editTitleBtn) {
-    editTitleBtn.onclick = () => editMeetingTitle(onUpdate);
+  // Edit meeting info button
+  const editMeetingInfoBtn = document.getElementById('editMeetingInfoBtn');
+  if (editMeetingInfoBtn) {
+    editMeetingInfoBtn.onclick = () => enterMeetingInfoEditMode();
+  }
+
+  // Save meeting info button
+  const saveMeetingInfoBtn = document.getElementById('saveMeetingInfoBtn');
+  if (saveMeetingInfoBtn) {
+    saveMeetingInfoBtn.onclick = () => saveMeetingInfo(onUpdate);
+  }
+
+  // Cancel meeting info edit button
+  const cancelMeetingInfoEditBtn = document.getElementById('cancelMeetingInfoEditBtn');
+  if (cancelMeetingInfoEditBtn) {
+    cancelMeetingInfoEditBtn.onclick = () => exitMeetingInfoEditMode();
+  }
+
+  // Unlink meeting button (in edit mode)
+  const unlinkMeetingBtn = document.getElementById('unlinkMeetingBtn');
+  if (unlinkMeetingBtn) {
+    unlinkMeetingBtn.onclick = () => unlinkFromObsidian(onUpdate);
+  }
+
+  // Edit participants button
+  const editParticipantsBtn = document.getElementById('editParticipantsBtn');
+  if (editParticipantsBtn) {
+    editParticipantsBtn.onclick = () => toggleParticipantsEditMode();
   }
 
   // Transcript search
@@ -126,6 +154,12 @@ function setupEventListeners(onBack, onUpdate) {
     });
     // Clear search when input is cleared (real-time)
     searchInput.addEventListener('input', e => {
+      if (e.target.value === '') {
+        searchTranscript('');
+      }
+    });
+    // Also handle the 'search' event which fires when the native clear button (X) is clicked
+    searchInput.addEventListener('search', e => {
       if (e.target.value === '') {
         searchTranscript('');
       }
@@ -157,24 +191,6 @@ function setupEventListeners(onBack, onUpdate) {
   }
   if (cancelEditSummaryBtn) {
     cancelEditSummaryBtn.onclick = () => exitSummaryEditMode();
-  }
-
-  // Save vault path button
-  const saveVaultPathBtn = document.getElementById('saveVaultPathBtn');
-  if (saveVaultPathBtn) {
-    saveVaultPathBtn.onclick = () => saveVaultPath(onUpdate);
-  }
-
-  // Unlink from Obsidian button
-  const unlinkObsidianBtn = document.getElementById('unlinkObsidianBtn');
-  if (unlinkObsidianBtn) {
-    unlinkObsidianBtn.onclick = () => unlinkFromObsidian(onUpdate);
-  }
-
-  // Add participant button
-  const addParticipantBtn = document.getElementById('addParticipantBtn');
-  if (addParticipantBtn) {
-    addParticipantBtn.onclick = () => addParticipant(onUpdate);
   }
 
   // Export to Obsidian button
@@ -248,6 +264,9 @@ function populateMeetingInfo(meeting) {
   }
 }
 
+// Track participants edit mode
+let participantsEditMode = false;
+
 /**
  * Populate participants card
  */
@@ -255,24 +274,39 @@ function populateParticipants(meeting) {
   const participantsList = document.getElementById('meetingDetailParticipants');
   if (!participantsList) return;
 
+  // Preserve edit mode class if active
+  if (participantsEditMode) {
+    participantsList.classList.add('edit-mode');
+  } else {
+    participantsList.classList.remove('edit-mode');
+  }
+
   if (!meeting.participants || meeting.participants.length === 0) {
     participantsList.innerHTML = `
       <div class="placeholder-content">
         <p>No participants detected</p>
       </div>
+      <div class="add-participant-row">
+        <button class="btn btn-outline btn-sm add-participant-btn">+ Add Participant</button>
+      </div>
     `;
+    setupAddParticipantButton();
     return;
   }
 
   participantsList.innerHTML = '';
 
-  meeting.participants.forEach(participant => {
+  meeting.participants.forEach((participant, index) => {
     const participantItem = document.createElement('div');
     participantItem.className = 'participant-item';
+    participantItem.dataset.index = index;
 
     // Create initials for avatar
     const name = participant.name || participant.email || 'Unknown';
     const initials = getInitials(name);
+
+    // Determine if linked to a contact (has email or contactId)
+    const isLinked = !!(participant.email || participant.contactId);
 
     // Build sub-info line: email and/or company
     let subInfo = '';
@@ -284,16 +318,211 @@ function populateParticipants(meeting) {
       subInfo += `<div class="participant-company">${escapeHtml(company)}</div>`;
     }
 
+    // Name with optional link to contact and checkmark
+    const checkmarkIcon = '<svg class="linked-check" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+    const nameHtml = isLinked && participant.email
+      ? `<a href="#" class="participant-name-link" data-email="${escapeHtml(participant.email)}">${escapeHtml(name)}</a>${checkmarkIcon}`
+      : escapeHtml(name);
+
     participantItem.innerHTML = `
       <div class="participant-avatar">${escapeHtml(initials)}</div>
       <div class="participant-info">
-        <div class="participant-name">${escapeHtml(name)}</div>
+        <div class="participant-name">${nameHtml}</div>
         ${subInfo}
+      </div>
+      <div class="participant-actions">
+        <button class="btn btn-outline btn-xs change-btn" data-index="${index}">Change</button>
+        <button class="icon-btn remove-btn" title="Remove participant" data-index="${index}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
+          </svg>
+        </button>
       </div>
     `;
 
     participantsList.appendChild(participantItem);
   });
+
+  // Add the "Add participant" row at the end
+  const addRow = document.createElement('div');
+  addRow.className = 'add-participant-row';
+  addRow.innerHTML = '<button class="btn btn-outline btn-sm add-participant-btn">+ Add Participant</button>';
+  participantsList.appendChild(addRow);
+
+  // Set up event listeners
+  setupParticipantEventListeners();
+}
+
+/**
+ * Set up event listeners for participant actions
+ */
+function setupParticipantEventListeners() {
+  const participantsList = document.getElementById('meetingDetailParticipants');
+  if (!participantsList) return;
+
+  // Name links to contact card
+  participantsList.querySelectorAll('.participant-name-link').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      const email = link.dataset.email;
+      if (email && window.openContactsView) {
+        window.openContactsView(email);
+      }
+    });
+  });
+
+  // Remove buttons
+  participantsList.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const index = parseInt(btn.dataset.index);
+      removeParticipantFromCard(index);
+    });
+  });
+
+  // Change buttons (replace with different contact)
+  participantsList.querySelectorAll('.change-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const index = parseInt(btn.dataset.index);
+      showParticipantChangeInput(index, btn);
+    });
+  });
+
+  // Add participant button
+  setupAddParticipantButton();
+}
+
+/**
+ * Set up add participant button
+ */
+function setupAddParticipantButton() {
+  const addBtn = document.querySelector('.add-participant-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      showAddParticipantDialog();
+    });
+  }
+}
+
+/**
+ * Remove participant from card and save
+ * Note: No confirmation dialog - user is already in edit mode and clicking remove is intentional.
+ * Using confirm() causes Electron focus issues with subsequent modals.
+ */
+async function removeParticipantFromCard(index) {
+  if (!currentMeeting || !currentMeeting.participants) return;
+
+  const participant = currentMeeting.participants[index];
+  if (!participant) return;
+
+  currentMeeting.participants.splice(index, 1);
+
+  // Save to backend
+  try {
+    await window.electronAPI.updateMeetingField(currentMeetingId, 'participants', currentMeeting.participants);
+    populateParticipants(currentMeeting);
+
+    // Notify the update callback
+    if (window._meetingDetailUpdateCallback) {
+      window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
+    }
+  } catch (error) {
+    console.error('[MeetingDetail] Failed to remove participant:', error);
+    // Restore the participant
+    currentMeeting.participants.splice(index, 0, participant);
+  }
+}
+
+/**
+ * Show contact search modal to change/replace a participant
+ */
+function showParticipantChangeInput(index, buttonEl) {
+  const participant = currentMeeting?.participants?.[index];
+  if (!participant) return;
+
+  // Show contact search modal with custom title
+  showContactSearchModal(
+    async selectedContact => {
+      // Replace participant with selected contact
+      currentMeeting.participants[index] = {
+        name: selectedContact.name,
+        email: selectedContact.email || null,
+        company: selectedContact.company || selectedContact.organization || null,
+        contactId: selectedContact.contactId || null,
+      };
+
+      // Save to backend
+      try {
+        await window.electronAPI.updateMeetingField(
+          currentMeetingId,
+          'participants',
+          currentMeeting.participants
+        );
+        populateParticipants(currentMeeting);
+
+        if (window._meetingDetailUpdateCallback) {
+          window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
+        }
+      } catch (error) {
+        console.error('[MeetingDetail] Failed to change participant:', error);
+      }
+    },
+    `Replace "${participant.name}" with...`
+  );
+}
+
+/**
+ * Show contact search modal to add a new participant
+ */
+function showAddParticipantDialog() {
+  showContactSearchModal(async selectedContact => {
+    if (!currentMeeting.participants) {
+      currentMeeting.participants = [];
+    }
+
+    currentMeeting.participants.push({
+      name: selectedContact.name,
+      email: selectedContact.email || null,
+      company: selectedContact.company || selectedContact.organization || null,
+      contactId: selectedContact.contactId || null,
+    });
+
+    // Save to backend
+    try {
+      await window.electronAPI.updateMeetingField(
+        currentMeetingId,
+        'participants',
+        currentMeeting.participants
+      );
+      populateParticipants(currentMeeting);
+
+      if (window._meetingDetailUpdateCallback) {
+        window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
+      }
+    } catch (error) {
+      console.error('[MeetingDetail] Failed to add participant:', error);
+      currentMeeting.participants.pop();
+      populateParticipants(currentMeeting);
+    }
+  });
+}
+
+/**
+ * Toggle participants edit mode
+ */
+function toggleParticipantsEditMode() {
+  participantsEditMode = !participantsEditMode;
+
+  const participantsList = document.getElementById('meetingDetailParticipants');
+  const editBtn = document.getElementById('editParticipantsBtn');
+
+  if (participantsList) {
+    participantsList.classList.toggle('edit-mode', participantsEditMode);
+  }
+
+  if (editBtn) {
+    editBtn.classList.toggle('active', participantsEditMode);
+    editBtn.title = participantsEditMode ? 'Done editing' : 'Edit participants';
+  }
 }
 
 /**
@@ -412,13 +641,23 @@ async function populateTranscript(meeting) {
 
 /**
  * Format timestamp from milliseconds to HH:MM:SS or MM:SS
- * Note: AssemblyAI and Deepgram return timestamps in milliseconds
+ * Note: AssemblyAI returns timestamps in milliseconds, Deepgram in seconds
+ * We normalize to milliseconds in transcriptionService, but handle both for legacy data
  */
 function formatTimestamp(ms) {
   if (!ms && ms !== 0) return '00:00';
 
-  // Convert milliseconds to seconds
-  const totalSeconds = Math.floor(ms / 1000);
+  // Heuristic: if value is < 100000, it's likely in seconds (legacy Deepgram data)
+  // A 27+ hour meeting in ms would exceed 100000000, so this is safe
+  // Most meetings are < 27 hours, and timestamps in seconds would be < 100000 for ~27 hours
+  let totalSeconds;
+  if (ms < 100000) {
+    // Likely in seconds (legacy Deepgram format) - value represents < 27 hours in seconds
+    totalSeconds = Math.floor(ms);
+  } else {
+    // In milliseconds (AssemblyAI format and normalized Deepgram)
+    totalSeconds = Math.floor(ms / 1000);
+  }
 
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -530,177 +769,172 @@ function populateMetadata(meeting) {
     recordingIdEl.value = meeting.recordingId || 'N/A';
   }
 
-  // Platform dropdown (UI-1)
-  const platformEl = document.getElementById('metadataPlatform');
-  if (platformEl) {
-    // Normalize platform to lowercase for matching dropdown options
-    const normalizedPlatform = (meeting.platform || 'unknown').toLowerCase();
-
-    // Remove existing listener to avoid duplicates
-    const newPlatformEl = platformEl.cloneNode(true);
-    platformEl.parentNode.replaceChild(newPlatformEl, platformEl);
-
-    // Set value AFTER cloning (value property doesn't survive clone)
-    newPlatformEl.value = normalizedPlatform;
-
-    // Add change listener to save platform
-    newPlatformEl.addEventListener('change', async e => {
-      const newPlatform = e.target.value;
-      console.log(
-        `[Metadata] Platform change event fired: ${meeting.platform} -> ${newPlatform}, meetingId: ${meeting.id}`
-      );
-      meeting.platform = newPlatform;
-
-      // Update meeting via IPC
-      try {
-        console.log('[Metadata] Calling updateMeetingField IPC...');
-        const result = await window.electronAPI.updateMeetingField(
-          meeting.id,
-          'platform',
-          newPlatform
-        );
-        console.log('[Metadata] IPC result:', result);
-        if (result.success) {
-          console.log(`[Metadata] Platform updated to: ${newPlatform}`);
-
-          // Trigger UI update callback to sync local arrays
-          if (window._meetingDetailUpdateCallback) {
-            window._meetingDetailUpdateCallback(meeting.id, meeting);
-          }
-
-          // Update platform display in header
-          updatePlatformDisplay(meeting);
-        } else {
-          console.error('[Metadata] Failed to update platform:', result.error);
-          // Revert dropdown on failure
-          newPlatformEl.value = meeting.platform;
-        }
-      } catch (err) {
-        console.error('[Metadata] Failed to update platform:', err);
-      }
-    });
-  }
-
   // Created date
   const createdEl = document.getElementById('metadataCreated');
   if (createdEl) {
     const dateObj = new Date(meeting.createdAt || meeting.date);
     createdEl.value = dateObj.toLocaleString();
   }
-
-  // Vault path (editable) - check both vaultPath and obsidianLink
-  const vaultPathEl = document.getElementById('metadataVaultPath');
-  if (vaultPathEl) {
-    vaultPathEl.value = meeting.vaultPath || meeting.obsidianLink || '';
-  }
-
-  // Participants editor
-  populateParticipantsEditor(meeting);
 }
 
 /**
- * Populate participants editor in metadata tab
+ * Enter meeting info edit mode
  */
-function populateParticipantsEditor(meeting) {
-  const participantsEditor = document.getElementById('participantsEditor');
-  if (!participantsEditor) return;
+function enterMeetingInfoEditMode() {
+  const viewMode = document.getElementById('meetingInfoViewMode');
+  const editMode = document.getElementById('meetingInfoEditMode');
 
-  participantsEditor.innerHTML = '';
+  if (!viewMode || !editMode || !currentMeeting) return;
 
-  if (!meeting.participants || meeting.participants.length === 0) {
-    participantsEditor.innerHTML = `
-      <div class="placeholder-content">
-        <p>No participants to edit</p>
-      </div>
-    `;
-    return;
+  // Populate edit fields with current values
+  const titleInput = document.getElementById('editMeetingTitle');
+  const platformSelect = document.getElementById('editMeetingPlatform');
+  const vaultPathInput = document.getElementById('editMeetingVaultPath');
+
+  if (titleInput) {
+    titleInput.value = currentMeeting.title || '';
+  }
+  if (platformSelect) {
+    platformSelect.value = (currentMeeting.platform || 'unknown').toLowerCase();
+  }
+  if (vaultPathInput) {
+    vaultPathInput.value = currentMeeting.vaultPath || currentMeeting.obsidianLink || '';
   }
 
-  meeting.participants.forEach((participant, index) => {
-    const row = document.createElement('div');
-    row.className = 'participant-editor-row';
+  // Show/hide unlink button based on sync status
+  const unlinkBtn = document.getElementById('unlinkMeetingBtn');
+  if (unlinkBtn) {
+    const isSynced = currentMeeting.vaultPath || currentMeeting.obsidianLink;
+    unlinkBtn.style.display = isSynced ? 'inline-flex' : 'none';
+  }
 
-    row.innerHTML = `
-      <input
-        type="text"
-        class="participant-name-input"
-        data-index="${index}"
-        value="${escapeHtml(participant.name || '')}"
-        placeholder="Name"
-      />
-      <input
-        type="email"
-        class="participant-email-input"
-        data-index="${index}"
-        value="${escapeHtml(participant.email || '')}"
-        placeholder="Email"
-      />
-      <button class="icon-btn remove-participant-btn" data-index="${index}" title="Remove">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
-        </svg>
-      </button>
-    `;
+  // Switch to edit mode
+  viewMode.style.display = 'none';
+  editMode.style.display = 'block';
 
-    participantsEditor.appendChild(row);
-  });
-
-  // Add event listeners to remove buttons
-  const removeButtons = participantsEditor.querySelectorAll('.remove-participant-btn');
-  removeButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const index = parseInt(btn.dataset.index);
-      removeParticipant(index);
-    });
-  });
+  // Focus the title input
+  if (titleInput) {
+    titleInput.focus();
+    titleInput.select();
+  }
 }
 
 /**
- * Edit meeting title
+ * Exit meeting info edit mode without saving
  */
-function editMeetingTitle(onUpdate) {
-  const titleEl = document.getElementById('meetingDetailTitle');
-  if (!titleEl) return;
+function exitMeetingInfoEditMode() {
+  const viewMode = document.getElementById('meetingInfoViewMode');
+  const editMode = document.getElementById('meetingInfoEditMode');
 
-  const currentTitle = titleEl.textContent;
+  if (!viewMode || !editMode) return;
 
-  // Create an input element
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.value = currentTitle;
-  input.className = 'meeting-title-edit-input';
+  // Switch back to view mode
+  viewMode.style.display = 'block';
+  editMode.style.display = 'none';
+}
 
-  // Replace title with input
-  titleEl.replaceWith(input);
-  input.focus();
-  input.select();
+/**
+ * Save meeting info from edit mode
+ */
+async function saveMeetingInfo(onUpdate) {
+  const titleInput = document.getElementById('editMeetingTitle');
+  const platformSelect = document.getElementById('editMeetingPlatform');
+  const vaultPathInput = document.getElementById('editMeetingVaultPath');
 
-  // Handle save
-  const save = () => {
-    const newTitle = input.value.trim() || 'Untitled Meeting';
-    currentMeeting.title = newTitle;
+  if (!currentMeeting || !currentMeetingId) return;
 
-    // Restore the title element
-    input.replaceWith(titleEl);
-    titleEl.textContent = newTitle;
+  const newTitle = titleInput?.value.trim() || 'Untitled Meeting';
+  const newPlatform = platformSelect?.value || 'unknown';
+  const newVaultPath = vaultPathInput?.value.trim() || '';
 
-    // Notify update
-    if (onUpdate) {
-      onUpdate(currentMeetingId, currentMeeting);
+  // Track what changed
+  const changes = [];
+
+  // Update title if changed
+  if (newTitle !== currentMeeting.title) {
+    try {
+      const result = await window.electronAPI.updateMeetingField(currentMeetingId, 'title', newTitle);
+      if (result.success) {
+        currentMeeting.title = newTitle;
+        changes.push('title');
+      }
+    } catch (err) {
+      console.error('[MeetingInfo] Failed to update title:', err);
     }
+  }
 
-    console.log(`[MeetingDetail] Title updated to: ${newTitle}`);
-  };
-
-  // Save on blur or enter key
-  input.addEventListener('blur', save);
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      save();
-    } else if (e.key === 'Escape') {
-      input.replaceWith(titleEl);
+  // Update platform if changed
+  const currentPlatform = (currentMeeting.platform || 'unknown').toLowerCase();
+  if (newPlatform !== currentPlatform) {
+    try {
+      const result = await window.electronAPI.updateMeetingField(currentMeetingId, 'platform', newPlatform);
+      if (result.success) {
+        currentMeeting.platform = newPlatform;
+        changes.push('platform');
+      }
+    } catch (err) {
+      console.error('[MeetingInfo] Failed to update platform:', err);
     }
-  });
+  }
+
+  // Update vault path if changed
+  const currentVaultPath = currentMeeting.vaultPath || currentMeeting.obsidianLink || '';
+  if (newVaultPath !== currentVaultPath) {
+    try {
+      const result = await window.electronAPI.updateMeetingField(currentMeetingId, 'vaultPath', newVaultPath);
+      if (result.success) {
+        currentMeeting.vaultPath = newVaultPath;
+        // Also update obsidianLink to keep them in sync
+        if (newVaultPath) {
+          currentMeeting.obsidianLink = newVaultPath;
+        } else {
+          // Clear obsidianLink when vault path is cleared
+          delete currentMeeting.obsidianLink;
+        }
+        changes.push('vaultPath');
+      }
+    } catch (err) {
+      console.error('[MeetingInfo] Failed to update vault path:', err);
+    }
+  }
+
+  // Update the display
+  populateMeetingInfo(currentMeeting);
+
+  // Explicitly update vault path display to ensure it's current
+  const pathDisplayEl = document.getElementById('meetingDetailVaultPath');
+  if (pathDisplayEl) {
+    pathDisplayEl.textContent = currentMeeting.vaultPath || currentMeeting.obsidianLink || 'Not saved to vault';
+  }
+
+  // Update sync status indicator
+  const obsidianStatusEl = document.getElementById('meetingDetailObsidianStatus');
+  const obsidianStatusTextEl = document.getElementById('meetingDetailObsidianStatusText');
+  if (obsidianStatusEl && obsidianStatusTextEl) {
+    const isSynced = currentMeeting.vaultPath || currentMeeting.obsidianLink;
+    if (isSynced) {
+      obsidianStatusTextEl.textContent = 'Synced';
+      obsidianStatusEl.style.color = '#4caf50';
+    } else {
+      obsidianStatusTextEl.textContent = 'Not synced';
+      obsidianStatusEl.style.color = 'var(--text-secondary)';
+    }
+  }
+
+  // Exit edit mode
+  exitMeetingInfoEditMode();
+
+  // Notify update callback
+  if (changes.length > 0 && onUpdate) {
+    onUpdate(currentMeetingId, currentMeeting);
+  }
+
+  if (changes.length > 0) {
+    console.log(`[MeetingInfo] Updated: ${changes.join(', ')}`);
+    if (window.showToast) {
+      window.showToast('Meeting info saved', 'success');
+    }
+  }
 }
 
 /**
@@ -758,67 +992,24 @@ async function generateTemplates(onUpdate) {
 }
 
 /**
- * Save vault path
- */
-async function saveVaultPath(onUpdate) {
-  const vaultPathEl = document.getElementById('metadataVaultPath');
-  if (!vaultPathEl) return;
-
-  const newPath = vaultPathEl.value.trim();
-  currentMeeting.vaultPath = newPath;
-
-  // Update the info card display
-  const pathDisplayEl = document.getElementById('meetingDetailVaultPath');
-  if (pathDisplayEl) {
-    pathDisplayEl.textContent = newPath || 'Not saved to vault';
-  }
-
-  // Notify update - this triggers saveMeetingsData
-  if (onUpdate) {
-    await onUpdate(currentMeetingId, currentMeeting);
-  }
-
-  // Show confirmation toast
-  if (window.showToast) {
-    window.showToast('Vault path saved', 'success');
-  }
-
-  console.log(`[MeetingDetail] Vault path updated to: ${newPath}`);
-}
-
-/**
  * Unlink meeting from Obsidian - clears sync status
  */
 async function unlinkFromObsidian(onUpdate) {
-  const confirmed = confirm(
-    'This will remove the Obsidian link and mark the meeting as unsynced. The files in your vault will NOT be deleted. Continue?'
-  );
-
-  if (!confirmed) {
-    return;
-  }
-
   // Clear Obsidian-related fields
   delete currentMeeting.obsidianLink;
   delete currentMeeting.vaultPath;
   delete currentMeeting.exportedAt;
 
-  // Update the UI
-  const vaultPathEl = document.getElementById('metadataVaultPath');
-  if (vaultPathEl) {
-    vaultPathEl.value = '';
+  // Update the vault path input in edit mode
+  const vaultPathInput = document.getElementById('editMeetingVaultPath');
+  if (vaultPathInput) {
+    vaultPathInput.value = '';
   }
 
-  const pathDisplayEl = document.getElementById('meetingDetailVaultPath');
-  if (pathDisplayEl) {
-    pathDisplayEl.textContent = 'Not saved to vault';
-  }
-
-  // Update sync status display in header
-  const syncStatusEl = document.getElementById('meetingDetailSyncStatus');
-  if (syncStatusEl) {
-    syncStatusEl.textContent = 'Not synced';
-    syncStatusEl.className = 'sync-status not-synced';
+  // Hide the unlink button since there's nothing to unlink now
+  const unlinkBtn = document.getElementById('unlinkMeetingBtn');
+  if (unlinkBtn) {
+    unlinkBtn.style.display = 'none';
   }
 
   // Show the Export button again
@@ -827,6 +1018,21 @@ async function unlinkFromObsidian(onUpdate) {
     exportBtn.style.display = 'flex';
   }
 
+  // Update meeting in database
+  try {
+    await window.electronAPI.updateMeetingField(currentMeetingId, 'vaultPath', null);
+    await window.electronAPI.updateMeetingField(currentMeetingId, 'obsidianLink', null);
+    await window.electronAPI.updateMeetingField(currentMeetingId, 'exportedAt', null);
+  } catch (err) {
+    console.error('[MeetingDetail] Failed to clear vault path in database:', err);
+  }
+
+  // Update the display
+  populateMeetingInfo(currentMeeting);
+
+  // Exit edit mode
+  exitMeetingInfoEditMode();
+
   // Notify update - this triggers saveMeetingsData
   if (onUpdate) {
     await onUpdate(currentMeetingId, currentMeeting);
@@ -834,82 +1040,18 @@ async function unlinkFromObsidian(onUpdate) {
 
   // Show confirmation toast
   if (window.showToast) {
-    window.showToast('Obsidian link removed - meeting marked as unsynced', 'success');
+    window.showToast('Obsidian link removed', 'success');
   }
 
   console.log(`[MeetingDetail] Meeting unlinked from Obsidian: ${currentMeetingId}`);
 }
 
 /**
- * Add a new participant
- */
-/**
- * Add a participant with contact search
- */
-async function addParticipant(onUpdate) {
-  if (!currentMeeting.participants) {
-    currentMeeting.participants = [];
-  }
-
-  // Show contact search modal
-  showContactSearchModal(selectedContact => {
-    // Check for duplicates by email
-    const isDuplicate = currentMeeting.participants.some(
-      p =>
-        p.email &&
-        selectedContact.email &&
-        p.email.toLowerCase() === selectedContact.email.toLowerCase()
-    );
-
-    if (isDuplicate) {
-      // Auto-replace duplicate participant
-      const index = currentMeeting.participants.findIndex(
-        p =>
-          p.email &&
-          selectedContact.email &&
-          p.email.toLowerCase() === selectedContact.email.toLowerCase()
-      );
-
-      currentMeeting.participants[index] = {
-        name: selectedContact.name,
-        email: selectedContact.email,
-        company: selectedContact.company || selectedContact.organization || null,
-      };
-
-      window.showToast(`Updated existing participant: ${selectedContact.name}`, 'info');
-    } else {
-      // Add new participant
-      currentMeeting.participants.push({
-        name: selectedContact.name,
-        email: selectedContact.email,
-        company: selectedContact.company || selectedContact.organization || null,
-      });
-
-      window.showToast(`Added participant: ${selectedContact.name}`, 'success');
-    }
-
-    // Re-populate the editors
-    populateParticipantsEditor(currentMeeting);
-    populateParticipants(currentMeeting);
-
-    // Update participant count
-    const countEl = document.getElementById('meetingDetailParticipantCount');
-    if (countEl) {
-      const count = currentMeeting.participants.length;
-      countEl.textContent = `${count} participant${count !== 1 ? 's' : ''}`;
-    }
-
-    // Notify update
-    if (onUpdate) {
-      onUpdate(currentMeetingId, currentMeeting);
-    }
-  });
-}
-
-/**
  * Show contact search modal for adding participants
+ * @param {Function} onSelect - Callback when a contact is selected
+ * @param {string} [title='Add Participant'] - Optional modal title
  */
-function showContactSearchModal(onSelect) {
+function showContactSearchModal(onSelect, title = 'Add Participant') {
   // Create modal overlay
   const overlay = document.createElement('div');
   overlay.className = 'contact-search-modal-overlay';
@@ -920,7 +1062,7 @@ function showContactSearchModal(onSelect) {
 
   modal.innerHTML = `
     <div class="contact-search-modal-header">
-      <h3>Add Participant</h3>
+      <h3>${escapeHtml(title)}</h3>
       <button class="close-modal-btn" title="Close">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/>
@@ -971,6 +1113,12 @@ function showContactSearchModal(onSelect) {
   };
   document.addEventListener('keydown', handleEscape);
 
+  // Pre-fetch contacts in background to warm the cache
+  // This happens async and doesn't block the UI
+  contactsService.fetchContacts(false).catch(err => {
+    console.log('[ContactSearchModal] Background fetch failed (cache may be cold):', err.message);
+  });
+
   // Search contacts as user types
   let searchTimeout;
   searchInput.addEventListener('input', async e => {
@@ -987,7 +1135,8 @@ function showContactSearchModal(onSelect) {
 
     searchTimeout = setTimeout(async () => {
       try {
-        const contacts = await contactsService.search(query);
+        // Use debounceMs: 0 since we already debounce in this handler
+        const contacts = await contactsService.search(query, { debounceMs: 0 });
 
         if (contacts.length === 0) {
           resultsContainer.innerHTML = '<div class="search-hint">No contacts found</div>';
@@ -1037,32 +1186,11 @@ function showContactSearchModal(onSelect) {
     }, 300); // Debounce search
   });
 
-  // Focus search input
-  searchInput.focus();
-}
-
-/**
- * Remove a participant
- */
-function removeParticipant(index) {
-  if (!currentMeeting.participants || index < 0 || index >= currentMeeting.participants.length) {
-    return;
-  }
-
-  currentMeeting.participants.splice(index, 1);
-
-  // Re-populate the editors
-  populateParticipantsEditor(currentMeeting);
-  populateParticipants(currentMeeting);
-
-  // Update participant count
-  const countEl = document.getElementById('meetingDetailParticipantCount');
-  if (countEl) {
-    const count = currentMeeting.participants.length;
-    countEl.textContent = `${count} participant${count !== 1 ? 's' : ''}`;
-  }
-
-  console.log(`[MeetingDetail] Removed participant at index ${index}`);
+  // Focus search input after a brief delay to ensure DOM is ready
+  // This fixes Electron focus issues with dynamically created elements
+  setTimeout(() => {
+    searchInput.focus();
+  }, 50);
 }
 
 /**
@@ -1414,8 +1542,7 @@ async function saveSpeakerEdit(newSpeakerName, contact = null) {
             email: contactEmail,
           });
 
-          // Re-populate the editors to show new participant
-          populateParticipantsEditor(currentMeeting);
+          // Re-populate the participant card to show new participant
           populateParticipants(currentMeeting);
 
           // Update participant count

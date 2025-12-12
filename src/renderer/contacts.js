@@ -53,8 +53,9 @@ function setupEventListeners() {
 
 /**
  * Open the contacts view
+ * @param {string} [emailToSelect] - Optional email to find and select a specific contact
  */
-export function openContactsView() {
+export async function openContactsView(emailToSelect) {
   const contactsView = document.getElementById('contactsView');
   const mainView = document.getElementById('mainView');
   const settingsView = document.getElementById('settingsView');
@@ -73,7 +74,17 @@ export function openContactsView() {
 
   // Load contacts if not already loaded
   if (allContacts.length === 0) {
-    loadContacts();
+    await loadContacts();
+  }
+
+  // If email specified, find and select the contact
+  if (emailToSelect) {
+    const contact = allContacts.find(
+      c => c.emails && c.emails.some(e => e.toLowerCase() === emailToSelect.toLowerCase())
+    );
+    if (contact) {
+      selectContact(contact);
+    }
   }
 }
 

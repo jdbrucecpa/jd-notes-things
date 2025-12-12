@@ -257,7 +257,8 @@ class TranscriptionService {
           speaker: `Speaker ${utterance.speaker}`,
           speakerId: utterance.speaker,
           text: utterance.transcript,
-          timestamp: utterance.start,
+          // Deepgram returns timestamps in seconds, convert to milliseconds for consistency with AssemblyAI
+          timestamp: Math.round(utterance.start * 1000),
           words: utterance.words || [],
         });
       });

@@ -296,8 +296,8 @@ const vocabularyConfigSchema = z.object({}).passthrough();
 // Meeting field update schema
 const updateMeetingFieldSchema = z.object({
   meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
-  field: z.enum(['platform', 'title', 'status']),
-  value: z.string(),
+  field: z.enum(['platform', 'title', 'status', 'vaultPath', 'obsidianLink', 'exportedAt']),
+  value: z.string().nullable(),
 });
 
 // Per-meeting auto-start schema
