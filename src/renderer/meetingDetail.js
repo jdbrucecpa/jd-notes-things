@@ -124,6 +124,12 @@ function setupEventListeners(onBack, onUpdate) {
         searchTranscript(searchInput.value);
       }
     });
+    // Clear search when input is cleared (real-time)
+    searchInput.addEventListener('input', e => {
+      if (e.target.value === '') {
+        searchTranscript('');
+      }
+    });
   }
 
   // Fix Speakers button (SM-2)
@@ -157,6 +163,12 @@ function setupEventListeners(onBack, onUpdate) {
   const saveVaultPathBtn = document.getElementById('saveVaultPathBtn');
   if (saveVaultPathBtn) {
     saveVaultPathBtn.onclick = () => saveVaultPath(onUpdate);
+  }
+
+  // Unlink from Obsidian button
+  const unlinkObsidianBtn = document.getElementById('unlinkObsidianBtn');
+  if (unlinkObsidianBtn) {
+    unlinkObsidianBtn.onclick = () => unlinkFromObsidian(onUpdate);
   }
 
   // Add participant button
@@ -262,11 +274,21 @@ function populateParticipants(meeting) {
     const name = participant.name || participant.email || 'Unknown';
     const initials = getInitials(name);
 
+    // Build sub-info line: email and/or company
+    let subInfo = '';
+    if (participant.email) {
+      subInfo += `<div class="participant-email">${escapeHtml(participant.email)}</div>`;
+    }
+    if (participant.company || participant.organization) {
+      const company = participant.company || participant.organization;
+      subInfo += `<div class="participant-company">${escapeHtml(company)}</div>`;
+    }
+
     participantItem.innerHTML = `
       <div class="participant-avatar">${escapeHtml(initials)}</div>
       <div class="participant-info">
         <div class="participant-name">${escapeHtml(name)}</div>
-        ${participant.email ? `<div class="participant-email">${escapeHtml(participant.email)}</div>` : ''}
+        ${subInfo}
       </div>
     `;
 
@@ -348,8 +370,8 @@ async function populateTranscript(meeting) {
     utteranceDiv.className = 'transcript-utterance';
     utteranceDiv.dataset.index = index;
 
-    // Format timestamp
-    const timestamp = formatTimestamp(utterance.start);
+    // Format timestamp - check both 'timestamp' field (our standard format) and 'start' (raw API format)
+    const timestamp = formatTimestamp(utterance.timestamp || utterance.start);
 
     // SM-1: Use speakerName (matched name) if available, fall back to speaker label
     const speakerName = utterance.speakerName || utterance.speaker || 'Unknown Speaker';
@@ -389,14 +411,18 @@ async function populateTranscript(meeting) {
 }
 
 /**
- * Format timestamp from seconds to HH:MM:SS or MM:SS
+ * Format timestamp from milliseconds to HH:MM:SS or MM:SS
+ * Note: AssemblyAI and Deepgram return timestamps in milliseconds
  */
-function formatTimestamp(seconds) {
-  if (!seconds && seconds !== 0) return '00:00';
+function formatTimestamp(ms) {
+  if (!ms && ms !== 0) return '00:00';
 
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
+  // Convert milliseconds to seconds
+  const totalSeconds = Math.floor(ms / 1000);
+
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
 
   if (hours > 0) {
     return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
@@ -408,7 +434,7 @@ function formatTimestamp(seconds) {
  * Search transcript for keywords
  */
 function searchTranscript(query) {
-  if (!query || !currentMeeting || !currentMeeting.transcript) {
+  if (!currentMeeting || !currentMeeting.transcript) {
     return;
   }
 
@@ -416,6 +442,17 @@ function searchTranscript(query) {
   if (!transcriptContent) return;
 
   const utterances = transcriptContent.querySelectorAll('.transcript-utterance');
+
+  // Clear search to show all results when query is empty
+  if (!query || query.trim() === '') {
+    utterances.forEach(utterance => {
+      utterance.style.display = 'block';
+      utterance.classList.remove('search-match');
+    });
+    console.log('[MeetingDetail] Search cleared, showing all utterances');
+    return;
+  }
+
   const lowerQuery = query.toLowerCase();
   let matchCount = 0;
 
@@ -432,14 +469,6 @@ function searchTranscript(query) {
   });
 
   console.log(`[MeetingDetail] Found ${matchCount} matches for "${query}"`);
-
-  // Clear search to show all results
-  if (query === '') {
-    utterances.forEach(utterance => {
-      utterance.style.display = 'block';
-      utterance.classList.remove('search-match');
-    });
-  }
 }
 
 /**
@@ -731,7 +760,7 @@ async function generateTemplates(onUpdate) {
 /**
  * Save vault path
  */
-function saveVaultPath(onUpdate) {
+async function saveVaultPath(onUpdate) {
   const vaultPathEl = document.getElementById('metadataVaultPath');
   if (!vaultPathEl) return;
 
@@ -744,12 +773,71 @@ function saveVaultPath(onUpdate) {
     pathDisplayEl.textContent = newPath || 'Not saved to vault';
   }
 
-  // Notify update
+  // Notify update - this triggers saveMeetingsData
   if (onUpdate) {
-    onUpdate(currentMeetingId, currentMeeting);
+    await onUpdate(currentMeetingId, currentMeeting);
+  }
+
+  // Show confirmation toast
+  if (window.showToast) {
+    window.showToast('Vault path saved', 'success');
   }
 
   console.log(`[MeetingDetail] Vault path updated to: ${newPath}`);
+}
+
+/**
+ * Unlink meeting from Obsidian - clears sync status
+ */
+async function unlinkFromObsidian(onUpdate) {
+  const confirmed = confirm(
+    'This will remove the Obsidian link and mark the meeting as unsynced. The files in your vault will NOT be deleted. Continue?'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  // Clear Obsidian-related fields
+  delete currentMeeting.obsidianLink;
+  delete currentMeeting.vaultPath;
+  delete currentMeeting.exportedAt;
+
+  // Update the UI
+  const vaultPathEl = document.getElementById('metadataVaultPath');
+  if (vaultPathEl) {
+    vaultPathEl.value = '';
+  }
+
+  const pathDisplayEl = document.getElementById('meetingDetailVaultPath');
+  if (pathDisplayEl) {
+    pathDisplayEl.textContent = 'Not saved to vault';
+  }
+
+  // Update sync status display in header
+  const syncStatusEl = document.getElementById('meetingDetailSyncStatus');
+  if (syncStatusEl) {
+    syncStatusEl.textContent = 'Not synced';
+    syncStatusEl.className = 'sync-status not-synced';
+  }
+
+  // Show the Export button again
+  const exportBtn = document.getElementById('exportToObsidianBtn');
+  if (exportBtn) {
+    exportBtn.style.display = 'flex';
+  }
+
+  // Notify update - this triggers saveMeetingsData
+  if (onUpdate) {
+    await onUpdate(currentMeetingId, currentMeeting);
+  }
+
+  // Show confirmation toast
+  if (window.showToast) {
+    window.showToast('Obsidian link removed - meeting marked as unsynced', 'success');
+  }
+
+  console.log(`[MeetingDetail] Meeting unlinked from Obsidian: ${currentMeetingId}`);
 }
 
 /**
@@ -785,6 +873,7 @@ async function addParticipant(onUpdate) {
       currentMeeting.participants[index] = {
         name: selectedContact.name,
         email: selectedContact.email,
+        company: selectedContact.company || selectedContact.organization || null,
       };
 
       window.showToast(`Updated existing participant: ${selectedContact.name}`, 'info');
@@ -793,6 +882,7 @@ async function addParticipant(onUpdate) {
       currentMeeting.participants.push({
         name: selectedContact.name,
         email: selectedContact.email,
+        company: selectedContact.company || selectedContact.organization || null,
       });
 
       window.showToast(`Added participant: ${selectedContact.name}`, 'success');
@@ -911,17 +1001,29 @@ function showContactSearchModal(onSelect) {
           contactItem.className = 'contact-search-result-item';
 
           const initials = contact.initials || contact.name.charAt(0).toUpperCase();
+          // Get primary email from emails array, with fallback
+          const primaryEmail = contact.email || (contact.emails && contact.emails[0]) || '';
+          // Get company/organization if available
+          const company = contact.company || contact.organization || '';
 
           contactItem.innerHTML = `
             <div class="contact-avatar">${escapeHtml(initials)}</div>
             <div class="contact-info">
               <div class="contact-name">${escapeHtml(contact.name)}</div>
-              <div class="contact-email">${escapeHtml(contact.email)}</div>
+              ${primaryEmail ? `<div class="contact-email">${escapeHtml(primaryEmail)}</div>` : ''}
+              ${company ? `<div class="contact-company">${escapeHtml(company)}</div>` : ''}
             </div>
           `;
 
           contactItem.addEventListener('click', () => {
-            onSelect(contact);
+            // Normalize contact data to ensure email is available
+            const normalizedContact = {
+              name: contact.name,
+              email: primaryEmail,
+              company: company || null,
+              organization: contact.organization || null,
+            };
+            onSelect(normalizedContact);
             closeModal();
           });
 

@@ -60,10 +60,6 @@
               <span>File</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 17l5-5-5-5v10z"/></svg>
             </button>
-            <button class="titlebar-dropdown-item" data-menu="edit">
-              <span>Edit</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 17l5-5-5-5v10z"/></svg>
-            </button>
             <button class="titlebar-dropdown-item" data-menu="view">
               <span>View</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M10 17l5-5-5-5v10z"/></svg>
@@ -82,15 +78,6 @@
           <button class="titlebar-dropdown-item" id="menuSettings">Settings</button>
           <div class="titlebar-dropdown-divider"></div>
           <button class="titlebar-dropdown-item" id="menuExit">Exit</button>
-        </div>
-        <!-- Submenu for Edit -->
-        <div class="titlebar-submenu" id="submenu-edit">
-          <button class="titlebar-dropdown-item" id="menuUndo">Undo</button>
-          <button class="titlebar-dropdown-item" id="menuRedo">Redo</button>
-          <div class="titlebar-dropdown-divider"></div>
-          <button class="titlebar-dropdown-item" id="menuCut">Cut</button>
-          <button class="titlebar-dropdown-item" id="menuCopy">Copy</button>
-          <button class="titlebar-dropdown-item" id="menuPaste">Paste</button>
         </div>
         <!-- Submenu for View -->
         <div class="titlebar-submenu" id="submenu-view">
@@ -469,13 +456,7 @@
               <!-- Templates Tab -->
               <div class="tab-content" id="templatesTab">
                 <div class="templates-header">
-                  <p class="templates-description">Generate additional summaries using custom templates</p>
-                  <button class="btn-primary" id="generateTemplatesBtn">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/>
-                    </svg>
-                    Generate from Template
-                  </button>
+                  <p class="templates-description">Generate additional summaries using custom templates. Use the Generate button in the toolbar above.</p>
                 </div>
                 <div class="generated-templates-list" id="generatedTemplatesList">
                   <!-- Generated template summaries will appear here -->
@@ -512,6 +493,7 @@
                     <label>Vault Path (editable)</label>
                     <input type="text" id="metadataVaultPath" placeholder="clients/acme-corp/meetings/..." />
                     <button class="btn-secondary" id="saveVaultPathBtn">Save Path</button>
+                    <button class="btn-secondary btn-danger" id="unlinkObsidianBtn" title="Remove Obsidian sync and mark as unsynced">Unlink</button>
                   </div>
                 </div>
 
@@ -1343,6 +1325,18 @@
                   </div>
                 </div>
               </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Minimize to Tray</div>
+                  <div class="settings-item-description">Hide window to system tray instead of closing</div>
+                </div>
+                <div class="settings-item-control">
+                  <div class="toggle-switch" id="minimizeToTrayToggle">
+                    <div class="toggle-switch-thumb"></div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <!-- AI Model Configuration Section -->
@@ -1782,18 +1776,6 @@
                 </div>
                 <div class="settings-item-control">
                   <div class="toggle-switch" id="enableSoundsToggle">
-                    <div class="toggle-switch-thumb"></div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="settings-item">
-                <div class="settings-item-info">
-                  <div class="settings-item-label">Minimize to Tray</div>
-                  <div class="settings-item-description">Hide window to system tray instead of closing</div>
-                </div>
-                <div class="settings-item-control">
-                  <div class="toggle-switch" id="minimizeToTrayToggle">
                     <div class="toggle-switch-thumb"></div>
                   </div>
                 </div>

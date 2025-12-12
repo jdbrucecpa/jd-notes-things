@@ -2462,7 +2462,7 @@ async function initSDK() {
       console.log('Recording processing complete - preparing for transcription');
 
       // Get the meeting ID, transcription provider, and participant emails for vocabulary
-      let transcriptionProvider = 'recallai'; // Default
+      let transcriptionProvider = 'assemblyai'; // Default (recallai SDK upload is broken)
       let meetingId = null;
       let participantEmails = [];
       try {
@@ -2642,6 +2642,11 @@ async function initSDK() {
 
               meetingsData.pastMeetings[meetingIndex].transcriptProvider = transcript.provider;
               meetingsData.pastMeetings[meetingIndex].transcriptConfidence = transcript.confidence;
+              // Save duration if available from transcription provider
+              if (transcript.audio_duration) {
+                meetingsData.pastMeetings[meetingIndex].duration = transcript.audio_duration;
+                console.log(`[Transcription] Duration: ${transcript.audio_duration} seconds`);
+              }
 
               console.log('[Transcription] Writing updated meeting data...');
               await fileOperationManager.writeData(meetingsData);
@@ -8144,7 +8149,7 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
 // Handle starting a manual desktop recording
 ipcMain.handle(
   'startManualRecording',
-  async (event, meetingId, transcriptionProvider = 'recallai', action = 'new') => {
+  async (event, meetingId, transcriptionProvider = 'assemblyai', action = 'new') => {
     try {
       // Validate meetingId
       const validatedId = MeetingIdSchema.parse(meetingId);
@@ -8752,7 +8757,7 @@ ipcMain.handle('loadMeetingsData', async () => {
 });
 
 // Function to create a new meeting note and start recording
-async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 'recallai') {
+async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 'assemblyai') {
   console.log('Creating meeting note for platform:', platformName);
   console.log('Using transcription provider:', transcriptionProvider);
   try {
@@ -10571,13 +10576,13 @@ ipcMain.handle('checkForDetectedMeeting', async () => {
 // Function to join the detected meeting
 ipcMain.handle(
   'joinDetectedMeeting',
-  withValidation(transcriptionProviderSchema, async (event, transcriptionProvider = 'recallai') => {
+  withValidation(transcriptionProviderSchema, async (event, transcriptionProvider = 'assemblyai') => {
     return joinDetectedMeeting(transcriptionProvider);
   })
 );
 
 // Function to handle joining a detected meeting
-async function joinDetectedMeeting(transcriptionProvider = 'recallai') {
+async function joinDetectedMeeting(transcriptionProvider = 'assemblyai') {
   try {
     console.log('Join detected meeting called');
     console.log('Using transcription provider:', transcriptionProvider);

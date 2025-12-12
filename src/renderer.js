@@ -56,7 +56,22 @@ function initializeTitleBar() {
   }
 
   if (closeBtn) {
-    closeBtn.addEventListener('click', () => {
+    closeBtn.addEventListener('click', async () => {
+      // Check if a recording is in progress
+      if (window.isRecording) {
+        const confirmed = confirm(
+          'A recording is in progress. Do you want to stop the recording and close the app?'
+        );
+        if (!confirmed) {
+          return; // User cancelled, don't close
+        }
+        // Stop recording before closing
+        try {
+          await window.electronAPI.stopRecording();
+        } catch (err) {
+          console.error('Error stopping recording on close:', err);
+        }
+      }
       window.electronAPI.windowClose();
     });
   }
@@ -112,7 +127,7 @@ function initializeTitleBar() {
       if (newNoteBtn) newNoteBtn.click();
     },
     menuImport: () => {
-      openSettingsTab('import');
+      openImportModal();
     },
     menuSettings: () => {
       openSettingsTab('general');
@@ -120,11 +135,6 @@ function initializeTitleBar() {
     menuExit: () => {
       window.electronAPI.windowClose();
     },
-    menuUndo: () => document.execCommand('undo'),
-    menuRedo: () => document.execCommand('redo'),
-    menuCut: () => document.execCommand('cut'),
-    menuCopy: () => document.execCommand('copy'),
-    menuPaste: () => document.execCommand('paste'),
     menuReload: () => location.reload(),
     menuToggleDevTools: () => {
       // Dev tools toggling needs to be done via main process
@@ -631,6 +641,36 @@ function formatDateHeader(dateString) {
   }
 }
 
+// Function to get date group label for meeting list grouping
+function getDateGroupLabel(date) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const lastWeek = new Date(today);
+  lastWeek.setDate(lastWeek.getDate() - 7);
+
+  const meetingDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  if (meetingDay.getTime() === today.getTime()) {
+    return 'Today';
+  } else if (meetingDay.getTime() === yesterday.getTime()) {
+    return 'Yesterday';
+  } else if (meetingDay >= lastWeek) {
+    // Within last 7 days - show day of week
+    const options = { weekday: 'long' };
+    return date.toLocaleDateString('en-US', options);
+  } else if (meetingDay.getFullYear() === today.getFullYear()) {
+    // This year - show month and day
+    const options = { month: 'long', day: 'numeric' };
+    return date.toLocaleDateString('en-US', options);
+  } else {
+    // Different year - show full date
+    const options = { month: 'long', day: 'numeric', year: 'numeric' };
+    return date.toLocaleDateString('en-US', options);
+  }
+}
+
 // We'll initialize pastMeetings and pastMeetingsByDate when we load data from file
 
 // Save meetings data back to file
@@ -906,7 +946,7 @@ async function syncAllUnsyncedMeetings() {
       if (result.success) {
         successCount++;
         // Update local meeting data
-        meeting.obsidianLink = result.data?.obsidianLink || true;
+        meeting.obsidianLink = result.data?.obsidianLink;
         meeting.vaultPath = result.data?.vaultPath;
       } else {
         failCount++;
@@ -1781,10 +1821,11 @@ function showEditorView(meetingId) {
     floatingControls.style.display = 'flex';
   }
 
-  // Show Export to Obsidian button in floating controls
+  // Show Export to Obsidian button only if not already synced
   const exportToObsidianBtn = document.getElementById('exportToObsidianBtn');
   if (exportToObsidianBtn) {
-    exportToObsidianBtn.style.display = 'flex';
+    const isSynced = !!(meeting.obsidianLink || meeting.vaultPath);
+    exportToObsidianBtn.style.display = isSynced ? 'none' : 'flex';
   }
 
   // Initialize the new meeting detail view
@@ -3123,8 +3164,22 @@ function renderMeetings() {
     notesContainer.parentElement.insertBefore(searchInfo, notesContainer);
   }
 
-  // Add filtered meetings to the container
+  // Add filtered meetings to the container with date grouping
+  let currentDateGroup = null;
   filteredMeetings.forEach(meeting => {
+    // Determine date group for this meeting
+    const meetingDate = new Date(meeting.date);
+    const dateGroup = getDateGroupLabel(meetingDate);
+
+    // Add date group header if this is a new group
+    if (dateGroup !== currentDateGroup) {
+      currentDateGroup = dateGroup;
+      const dateHeader = document.createElement('div');
+      dateHeader.className = 'date-group-header';
+      dateHeader.textContent = dateGroup;
+      notesContainer.appendChild(dateHeader);
+    }
+
     notesContainer.appendChild(createMeetingCard(meeting));
   });
 
@@ -3992,7 +4047,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             m => m.id === meetingId
           );
           if (meeting) {
-            meeting.obsidianLink = result.data?.obsidianLink || true;
+            meeting.obsidianLink = result.data?.obsidianLink;
             meeting.vaultPath = result.data?.vaultPath;
           }
 
@@ -4402,6 +4457,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.electronAPI.onRecordingStateChange(data => {
     console.log('Recording state change received:', data);
 
+    // Reset Join Meeting button when recording starts or stops
+    const joinButton = document.getElementById('joinMeetingBtn');
+    if (joinButton && (data.state === 'recording' || data.state === 'stopped' || data.state === 'error')) {
+      // Reset the button to its default state
+      joinButton.disabled = !window.meetingDetected; // Re-enable only if a meeting is detected
+      joinButton.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="toolbar-btn-icon">
+          <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
+        </svg>
+        <span class="toolbar-btn-label">Record Meeting</span>
+      `;
+      console.log('[Recording] Join Meeting button reset');
+    }
+
     // Handle upload progress updates
     if (data.state === 'uploading') {
       const uploadProgress = document.getElementById('uploadProgress');
@@ -4579,8 +4648,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       recordIcon.style.display = 'none';
       stopIcon.style.display = 'block';
 
-      // Get transcription provider from localStorage
-      const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'recallai';
+      // Get transcription provider from localStorage (default to assemblyai since recallai SDK upload is broken)
+      const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'assemblyai';
 
       // Call the API to start recording with action
       const result = await window.electronAPI.startManualRecording(

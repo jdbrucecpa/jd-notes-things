@@ -201,6 +201,7 @@ class TranscriptionService {
       entries: entries,
       provider: 'assemblyai',
       confidence: assemblyData.confidence,
+      audio_duration: assemblyData.audio_duration || null, // Duration in seconds
     };
   }
 
@@ -267,6 +268,7 @@ class TranscriptionService {
       entries: entries,
       provider: 'deepgram',
       confidence: deepgramData.results?.channels?.[0]?.alternatives?.[0]?.confidence,
+      audio_duration: deepgramData.metadata?.duration || null, // Duration in seconds
     };
   }
 }

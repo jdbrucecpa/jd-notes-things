@@ -1051,6 +1051,22 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   width: 100%;
 }
 
+/* Date group header for meeting list */
+.date-group-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 12px 4px 6px;
+  margin-top: 8px;
+  border-bottom: 1px solid var(--border-color);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.date-group-header:first-child {
+  margin-top: 0;
+}
+
 .meeting-card {
   display: flex;
   align-items: center;
@@ -5393,6 +5409,12 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 .participant-email {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.participant-company {
+  font-size: 11px;
+  color: var(--text-tertiary, #888);
+  font-style: italic;
 }
 
 /* Tabbed Content */
