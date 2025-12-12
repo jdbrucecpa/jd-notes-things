@@ -77,8 +77,9 @@ export async function openContactsView(emailToSelect) {
     await loadContacts();
   }
 
-  // If email specified, find and select the contact
-  if (emailToSelect) {
+  // If email specified (and it's actually a string, not an Event object from click handler),
+  // find and select the contact
+  if (emailToSelect && typeof emailToSelect === 'string') {
     const contact = allContacts.find(
       c => c.emails && c.emails.some(e => e.toLowerCase() === emailToSelect.toLowerCase())
     );
