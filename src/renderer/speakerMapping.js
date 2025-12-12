@@ -13,14 +13,19 @@ let searchTimeouts = {};
 let documentClickHandler = null; // Single delegated click handler
 let mergeMode = false; // Whether merge selection mode is active
 const selectedForMerge = new Set(); // Speakers selected for merging
+let meetingParticipants = []; // Meeting participants for suggestions
 
 /**
  * Open the speaker mapping modal for a meeting
  * @param {string} meetingId - The meeting ID
  * @param {Array} transcript - The transcript array
  * @param {Function} onComplete - Callback when mappings are applied
+ * @param {Object} options - Optional configuration
+ * @param {Array} options.participants - Meeting participants for suggestions
  */
-export async function openSpeakerMappingModal(meetingId, transcript, onComplete) {
+export async function openSpeakerMappingModal(meetingId, transcript, onComplete, options = {}) {
+  // Store participants for suggestions
+  meetingParticipants = options.participants || [];
   const startTime = performance.now();
   console.log('[SpeakerMapping] Opening modal for meeting:', meetingId);
 
@@ -70,9 +75,13 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete)
     speakersList.style.display = 'flex';
     noSpeakersMessage.style.display = 'none';
 
-    // Detect duplicate speakers
+    // Detect duplicate speakers - use mapped names, not original IDs
     const dupStart = performance.now();
-    const dupResult = await window.electronAPI.speakerMappingDetectDuplicates(speakerIds);
+    // Build list of display names for duplicate detection
+    // Use existingMappings to get the actual names, fall back to speaker ID
+    const speakerDisplayNames = speakerIds.map(id => existingMappings[id] || id);
+    console.log('[SpeakerMapping] Checking for duplicates among:', speakerDisplayNames);
+    const dupResult = await window.electronAPI.speakerMappingDetectDuplicates(speakerDisplayNames);
     console.log(
       `[SpeakerMapping] Detect duplicates took ${(performance.now() - dupStart).toFixed(0)}ms`
     );
@@ -341,7 +350,7 @@ function createSpeakerRow(speakerId, suggestion) {
       ${
         suggestion
           ? `
-        <div class="speaker-suggestion ${suggestion.isProfileSuggestion ? 'profile-suggestion' : ''}">
+        <div class="speaker-suggestion ${suggestion.isProfileSuggestion ? 'profile-suggestion' : ''} ${suggestion.isExistingMapping ? 'existing-mapping' : ''}">
           <span class="speaker-suggestion-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               ${
@@ -354,7 +363,9 @@ function createSpeakerRow(speakerId, suggestion) {
           <span class="speaker-suggestion-text">${
             suggestion.isProfileSuggestion
               ? 'Single speaker auto-labeled as you (from profile)'
-              : 'Auto-suggested from previous mapping'
+              : suggestion.isExistingMapping
+                ? 'Current mapping (from transcript)'
+                : 'Auto-suggested from previous mapping'
           }</span>
         </div>
       `
@@ -414,11 +425,14 @@ function setupRowEventListeners(row, speakerId) {
     }
   });
 
-  // Focus handling
+  // Focus handling - show participant suggestions when focused
   input.addEventListener('focus', () => {
     const query = input.value.trim();
     if (query.length >= 2) {
       searchContacts(row, speakerId, query);
+    } else if (meetingParticipants.length > 0) {
+      // Show meeting participants as suggestions when input is empty/short
+      showParticipantSuggestions(row, speakerId);
     }
   });
 
@@ -532,6 +546,78 @@ async function searchContacts(row, speakerId, query) {
     console.error('[SpeakerMapping] Contact search error:', error);
     hideDropdown(row);
   }
+}
+
+/**
+ * Show meeting participants as suggestions when the input is focused
+ * This provides quick access to likely speaker identities
+ */
+function showParticipantSuggestions(row, speakerId) {
+  // Remove existing dropdown
+  hideAllDropdowns();
+
+  if (!meetingParticipants || meetingParticipants.length === 0) {
+    return;
+  }
+
+  const input = row.querySelector('.speaker-contact-input');
+  const dropdown = document.createElement('div');
+  dropdown.className = 'speaker-contact-dropdown';
+  dropdown.dataset.speakerId = speakerId;
+
+  // Position the dropdown relative to the input using fixed positioning
+  const inputRect = input.getBoundingClientRect();
+  dropdown.style.position = 'fixed';
+  dropdown.style.top = `${inputRect.bottom + 4}px`;
+  dropdown.style.left = `${inputRect.left}px`;
+  dropdown.style.width = `${inputRect.width}px`;
+
+  // Add header for participants
+  const header = document.createElement('div');
+  header.className = 'dropdown-section-header';
+  header.innerHTML = `
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor"/>
+    </svg>
+    <span>Meeting Participants</span>
+  `;
+  dropdown.appendChild(header);
+
+  // Show each participant as a suggestion
+  for (const participant of meetingParticipants.slice(0, 6)) {
+    const option = document.createElement('div');
+    option.className = 'speaker-contact-option participant-suggestion';
+
+    const name = participant.name || participant.email || 'Unknown';
+    const initials = getInitials(name);
+    const email = participant.email || '';
+    const company = participant.company || participant.organization || '';
+
+    option.innerHTML = `
+      <div class="contact-avatar">${escapeHtml(initials)}</div>
+      <div class="contact-info">
+        <div class="contact-name">${escapeHtml(name)}</div>
+        ${email ? `<div class="contact-email">${escapeHtml(email)}</div>` : ''}
+        ${company ? `<div class="contact-company">${escapeHtml(company)}</div>` : ''}
+      </div>
+    `;
+
+    option.addEventListener('click', () => {
+      // Create a contact-like object from the participant
+      const contact = {
+        name: name,
+        email: email,
+        emails: email ? [email] : [],
+      };
+      selectContact(row, speakerId, contact);
+      hideAllDropdowns();
+    });
+
+    dropdown.appendChild(option);
+  }
+
+  // Append to body to avoid clipping
+  document.body.appendChild(dropdown);
 }
 
 /**
@@ -701,6 +787,7 @@ function setupModalEventListeners(onComplete) {
     currentMeetingId = null;
     currentMappings = {};
     searchTimeouts = {};
+    meetingParticipants = []; // Clear participant suggestions
     // Reset merge mode
     mergeMode = false;
     selectedForMerge.clear();

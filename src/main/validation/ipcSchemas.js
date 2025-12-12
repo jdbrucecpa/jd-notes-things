@@ -18,6 +18,10 @@ const providerSchema = z.enum(['openai', 'anthropic', 'azure']);
 const transcriptEntrySchema = z.object({
   speaker: z.string().optional(),
   speakerId: z.string().optional(),
+  speakerName: z.string().optional(), // Mapped speaker name (after speaker matching)
+  speakerEmail: z.string().nullable().optional(), // Speaker's email if matched
+  speakerDisplayName: z.string().optional(), // Display name with wiki links
+  speakerMapped: z.boolean().optional(), // Whether speaker was mapped
   text: z.string(),
   timestamp: z.union([z.string(), z.number()]).optional(),
   words: z.array(z.any()).optional(),

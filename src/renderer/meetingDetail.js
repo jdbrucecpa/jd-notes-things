@@ -1733,6 +1733,9 @@ async function openFixSpeakersModal(onUpdate) {
       if (onUpdate) {
         onUpdate(currentMeetingId, currentMeeting);
       }
+    },
+    {
+      participants: currentMeeting.participants || [],
     }
   );
 }

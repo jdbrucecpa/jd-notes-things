@@ -7080,6 +7080,11 @@ body.dark-theme .pattern-error {
   color: var(--color-primary);
 }
 
+/* Existing mapping from transcript (current display) */
+.speaker-suggestion.existing-mapping {
+  color: #4caf50;
+}
+
 .speaker-contact-dropdown {
   position: fixed;
   background: var(--card-bg);
@@ -7138,6 +7143,39 @@ body.dark-theme .pattern-error {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.speaker-contact-option .contact-company {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Dropdown section header for participant suggestions */
+.dropdown-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.dropdown-section-header svg {
+  opacity: 0.7;
+}
+
+/* Participant suggestion styling */
+.speaker-contact-option.participant-suggestion {
+  border-left: 3px solid var(--color-primary);
+  margin-left: 3px;
 }
 
 .no-speakers-message {

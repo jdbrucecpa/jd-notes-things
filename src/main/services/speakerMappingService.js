@@ -265,6 +265,27 @@ class SpeakerMappingService {
   }
 
   /**
+   * Check if a speaker name is a generic/placeholder name that shouldn't be used for duplicate detection
+   * @param {string} name - Speaker name to check
+   * @returns {boolean} True if it's a generic name
+   */
+  isGenericSpeakerName(name) {
+    if (!name) return true;
+
+    // Pattern for generic speaker IDs like "Speaker A", "Speaker B", "Speaker 1", etc.
+    const genericPatterns = [
+      /^speaker\s*[a-z0-9]$/i, // "Speaker A", "Speaker B", "Speaker 1"
+      /^SPK[-_][a-z0-9]+$/i, // "SPK-abc123"
+      /^spk_\d+$/i, // "spk_1"
+      /^SPEAKER_\d+$/i, // "SPEAKER_1"
+      /^S\d+$/i, // "S1", "S2"
+      /^unknown\s*speaker$/i, // "Unknown Speaker"
+    ];
+
+    return genericPatterns.some(pattern => pattern.test(name.trim()));
+  }
+
+  /**
    * Detect potential duplicate speakers that might be the same person
    * @param {string[]} speakers - Array of unique speaker names
    * @returns {Object} Object with { autoMerge: [{from, to}], suggestions: [{speakers, reason}] }
@@ -273,6 +294,23 @@ class SpeakerMappingService {
     const autoMerge = []; // Obvious duplicates to auto-merge
     const suggestions = []; // Potential duplicates to ask user about
     const processed = new Set();
+
+    // Filter out generic speaker names - they shouldn't be compared for duplicates
+    const realSpeakers = speakers.filter(s => !this.isGenericSpeakerName(s));
+    const filteredOut = speakers.filter(s => this.isGenericSpeakerName(s));
+
+    if (filteredOut.length > 0) {
+      logger.debug(
+        `${LOG_PREFIX} Filtered out ${filteredOut.length} generic speaker name(s) from duplicate detection:`,
+        filteredOut
+      );
+    }
+
+    if (realSpeakers.length < 2) {
+      // Not enough real names to compare
+      logger.debug(`${LOG_PREFIX} Only ${realSpeakers.length} real speaker name(s), skipping duplicate detection`);
+      return { autoMerge, suggestions };
+    }
 
     // Normalize for comparison
     const normalize = name =>
@@ -286,18 +324,18 @@ class SpeakerMappingService {
       return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
     };
 
-    for (let i = 0; i < speakers.length; i++) {
-      if (processed.has(speakers[i])) continue;
+    for (let i = 0; i < realSpeakers.length; i++) {
+      if (processed.has(realSpeakers[i])) continue;
 
-      const speaker1 = speakers[i];
+      const speaker1 = realSpeakers[i];
       const norm1 = normalize(speaker1);
       const first1 = getFirstName(speaker1);
       const last1 = getLastName(speaker1);
 
-      for (let j = i + 1; j < speakers.length; j++) {
-        if (processed.has(speakers[j])) continue;
+      for (let j = i + 1; j < realSpeakers.length; j++) {
+        if (processed.has(realSpeakers[j])) continue;
 
-        const speaker2 = speakers[j];
+        const speaker2 = realSpeakers[j];
         const norm2 = normalize(speaker2);
         const first2 = getFirstName(speaker2);
         const last2 = getLastName(speaker2);
