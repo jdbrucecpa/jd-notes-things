@@ -5,6 +5,7 @@
 
 import { escapeHtml } from './security.js';
 import { notifySuccess, notifyInfo, notifyError } from './utils/notificationHelper.js';
+import { isGenericSpeakerName } from '../shared/speakerValidation.js';
 
 // Current state
 let currentMeetingId = null;
@@ -127,14 +128,13 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
 
     // Filter out stored mappings for generic speaker IDs like "Speaker A", "Speaker B", etc.
     // These are not consistent across transcripts and shouldn't be reused
-    const genericSpeakerPattern = /^speaker\s*[a-z0-9]$/i;
     storedSuggestions = Object.fromEntries(
       Object.entries(storedSuggestions).filter(([speakerId]) => {
-        const isGeneric = genericSpeakerPattern.test(speakerId);
-        if (isGeneric) {
+        if (isGenericSpeakerName(speakerId)) {
           console.log(`[SpeakerMapping] Ignoring stored mapping for generic speaker: ${speakerId}`);
+          return false;
         }
-        return !isGeneric;
+        return true;
       })
     );
 

@@ -959,6 +959,30 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   width: 100%;
 }
 
+/* Calendar refresh button in section header */
+.refresh-calendar-btn {
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.refresh-calendar-btn:hover {
+  background: var(--card-hover);
+  color: var(--primary-color);
+}
+
+.refresh-calendar-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
 .section-title {
   font-size: 18px;
   font-weight: 600;

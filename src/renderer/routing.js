@@ -87,16 +87,6 @@ function setupEventListeners() {
     validateRoutingBtn.addEventListener('click', validateRouting);
   }
 
-  // Test routing button (toolbar)
-  const testRoutingBtn = document.getElementById('testRoutingBtn');
-  if (testRoutingBtn) {
-    testRoutingBtn.addEventListener('click', () => {
-      // Switch to test tab
-      const testTab = document.getElementById('routingTestTabBtn');
-      if (testTab) testTab.click();
-    });
-  }
-
   // Run routing test button
   const runRoutingTestBtn = document.getElementById('runRoutingTestBtn');
   if (runRoutingTestBtn) {
@@ -165,12 +155,12 @@ function parseOrganizations() {
 
   if (!routingConfig) return;
 
-  // Add clients
+  // Add clients (use 'client' singular for API consistency)
   if (routingConfig.clients) {
     Object.keys(routingConfig.clients).forEach(key => {
       organizations.push({
         id: key,
-        type: 'clients', // Use plural to match YAML section name
+        type: 'client', // Use singular to match IPC schema
         name: key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
         data: routingConfig.clients[key],
       });
@@ -182,7 +172,7 @@ function parseOrganizations() {
     Object.keys(routingConfig.industry).forEach(key => {
       organizations.push({
         id: key,
-        type: 'industry', // Singular to match YAML section name
+        type: 'industry',
         name: key.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
         data: routingConfig.industry[key],
       });
@@ -222,7 +212,7 @@ function renderOrganizationList() {
   let html = '';
 
   // Group by type
-  const clients = organizations.filter(o => o.type === 'clients');
+  const clients = organizations.filter(o => o.type === 'client');
   const industry = organizations.filter(o => o.type === 'industry');
   const internal = organizations.filter(o => o.type === 'internal');
 
@@ -309,11 +299,14 @@ function scrollToOrganization(id, type) {
   let targetLine = 0;
   let foundSection = false;
 
+  // Map type to YAML section name (client -> clients, industry -> industry, internal -> internal)
+  const sectionName = type === 'client' ? 'clients' : type;
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
 
     // Check for section headers
-    if (line === `${type}:` || line === `${type}s:`) {
+    if (line === `${sectionName}:`) {
       foundSection = true;
       continue;
     }
@@ -506,8 +499,9 @@ async function createNewOrganization() {
       <div class="form-group">
         <label for="${formId}_type">Type</label>
         <select id="${formId}_type" class="form-control">
-          <option value="clients">Client</option>
+          <option value="client">Client</option>
           <option value="industry">Industry Contact</option>
+          <option value="internal">Internal</option>
         </select>
       </div>
       <div class="form-group">

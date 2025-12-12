@@ -102,8 +102,8 @@ export function createModal({
         ${sanitizedBody}
       </div>
       <div class="modal-footer">
-        ${showCancel ? `<button class="btn-secondary" data-modal-action="cancel">${escapeHtml(cancelText)}</button>` : ''}
-        <button class="btn-primary" data-modal-action="confirm">${escapeHtml(confirmText)}</button>
+        ${showCancel ? `<button class="btn btn-secondary" data-modal-action="cancel">${escapeHtml(cancelText)}</button>` : ''}
+        <button class="btn btn-primary" data-modal-action="confirm">${escapeHtml(confirmText)}</button>
       </div>
     </div>
   `;

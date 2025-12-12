@@ -15,6 +15,7 @@ import {
 } from './components/PatternTestingPanel.js';
 import { initializeTabs } from './utils/tabHelper.js';
 import { notifySuccess, notifyError, notifyInfo } from './utils/notificationHelper.js';
+import { createModal } from './utils/modalHelper.js';
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -1056,28 +1057,63 @@ function initializeVocabularyUI() {
   // Add new client vocabulary
   const addNewClientBtn = document.getElementById('addNewClientVocab');
   if (addNewClientBtn) {
-    addNewClientBtn.addEventListener('click', async () => {
-      const slug = prompt('Enter client slug (e.g., "acme-corp"):');
-      if (slug) {
-        const normalizedSlug = slug.toLowerCase().replace(/\s+/g, '-');
-        if (!vocabularyConfig.clients) vocabularyConfig.clients = {};
-        if (!vocabularyConfig.clients[normalizedSlug]) {
-          vocabularyConfig.clients[normalizedSlug] = {
-            spelling_corrections: [],
-            keyword_boosts: [],
-          };
-          await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
-          await loadClientSlugs();
-          document.getElementById('vocabularyClientSelect').value = normalizedSlug;
-          selectedClientSlug = normalizedSlug;
-          renderVocabularyUI();
-          notifySuccess(`Created vocabulary for "${normalizedSlug}"`);
-        } else {
-          document.getElementById('vocabularyClientSelect').value = normalizedSlug;
-          selectedClientSlug = normalizedSlug;
-          renderVocabularyUI();
-        }
-      }
+    addNewClientBtn.addEventListener('click', () => {
+      const formId = 'addClientVocab_' + Date.now();
+
+      createModal({
+        title: 'Add Client Vocabulary',
+        body: `
+          <div class="form-group">
+            <label for="${formId}_slug">Client Slug</label>
+            <input type="text" id="${formId}_slug" class="form-control" placeholder="e.g., acme-corp" />
+            <small class="form-help">Use lowercase with hyphens (e.g., acme-corp, tech-solutions)</small>
+          </div>
+        `,
+        confirmText: 'Add Client',
+        cancelText: 'Cancel',
+        onConfirm: async () => {
+          const slugInput = document.getElementById(`${formId}_slug`);
+          const slug = slugInput?.value?.trim();
+
+          if (!slug) {
+            notifyError('Please enter a client slug');
+            throw new Error('Validation failed');
+          }
+
+          const normalizedSlug = slug.toLowerCase().replace(/\s+/g, '-');
+
+          // Validate slug format
+          if (!/^[a-z0-9-]+$/.test(normalizedSlug)) {
+            notifyError('Client slug must be lowercase alphanumeric with hyphens');
+            throw new Error('Validation failed');
+          }
+
+          if (!vocabularyConfig.clients) vocabularyConfig.clients = {};
+          if (!vocabularyConfig.clients[normalizedSlug]) {
+            vocabularyConfig.clients[normalizedSlug] = {
+              spelling_corrections: [],
+              keyword_boosts: [],
+            };
+            await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
+            await loadClientSlugs();
+            document.getElementById('vocabularyClientSelect').value = normalizedSlug;
+            selectedClientSlug = normalizedSlug;
+            renderVocabularyUI();
+            notifySuccess(`Created vocabulary for "${normalizedSlug}"`);
+          } else {
+            document.getElementById('vocabularyClientSelect').value = normalizedSlug;
+            selectedClientSlug = normalizedSlug;
+            renderVocabularyUI();
+            notifyInfo(`Client "${normalizedSlug}" already exists, selected it`);
+          }
+        },
+      });
+
+      // Focus on the input after modal is created
+      setTimeout(() => {
+        const slugInput = document.getElementById(`${formId}_slug`);
+        if (slugInput) slugInput.focus();
+      }, 150);
     });
   }
 

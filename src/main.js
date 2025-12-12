@@ -33,6 +33,7 @@ const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
 const speakerMappingService = require('./main/services/speakerMappingService');
 const vocabularyService = require('./main/services/vocabularyService');
+const { isGenericSpeakerName } = require('./shared/speakerValidation');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
@@ -5070,10 +5071,9 @@ ipcMain.handle(
     // Persist each mapping to the service for future auto-suggest
     // But skip generic speaker IDs like "Speaker A", "Speaker B" which are not consistent across transcripts
     if (mappings) {
-      const genericSpeakerPattern = /^speaker\s*[a-z0-9]$/i;
       for (const [speakerId, mapping] of Object.entries(mappings)) {
         // Skip saving mappings for generic speaker IDs
-        if (genericSpeakerPattern.test(speakerId)) {
+        if (isGenericSpeakerName(speakerId)) {
           console.log(`[SpeakerMapping IPC] Not persisting mapping for generic speaker: ${speakerId}`);
           continue;
         }
@@ -5481,20 +5481,22 @@ ipcMain.handle(
       throw new Error('Routing engine not initialized');
     }
 
-    // Create a mock meeting object with participants
-    const mockMeeting = {
-      participants: emails.map(email => ({ email })),
-    };
+    // Use the testRoute method which is designed for this purpose
+    const decision = routingEngine.testRoute(emails);
 
-    // Use routing engine to determine vault path
-    const result = routingEngine.determineMeetingPath(mockMeeting);
+    // Get the primary route
+    const primaryRoute = decision.routes[0] || {};
 
     return {
-      vaultPath: result.vaultPath,
-      reason: result.reason,
-      matchedOrganizations: result.matchedOrgs || [],
+      vaultPath: primaryRoute.fullPath || '_unfiled/',
+      reason: decision.multiOrg
+        ? `Multi-org meeting with ${decision.orgCount} organizations`
+        : primaryRoute.type
+          ? `Routed to ${primaryRoute.type}${primaryRoute.slug ? ` (${primaryRoute.slug})` : ''}`
+          : 'No match found - routed to unfiled',
+      matchedOrganizations: decision.routes.map(r => r.slug || r.type).filter(Boolean),
       matchedEmails: emails.filter(email => {
-        return routingEngine.findMatchingOrganization(email) !== null;
+        return routingEngine.emailMatcher.match(email) !== null;
       }),
     };
   })
@@ -5777,22 +5779,27 @@ ipcMain.handle(
       throw new Error('Type, ID, and vault path are required');
     }
 
-    if (!['clients', 'industry'].includes(type)) {
-      throw new Error('Type must be "clients" or "industry"');
+    // Map type names (handle both singular and plural forms)
+    // Schema sends: 'client', 'industry', 'internal'
+    // YAML uses: 'clients', 'industry', 'internal'
+    const typeKey = type === 'client' ? 'clients' : type;
+
+    if (!['clients', 'industry', 'internal'].includes(typeKey)) {
+      throw new Error('Type must be "client", "industry", or "internal"');
     }
 
     // Check if organization already exists
-    if (config[type] && config[type][id]) {
-      throw new Error(`Organization "${id}" already exists in ${type}`);
+    if (config[typeKey] && config[typeKey][id]) {
+      throw new Error(`Organization "${id}" already exists in ${typeKey}`);
     }
 
     // Initialize section if it doesn't exist
-    if (!config[type]) {
-      config[type] = {};
+    if (!config[typeKey]) {
+      config[typeKey] = {};
     }
 
     // Add the new organization
-    config[type][id] = {
+    config[typeKey][id] = {
       vault_path: vaultPath,
       emails: emails || [],
       contacts: contacts || [],
@@ -5816,7 +5823,7 @@ ipcMain.handle(
       console.log('[Routing IPC] Routing engine reloaded');
     }
 
-    return { content: newContent };
+    return { success: true, content: newContent };
   })
 );
 
@@ -5908,14 +5915,19 @@ ipcMain.handle(
       throw new Error('Type and ID are required');
     }
 
-    // Check if organization exists
-    if (!config[type] || !config[type][id]) {
-      throw new Error(`Organization "${id}" not found in ${type}`);
-    }
+    // Map type names (handle both singular and plural forms)
+    // Schema sends: 'client', 'industry', 'internal'
+    // YAML uses: 'clients', 'industry', 'internal'
+    const typeKey = type === 'client' ? 'clients' : type;
 
     // Prevent deleting internal (it's special)
-    if (type === 'internal') {
+    if (typeKey === 'internal') {
       throw new Error('Cannot delete internal organization');
+    }
+
+    // Check if organization exists
+    if (!config[typeKey] || !config[typeKey][id]) {
+      throw new Error(`Organization "${id}" not found in ${typeKey}`);
     }
 
     // Create backup before deleting
@@ -5926,7 +5938,7 @@ ipcMain.handle(
     }
 
     // Delete the organization
-    delete config[type][id];
+    delete config[typeKey][id];
 
     // Keep the section even if empty (don't delete it)
     // This ensures the routing engine doesn't fail on reload
@@ -5942,7 +5954,7 @@ ipcMain.handle(
       console.log('[Routing IPC] Routing engine reloaded');
     }
 
-    return { content: newContent };
+    return { success: true, content: newContent };
   })
 );
 

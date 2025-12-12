@@ -33,7 +33,8 @@ module.exports = {
     new MonacoWebpackPlugin({
       // Available languages: https://github.com/microsoft/monaco-editor/tree/main/src/basic-languages
       languages: ['yaml', 'json', 'markdown', 'plaintext'],
-      features: ['coreCommands', 'find'],
+      // Include colorization features for proper syntax highlighting
+      features: ['coreCommands', 'find', 'colorPicker', 'bracketMatching', 'wordHighlighter', 'folding'],
     }),
     new CopyWebpackPlugin({
       patterns: [

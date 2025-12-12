@@ -917,7 +917,7 @@
             <h3>Import Options</h3>
 
             <div class="import-option-group">
-              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Summaries</h4>
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: var(--text-secondary);">Summaries</h4>
               <label class="checkbox-label">
                 <input type="checkbox" id="generateAutoSummaryCheck" checked />
                 <span>Generate auto-summary</span>
@@ -935,7 +935,7 @@
             <div style="height: 16px;"></div>
 
             <div class="import-option-group">
-              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Export</h4>
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: var(--text-secondary);">Export</h4>
               <label class="checkbox-label">
                 <input type="checkbox" id="autoExportCheck" />
                 <span>Auto-export to Obsidian vault</span>
@@ -947,7 +947,7 @@
 
             <!-- IM-1.3: Audio Transcription Provider (shown when audio files selected) -->
             <div class="import-option-group" id="audioProviderGroup" style="display: none;">
-              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Audio Transcription</h4>
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: var(--text-secondary);">Audio Transcription</h4>
               <p style="margin: 0 0 8px 0; font-size: 12px; color: #888;">
                 <span id="audioFileCount">0</span> audio file(s) will be transcribed before import
               </p>
@@ -968,7 +968,7 @@
 
             <!-- UI-1.6: Meeting Platform Selection -->
             <div class="import-option-group">
-              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Meeting Platform</h4>
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: var(--text-secondary);">Meeting Platform</h4>
               <p style="margin: 0 0 8px 0; font-size: 12px; color: #888;">
                 Select the original meeting platform (for imported files)
               </p>
@@ -988,7 +988,7 @@
             <div style="height: 16px;"></div>
 
             <div class="import-option-group">
-              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: #666;">Pattern Testing</h4>
+              <h4 style="margin: 0 0 8px 0; font-size: 14px; color: var(--text-secondary);">Pattern Testing</h4>
               <label class="checkbox-label">
                 <input type="checkbox" id="previewParsingCheck" />
                 <span>Preview parsing before importing (shows first file)</span>
@@ -1010,7 +1010,7 @@
         </div>
 
         <div class="modal-footer">
-          <div style="flex: 1; font-size: 12px; color: #666; text-align: left;">
+          <div style="flex: 1; font-size: 12px; color: var(--text-secondary); text-align: left;">
             Import runs in background - you can close this window after starting
           </div>
           <button class="btn btn-secondary" id="cancelImport">Cancel</button>
@@ -1467,7 +1467,7 @@
           <div class="settings-panel" id="routingPanel" style="display: none;">
             <div class="settings-section">
               <h3 class="settings-section-title">Routing Configuration</h3>
-              <p style="color: #666; margin-bottom: 20px;">
+              <p style="color: var(--text-secondary); margin-bottom: 20px;">
                 Configure where meeting notes are saved based on participant email addresses. Define clients, industry contacts, and internal team routing rules.
               </p>
 
@@ -1511,12 +1511,6 @@
                         </svg>
                         Validate
                       </button>
-                      <button id="testRoutingBtn" class="btn-secondary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill="currentColor"/>
-                        </svg>
-                        Test
-                      </button>
                       <button id="saveRoutingBtn">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                           <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" fill="currentColor"/>
@@ -1545,7 +1539,12 @@
                         <input type="text" id="routingTestEmailInput" placeholder="e.g., john@example.com, jane@company.com" />
                       </div>
 
-                      <button id="runRoutingTestBtn" class="btn-primary" style="margin-top: 12px;">Run Test</button>
+                      <button id="runRoutingTestBtn" class="btn btn-secondary" style="margin-top: 12px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M8 5v14l11-7z" fill="currentColor"/>
+                        </svg>
+                        Run Test
+                      </button>
 
                       <div id="routingTestResults" style="margin-top: 24px; display: none;">
                         <h5 style="margin-bottom: 12px;">Routing Result:</h5>
@@ -1561,9 +1560,23 @@
           <div class="settings-panel" id="templatesPanel" style="display: none;">
             <div class="settings-section">
               <h3 class="settings-section-title">Template Editor</h3>
-              <p style="color: #666; margin-bottom: 20px;">
+              <p style="color: var(--text-secondary); margin-bottom: 20px;">
                 Create and edit summary templates that define how meeting transcripts are summarized.
               </p>
+
+              <!-- Manual template management notice -->
+              <div class="info-notice" style="background: var(--bg-secondary); border-radius: 8px; padding: 16px; margin-bottom: 20px; border-left: 4px solid var(--primary-color);">
+                <p style="margin: 0 0 8px 0; font-weight: 500; color: var(--text-primary);">Manual Template Management</p>
+                <p style="margin: 0; color: var(--text-secondary); font-size: 13px;">
+                  Template creation and deletion features are coming soon. In the meantime, you can manage templates manually:
+                </p>
+                <ul style="margin: 8px 0 0 0; padding-left: 20px; color: var(--text-secondary); font-size: 13px;">
+                  <li>Templates are stored in your config folder: <code style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 2px 6px; border-radius: 4px; font-family: monospace;">%APPDATA%\jd-notes-things\config\templates\</code></li>
+                  <li>Supported formats: <code style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 1px 4px; border-radius: 3px;">.md</code>, <code style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 1px 4px; border-radius: 3px;">.yaml</code>, <code style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 1px 4px; border-radius: 3px;">.json</code>, <code style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 1px 4px; border-radius: 3px;">.txt</code></li>
+                  <li>Add new templates by creating files directly in this folder</li>
+                  <li>Click "Refresh" in the Templates tab after adding new files</li>
+                </ul>
+              </div>
 
               <div class="template-editor-container">
                 <!-- Template List Sidebar -->
@@ -1696,7 +1709,7 @@
           <div class="settings-panel" id="patternsPanel" style="display: none;">
             <div class="settings-section">
               <h3 class="settings-section-title">Transcript Pattern Testing</h3>
-              <p style="color: #666; margin-bottom: 20px;">
+              <p style="color: var(--text-secondary); margin-bottom: 20px;">
                 Test and edit patterns for parsing transcript files. Patterns are defined in YAML and use regex to extract speaker names and text.
               </p>
 
@@ -1920,7 +1933,7 @@
 
               <div class="log-viewer" id="logViewer">
                 <div class="log-viewer-content" id="logViewerContent">
-                  <div style="color: #666; text-align: center; padding: 40px;">
+                  <div style="color: var(--text-secondary); text-align: center; padding: 40px;">
                     Click "Refresh" to load logs
                   </div>
                 </div>
@@ -1928,7 +1941,7 @@
 
               <div class="log-viewer-footer">
                 <span id="logStats">0 lines</span>
-                <span id="logPath" style="color: #666; font-size: 12px;"></span>
+                <span id="logPath" style="color: var(--text-secondary); font-size: 12px;"></span>
               </div>
             </div>
           </div>
@@ -1936,7 +1949,7 @@
           <div class="settings-panel" id="advancedPanel" style="display: none;">
             <div class="settings-section">
               <h3 class="settings-section-title">Backup & Restore</h3>
-              <p class="settings-section-description" style="color: #666; font-size: 13px; margin-bottom: 16px;">
+              <p class="settings-section-description" style="color: var(--text-secondary); font-size: 13px; margin-bottom: 16px;">
                 Export all configuration including routing rules, templates, vocabulary, speaker mappings, and app preferences.
                 API keys are NOT exported for security.
               </p>
@@ -1955,7 +1968,7 @@
                   <span>Import Settings</span>
                 </button>
               </div>
-              <div id="exportStatus" style="margin-top: 12px; font-size: 13px; color: #666; display: none;"></div>
+              <div id="exportStatus" style="margin-top: 12px; font-size: 13px; color: var(--text-secondary); display: none;"></div>
             </div>
 
             <!-- RS-2: Data Maintenance Section -->
@@ -1996,7 +2009,7 @@
             <div class="settings-section">
               <div class="about-info">
                 <h3>JD Notes Things</h3>
-                <p class="version" id="appVersion">v1.1.0</p>
+                <p class="version" id="appVersion">v1.2.0</p>
                 <p>AI-Powered Meeting Transcription & Summarization</p>
                 <p style="margin-top: 12px;">
                   <a href="#" id="githubRepoLink" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
@@ -2045,7 +2058,7 @@
                   <div class="settings-item-description" id="updateStatus">Auto-updates are enabled. Click to check manually.</div>
                 </div>
                 <div class="settings-item-control">
-                  <button class="action-btn" id="checkForUpdatesBtn">Check Now</button>
+                  <button class="btn btn-secondary" id="checkForUpdatesBtn">Check Now</button>
                 </div>
               </div>
             </div>

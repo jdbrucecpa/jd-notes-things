@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const logger = require('../../shared/logger');
+const { isGenericSpeakerName } = require('../../shared/speakerValidation');
 
 const LOG_PREFIX = '[SpeakerMappingService]';
 
@@ -265,27 +266,6 @@ class SpeakerMappingService {
   }
 
   /**
-   * Check if a speaker name is a generic/placeholder name that shouldn't be used for duplicate detection
-   * @param {string} name - Speaker name to check
-   * @returns {boolean} True if it's a generic name
-   */
-  isGenericSpeakerName(name) {
-    if (!name) return true;
-
-    // Pattern for generic speaker IDs like "Speaker A", "Speaker B", "Speaker 1", etc.
-    const genericPatterns = [
-      /^speaker\s*[a-z0-9]$/i, // "Speaker A", "Speaker B", "Speaker 1"
-      /^SPK[-_][a-z0-9]+$/i, // "SPK-abc123"
-      /^spk_\d+$/i, // "spk_1"
-      /^SPEAKER_\d+$/i, // "SPEAKER_1"
-      /^S\d+$/i, // "S1", "S2"
-      /^unknown\s*speaker$/i, // "Unknown Speaker"
-    ];
-
-    return genericPatterns.some(pattern => pattern.test(name.trim()));
-  }
-
-  /**
    * Detect potential duplicate speakers that might be the same person
    * @param {string[]} speakers - Array of unique speaker names
    * @returns {Object} Object with { autoMerge: [{from, to}], suggestions: [{speakers, reason}] }
@@ -296,8 +276,8 @@ class SpeakerMappingService {
     const processed = new Set();
 
     // Filter out generic speaker names - they shouldn't be compared for duplicates
-    const realSpeakers = speakers.filter(s => !this.isGenericSpeakerName(s));
-    const filteredOut = speakers.filter(s => this.isGenericSpeakerName(s));
+    const realSpeakers = speakers.filter(s => !isGenericSpeakerName(s));
+    const filteredOut = speakers.filter(s => isGenericSpeakerName(s));
 
     if (filteredOut.length > 0) {
       logger.debug(
@@ -510,25 +490,6 @@ class SpeakerMappingService {
       transcript: updatedTranscript,
       mapping: suggestions,
     };
-  }
-
-  /**
-   * Check if a speaker label looks like a cryptic ID that needs mapping
-   * @param {string} speaker - Speaker label to check
-   * @returns {boolean} True if it appears to be a cryptic ID
-   */
-  isCrypticSpeakerId(speaker) {
-    if (!speaker) return false;
-
-    const crypticPatterns = [
-      /^SPK[-_][a-z0-9]+$/i,
-      /^Speaker\s*[A-Z0-9]+$/i,
-      /^spk_\d+$/i,
-      /^SPEAKER_\d+$/i,
-      /^S\d+$/i,
-    ];
-
-    return crypticPatterns.some(pattern => pattern.test(speaker));
   }
 
   /**

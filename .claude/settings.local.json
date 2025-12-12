@@ -26,5 +26,6 @@
       "Read(.env*):*"
     ],
     "ask": []
-  }
+  },
+  "outputStyle": "Explanatory"
 }
