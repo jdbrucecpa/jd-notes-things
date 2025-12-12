@@ -234,7 +234,7 @@ async function refreshLogs(textFilter = null) {
 
     // Show loading state
     logViewerContent.innerHTML =
-      '<div style="color: #666; text-align: center; padding: 40px;">Loading logs...</div>';
+      '<div style="color: var(--text-secondary); text-align: center; padding: 40px;">Loading logs...</div>';
 
     const result = await window.electronAPI.appGetLogs({ limit: 2000, level: apiLevel });
 
@@ -251,7 +251,7 @@ async function refreshLogs(textFilter = null) {
 
       if (logs.length === 0) {
         const filterMsg = textFilterValue ? ` matching "${textFilterValue}"` : '';
-        logViewerContent.innerHTML = `<div style="color: #666; text-align: center; padding: 40px;">No logs found${filterMsg}</div>`;
+        logViewerContent.innerHTML = `<div style="color: var(--text-secondary); text-align: center; padding: 40px;">No logs found${filterMsg}</div>`;
       } else {
         // Render logs with text highlighting if filter is active
         const logsHTML = logs
@@ -294,13 +294,13 @@ async function refreshLogs(textFilter = null) {
         logPath.textContent = path;
       }
     } else {
-      logViewerContent.innerHTML = `<div style="color: #e74c3c; text-align: center; padding: 40px;">Error loading logs: ${result.error}</div>`;
+      logViewerContent.innerHTML = `<div style="color: var(--color-error); text-align: center; padding: 40px;">Error loading logs: ${result.error}</div>`;
     }
   } catch (error) {
     console.error('[AppSettings] Refresh logs error:', error);
     const logViewerContent = document.getElementById('logViewerContent');
     if (logViewerContent) {
-      logViewerContent.innerHTML = `<div style="color: #e74c3c; text-align: center; padding: 40px;">Error: ${error.message}</div>`;
+      logViewerContent.innerHTML = `<div style="color: var(--color-error); text-align: center; padding: 40px;">Error: ${error.message}</div>`;
     }
   }
 }

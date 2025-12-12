@@ -4844,6 +4844,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       let html = '';
 
+      // Add "Default" option to remove manual override and return to auto-routing
+      html += '<option value="__default__">↺ Default (auto-route)</option>';
+
       // CS-4.6: Add "Create New Organization" option at the top
       html += '<option value="__create_new__">+ Create New Organization...</option>';
 
@@ -4888,6 +4891,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function applyDestinationOverride() {
     const select = document.getElementById('routingDestinationSelect');
     if (!select || !select.value) return;
+
+    // Handle "Default" option - clear the manual override
+    if (select.value === '__default__') {
+      routingOverride = null;
+      hideDestinationPicker();
+      // Re-render preview with auto-routing
+      await loadRoutingPreview();
+      return;
+    }
 
     // CS-4.6: Check if "Create New Organization" was selected
     if (select.value === '__create_new__') {

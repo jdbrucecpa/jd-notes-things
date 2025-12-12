@@ -125,7 +125,7 @@ async function loadAPIKeys() {
     console.error('[SecuritySettings] Failed to load API keys:', error);
     tableBody.innerHTML = `
       <tr>
-        <td colspan="4" style="text-align: center; padding: 32px; color: #f44336;">
+        <td colspan="4" style="text-align: center; padding: 32px; color: var(--color-error);">
           <p>Failed to load API keys: ${error.message}</p>
           <button class="api-key-action-btn" onclick="location.reload()" style="margin-top: 12px;">Retry</button>
         </td>

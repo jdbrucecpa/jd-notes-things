@@ -427,11 +427,6 @@
           <div class="meeting-participants-card">
             <div class="card-header">
               <h3 class="card-title">Participants</h3>
-              <button class="icon-btn" id="editParticipantsBtn" title="Edit participants">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/>
-                </svg>
-              </button>
             </div>
             <div class="participants-list" id="meetingDetailParticipants">
               <!-- Participants will be dynamically inserted -->
@@ -1326,8 +1321,8 @@
 
               <div class="settings-item">
                 <div class="settings-item-info">
-                  <div class="settings-item-label">Show Recording Widget</div>
-                  <div class="settings-item-description">Display a floating widget when meetings are detected for quick recording control</div>
+                  <div class="settings-item-label">Auto Pop-up Recording Widget</div>
+                  <div class="settings-item-description">Automatically show the floating widget when meetings are detected or calendar events start</div>
                 </div>
                 <div class="settings-item-control">
                   <div class="toggle-switch" id="showRecordingWidgetToggle">
@@ -1744,8 +1739,7 @@
                   <div class="pattern-test-sample">
                     <textarea id="patternTestSampleText"
                               placeholder="Paste sample transcript text here to test patterns..."
-                              rows="8"
-                              style="width: 100%; padding: 12px; font-family: monospace; font-size: 13px; resize: vertical; border: 1px solid var(--border-color); border-radius: 4px;"></textarea>
+                              rows="8"></textarea>
                   </div>
 
                   <!-- Results -->

@@ -23,6 +23,12 @@
 
   /* Brand colors */
   --brand-google: #4285f4;
+  --accent-color: #6947bd;
+
+  /* Interactive state colors */
+  --primary-color-hover: #0066cc;
+  --primary-color-active: #0055aa;
+  --accent-color-hover: #5839a0;
 
   /* Additional semantic colors */
   --color-error: #f44336;
@@ -39,6 +45,16 @@
 
   /* Gradients */
   --gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+
+  /* Routing type colors */
+  --routing-client: #3b82f6;
+  --routing-client-bg: rgba(59, 130, 246, 0.15);
+  --routing-industry: #8b5cf6;
+  --routing-industry-bg: rgba(139, 92, 246, 0.15);
+  --routing-internal: #22c55e;
+  --routing-internal-bg: rgba(34, 197, 94, 0.15);
+  --routing-unfiled: #eab308;
+  --routing-unfiled-bg: rgba(234, 179, 8, 0.15);
 }
 
 /* Dark Theme Variables */
@@ -66,6 +82,12 @@ body.dark-theme {
 
   /* Brand colors (Google blue stays same for brand consistency) */
   --brand-google: #4285f4;
+  --accent-color: #8b5cf6;
+
+  /* Interactive state colors (adjusted for dark mode) */
+  --primary-color-hover: #2196f3;
+  --primary-color-active: #1976d2;
+  --accent-color-hover: #7c3aed;
 
   /* Additional semantic colors (adjusted for dark mode) */
   --color-error: #ef5350;
@@ -78,6 +100,16 @@ body.dark-theme {
   --color-gray-light: #555;
   --color-gray-medium: #777;
   --color-gray-dark: #aaa;
+
+  /* Routing type colors (adjusted for dark mode) */
+  --routing-client: #60a5fa;
+  --routing-client-bg: rgba(96, 165, 250, 0.2);
+  --routing-industry: #a78bfa;
+  --routing-industry-bg: rgba(167, 139, 250, 0.2);
+  --routing-internal: #4ade80;
+  --routing-internal-bg: rgba(74, 222, 128, 0.2);
+  --routing-unfiled: #facc15;
+  --routing-unfiled-bg: rgba(250, 204, 21, 0.2);
   --color-text-muted: #999;
 }
 
@@ -621,7 +653,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .filter-save-view-btn:hover {
-  background: #0a6ee0;
+  background: var(--primary-color-hover);
 }
 
 /* Spacer */
@@ -673,12 +705,12 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .toolbar-btn-primary:hover {
-  background: #0066cc;
-  border-color: #0066cc;
+  background: var(--primary-color-hover);
+  border-color: var(--primary-color-hover);
 }
 
 .toolbar-btn-primary:active {
-  background: #0055aa;
+  background: var(--primary-color-active);
 }
 
 /* Secondary Button (Meeting) */
@@ -758,12 +790,12 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .toolbar-icon-btn.connected .toolbar-status-badge {
-  background: #10b981;
+  background: var(--status-success);
   animation: pulse 2s ease-in-out infinite;
 }
 
 .toolbar-status-badge.disconnected {
-  background: #ef4444;
+  background: var(--color-error);
   animation: none;
 }
 
@@ -1021,8 +1053,8 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .btn-accent:hover {
-  background-color: #5839a0;
-  border-color: #5839a0;
+  background-color: var(--accent-color-hover);
+  border-color: var(--accent-color-hover);
 }
 
 .btn-accent:disabled {
@@ -1372,7 +1404,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   border: none;
   padding: 6px;
   cursor: pointer;
-  color: var(--accent-color);
+  color: var(--color-gray-medium);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -1381,8 +1413,8 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .sync-meeting-btn:hover {
-  background-color: rgba(105, 71, 189, 0.1);
-  color: var(--accent-color);
+  background-color: rgba(76, 175, 80, 0.1);
+  color: var(--status-success);
 }
 
 .sync-meeting-btn:disabled {
@@ -2229,23 +2261,23 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .routing-preview-icon.client {
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+  background: var(--routing-client-bg);
+  color: var(--routing-client);
 }
 
 .routing-preview-icon.industry {
-  background: rgba(139, 92, 246, 0.15);
-  color: #8b5cf6;
+  background: var(--routing-industry-bg);
+  color: var(--routing-industry);
 }
 
 .routing-preview-icon.internal {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background: var(--routing-internal-bg);
+  color: var(--routing-internal);
 }
 
 .routing-preview-icon.unfiled {
-  background: rgba(234, 179, 8, 0.15);
-  color: #eab308;
+  background: var(--routing-unfiled-bg);
+  color: var(--routing-unfiled);
 }
 
 .routing-preview-info {
@@ -5301,6 +5333,13 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 20px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Editing state highlight for meeting info card */
+.meeting-info-card.editing {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
 }
 
 .meeting-title-row {
@@ -5336,6 +5375,19 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   background: var(--bg-secondary);
   border-color: var(--primary-color);
   color: var(--primary-color);
+}
+
+/* Active state for edit buttons (when in edit mode) */
+.icon-btn.active {
+  background: var(--status-success);
+  border-color: var(--status-success);
+  color: white;
+}
+
+.icon-btn.active:hover {
+  background: #43a047;
+  border-color: #43a047;
+  color: white;
 }
 
 .meeting-meta-row {
@@ -5452,21 +5504,11 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 .meeting-participants-card .card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   margin-bottom: 16px;
 }
 
 .meeting-participants-card .card-header .card-title {
   margin: 0;
-}
-
-.meeting-participants-card .card-header .icon-btn {
-  opacity: 0.6;
-  transition: opacity 0.2s;
-}
-
-.meeting-participants-card .card-header .icon-btn:hover {
-  opacity: 1;
 }
 
 .card-title {
@@ -5558,6 +5600,51 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   flex-shrink: 0;
 }
 
+/* Participant name row with talk time (v1.2) */
+.participant-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.participant-name-row .participant-name {
+  margin-bottom: 0;
+}
+
+.participant-talk-time {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.talk-time-percent {
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 24px;
+  text-align: right;
+}
+
+.talk-time-bar-mini {
+  width: 40px;
+  height: 3px;
+  background: var(--border-color);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.talk-time-fill-mini {
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
 /* Participant edit input */
 .participant-edit-input {
   padding: 4px 8px;
@@ -5595,18 +5682,10 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   border-color: var(--text-secondary);
 }
 
-/* Participants edit mode */
-.participants-list.edit-mode .participant-item {
-  padding: 8px 12px;
-}
-
+/* Participant actions - always visible */
 .participant-item .participant-actions {
-  display: none;
-  gap: 4px;
-}
-
-.participants-list.edit-mode .participant-item .participant-actions {
   display: flex;
+  gap: 4px;
 }
 
 .participant-item .participant-actions .icon-btn {
@@ -5625,17 +5704,13 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   color: var(--color-error);
 }
 
-/* Add participant button in edit mode */
+/* Add participant button - always visible */
 .add-participant-row {
-  display: none;
+  display: flex;
   padding: 12px;
   border: 1px dashed var(--border-color);
   border-radius: 8px;
   justify-content: center;
-}
-
-.participants-list.edit-mode .add-participant-row {
-  display: flex;
 }
 
 .add-participant-row .btn {
@@ -6904,6 +6979,22 @@ body.dark-theme .pattern-error {
   margin-bottom: 16px;
 }
 
+.pattern-test-sample textarea {
+  width: 100%;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 13px;
+  resize: vertical;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.pattern-test-sample textarea::placeholder {
+  color: var(--text-secondary);
+}
+
 .pattern-test-results {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -7006,6 +7097,62 @@ body.dark-theme .pattern-error {
   font-weight: 500;
   color: var(--text-primary);
   word-break: break-all;
+}
+
+/* Speaker Statistics (v1.2) */
+.speaker-stats {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.speaker-talk-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.talk-time-label {
+  color: var(--text-secondary);
+}
+
+.talk-time-value {
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 32px;
+}
+
+.talk-time-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  overflow: hidden;
+  max-width: 80px;
+}
+
+.talk-time-fill {
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.speaker-sample-quote {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  border-left: 2px solid var(--border-color);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .speaker-mapping-arrow {

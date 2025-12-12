@@ -56,6 +56,7 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
   const speakerIds = result.success ? result.speakerIds : [];
   const existingMappings = result.success ? result.existingMappings || {} : {};
   const profileSuggestions = result.success ? result.profileSuggestions || {} : {};
+  const speakerStats = result.success ? result.speakerStats || {} : {};
   console.log(
     `[SpeakerMapping] Extract IDs took ${(performance.now() - extractStart).toFixed(0)}ms, found ${speakerIds.length} IDs`
   );
@@ -64,6 +65,9 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
   }
   if (Object.keys(profileSuggestions).length > 0) {
     console.log(`[SpeakerMapping] Profile suggestions:`, profileSuggestions);
+  }
+  if (Object.keys(speakerStats).length > 0) {
+    console.log(`[SpeakerMapping] Speaker stats:`, speakerStats);
   }
 
   if (speakerIds.length === 0) {
@@ -161,7 +165,7 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
 
     // Render speaker mapping rows
     const renderStart = performance.now();
-    await renderSpeakerRows(speakersList, filteredSpeakerIds, suggestions);
+    await renderSpeakerRows(speakersList, filteredSpeakerIds, suggestions, speakerStats);
     console.log(
       `[SpeakerMapping] Render rows took ${(performance.now() - renderStart).toFixed(0)}ms`
     );
@@ -190,12 +194,13 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
 /**
  * Render speaker mapping rows
  */
-async function renderSpeakerRows(container, speakerIds, suggestions) {
+async function renderSpeakerRows(container, speakerIds, suggestions, speakerStats = {}) {
   container.innerHTML = '';
 
   for (const speakerId of speakerIds) {
     const suggestion = suggestions[speakerId];
-    const row = createSpeakerRow(speakerId, suggestion);
+    const stats = speakerStats[speakerId] || {};
+    const row = createSpeakerRow(speakerId, suggestion, stats);
     container.appendChild(row);
 
     // If there's a suggestion, pre-populate the mapping
@@ -307,7 +312,7 @@ function mergeSpeakers(fromSpeaker, toSpeaker, suggestionItem) {
 /**
  * Create a speaker mapping row
  */
-function createSpeakerRow(speakerId, suggestion) {
+function createSpeakerRow(speakerId, suggestion, stats = {}) {
   const row = document.createElement('div');
   row.className = 'speaker-mapping-row';
   row.dataset.speakerId = speakerId;
@@ -320,6 +325,22 @@ function createSpeakerRow(speakerId, suggestion) {
     <path d="M12 4L10.59 5.41 16.17 11H4V13H16.17L10.59 18.59 12 20L20 12L12 4Z" fill="currentColor"/>
   </svg>`;
 
+  // Build stats HTML if we have stats
+  const talkTimePercent = stats.talkTimePercent || 0;
+  const sampleQuote = stats.sampleQuote || '';
+  const statsHtml = `
+    <div class="speaker-stats">
+      <div class="speaker-talk-time">
+        <span class="talk-time-label">Talk time:</span>
+        <span class="talk-time-value">${talkTimePercent}%</span>
+        <div class="talk-time-bar">
+          <div class="talk-time-fill" style="width: ${Math.min(talkTimePercent, 100)}%"></div>
+        </div>
+      </div>
+      ${sampleQuote ? `<div class="speaker-sample-quote">"${escapeHtml(sampleQuote)}"</div>` : ''}
+    </div>
+  `;
+
   row.innerHTML = `
     <div class="speaker-merge-checkbox">
       <input type="checkbox" class="merge-checkbox" data-speaker-id="${escapeHtml(speakerId)}" />
@@ -327,6 +348,7 @@ function createSpeakerRow(speakerId, suggestion) {
     <div class="speaker-id-box">
       <span class="speaker-id-label">Original Speaker</span>
       <span class="speaker-id-value">${escapeHtml(speakerId)}</span>
+      ${statsHtml}
     </div>
     <div class="speaker-mapping-arrow">
       ${arrowSvg}

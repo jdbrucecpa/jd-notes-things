@@ -1344,23 +1344,26 @@ function showRecordingWidget(meetingInfo = null) {
     }
   };
 
-  widget.once('ready-to-show', () => {
-    widget.show();
-    sendUpdate();
-  });
-
   if (widget.isVisible()) {
     // Widget already visible, just update content
     sendUpdate();
+  } else {
+    // Wait for ready-to-show event before displaying
+    widget.once('ready-to-show', () => {
+      widget.show();
+      sendUpdate();
+    });
   }
 }
 
 /**
  * Hide the recording widget
+ * Note: We destroy instead of hide to avoid Windows transparency flash on re-show
  */
 function hideRecordingWidget() {
   if (recordingWidget && !recordingWidget.isDestroyed()) {
-    recordingWidget.hide();
+    recordingWidget.close();
+    recordingWidget = null;
   }
 }
 
@@ -2352,6 +2355,35 @@ async function initSDK() {
         message: `${platformName} meeting detected`,
         type: 'info',
       });
+    }
+
+    // v1.2: Auto-show widget when meeting detected (if setting enabled and not already visible)
+    const showWidgetOnDetection =
+      appSettings.showRecordingWidget !== undefined
+        ? appSettings.showRecordingWidget
+        : (appSettings.notifications?.showRecordingWidget ?? true);
+
+    if (showWidgetOnDetection && !isRecording) {
+      // Check if widget is already visible to avoid re-popping
+      const widgetAlreadyVisible =
+        recordingWidget && !recordingWidget.isDestroyed() && recordingWidget.isVisible();
+
+      if (!widgetAlreadyVisible) {
+        logger.main.info(`[Widget] Auto-showing widget for detected ${platformName} meeting`);
+
+        // Create a meeting-like object for the widget with platform info
+        const detectedMeetingInfo = {
+          id: `detected-${evt.window.id}`,
+          title: `${platformName} Meeting`,
+          platform: evt.window.platform,
+          startTime: new Date().toISOString(),
+          isDetectedMeeting: true, // Flag to distinguish from calendar meetings
+        };
+
+        showRecordingWidget(detectedMeetingInfo);
+      } else {
+        logger.main.debug('[Widget] Widget already visible, not re-showing for detected meeting');
+      }
     }
   });
 
@@ -4839,7 +4871,7 @@ ipcMain.handle(
   withValidation(speakerMappingExtractSchema, async (event, { transcript }) => {
     try {
       const result = speakerMappingService.extractUniqueSpeakerIds(transcript);
-      const { speakerIds, existingMappings } = result;
+      const { speakerIds, existingMappings, speakerStats } = result;
 
       // v1.1: Get auto-suggestions from user profile (single speaker = user)
       const profileSuggestions = speakerMappingService.getAutoSuggestionsFromProfile(
@@ -4852,6 +4884,7 @@ ipcMain.handle(
         speakerIds,
         existingMappings, // New: mappings already in the transcript (speaker → speakerName)
         profileSuggestions, // Suggestions based on user profile
+        speakerStats, // v1.2: Talk time % and sample quote per speaker
       };
     } catch (error) {
       console.error('[SpeakerMapping IPC] Failed to extract speaker IDs:', error);

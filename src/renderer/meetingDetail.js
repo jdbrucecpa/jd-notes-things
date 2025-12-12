@@ -35,6 +35,93 @@ const PLATFORM_COLORS = {
 };
 
 /**
+ * Calculate speaker statistics from a transcript
+ * Returns a map of speaker name -> { talkTimePercent, wordCount, sampleQuote }
+ * @param {Array} transcript - The transcript array
+ * @returns {Object} Map of speaker name to stats
+ */
+function calculateSpeakerStatsFromTranscript(transcript) {
+  if (!Array.isArray(transcript) || transcript.length === 0) {
+    return {};
+  }
+
+  const speakerWordCounts = {};
+  const speakerFirstQuotes = {};
+  let totalWords = 0;
+
+  for (const utterance of transcript) {
+    // Get speaker name (prefer speakerName, fall back to speaker)
+    const speakerName = utterance.speakerName || utterance.speaker;
+    const text = utterance.text || '';
+
+    if (!speakerName || !text) continue;
+
+    const wordCount = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+    totalWords += wordCount;
+
+    // Accumulate word count (normalize speaker name for matching)
+    const normalizedName = speakerName.toLowerCase().trim();
+    speakerWordCounts[normalizedName] = (speakerWordCounts[normalizedName] || 0) + wordCount;
+
+    // Capture first meaningful quote
+    if (!speakerFirstQuotes[normalizedName] && text.trim().length >= 10) {
+      let quote = text.trim();
+      if (quote.length > 60) {
+        quote = quote.substring(0, 57) + '...';
+      }
+      speakerFirstQuotes[normalizedName] = quote;
+    }
+  }
+
+  // Build stats object
+  const stats = {};
+  for (const [normalizedName, wordCount] of Object.entries(speakerWordCounts)) {
+    const talkTimePercent = totalWords > 0 ? Math.round((wordCount / totalWords) * 100) : 0;
+    stats[normalizedName] = {
+      talkTimePercent,
+      wordCount,
+      sampleQuote: speakerFirstQuotes[normalizedName] || '',
+    };
+  }
+
+  return stats;
+}
+
+/**
+ * Find speaker stats for a participant by matching names
+ * @param {Object} participant - The participant object
+ * @param {Object} speakerStats - Map of normalized speaker names to stats
+ * @returns {Object|null} Stats if found, null otherwise
+ */
+function findParticipantSpeakerStats(participant, speakerStats) {
+  const participantName = (participant.name || participant.email || '').toLowerCase().trim();
+  if (!participantName) return null;
+
+  // Direct match
+  if (speakerStats[participantName]) {
+    return speakerStats[participantName];
+  }
+
+  // Try matching first name only
+  const firstName = participantName.split(/\s+/)[0];
+  for (const [speakerName, stats] of Object.entries(speakerStats)) {
+    if (speakerName === firstName || speakerName.startsWith(firstName + ' ')) {
+      return stats;
+    }
+  }
+
+  // Try matching if speaker name contains participant's first name
+  for (const [speakerName, stats] of Object.entries(speakerStats)) {
+    const speakerFirst = speakerName.split(/\s+/)[0];
+    if (speakerFirst === firstName) {
+      return stats;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Update the platform display in the meeting header (UI-1)
  * @param {object} meeting - The meeting data object
  */
@@ -72,7 +159,6 @@ export function initializeMeetingDetail(meetingId, meeting, onBack, onUpdate) {
 
   // Reset edit modes when viewing a new meeting
   exitMeetingInfoEditMode();
-  participantsEditMode = false;
 
   // Store update callback for speaker editing
   window._meetingDetailUpdateCallback = onUpdate;
@@ -134,12 +220,6 @@ function setupEventListeners(onBack, onUpdate) {
   const unlinkMeetingBtn = document.getElementById('unlinkMeetingBtn');
   if (unlinkMeetingBtn) {
     unlinkMeetingBtn.onclick = () => unlinkFromObsidian(onUpdate);
-  }
-
-  // Edit participants button
-  const editParticipantsBtn = document.getElementById('editParticipantsBtn');
-  if (editParticipantsBtn) {
-    editParticipantsBtn.onclick = () => toggleParticipantsEditMode();
   }
 
   // Transcript search
@@ -250,7 +330,7 @@ function populateMeetingInfo(meeting) {
   if (obsidianStatusEl && obsidianStatusTextEl) {
     if (meeting.obsidianLink || meeting.vaultPath) {
       obsidianStatusTextEl.textContent = 'Synced';
-      obsidianStatusEl.style.color = '#4caf50'; // Green for synced
+      obsidianStatusEl.style.color = 'var(--status-success)';
     } else {
       obsidianStatusTextEl.textContent = 'Not synced';
       obsidianStatusEl.style.color = 'var(--text-secondary)'; // Gray for not synced
@@ -264,8 +344,16 @@ function populateMeetingInfo(meeting) {
   }
 }
 
-// Track participants edit mode
-let participantsEditMode = false;
+/**
+ * Update the participant count display in the meeting info section
+ */
+function updateParticipantCount() {
+  const countEl = document.getElementById('meetingDetailParticipantCount');
+  if (countEl && currentMeeting) {
+    const count = currentMeeting.participants ? currentMeeting.participants.length : 0;
+    countEl.textContent = `${count} participant${count !== 1 ? 's' : ''}`;
+  }
+}
 
 /**
  * Populate participants card
@@ -273,13 +361,6 @@ let participantsEditMode = false;
 function populateParticipants(meeting) {
   const participantsList = document.getElementById('meetingDetailParticipants');
   if (!participantsList) return;
-
-  // Preserve edit mode class if active
-  if (participantsEditMode) {
-    participantsList.classList.add('edit-mode');
-  } else {
-    participantsList.classList.remove('edit-mode');
-  }
 
   if (!meeting.participants || meeting.participants.length === 0) {
     participantsList.innerHTML = `
@@ -294,6 +375,9 @@ function populateParticipants(meeting) {
     return;
   }
 
+  // Calculate speaker stats from transcript
+  const speakerStats = calculateSpeakerStatsFromTranscript(meeting.transcript);
+
   participantsList.innerHTML = '';
 
   meeting.participants.forEach((participant, index) => {
@@ -307,6 +391,9 @@ function populateParticipants(meeting) {
 
     // Determine if linked to a contact (has email or contactId)
     const isLinked = !!(participant.email || participant.contactId);
+
+    // Find speaker stats for this participant
+    const participantStats = findParticipantSpeakerStats(participant, speakerStats);
 
     // Build sub-info line: email and/or company
     let subInfo = '';
@@ -324,10 +411,23 @@ function populateParticipants(meeting) {
       ? `<a href="#" class="participant-name-link" data-email="${escapeHtml(participant.email)}">${escapeHtml(name)}</a>${checkmarkIcon}`
       : escapeHtml(name);
 
+    // Build talk time badge if we have stats
+    const talkTimeBadge = participantStats
+      ? `<div class="participant-talk-time" title="${participantStats.wordCount} words">
+           <span class="talk-time-percent">${participantStats.talkTimePercent}%</span>
+           <div class="talk-time-bar-mini">
+             <div class="talk-time-fill-mini" style="width: ${Math.min(participantStats.talkTimePercent, 100)}%"></div>
+           </div>
+         </div>`
+      : '';
+
     participantItem.innerHTML = `
       <div class="participant-avatar">${escapeHtml(initials)}</div>
       <div class="participant-info">
-        <div class="participant-name">${nameHtml}</div>
+        <div class="participant-name-row">
+          <span class="participant-name">${nameHtml}</span>
+          ${talkTimeBadge}
+        </div>
         ${subInfo}
       </div>
       <div class="participant-actions">
@@ -420,6 +520,7 @@ async function removeParticipantFromCard(index) {
   try {
     await window.electronAPI.updateMeetingField(currentMeetingId, 'participants', currentMeeting.participants);
     populateParticipants(currentMeeting);
+    updateParticipantCount();
 
     // Notify the update callback
     if (window._meetingDetailUpdateCallback) {
@@ -429,6 +530,7 @@ async function removeParticipantFromCard(index) {
     console.error('[MeetingDetail] Failed to remove participant:', error);
     // Restore the participant
     currentMeeting.participants.splice(index, 0, participant);
+    updateParticipantCount();
   }
 }
 
@@ -494,6 +596,7 @@ function showAddParticipantDialog() {
         currentMeeting.participants
       );
       populateParticipants(currentMeeting);
+      updateParticipantCount();
 
       if (window._meetingDetailUpdateCallback) {
         window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
@@ -502,27 +605,9 @@ function showAddParticipantDialog() {
       console.error('[MeetingDetail] Failed to add participant:', error);
       currentMeeting.participants.pop();
       populateParticipants(currentMeeting);
+      updateParticipantCount();
     }
   });
-}
-
-/**
- * Toggle participants edit mode
- */
-function toggleParticipantsEditMode() {
-  participantsEditMode = !participantsEditMode;
-
-  const participantsList = document.getElementById('meetingDetailParticipants');
-  const editBtn = document.getElementById('editParticipantsBtn');
-
-  if (participantsList) {
-    participantsList.classList.toggle('edit-mode', participantsEditMode);
-  }
-
-  if (editBtn) {
-    editBtn.classList.toggle('active', participantsEditMode);
-    editBtn.title = participantsEditMode ? 'Done editing' : 'Edit participants';
-  }
 }
 
 /**
@@ -812,6 +897,12 @@ function enterMeetingInfoEditMode() {
   viewMode.style.display = 'none';
   editMode.style.display = 'block';
 
+  // Add editing highlight to the card
+  const meetingInfoCard = document.getElementById('meetingInfoCard');
+  if (meetingInfoCard) {
+    meetingInfoCard.classList.add('editing');
+  }
+
   // Focus the title input
   if (titleInput) {
     titleInput.focus();
@@ -831,6 +922,12 @@ function exitMeetingInfoEditMode() {
   // Switch back to view mode
   viewMode.style.display = 'block';
   editMode.style.display = 'none';
+
+  // Remove editing highlight from the card
+  const meetingInfoCard = document.getElementById('meetingInfoCard');
+  if (meetingInfoCard) {
+    meetingInfoCard.classList.remove('editing');
+  }
 }
 
 /**
@@ -914,7 +1011,7 @@ async function saveMeetingInfo(onUpdate) {
     const isSynced = currentMeeting.vaultPath || currentMeeting.obsidianLink;
     if (isSynced) {
       obsidianStatusTextEl.textContent = 'Synced';
-      obsidianStatusEl.style.color = '#4caf50';
+      obsidianStatusEl.style.color = 'var(--status-success)';
     } else {
       obsidianStatusTextEl.textContent = 'Not synced';
       obsidianStatusEl.style.color = 'var(--text-secondary)';

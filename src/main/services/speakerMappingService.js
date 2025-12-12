@@ -195,21 +195,31 @@ class SpeakerMappingService {
    * Returns ALL unique speakers so user can remap any speaker to a contact
    * Filters out header content like "summary", "introduction", etc.
    * Also returns existing speaker mappings from the transcript data
+   * Plus speaker statistics: talk time % and sample quote
    * @param {Array} transcript - Transcript utterances
-   * @returns {Object} { speakerIds: string[], existingMappings: {speakerId: speakerName} }
+   * @returns {Object} { speakerIds: string[], existingMappings: {speakerId: speakerName}, speakerStats: {speakerId: {talkTimePercent, sampleQuote, wordCount}} }
    */
   extractUniqueSpeakerIds(transcript) {
-    if (!Array.isArray(transcript)) return { speakerIds: [], existingMappings: {} };
+    if (!Array.isArray(transcript)) return { speakerIds: [], existingMappings: {}, speakerStats: {} };
 
     const speakers = new Set();
     const existingMappings = {}; // Map of speaker (original) → speakerName (current display)
+    const speakerWordCounts = {}; // Track word count per speaker
+    const speakerFirstQuotes = {}; // Track first meaningful quote per speaker
+
+    let totalWords = 0;
 
     for (const utterance of transcript) {
       // Use the original speaker ID (what was assigned by transcription service)
       const speakerId = utterance.speaker;
       const speakerName = utterance.speakerName;
+      const text = utterance.text || '';
+
+      // Determine the effective speaker ID for this utterance
+      let effectiveSpeakerId = null;
 
       if (speakerId && !this.isHeaderContent(speakerId)) {
+        effectiveSpeakerId = speakerId;
         speakers.add(speakerId);
 
         // If there's a different speakerName, record the existing mapping
@@ -218,14 +228,49 @@ class SpeakerMappingService {
         }
       } else if (speakerName && !this.isHeaderContent(speakerName)) {
         // Fall back to speakerName if no speaker field
+        effectiveSpeakerId = speakerName;
         speakers.add(speakerName);
       }
+
+      // Calculate statistics for this speaker
+      if (effectiveSpeakerId && text) {
+        const wordCount = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+        totalWords += wordCount;
+
+        // Accumulate word count
+        speakerWordCounts[effectiveSpeakerId] = (speakerWordCounts[effectiveSpeakerId] || 0) + wordCount;
+
+        // Capture first meaningful quote (at least 10 chars, not already captured)
+        if (!speakerFirstQuotes[effectiveSpeakerId] && text.trim().length >= 10) {
+          speakerFirstQuotes[effectiveSpeakerId] = text.trim();
+        }
+      }
+    }
+
+    // Calculate talk time percentages and build stats object
+    const speakerStats = {};
+    for (const speakerId of speakers) {
+      const wordCount = speakerWordCounts[speakerId] || 0;
+      const talkTimePercent = totalWords > 0 ? Math.round((wordCount / totalWords) * 100) : 0;
+
+      // Truncate sample quote to ~80 chars for display
+      let sampleQuote = speakerFirstQuotes[speakerId] || '';
+      if (sampleQuote.length > 80) {
+        sampleQuote = sampleQuote.substring(0, 77) + '...';
+      }
+
+      speakerStats[speakerId] = {
+        talkTimePercent,
+        sampleQuote,
+        wordCount,
+      };
     }
 
     // Return all unique speakers - user should be able to remap any speaker to a contact
     return {
       speakerIds: Array.from(speakers).sort(),
       existingMappings,
+      speakerStats,
     };
   }
 

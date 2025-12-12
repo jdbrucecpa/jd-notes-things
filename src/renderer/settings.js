@@ -414,22 +414,22 @@ export function initializeSettingsUI() {
           notifySuccess(`Settings exported successfully (${sizeKB} KB)`);
 
           if (exportStatus) {
-            exportStatus.innerHTML = `<span style="color: #27ae60;">Export complete:</span> ${result.manifest.included.length} files exported`;
+            exportStatus.innerHTML = `<span style="color: var(--status-success);">Export complete:</span> ${result.manifest.included.length} files exported`;
             if (result.manifest.warnings.length > 0) {
-              exportStatus.innerHTML += `<br><span style="color: #e67e22;">Warnings:</span> ${result.manifest.warnings.join(', ')}`;
+              exportStatus.innerHTML += `<br><span style="color: var(--color-warning);">Warnings:</span> ${result.manifest.warnings.join(', ')}`;
             }
           }
         } else {
           notifyError('Export failed: ' + result.error);
           if (exportStatus) {
-            exportStatus.innerHTML = `<span style="color: #e74c3c;">Export failed:</span> ${result.error}`;
+            exportStatus.innerHTML = `<span style="color: var(--color-error);">Export failed:</span> ${result.error}`;
           }
         }
       } catch (error) {
         console.error('Error exporting settings:', error);
         notifyError(error, { prefix: 'Export failed:' });
         if (exportStatus) {
-          exportStatus.innerHTML = `<span style="color: #e74c3c;">Export failed:</span> ${error.message}`;
+          exportStatus.innerHTML = `<span style="color: var(--color-error);">Export failed:</span> ${error.message}`;
         }
       } finally {
         exportAllSettingsBtn.disabled = false;
@@ -461,12 +461,12 @@ export function initializeSettingsUI() {
           notifySuccess(`Settings imported: ${result.imported.length} files`);
 
           if (exportStatus) {
-            let statusHtml = `<span style="color: #27ae60;">Import complete:</span> ${result.imported.length} files imported`;
+            let statusHtml = `<span style="color: var(--status-success);">Import complete:</span> ${result.imported.length} files imported`;
             if (result.skipped.length > 0) {
-              statusHtml += `<br><span style="color: #e67e22;">Skipped:</span> ${result.skipped.length} files (already exist)`;
+              statusHtml += `<br><span style="color: var(--color-warning);">Skipped:</span> ${result.skipped.length} files (already exist)`;
             }
             if (result.errors.length > 0) {
-              statusHtml += `<br><span style="color: #e74c3c;">Errors:</span> ${result.errors.map(e => e.file).join(', ')}`;
+              statusHtml += `<br><span style="color: var(--color-error);">Errors:</span> ${result.errors.map(e => e.file).join(', ')}`;
             }
             exportStatus.innerHTML = statusHtml;
           }
@@ -476,14 +476,14 @@ export function initializeSettingsUI() {
         } else {
           notifyError('Import failed: ' + result.error);
           if (exportStatus) {
-            exportStatus.innerHTML = `<span style="color: #e74c3c;">Import failed:</span> ${result.error}`;
+            exportStatus.innerHTML = `<span style="color: var(--color-error);">Import failed:</span> ${result.error}`;
           }
         }
       } catch (error) {
         console.error('Error importing settings:', error);
         notifyError(error, { prefix: 'Import failed:' });
         if (exportStatus) {
-          exportStatus.innerHTML = `<span style="color: #e74c3c;">Import failed:</span> ${error.message}`;
+          exportStatus.innerHTML = `<span style="color: var(--color-error);">Import failed:</span> ${error.message}`;
         }
       } finally {
         importAllSettingsBtn.disabled = false;
