@@ -1732,6 +1732,9 @@ function showHomeView() {
   const homeButton = document.getElementById('homeButton');
   if (homeButton) homeButton.style.visibility = 'hidden';
 
+  // v1.2 fix: Clear current meeting when returning to home view
+  window.electronAPI.notifyCurrentMeetingChanged(null);
+
   // Hide the entire floating controls section on home page
   const floatingControls = document.querySelector('.floating-controls');
   if (floatingControls) {
@@ -1831,6 +1834,17 @@ function showEditorView(meetingId) {
     transcriptLength: meeting.transcript?.length || 0,
     firstSpeaker: meeting.transcript?.[0]?.speakerName || meeting.transcript?.[0]?.speaker || 'N/A',
     allSpeakers: meeting.transcript?.map(t => t.speakerName || t.speaker) || [],
+  });
+
+  // v1.2 fix: Notify main process that user is viewing this meeting (for widget sync)
+  window.electronAPI.notifyCurrentMeetingChanged({
+    id: meeting.id,
+    title: meeting.title,
+    date: meeting.date,
+    platform: meeting.platform,
+    participants: meeting.participants,
+    hasTranscript: !!(meeting.transcript && meeting.transcript.length > 0),
+    isSynced: !!(meeting.obsidianLink || meeting.vaultPath),
   });
 
   // Show floating controls section for meeting detail view
@@ -3649,6 +3663,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           // Log the latest transcript entry
           const latestEntry = meeting.transcript[meeting.transcript.length - 1];
           console.log(`Latest transcript: ${latestEntry.speaker}: "${latestEntry.text}"`);
+
+          // v1.2 fix: Notify widget that meeting info has changed
+          window.electronAPI.notifyCurrentMeetingChanged({
+            id: meeting.id,
+            title: meeting.title,
+            date: meeting.date,
+            platform: meeting.platform,
+            participants: meeting.participants,
+            hasTranscript: true,
+            isSynced: !!(meeting.obsidianLink || meeting.vaultPath),
+          });
         }
       });
     }
@@ -3668,6 +3693,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Update the meeting detail view with new data
         updateMeetingDetail(meeting);
+
+        // v1.2 fix: Notify widget that meeting info has changed (title may have been updated)
+        window.electronAPI.notifyCurrentMeetingChanged({
+          id: meeting.id,
+          title: meeting.title,
+          date: meeting.date,
+          platform: meeting.platform,
+          participants: meeting.participants,
+          hasTranscript: !!(meeting.transcript && meeting.transcript.length > 0),
+          isSynced: !!(meeting.obsidianLink || meeting.vaultPath),
+        });
       }
     });
   });
@@ -3710,10 +3746,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Create the meeting note (this also starts recording)
       await createNewMeeting(calendarMeeting || null);
 
-      // Send success response back to main process
+      // v1.2 fix: Get the created meeting ID and info for widget tracking
+      const createdMeetingId = currentEditingMeetingId;
+      const createdMeeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === createdMeetingId);
+
+      // Send success response back to main process with meeting ID
       window.electronAPI.sendWidgetRecordingResult({
         success: true,
-        meetingTitle: calendarMeeting?.title || 'New Meeting',
+        meetingId: createdMeetingId,
+        meetingTitle: createdMeeting?.title || calendarMeeting?.title || 'New Meeting',
+        meetingInfo: createdMeeting ? {
+          id: createdMeeting.id,
+          title: createdMeeting.title,
+          date: createdMeeting.date,
+          platform: createdMeeting.platform,
+          participants: createdMeeting.participants,
+        } : null,
       });
     } catch (error) {
       console.error('[Widget] Failed to create meeting:', error);
@@ -3738,6 +3786,54 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.electronAPI.sendWidgetStopRecordingResult({
         success: false,
         error: 'No active recording',
+      });
+    }
+  });
+
+  // v1.2 fix: Listen for widget create-and-record with specific action
+  window.electronAPI.onWidgetCreateAndRecordWithAction(async data => {
+    const { meetingId, action, transcriptionProvider } = data;
+    console.log('[Widget] Create and record with action requested:', meetingId, action);
+
+    try {
+      // Find the meeting
+      const meeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === meetingId);
+
+      if (!meeting) {
+        // If no meeting found, create a new one
+        console.log('[Widget] Meeting not found, creating new meeting');
+        await createNewMeeting(null);
+      } else {
+        // Navigate to the meeting first
+        showEditorView(meetingId);
+
+        // Wait a moment for the view to load
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        // Start recording with the specified action
+        await startRecording(action);
+      }
+
+      const resultMeetingId = currentEditingMeetingId;
+      const resultMeeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === resultMeetingId);
+
+      window.electronAPI.sendWidgetRecordingResult({
+        success: true,
+        meetingId: resultMeetingId,
+        meetingTitle: resultMeeting?.title || 'Meeting',
+        meetingInfo: resultMeeting ? {
+          id: resultMeeting.id,
+          title: resultMeeting.title,
+          date: resultMeeting.date,
+          platform: resultMeeting.platform,
+          participants: resultMeeting.participants,
+        } : null,
+      });
+    } catch (error) {
+      console.error('[Widget] Failed to create/record with action:', error);
+      window.electronAPI.sendWidgetRecordingResult({
+        success: false,
+        error: error.message,
       });
     }
   });

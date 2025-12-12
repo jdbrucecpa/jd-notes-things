@@ -351,6 +351,123 @@
         background: rgba(255, 255, 255, 0.08);
         color: #fff;
       }
+
+      /* v1.2 fix: Recording options mode */
+      .widget-container.options-mode {
+        width: 280px;
+        padding: 14px;
+      }
+
+      .widget-container.options-mode .timer-section,
+      .widget-container.options-mode .divider,
+      .widget-container.options-mode .widget-controls {
+        display: none;
+      }
+
+      .widget-container.options-mode .meeting-select {
+        display: none;
+      }
+
+      .recording-options {
+        display: none;
+        flex-direction: column;
+        gap: 4px;
+        width: 100%;
+        -webkit-app-region: no-drag;
+      }
+
+      .widget-container.options-mode .recording-options {
+        display: flex;
+      }
+
+      .options-title {
+        font-size: 12px;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.7);
+        text-align: left;
+        margin-bottom: 8px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .recording-option {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: transparent;
+        border: none;
+        border-radius: 6px;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: background 0.12s ease;
+        text-align: left;
+        color: #fff;
+      }
+
+      .recording-option:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .recording-option .option-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+        width: 24px;
+        text-align: center;
+        opacity: 0.9;
+      }
+
+      .recording-option .option-content {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .recording-option .option-title {
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.3;
+      }
+
+      .recording-option .option-subtitle {
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.5);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 2px;
+      }
+
+      /* Remove colorful borders - keep it utilitarian */
+      .recording-option.platform-zoom,
+      .recording-option.platform-teams,
+      .recording-option.platform-meet,
+      .recording-option.platform-calendar,
+      .recording-option.action-append,
+      .recording-option.action-replace,
+      .recording-option.action-new {
+        border-left: none;
+      }
+
+      .options-divider {
+        height: 1px;
+        background: rgba(255, 255, 255, 0.08);
+        margin: 6px 0;
+      }
+
+      /* Options cancel button - slightly larger */
+      .recording-options .cancel-btn {
+        margin-top: 6px;
+        padding: 10px;
+        font-size: 12px;
+        border: none;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .recording-options .cancel-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
     </style>
   </head>
   <body>
@@ -413,6 +530,13 @@
           <div id="meetingOptions"></div>
           <button class="cancel-btn" id="cancelBtn">Cancel</button>
         </div>
+
+        <!-- v1.2 fix: Recording options (hidden by default) -->
+        <div class="recording-options" id="recordingOptions">
+          <div class="options-title">Start recording:</div>
+          <div id="optionsList"></div>
+          <button class="cancel-btn" id="cancelOptionsBtn">Cancel</button>
+        </div>
       </div>
 
       <!-- Close button -->
@@ -444,6 +568,10 @@
       const meetingSelect = document.getElementById('meetingSelect');
       const meetingOptions = document.getElementById('meetingOptions');
       const cancelBtn = document.getElementById('cancelBtn');
+      // v1.2 fix: Recording options elements
+      const recordingOptions = document.getElementById('recordingOptions');
+      const optionsList = document.getElementById('optionsList');
+      const cancelOptionsBtn = document.getElementById('cancelOptionsBtn');
 
       // Escape HTML to prevent XSS
       function escapeHtml(text) {
@@ -472,7 +600,209 @@
         }
       }
 
-      // Start recording - just tells main app
+      // v1.2 fix: Truncate text to fit in UI
+      function truncateText(text, maxLength = 30) {
+        if (!text) return '';
+        return text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text;
+      }
+
+      // v1.2 fix: Get platform icon
+      function getPlatformIcon(platform) {
+        const icons = {
+          'zoom': '📹',
+          'teams': '💼',
+          'meet': '🎥',
+          'calendar': '📅',
+          'in-person': '🎙️'
+        };
+        return icons[platform?.toLowerCase()] || '🎙️';
+      }
+
+      // v1.2 fix: Get platform class for styling
+      function getPlatformClass(platform) {
+        if (!platform) return '';
+        const p = platform.toLowerCase();
+        if (p.includes('zoom')) return 'platform-zoom';
+        if (p.includes('teams')) return 'platform-teams';
+        if (p.includes('meet')) return 'platform-meet';
+        if (p.includes('calendar')) return 'platform-calendar';
+        return '';
+      }
+
+      // v1.2 fix: Show recording options dialog
+      function showRecordingOptions(options) {
+        optionsList.innerHTML = '';
+
+        options.forEach((option, index) => {
+          // Add divider before "New Meeting" option if there were previous options
+          if (option.type === 'new' && index > 0) {
+            const divider = document.createElement('div');
+            divider.className = 'options-divider';
+            optionsList.appendChild(divider);
+          }
+
+          const btn = document.createElement('button');
+          btn.className = 'recording-option ' + (option.className || '');
+          btn.innerHTML = `
+            <span class="option-icon">${escapeHtml(option.icon)}</span>
+            <div class="option-content">
+              <div class="option-title">${escapeHtml(option.title)}</div>
+              ${option.subtitle ? `<div class="option-subtitle">${escapeHtml(option.subtitle)}</div>` : ''}
+            </div>
+          `;
+          btn.addEventListener('click', () => selectRecordingOption(option));
+          optionsList.appendChild(btn);
+        });
+
+        widgetContainer.classList.add('options-mode');
+      }
+
+      // v1.2 fix: Hide recording options dialog
+      function hideRecordingOptions() {
+        widgetContainer.classList.remove('options-mode');
+      }
+
+      // v1.2 fix: Handle recording option selection
+      async function selectRecordingOption(option) {
+        hideRecordingOptions();
+
+        try {
+          let result;
+          if (option.action) {
+            // Recording with action (append, overwrite, new) for existing meeting
+            result = await window.widgetAPI.startRecordingWithAction(option.meetingId, option.action);
+          } else {
+            // Simple start recording
+            currentMeetingId = option.meetingId || null;
+            result = await window.widgetAPI.startRecording(currentMeetingId);
+          }
+          // UI update will come from sync-state event
+        } catch (error) {
+          console.error('Failed to start recording:', error);
+        }
+      }
+
+      // v1.2 fix: Context-aware recording - check conditions and show options if needed
+      async function handleRecordClick() {
+        if (isRecording) {
+          // Stop recording
+          await stopRecording();
+          return;
+        }
+
+        try {
+          // Get recording context from main process
+          const { success, context } = await window.widgetAPI.getRecordingContext();
+
+          if (!success || !context) {
+            // Fallback to simple recording
+            await startRecording();
+            return;
+          }
+
+          // Build options based on context
+          const options = [];
+
+          // 1. Detected platform meeting
+          if (context.detectedMeeting) {
+            const platform = context.detectedMeeting.platform;
+            options.push({
+              type: 'detected',
+              icon: getPlatformIcon(platform),
+              title: `Start ${platform.charAt(0).toUpperCase() + platform.slice(1)} Meeting`,
+              subtitle: truncateText(context.detectedMeeting.title, 25),
+              meetingId: context.detectedMeeting.id,
+              className: getPlatformClass(platform),
+            });
+          }
+
+          // 2. Upcoming calendar events
+          if (context.upcomingCalendarEvents && context.upcomingCalendarEvents.length > 0) {
+            context.upcomingCalendarEvents.forEach(event => {
+              options.push({
+                type: 'calendar',
+                icon: '📅',
+                title: truncateText(event.title, 28),
+                subtitle: new Date(event.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                meetingId: event.id,
+                className: 'platform-calendar',
+              });
+            });
+          }
+
+          // 3. Currently viewed meeting with transcript options
+          if (context.currentViewedMeeting && context.currentViewedMeeting.id) {
+            const meeting = context.currentViewedMeeting;
+            const meetingTitle = truncateText(meeting.title, 22);
+
+            if (meeting.hasTranscript) {
+              // Has transcript - offer append and replace
+              options.push({
+                type: 'append',
+                icon: '📎',
+                title: `Append to "${meetingTitle}"`,
+                subtitle: 'Add to existing transcript',
+                meetingId: meeting.id,
+                action: 'append',
+                className: 'action-append',
+              });
+              options.push({
+                type: 'replace',
+                icon: '🔄',
+                title: `Replace "${meetingTitle}"`,
+                subtitle: 'Overwrite existing transcript',
+                meetingId: meeting.id,
+                action: 'overwrite',
+                className: 'action-replace',
+              });
+            } else {
+              // No transcript - just record to this meeting
+              options.push({
+                type: 'existing',
+                icon: '🎙️',
+                title: `Record "${meetingTitle}"`,
+                subtitle: 'Record to open meeting',
+                meetingId: meeting.id,
+                action: 'new',
+                className: 'action-new',
+              });
+            }
+          }
+
+          // 4. New meeting option (always available)
+          options.push({
+            type: 'new',
+            icon: '➕',
+            title: 'New In-Person Meeting',
+            subtitle: 'Start fresh recording',
+            meetingId: null,
+            className: 'action-new',
+          });
+
+          // Decision logic based on user requirements:
+          // - If no detected meeting, no calendar event within 10 minutes, and app not open to a meeting: start new meeting silently
+          // - Otherwise: show options
+
+          const hasDetectedMeeting = !!context.detectedMeeting;
+          const hasUpcomingCalendar = context.upcomingCalendarEvents && context.upcomingCalendarEvents.length > 0;
+          const hasOpenMeeting = !!context.currentViewedMeeting?.id;
+
+          if (!hasDetectedMeeting && !hasUpcomingCalendar && !hasOpenMeeting) {
+            // No context - just start new meeting
+            await window.widgetAPI.startRecording(null);
+          } else {
+            // Show options dialog
+            showRecordingOptions(options);
+          }
+
+        } catch (error) {
+          console.error('Error getting recording context:', error);
+          // Fallback to simple recording
+          await startRecording();
+        }
+      }
+
+      // Start recording - just tells main app (simple version, kept for backward compatibility)
       async function startRecording() {
         try {
           const result = await window.widgetAPI.startRecording(currentMeetingId);
@@ -586,12 +916,12 @@
       }
 
       // Event listeners
-      recordBtn.addEventListener('click', () => {
-        if (isRecording) {
-          stopRecording();
-        } else {
-          startRecording();
-        }
+      // v1.2 fix: Use context-aware recording handler
+      recordBtn.addEventListener('click', handleRecordClick);
+
+      // v1.2 fix: Cancel options button handler
+      cancelOptionsBtn.addEventListener('click', () => {
+        hideRecordingOptions();
       });
 
       // Info button - show tooltip on hover, open meeting on click
@@ -648,10 +978,18 @@
         } else if (data.type === 'recording-started') {
           isRecording = true;
           recordingStartTime = data.startTime || Date.now();
+          // v1.2 fix: Set meeting ID from the event
+          if (data.meetingId) {
+            currentMeetingId = data.meetingId;
+          }
           if (data.meetingInfo) {
             currentMeetingInfo = data.meetingInfo;
+            currentMeetingId = data.meetingInfo.id || currentMeetingId;
             updateInfoTooltip(data.meetingInfo);
           }
+          // v1.2 fix: Hide options mode when recording starts
+          hideRecordingOptions();
+          widgetContainer.classList.remove('select-mode');
           updateUI();
           if (timerInterval) clearInterval(timerInterval);
           timerInterval = setInterval(updateTimer, 1000);
@@ -670,21 +1008,39 @@
             if (timerInterval) clearInterval(timerInterval);
             timerInterval = setInterval(updateTimer, 1000);
           }
+          // v1.2 fix: Set meeting ID from sync state
+          if (data.meetingId) {
+            currentMeetingId = data.meetingId;
+          }
           if (data.meetingInfo) {
-            currentMeetingId = data.meetingInfo.id;
+            currentMeetingId = data.meetingInfo.id || currentMeetingId;
             currentMeetingInfo = data.meetingInfo;
             updateInfoTooltip(data.meetingInfo);
           }
+          // v1.2 fix: Also use currentViewedMeeting for info if no recording meeting
+          if (!currentMeetingInfo && data.currentViewedMeeting) {
+            currentMeetingInfo = data.currentViewedMeeting;
+            currentMeetingId = data.currentViewedMeeting.id || currentMeetingId;
+            updateInfoTooltip(data.currentViewedMeeting);
+          }
           widgetContainer.classList.remove('select-mode');
+          hideRecordingOptions();
           updateUI();
         } else if (data.type === 'always-on-top-changed') {
           isAlwaysOnTop = data.enabled;
           updatePinButton();
         } else if (data.type === 'meeting-info-update') {
-          // Update meeting info when it changes
+          // v1.2 fix: Update meeting info when it changes (from app navigation)
           if (data.meetingInfo) {
             currentMeetingInfo = data.meetingInfo;
+            currentMeetingId = data.meetingInfo.id || currentMeetingId;
             updateInfoTooltip(data.meetingInfo);
+          }
+          // Also handle currentViewedMeeting
+          if (data.currentViewedMeeting) {
+            currentMeetingInfo = data.currentViewedMeeting;
+            currentMeetingId = data.currentViewedMeeting.id || currentMeetingId;
+            updateInfoTooltip(data.currentViewedMeeting);
           }
         }
       });

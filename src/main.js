@@ -339,6 +339,9 @@ let isRecording = false; // Track recording state for UI updates (Phase 10.7)
 let sdkReady = false; // Track when SDK is fully initialized (after restart workaround)
 let recordingStartTime = null; // Track when recording started for widget timer (v1.2)
 let currentRecordingMeetingTitle = null; // Track current meeting title for widget (v1.2)
+let currentRecordingMeetingId = null; // Track current meeting ID for widget (v1.2 fix)
+let currentViewedMeetingId = null; // Track which meeting is currently open in the app (v1.2 fix)
+let currentViewedMeetingInfo = null; // Full meeting info for the currently viewed meeting (v1.2 fix)
 
 // Meeting monitor state
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
@@ -1270,7 +1273,7 @@ function createRecordingWidget() {
   // Widget is 90px but tooltip expands 220px to the left + padding
   const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
   const widgetWidth = 350; // Wide enough for tooltip (220px) + widget (90px) + margins
-  const widgetHeight = 220;
+  const widgetHeight = 320; // v1.2 fix: Increased to accommodate options menu
   const margin = 20;
 
   recordingWidget = new BrowserWindow({
@@ -1369,16 +1372,23 @@ function hideRecordingWidget() {
 
 /**
  * Update widget with recording state
+ * @param {boolean} recording - Whether recording is active
+ * @param {string|null} meetingTitle - Meeting title
+ * @param {string|null} meetingId - Meeting ID (v1.2 fix)
+ * @param {object|null} meetingInfo - Full meeting info object (v1.2 fix)
  */
-function updateWidgetRecordingState(recording, meetingTitle = null) {
+function updateWidgetRecordingState(recording, meetingTitle = null, meetingId = null, meetingInfo = null) {
   if (recordingWidget && !recordingWidget.isDestroyed()) {
     if (recording) {
       recordingStartTime = Date.now();
       currentRecordingMeetingTitle = meetingTitle;
+      currentRecordingMeetingId = meetingId;
       recordingWidget.webContents.send('widget:update', {
         type: 'recording-started',
         startTime: recordingStartTime,
         meetingTitle: meetingTitle,
+        meetingId: meetingId,
+        meetingInfo: meetingInfo,
       });
     } else {
       recordingWidget.webContents.send('widget:update', {
@@ -1386,6 +1396,7 @@ function updateWidgetRecordingState(recording, meetingTitle = null) {
       });
       recordingStartTime = null;
       currentRecordingMeetingTitle = null;
+      currentRecordingMeetingId = null;
     }
   }
 }
@@ -7820,29 +7831,65 @@ ipcMain.on('widget:hide', () => {
 
 // Open meeting in main app from widget
 ipcMain.on('widget:open-meeting', (_event, meetingId) => {
-  // Validate input - meetingId should be a non-empty string
-  if (typeof meetingId !== 'string' || !meetingId.trim()) {
-    logger.main.warn('[Widget] Invalid meetingId for open-meeting:', meetingId);
+  // v1.2 fix: Resolve placeholder IDs to real meeting IDs
+  let realMeetingId = meetingId;
+
+  // If the meetingId is a placeholder (detected-*, calendar-*) or null/undefined,
+  // try to use the current recording meeting ID or currently viewed meeting ID
+  if (!meetingId ||
+      (typeof meetingId === 'string' && (meetingId.startsWith('detected-') || meetingId.startsWith('calendar-')))) {
+    // Priority: current recording > currently viewed meeting
+    if (currentRecordingMeetingId) {
+      realMeetingId = currentRecordingMeetingId;
+      logger.main.info('[Widget] Using currentRecordingMeetingId:', realMeetingId);
+    } else if (currentViewedMeetingId) {
+      realMeetingId = currentViewedMeetingId;
+      logger.main.info('[Widget] Using currentViewedMeetingId:', realMeetingId);
+    } else {
+      logger.main.warn('[Widget] No valid meeting ID available for open-meeting. Original:', meetingId);
+      // Still show and focus the main window even without a meeting
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      return;
+    }
+  }
+
+  // Validate the resolved ID
+  if (typeof realMeetingId !== 'string' || !realMeetingId.trim()) {
+    logger.main.warn('[Widget] Invalid resolved meetingId for open-meeting:', realMeetingId);
     return;
   }
-  logger.main.info('[Widget] Open meeting requested:', meetingId);
+
+  logger.main.info('[Widget] Open meeting requested:', realMeetingId, '(original:', meetingId, ')');
   if (mainWindow && !mainWindow.isDestroyed()) {
     // Show and focus the main window
     mainWindow.show();
     mainWindow.focus();
     // Tell renderer to open the meeting note
-    mainWindow.webContents.send('open-meeting-note', meetingId);
+    mainWindow.webContents.send('open-meeting-note', realMeetingId);
   }
 });
 
 // Request state sync from widget
 ipcMain.on('widget:request-sync', _event => {
   if (recordingWidget && !recordingWidget.isDestroyed()) {
+    // v1.2 fix: Include meeting ID and currently viewed meeting info
+    const meetingInfo = currentViewedMeetingInfo || (currentRecordingMeetingId ? {
+      id: currentRecordingMeetingId,
+      title: currentRecordingMeetingTitle,
+    } : null);
+
     recordingWidget.webContents.send('widget:update', {
       type: 'sync-state',
       isRecording: isRecording,
       startTime: recordingStartTime,
       meetingTitle: currentRecordingMeetingTitle,
+      meetingId: currentRecordingMeetingId,
+      meetingInfo: meetingInfo,
+      // v1.2 fix: Include currently viewed meeting for info button
+      currentViewedMeeting: currentViewedMeetingInfo,
     });
   }
 });
@@ -7889,12 +7936,48 @@ ipcMain.handle('widget:start-recording', async (event, meetingId) => {
     });
 
     if (result.success) {
-      updateWidgetRecordingState(true, result.meetingTitle);
+      // v1.2 fix: Pass meeting ID and info to updateWidgetRecordingState
+      updateWidgetRecordingState(true, result.meetingTitle, result.meetingId, result.meetingInfo);
     }
 
     return result;
   } catch (error) {
     logger.main.error('[Widget] Failed to start recording:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// v1.2 fix: Start recording with specific action (new, append, overwrite) for existing meetings
+ipcMain.handle('widget:start-recording-with-action', async (event, { meetingId, action }) => {
+  logger.main.info('[Widget] Start recording with action requested:', meetingId, action);
+
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      return { success: false, error: 'Main window not available' };
+    }
+
+    // Send request to renderer with the action
+    mainWindow.webContents.send('widget:create-and-record-with-action', {
+      meetingId,
+      action,
+      transcriptionProvider: appSettings.transcriptionProvider || 'assemblyai',
+    });
+
+    // Wait for response
+    const result = await new Promise(resolve => {
+      ipcMain.once('widget:recording-result', (e, res) => {
+        resolve(res);
+      });
+      setTimeout(() => resolve({ success: false, error: 'Timeout' }), 30000);
+    });
+
+    if (result.success) {
+      updateWidgetRecordingState(true, result.meetingTitle, result.meetingId, result.meetingInfo);
+    }
+
+    return result;
+  } catch (error) {
+    logger.main.error('[Widget] Failed to start recording with action:', error);
     return { success: false, error: error.message };
   }
 });
@@ -7992,6 +8075,84 @@ ipcMain.handle('widget:getState', () => {
     };
   }
   return { success: true, visible: false, alwaysOnTop: true };
+});
+
+// v1.2 fix: Track which meeting the user is currently viewing in the app
+ipcMain.on('renderer:current-meeting-changed', (_event, meetingInfo) => {
+  if (meetingInfo) {
+    currentViewedMeetingId = meetingInfo.id || null;
+    currentViewedMeetingInfo = meetingInfo;
+    logger.main.info('[Widget] Current viewed meeting changed:', currentViewedMeetingId, meetingInfo.title);
+
+    // Update the widget with the new meeting info if it's visible
+    if (recordingWidget && !recordingWidget.isDestroyed()) {
+      recordingWidget.webContents.send('widget:update', {
+        type: 'meeting-info-update',
+        meetingInfo: meetingInfo,
+        currentViewedMeeting: meetingInfo,
+      });
+    }
+  } else {
+    currentViewedMeetingId = null;
+    currentViewedMeetingInfo = null;
+    logger.main.info('[Widget] Current viewed meeting cleared');
+  }
+});
+
+// v1.2 fix: Get recording context for widget options dialog
+ipcMain.handle('widget:get-recording-context', async () => {
+  try {
+    const context = {
+      // Current state
+      isRecording: isRecording,
+      currentRecordingMeetingId: currentRecordingMeetingId,
+      currentRecordingMeetingTitle: currentRecordingMeetingTitle,
+
+      // Detected platform meeting
+      detectedMeeting: detectedMeeting ? {
+        id: `detected-${detectedMeeting.window?.id}`,
+        platform: detectedMeeting.window?.platform || 'unknown',
+        title: detectedMeeting.window?.title || 'Meeting',
+        isDetectedMeeting: true,
+      } : null,
+
+      // Currently viewed meeting in app (with transcript info)
+      currentViewedMeeting: currentViewedMeetingInfo,
+
+      // Upcoming calendar events (within next 10 minutes)
+      upcomingCalendarEvents: [],
+    };
+
+    // Get upcoming calendar events if authenticated
+    if (googleCalendar && googleCalendar.isAuthenticated()) {
+      try {
+        const meetings = await googleCalendar.getUpcomingMeetings(0.25); // Next 15 minutes
+        const now = new Date();
+
+        // Filter to events starting within 10 minutes (or already started within last 5 min)
+        context.upcomingCalendarEvents = meetings.filter(m => {
+          const startTime = new Date(m.startTime);
+          const minutesUntilStart = (startTime - now) / (1000 * 60);
+          return minutesUntilStart >= -5 && minutesUntilStart <= 10;
+        }).map(m => ({
+          id: m.id,
+          title: m.title,
+          startTime: m.startTime,
+          endTime: m.endTime,
+          platform: m.platform || 'calendar',
+          participants: m.participants || [],
+          isCalendarEvent: true,
+        }));
+      } catch (calendarError) {
+        logger.main.warn('[Widget] Failed to fetch calendar events:', calendarError.message);
+      }
+    }
+
+    return { success: true, context };
+  } catch (error) {
+    logger.main.error('[Widget] Failed to get recording context:', error);
+    return { success: false, error: error.message };
+  }
 });
 
 // Handler to get active recording ID for a note

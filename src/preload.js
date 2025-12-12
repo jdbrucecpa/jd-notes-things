@@ -47,6 +47,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // v1.2: Recording Widget IPC
   onWidgetCreateAndRecord: callback =>
     ipcRenderer.on('widget:create-and-record', (_, data) => callback(data)),
+  // v1.2 fix: Handler for recording with specific action (append, overwrite, new)
+  onWidgetCreateAndRecordWithAction: callback =>
+    ipcRenderer.on('widget:create-and-record-with-action', (_, data) => callback(data)),
   onWidgetStopRecording: callback =>
     ipcRenderer.on('widget:stop-recording-request', () => callback()),
   sendWidgetRecordingResult: result => ipcRenderer.send('widget:recording-result', result),
@@ -55,6 +58,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleRecordingWidget: () => ipcRenderer.invoke('widget:toggle'),
   widgetToggleAlwaysOnTop: enabled => ipcRenderer.invoke('widget:toggleAlwaysOnTop', enabled),
   widgetGetState: () => ipcRenderer.invoke('widget:getState'),
+  // v1.2 fix: Notify main process when user views a meeting
+  notifyCurrentMeetingChanged: meetingInfo => ipcRenderer.send('renderer:current-meeting-changed', meetingInfo),
   onParticipantsUpdated: callback =>
     ipcRenderer.on('participants-updated', (_, meetingId) => callback(meetingId)),
   onVideoFrame: callback => ipcRenderer.on('video-frame', (_, data) => callback(data)),
