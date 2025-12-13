@@ -1,0 +1,103 @@
+This is a recording of my YouTube Live show where I chat with someone in the industry. Analyze the full conversation to identify content repurposing opportunities.
+
+I need:
+1. Timestamps for potential YouTube Shorts (punchy 30-60 second moments)
+2. Ideas for blog posts, LinkedIn posts, book chapters, or other content
+3. Key themes and quotable moments
+
+For Shorts, look for:
+- Surprising or counterintuitive insights
+- Emotional moments or strong reactions
+- Clear, self-contained advice or wisdom
+- Funny exchanges or memorable one-liners
+- Controversial or spicy takes
+- Aha moments or revelations
+
+For longer content, look for:
+- Themes worth expanding into articles
+- Stories that could be book chapter material
+- Frameworks or mental models worth explaining
+- Contrarian perspectives worth defending
+- Topics that generated good back-and-forth
+
+Preserve the conversational energy—note when something landed well.
+
+Format exactly like this:
+
+"template:Content Mining"
+
+# YouTube Shorts Candidates
+
+## Short 1: [Punchy Title for the Clip]
+- **Timestamp:** [Start] - [End]
+- **Speaker:** [[Name]] (or both)
+- **The hook:** One sentence describing why this works as a short
+- **Suggested caption:** Brief caption/hook for social
+
+## Short 2: [Title]
+- **Timestamp:** [Start] - [End]
+- **Speaker:** [[Name]]
+- **The hook:** Why it works
+- **Suggested caption:** Caption idea
+
+(aim for 5-10 candidates, ranked by potential)
+
+---
+
+# Blog Post Ideas
+
+## [Blog Title Idea 1]
+- **Based on:** [Timestamp range or topic]
+- **Core argument:** One sentence thesis
+- **Key points to include:** 3-5 bullets
+- **Angle:** What makes this worth writing about
+
+## [Blog Title Idea 2]
+- **Based on:** [Timestamp/topic]
+- **Core argument:** Thesis
+- **Key points:** Bullets
+- **Angle:** Why it's interesting
+
+---
+
+# LinkedIn Post Ideas
+
+## [Post concept 1]
+- **Hook:** Opening line that would grab attention
+- **Based on:** [Timestamp/topic]
+- **Format:** [Story / Hot take / Framework / Lesson learned]
+
+## [Post concept 2]
+- **Hook:** Opening line
+- **Based on:** [Timestamp/topic]
+- **Format:** Type
+
+---
+
+# Book Chapter Potential
+
+Any themes or stories from this conversation that could expand into book chapter material:
+
+- **[Chapter concept]:** Brief description, what section of a book it might fit
+- **[Chapter concept]:** Description
+
+---
+
+# Quotable Moments
+
+Exact quotes worth saving for future use (social posts, presentations, articles):
+
+> "[Quote]"
+> — [[Speaker]], on [topic]
+
+> "[Quote]"
+> — [[Speaker]], on [topic]
+
+---
+
+# Overall Content Value
+
+**Richest topics:** Where the best material is concentrated
+**Guest quotability:** How quotable was the guest? (1-10)
+**Reuse potential:** High/Medium/Low — overall content value assessment
+**Recommended priority:** Which content type to create first and why

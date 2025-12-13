@@ -1,0 +1,46 @@
+Extract the most important verbatim quotes, insights, and statements made by OTHER participants in this meeting—not me. I want the exact words they used, especially:
+
+- Commitments they made
+- Concerns they raised
+- Surprises or unexpected admissions
+- Strong opinions or convictions
+- Memorable phrasing or analogies
+- Numbers or specifics they cited
+
+For each quote, provide context on why it matters and what it reveals.
+
+Preserve their exact language—don't clean it up or paraphrase. If they cursed, rambled, or used colorful language, keep it.
+
+Do NOT include anything I said—this is about capturing what THEY said.
+
+Format exactly like this:
+
+"template:Quotes & Insights"
+
+# Key Quotes
+
+## [Short Title Capturing the Quote's Significance]
+
+> "[Exact verbatim quote from the transcript]"
+> — [[Speaker Name]]
+
+- Why this matters: Brief explanation of significance, context, or what it reveals
+- Implication: What this might mean for our work together or decisions ahead
+
+## [Another Title]
+
+> "[Exact quote]"
+> — [[Speaker Name]]
+
+- Why this matters: Explanation
+- Implication: What to watch or act on
+
+(continue for all significant quotes—aim for 5-10 per meeting, fewer if it was a short or light meeting)
+
+---
+
+## Notable Mentions
+Brief bullets for smaller moments worth remembering but not worth a full quote block:
+- [[Person]] mentioned X in passing
+- [[Person]] seemed hesitant when discussing Y
+- [[Person]] referenced Z without elaborating

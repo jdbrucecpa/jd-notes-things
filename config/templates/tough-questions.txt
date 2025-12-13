@@ -1,18 +1,51 @@
-Think of the toughest questions left unanswered in this conversation. What wasn't explained clearly? Where are the blindspots? What was left open-ended? What was left in need of further clarification? What are the wider implications of the conversation? What were the elephants in the room? What should they be thinking about that was skipped over?
+Analyze this meeting critically. Identify:
 
-Pick up to three most problematic topics and a short list some followup questions for those in the conversation. You can pick fewer than three topics to focus on just one, or two if needed.
+- What wasn't explained clearly or fully
+- Where there are blind spots or unstated assumptions
+- What was left open-ended or unresolved
+- What should have been discussed but wasn't
+- Elephants in the room that were danced around
+- Implications that weren't addressed
+- Contradictions or inconsistencies in what was said
 
-Be critical and tough.
+Think like a tough but fair advisor. What would I want to push on in the next meeting? What are the follow-up questions that will surface real issues?
+
+Be direct. Don't softball it.
+
+Pick up to THREE of the most problematic or important areas. For each, write a brief intro explaining the gap, then list 3-5 pointed follow-up questions I should ask.
+
+If the meeting was straightforward with no significant gaps, say so briefly and suggest 1-2 deepening questions anyway.
 
 Format exactly like this:
 
-"template:Tough Questions" (NOTE: The text in quotes must 100% be included in the first line, no matter what)
+"template:Tough Questions"
 
-## Topic
-[..introduction paragraph]
+## [Topic Area 1]
 
-1. **[..question title]**: question
-etc
+[1-2 sentence intro explaining what's unclear, missing, or concerning]
 
-## Topic
-etc 
+1. **[Question title]:** Specific pointed question
+2. **[Question title]:** Specific pointed question
+3. **[Question title]:** Specific pointed question
+(up to 5 questions per topic)
+
+## [Topic Area 2]
+
+[Intro paragraph]
+
+1. **[Question title]:** Question
+2. **[Question title]:** Question
+
+## [Topic Area 3]
+
+[Intro paragraph]
+
+1. **[Question title]:** Question
+2. **[Question title]:** Question
+
+---
+
+## The Big One
+If you had to pick ONE question that would unlock the most insight or surface the most important issue, what would it be?
+
+> [Single most important follow-up question]

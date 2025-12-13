@@ -1,45 +1,64 @@
-Create a detailed summary of the conversation, from our point of view. Capture all the topics, fleshing out as every single key detail, decision, date, number or metric in short-hand bullets below each heading.
+Create a comprehensive meeting record from my point of view, as if written by a sharp executive assistant. Capture everything substantive that happened—topics, details, decisions, context, numbers, dates, names—in chronological flow.
 
-When choosing headings, make them generalized. Below each heading, include 5+ abbreviated bullet points and an 'In Short' takeaways bullet.
+Use generalized headings for topics. Under each heading, include abbreviated bullet points covering all key details. End each section with a brief "In Short" takeaway.
+
+Do NOT include:
+- Editorial commentary on blind spots or what they should have said (that's a separate template)
+- Verbatim quotes as featured content (that's a separate template)
+- Sentiment analysis or relationship dynamics (that's a separate template)
+- Firm profile data extraction (that's a separate template)
+
+Focus on: what was discussed, what was decided, what context was shared, what commitments were made.
+
+Preserve any colorful language, analogies, or memorable phrasing in the bullet points—don't sanitize.
 
 Format exactly like this:
 
-"template:Full Notes" (NOTE: The text in quotes must 100% be included in the first line, no matter what)
+"template:Full Notes"
 
-# Topic 1
+# [First Major Topic]
 
-## General Heading
-- short-form bullet note
-- etc
+## [Subtopic Heading]
+- short-form bullet with specific detail, number, date, or name
+- another bullet
+- etc (aim for 5+ bullets per section if content warrants)
 
-**In Short:** brief, specific takeaway(s) for us
+**In Short:** One-sentence takeaway for this section
 
-## General Heading
-- short-form bullet note
-- etc
+## [Another Subtopic]
+- bullet
+- bullet
 
-**In Short:** brief, specific takeaway(s) for us
+**In Short:** Takeaway
 
-etc
+# [Second Major Topic]
 
-# Topic 2
+## [Subtopic]
+- bullet
+- bullet
 
-## General Heading
-- short-form bullet note
-- etc
+**In Short:** Takeaway
 
-**In Short:** brief, specific takeaway(s) for us
+(continue for all major topics)
 
-## General Heading
-- short-form bullet note
-- etc
+# Commitments & Next Steps
+- [ ] Commitment I made (with deadline if mentioned)
+- [ ] Commitment they made (with deadline if mentioned)
+- [ ] Follow-up needed on X
 
-**In Short:** brief, specific takeaway(s) for us
+**In Summary:** 2-3 sentence summary of the meeting from my perspective
 
-etc
+---
 
-# Conclusions & Next Steps
-- short-form bullet note
-- etc
+## Machine Context
 
-**In Summary:** brief summary from our point of view
+### Entities
+- **People:** [[Name1]], [[Name2]] (use wikilink format for all people mentioned)
+- **Firms:** [[Firm Name]] (if applicable)
+- **Tools/Vendors:** [[Tool1]], [[Vendor1]] (any tech, custodians, software mentioned)
+
+### Tags
+#meeting-type #topic1 #topic2 (3-5 relevant tags)
+
+### Key Terms
+comma, separated, key, terms, for, vector, search

@@ -1,0 +1,128 @@
+name: Firm Profile Signals
+description: Extract data points mentioned in this meeting that may update the firm's profile
+type: client
+cost_estimate: 0.01
+sections:
+  - title: Firm Basics
+    prompt: |
+      Extract any firm-level data mentioned or updated in this meeting. Only include what was actually discussed—don't infer or assume.
+      
+      Format as Obsidian-compatible inline fields:
+      
+      ```
+      ## Firm Basics
+      
+      firm_name:: [[Firm Name]]
+      aum:: $X (if mentioned)
+      custodian:: [[Custodian Name]] (if mentioned)
+      broker_dealer:: [[BD Name]] (if mentioned)
+      location:: City, State (if mentioned)
+      founded:: Year (if mentioned)
+      
+      **Update notes:** Brief context on what was said about any of the above
+      ```
+      
+      If nothing in this category was discussed, output: "No firm basics discussed in this meeting."
+
+  - title: Team & Staffing
+    prompt: |
+      Extract any information about the firm's team, staffing, or org structure mentioned in this meeting.
+      
+      Format:
+      
+      ```
+      ## Team & Staffing
+      
+      total_headcount:: X (if mentioned)
+      advisor_count:: X (if mentioned)
+      
+      ### Staff Mentioned
+      - [[Person Name]] — Role, any context shared about them
+      - [[Person Name]] — Role, context
+      
+      ### Staffing Signals
+      - Any hiring plans, departures, or staffing concerns mentioned
+      - Capacity issues discussed
+      - Career path or development topics
+      
+      **Update notes:** Context on staffing discussions
+      ```
+      
+      If nothing in this category was discussed, output: "No team/staffing discussed in this meeting."
+
+  - title: Technology & Operations
+    prompt: |
+      Extract any technology, systems, or operational details mentioned in this meeting.
+      
+      Format:
+      
+      ```
+      ## Technology & Operations
+      
+      crm:: [[CRM Name]] (if mentioned)
+      planning_software:: [[Software]] (if mentioned)
+      portfolio_management:: [[Software]] (if mentioned)
+      other_tech:: [[Tool1]], [[Tool2]] (any other tech mentioned)
+      
+      ### Tech Signals
+      - Any tech changes planned or discussed
+      - Pain points with current systems
+      - Integration issues
+      - Process or workflow topics
+      
+      **Update notes:** Context on tech/ops discussions
+      ```
+      
+      If nothing in this category was discussed, output: "No technology/operations discussed in this meeting."
+
+  - title: Pain Points & Goals
+    prompt: |
+      Extract any pain points, challenges, goals, or aspirations mentioned in this meeting. These are critical signals for advising.
+      
+      Format:
+      
+      ```
+      ## Pain Points & Goals
+      
+      ### Active Pain Points
+      - pain:: [Specific pain point] — context
+      - pain:: [Another pain point] — context
+      
+      ### Stated Goals
+      - goal:: [Specific goal] — timeline if mentioned
+      - goal:: [Another goal]
+      
+      ### Recurring Themes
+      Note if any pain points or goals have come up in prior meetings (based on what was said in this meeting)
+      
+      **Update notes:** Context and priority signals
+      ```
+      
+      If nothing in this category was discussed, output: "No pain points or goals discussed in this meeting."
+
+  - title: Machine Context Footer
+    prompt: |
+      Create a machine-readable footer summarizing all profile-relevant signals from this meeting.
+      
+      Format:
+      
+      ```
+      ---
+      
+      ## Machine Context
+      
+      ### Entities
+      - **People:** [[Name1]], [[Name2]] (all staff/people mentioned)
+      - **Firm:** [[Firm Name]]
+      - **Vendors:** [[Vendor1]], [[Vendor2]] (all tech/custodians/vendors)
+      
+      ### Profile Update Signals
+      - field:: value (for each data point that might need updating)
+      - field:: value
+      
+      ### Tags
+      #firm-profile #data-extract #relevant-topic-tags
+      
+      ### Change Summary
+      One sentence: "This meeting surfaced potential updates to: [list fields]"
+      ```

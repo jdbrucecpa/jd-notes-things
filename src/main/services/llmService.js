@@ -48,8 +48,75 @@ class LLMAdapter {
 }
 
 /**
+ * Model ID mappings - preference string to actual API model ID
+ * Format: 'preference-value' => 'api-model-id'
+ */
+const OPENAI_MODEL_MAP = {
+  // Budget tier
+  'gpt-5-nano': 'gpt-5-nano',
+  'gpt-4.1-nano': 'gpt-4.1-nano',
+  // Balanced tier
+  'gpt-4o-mini': 'gpt-4o-mini',
+  'gpt-5-mini': 'gpt-5-mini',
+  'gpt-4.1-mini': 'gpt-4.1-mini',
+  // Legacy
+  'gpt-4o': 'gpt-4o',
+};
+
+const ANTHROPIC_MODEL_MAP = {
+  // Premium tier
+  'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
+  // Ultra-premium tier
+  'claude-sonnet-4': 'claude-sonnet-4-20250514',
+  'claude-sonnet-4-5': 'claude-sonnet-4-5-20241022',
+  // Legacy
+  'claude-opus-4': 'claude-opus-4-20250514',
+};
+
+/**
+ * Extract model ID from preference string
+ * e.g., 'openai-gpt-5-nano' => 'gpt-5-nano'
+ * e.g., 'claude-haiku-4-5' => 'claude-haiku-4-5-20251001'
+ */
+function extractModelFromPreference(preference) {
+  if (!preference) return null;
+
+  if (preference.startsWith('openai-')) {
+    const modelKey = preference.replace('openai-', '');
+    return OPENAI_MODEL_MAP[modelKey] || modelKey;
+  }
+
+  if (preference.startsWith('claude-')) {
+    return ANTHROPIC_MODEL_MAP[preference] || preference;
+  }
+
+  if (preference.startsWith('azure-')) {
+    // Azure uses deployment names, extract the model part
+    return preference.replace('azure-', '');
+  }
+
+  return preference;
+}
+
+/**
+ * Check if a model is a reasoning model (GPT-5 series)
+ * Reasoning models use max_completion_tokens and don't support temperature
+ * @param {string} model - Model identifier
+ * @returns {boolean}
+ */
+function isReasoningModel(model) {
+  // GPT-5 series are reasoning models
+  // GPT-4.1 and GPT-4o series are NOT reasoning models
+  return model && (model.startsWith('gpt-5') || model.includes('gpt-5'));
+}
+
+/**
  * OpenAI Adapter
- * Supports gpt-4o-mini and other OpenAI models
+ * Supports GPT models including gpt-4o-mini, gpt-4.1-*, gpt-5-* (reasoning models)
+ *
+ * Note: GPT-5 series are reasoning models that:
+ * - Use max_completion_tokens instead of max_tokens
+ * - Don't support temperature, top_p, presence_penalty, frequency_penalty
  */
 class OpenAIAdapter extends LLMAdapter {
   constructor(apiKey, model = 'gpt-4o-mini') {
@@ -67,6 +134,8 @@ class OpenAIAdapter extends LLMAdapter {
       temperature = 0.7,
     } = options;
 
+    const isReasoning = isReasoningModel(this.model);
+
     // Build messages array - use separate messages for caching
     const messages = [{ role: 'system', content: systemPrompt }];
 
@@ -83,12 +152,23 @@ class OpenAIAdapter extends LLMAdapter {
       messages.push({ role: 'user', content: userPrompt });
     }
 
-    const completion = await this.client.chat.completions.create({
+    // Build request parameters based on model type
+    const requestParams = {
       model: this.model,
       messages: messages,
-      temperature,
-      max_tokens: maxTokens,
-    });
+    };
+
+    if (isReasoning) {
+      // Reasoning models (GPT-5 series): use max_completion_tokens, no temperature
+      requestParams.max_completion_tokens = maxTokens;
+      console.log(`[OpenAI] Using reasoning model params for ${this.model} (max_completion_tokens: ${maxTokens})`);
+    } else {
+      // Standard models (GPT-4o, GPT-4.1 series): use max_tokens with temperature
+      requestParams.max_tokens = maxTokens;
+      requestParams.temperature = temperature;
+    }
+
+    const completion = await this.client.chat.completions.create(requestParams);
 
     // Log token usage and cache statistics
     if (completion.usage) {
@@ -120,18 +200,50 @@ class OpenAIAdapter extends LLMAdapter {
   }
 
   async streamCompletion(options) {
-    const { systemPrompt, userPrompt, maxTokens = 1000, temperature = 0.7, onChunk } = options;
+    const {
+      systemPrompt,
+      userPrompt,
+      cacheableContext,
+      maxTokens = 1000,
+      temperature = 0.7,
+      onChunk,
+    } = options;
 
-    const stream = await this.client.chat.completions.create({
+    const isReasoning = isReasoningModel(this.model);
+
+    // Build messages array - use separate messages for caching
+    const messages = [{ role: 'system', content: systemPrompt }];
+
+    if (cacheableContext) {
+      // Cacheable content (e.g., transcript) goes first
+      messages.push({
+        role: 'user',
+        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
+      });
+      // Dynamic instructions go second (will use cached transcript)
+      messages.push({ role: 'user', content: userPrompt });
+    } else {
+      // Standard single message
+      messages.push({ role: 'user', content: userPrompt });
+    }
+
+    // Build request parameters based on model type
+    const requestParams = {
       model: this.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature,
-      max_tokens: maxTokens,
+      messages: messages,
       stream: true,
-    });
+    };
+
+    if (isReasoning) {
+      // Reasoning models (GPT-5 series): use max_completion_tokens, no temperature
+      requestParams.max_completion_tokens = maxTokens;
+    } else {
+      // Standard models (GPT-4o, GPT-4.1 series): use max_tokens with temperature
+      requestParams.max_tokens = maxTokens;
+      requestParams.temperature = temperature;
+    }
+
+    const stream = await this.client.chat.completions.create(requestParams);
 
     let fullText = '';
     for await (const chunk of stream) {
@@ -262,15 +374,29 @@ class AzureOpenAIAdapter extends LLMAdapter {
   }
 
   async streamCompletion(options) {
-    const { systemPrompt, userPrompt, maxTokens = 1000, onChunk } = options;
+    const { systemPrompt, userPrompt, cacheableContext, maxTokens = 1000, onChunk } = options;
     // Note: gpt-5-mini is a reasoning model and does NOT support temperature
+
+    // Build messages array - use separate messages for caching
+    const messages = [{ role: 'system', content: systemPrompt }];
+
+    if (cacheableContext) {
+      // Cacheable content (e.g., transcript) goes first
+      messages.push({
+        role: 'user',
+        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
+      });
+      // Dynamic instructions go second (will use cached transcript)
+      messages.push({ role: 'user', content: userPrompt });
+      console.log('[Azure Stream] Using prompt caching structure (2 user messages)');
+    } else {
+      // Standard single message
+      messages.push({ role: 'user', content: userPrompt });
+    }
 
     const stream = await this.client.chat.completions.create({
       model: this.deployment,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
+      messages: messages,
       max_completion_tokens: maxTokens, // Reasoning models use max_completion_tokens
       stream: true,
     });
@@ -381,12 +507,44 @@ class AnthropicAdapter extends LLMAdapter {
   }
 
   async streamCompletion(options) {
-    const { systemPrompt, userPrompt, maxTokens = 1000, temperature = 0.7, onChunk } = options;
+    const {
+      systemPrompt,
+      userPrompt,
+      cacheableContext,
+      maxTokens = 1000,
+      temperature = 0.7,
+      onChunk,
+    } = options;
+
+    let systemConfig;
+    let messages;
+
+    if (cacheableContext) {
+      // Use Anthropic's explicit prompt caching
+      // Mark the cacheable content (transcript) with cache_control
+      systemConfig = [
+        {
+          type: 'text',
+          text: systemPrompt,
+        },
+        {
+          type: 'text',
+          text: `Here is the meeting transcript:\n\n${cacheableContext}`,
+          cache_control: { type: 'ephemeral' }, // Mark for caching
+        },
+      ];
+      messages = [{ role: 'user', content: userPrompt }];
+      console.log('[Anthropic Stream] Using prompt caching structure with cache_control');
+    } else {
+      // Standard message format
+      systemConfig = systemPrompt;
+      messages = [{ role: 'user', content: userPrompt }];
+    }
 
     const stream = this.client.messages.stream({
       model: this.model,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+      system: systemConfig,
+      messages: messages,
       max_tokens: maxTokens,
       temperature,
     });
@@ -517,11 +675,69 @@ class LLMService {
   /**
    * Switch to a different provider
    * @param {string} provider - 'openai' | 'azure' | 'anthropic'
+   * @param {string} [model] - Optional model to use (e.g., 'gpt-5-nano', 'claude-sonnet-4')
    */
-  switchProvider(provider) {
+  switchProvider(provider, model) {
     this.config.provider = provider;
+
+    // Update model config if provided
+    if (model) {
+      if (provider === 'openai' && this.config.openai) {
+        this.config.openai.model = model;
+      } else if (provider === 'anthropic' && this.config.anthropic) {
+        this.config.anthropic.model = model;
+      } else if (provider === 'azure' && this.config.azure) {
+        this.config.azure.deployment = model;
+      }
+    }
+
     this.adapter = this._createAdapter();
-    console.log(`[LLM Service] Switched to ${this.adapter.getProviderName()}`);
+    console.log(
+      `[LLM Service] Switched to ${this.adapter.getProviderName()}${model ? ` with model: ${model}` : ''}`
+    );
+  }
+
+  /**
+   * Switch to a specific model using preference string
+   * @param {string} preference - Full preference string (e.g., 'openai-gpt-5-nano', 'claude-haiku-4-5', 'azure-my-deployment')
+   * @param {Object} [azureConfig] - Optional Azure config for dynamic deployments
+   * @param {string} [azureConfig.endpoint] - Azure OpenAI endpoint URL
+   */
+  switchToPreference(preference, azureConfig = null) {
+    const model = extractModelFromPreference(preference);
+    let provider;
+
+    if (preference.startsWith('openai-')) {
+      provider = 'openai';
+    } else if (preference.startsWith('claude-')) {
+      provider = 'anthropic';
+    } else if (preference.startsWith('azure-')) {
+      provider = 'azure';
+      // Update Azure config if provided (for dynamic deployments)
+      if (azureConfig && azureConfig.endpoint && this.config.azure) {
+        this.config.azure.endpoint = azureConfig.endpoint;
+        console.log(`[LLM Service] Updated Azure endpoint to: ${azureConfig.endpoint}`);
+      }
+    } else {
+      console.warn(`[LLM Service] Unknown preference format: ${preference}, defaulting to openai`);
+      provider = 'openai';
+    }
+
+    this.switchProvider(provider, model);
+  }
+
+  /**
+   * Get current model name
+   */
+  getCurrentModel() {
+    if (this.config.provider === 'openai') {
+      return this.config.openai?.model || 'gpt-4o-mini';
+    } else if (this.config.provider === 'anthropic') {
+      return this.config.anthropic?.model || 'claude-haiku-4-5-20251001';
+    } else if (this.config.provider === 'azure') {
+      return this.config.azure?.deployment || 'unknown';
+    }
+    return 'unknown';
   }
 }
 
@@ -531,18 +747,18 @@ class LLMService {
  */
 function createLLMServiceFromEnv() {
   // Determine which provider to use based on env vars
-  // Priority: Azure > Anthropic > OpenAI
+  // Priority (v1.2): OpenAI > Anthropic > Azure (Azure is now emergency backup)
   let provider;
-  if (
+  if (process.env.OPENAI_API_KEY) {
+    provider = 'openai';
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    provider = 'anthropic';
+  } else if (
     process.env.AZURE_OPENAI_API_KEY &&
     process.env.AZURE_OPENAI_ENDPOINT &&
     process.env.AZURE_OPENAI_DEPLOYMENT
   ) {
     provider = 'azure';
-  } else if (process.env.ANTHROPIC_API_KEY) {
-    provider = 'anthropic';
-  } else if (process.env.OPENAI_API_KEY) {
-    provider = 'openai';
   } else {
     throw new Error('No LLM API keys found in environment variables');
   }
@@ -574,6 +790,10 @@ function createLLMServiceFromEnv() {
  */
 async function createLLMServiceFromCredentials(keyManagementService) {
   // Try to get API keys from Windows Credential Manager first, fall back to env vars
+  const openaiKey =
+    (await keyManagementService.getKey('OPENAI_API_KEY')) || process.env.OPENAI_API_KEY;
+  const anthropicKey =
+    (await keyManagementService.getKey('ANTHROPIC_API_KEY')) || process.env.ANTHROPIC_API_KEY;
   const azureKey =
     (await keyManagementService.getKey('AZURE_OPENAI_API_KEY')) || process.env.AZURE_OPENAI_API_KEY;
   const azureEndpoint =
@@ -582,20 +802,16 @@ async function createLLMServiceFromCredentials(keyManagementService) {
   const azureDeployment =
     (await keyManagementService.getKey('AZURE_OPENAI_DEPLOYMENT')) ||
     process.env.AZURE_OPENAI_DEPLOYMENT;
-  const anthropicKey =
-    (await keyManagementService.getKey('ANTHROPIC_API_KEY')) || process.env.ANTHROPIC_API_KEY;
-  const openaiKey =
-    (await keyManagementService.getKey('OPENAI_API_KEY')) || process.env.OPENAI_API_KEY;
 
   // Determine which provider to use based on available keys
-  // Priority: Azure > Anthropic > OpenAI
+  // Priority (v1.2): OpenAI > Anthropic > Azure (Azure is now emergency backup)
   let provider;
-  if (azureKey && azureEndpoint && azureDeployment) {
-    provider = 'azure';
+  if (openaiKey) {
+    provider = 'openai';
   } else if (anthropicKey) {
     provider = 'anthropic';
-  } else if (openaiKey) {
-    provider = 'openai';
+  } else if (azureKey && azureEndpoint && azureDeployment) {
+    provider = 'azure';
   } else {
     throw new Error('No LLM API keys found in Windows Credential Manager or environment variables');
   }
@@ -679,4 +895,7 @@ module.exports = {
   createLLMServiceFromEnv,
   createLLMServiceFromCredentials,
   createLLMServiceFromPreference,
+  extractModelFromPreference,
+  OPENAI_MODEL_MAP,
+  ANTHROPIC_MODEL_MAP,
 };

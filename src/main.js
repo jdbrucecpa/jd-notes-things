@@ -5312,7 +5312,7 @@ ipcMain.handle(
   'templates:generateSummaries',
   withValidation(
     templatesGenerateSummariesSchema,
-    async (event, { meetingId, templateIds, routingOverride }) => {
+    async (event, { meetingId, templateIds, routingOverride, mode = 'replace', model = null }) => {
       try {
         console.log(
           '[Template IPC] Generating summaries for meeting:',
@@ -5321,6 +5321,7 @@ ipcMain.handle(
           templateIds.length,
           'templates'
         );
+        console.log(`[Template IPC] Mode: ${mode}, Model: ${model || 'default'}`);
         if (routingOverride) {
           console.log('[Template IPC] Using routing override:', routingOverride);
         }
@@ -5339,9 +5340,53 @@ ipcMain.handle(
           return { success: false, error: 'Meeting has no transcript' };
         }
 
-        // Use shared template generation function
-        console.log('[Template IPC] Using shared generateTemplateSummaries function');
-        const summaries = await generateTemplateSummaries(meeting, templateIds);
+        // Store existing summaries for append mode
+        const existingSummaries = mode === 'append' ? [...(meeting.summaries || [])] : [];
+
+        // Generate summaries with optional custom model
+        let summaries;
+        if (model) {
+          // Use custom model for this generation
+          const originalProvider = llmService.config.provider;
+          const originalModel = llmService.getCurrentModel();
+          console.log(`[Template IPC] Switching to custom model: ${model}`);
+
+          // Get Azure config if needed
+          const preferences = await getProviderPreferences();
+          const azureConfig =
+            model.startsWith('azure-') && preferences.azureEndpoint
+              ? { endpoint: preferences.azureEndpoint }
+              : null;
+
+          llmService.switchToPreference(model, azureConfig);
+
+          try {
+            summaries = await generateTemplateSummaries(meeting, templateIds);
+          } finally {
+            // Restore original provider/model
+            console.log(
+              `[Template IPC] Restoring LLM to ${originalProvider} with model ${originalModel}`
+            );
+            llmService.switchProvider(originalProvider, originalModel);
+          }
+        } else {
+          // Use default model via withProviderSwitch
+          summaries = await withProviderSwitch(
+            'auto',
+            async () => generateTemplateSummaries(meeting, templateIds),
+            '[Template IPC]'
+          );
+        }
+
+        // Handle append mode: keep all existing summaries and add new ones at the bottom
+        if (mode === 'append' && existingSummaries.length > 0) {
+          // Combine existing summaries with new summaries
+          summaries = [...existingSummaries, ...summaries];
+          console.log(
+            `[Template IPC] Appended ${summaries.length - existingSummaries.length} new summaries to ${existingSummaries.length} existing`
+          );
+        }
+        // Replace mode: summaries already contains only the new ones (existingSummaries was not used)
 
         // Save summaries to meeting object
         meeting.summaries = summaries;
@@ -7298,7 +7343,7 @@ ipcMain.handle('settings:chooseVaultPath', async () => {
   }
 });
 
-// Get AI provider preferences (Phase 10.3)
+// Get AI provider preferences (Phase 10.3, updated v1.2)
 ipcMain.handle('settings:getProviderPreferences', async event => {
   // Get settings from renderer's localStorage via webContents
   const preferences = await event.sender.executeJavaScript(`
@@ -7306,15 +7351,15 @@ ipcMain.handle('settings:getProviderPreferences', async event => {
       try {
         const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
         return {
-          autoSummaryProvider: settings.autoSummaryProvider || 'azure-gpt-5-mini',
-          templateSummaryProvider: settings.templateSummaryProvider || 'azure-gpt-5-mini',
-          patternGenerationProvider: settings.patternGenerationProvider || 'openai-gpt-4o-mini'
+          autoSummaryProvider: settings.autoSummaryProvider || 'openai-gpt-4o-mini',
+          templateSummaryProvider: settings.templateSummaryProvider || 'openai-gpt-4o-mini',
+          patternGenerationProvider: settings.patternGenerationProvider || 'openai-gpt-5-nano'
         };
       } catch (e) {
         return {
-          autoSummaryProvider: 'azure-gpt-5-mini',
-          templateSummaryProvider: 'azure-gpt-5-mini',
-          patternGenerationProvider: 'openai-gpt-4o-mini'
+          autoSummaryProvider: 'openai-gpt-4o-mini',
+          templateSummaryProvider: 'openai-gpt-4o-mini',
+          patternGenerationProvider: 'openai-gpt-5-nano'
         };
       }
     })()
@@ -8251,7 +8296,7 @@ ipcMain.handle('deleteMeeting', async (event, meetingId) => {
 });
 
 // Handle generating AI summary for a meeting (non-streaming)
-ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
+ipcMain.handle('generateMeetingSummary', async (event, meetingId, options = {}) => {
   // Validate meetingId
   try {
     validateIpcInput(stringIdSchema, meetingId);
@@ -8259,106 +8304,146 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId) => {
     return { success: false, error: validationError.message };
   }
 
+  // Extract options with defaults
+  const { mode = 'replace', model = null } = options || {};
   console.log(`Manual summary generation requested for meeting: ${meetingId}`);
+  console.log(`[RegenerateSummary] Mode: ${mode}, Custom model: ${model || 'default'}`);
 
-  return await withProviderSwitch(
-    'auto',
-    async () => {
-      // Read current data
-      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-      const meetingsData = JSON.parse(fileData);
+  // Helper to perform the generation
+  const performGeneration = async () => {
+    // Read current data
+    const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
+    const meetingsData = JSON.parse(fileData);
 
-      // Find the meeting
-      const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
-        meeting => meeting.id === meetingId
-      );
+    // Find the meeting
+    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
+      meeting => meeting.id === meetingId
+    );
 
-      if (pastMeetingIndex === -1) {
-        return { success: false, error: 'Meeting not found' };
+    if (pastMeetingIndex === -1) {
+      return { success: false, error: 'Meeting not found' };
+    }
+
+    const meeting = meetingsData.pastMeetings[pastMeetingIndex];
+
+    // Check if there's a transcript to summarize
+    if (!meeting.transcript || meeting.transcript.length === 0) {
+      return {
+        success: false,
+        error: 'No transcript available for this meeting',
+      };
+    }
+
+    // Log summary generation to console instead of showing a notification
+    console.log('Generating AI summary for meeting: ' + meetingId);
+
+    // Generate the summary
+    const summary = await generateMeetingSummary(meeting);
+
+    // Get meeting title for use in the new content
+    const meetingTitle = meeting.title || 'Meeting Notes';
+
+    // Get recording ID
+    const recordingId = meeting.recordingId;
+
+    // Check for different possible video file patterns
+    const possibleFilePaths = recordingId
+      ? [
+          path.join(RECORDING_PATH, `${recordingId}.mp4`),
+          path.join(RECORDING_PATH, `macos-desktop-${recordingId}.mp4`),
+          path.join(RECORDING_PATH, `macos-desktop${recordingId}.mp4`),
+          path.join(RECORDING_PATH, `desktop-${recordingId}.mp4`),
+        ]
+      : [];
+
+    // Find the first video file that exists
+    let videoExists = false;
+    let videoFilePath = null;
+
+    try {
+      for (const filePath of possibleFilePaths) {
+        if (fs.existsSync(filePath)) {
+          videoExists = true;
+          videoFilePath = filePath;
+          console.log(`Found video file at: ${videoFilePath}`);
+          break;
+        }
       }
+    } catch (err) {
+      console.error('Error checking for video files:', err);
+    }
 
-      const meeting = meetingsData.pastMeetings[pastMeetingIndex];
+    // Handle mode: replace vs append
+    if (mode === 'append' && meeting.content) {
+      // Append mode: add new summary below existing content
+      const timestamp = new Date().toLocaleString();
+      meeting.content = `${meeting.content}\n\n---\n\n## Regenerated Summary (${timestamp})\n\n${summary}`;
+      console.log('[RegenerateSummary] Appended new summary to existing content');
+    } else {
+      // Replace mode (default): create new content
+      meeting.content = `# ${meetingTitle}\n\n${summary}`;
+      console.log('[RegenerateSummary] Replaced existing content with new summary');
+    }
 
-      // Check if there's a transcript to summarize
-      if (!meeting.transcript || meeting.transcript.length === 0) {
-        return {
-          success: false,
-          error: 'No transcript available for this meeting',
-        };
-      }
+    // If video exists, store the path separately but don't add it to the content
+    if (videoExists) {
+      meeting.videoPath = videoFilePath; // Store the path for future reference
+      console.log(`Stored video path in meeting object: ${videoFilePath}`);
+    } else {
+      console.log('Video file not found or no recording ID');
+    }
 
-      // Log summary generation to console instead of showing a notification
-      console.log('Generating AI summary for meeting: ' + meetingId);
+    meeting.hasSummary = true;
 
-      // Generate the summary
-      const summary = await generateMeetingSummary(meeting);
+    // Save the updated data with summary
+    await fileOperationManager.writeData(meetingsData);
 
-      // Get meeting title for use in the new content
-      const meetingTitle = meeting.title || 'Meeting Notes';
+    console.log('Updated meeting note with AI summary');
 
-      // Get recording ID
-      const recordingId = meeting.recordingId;
+    // Notify the renderer to refresh the note if it's open
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('summary-generated', meetingId);
+    }
 
-      // Check for different possible video file patterns
-      const possibleFilePaths = recordingId
-        ? [
-            path.join(RECORDING_PATH, `${recordingId}.mp4`),
-            path.join(RECORDING_PATH, `macos-desktop-${recordingId}.mp4`),
-            path.join(RECORDING_PATH, `macos-desktop${recordingId}.mp4`),
-            path.join(RECORDING_PATH, `desktop-${recordingId}.mp4`),
-          ]
-        : [];
+    return {
+      success: true,
+      summary,
+    };
+  };
 
-      // Find the first video file that exists
-      let videoExists = false;
-      let videoFilePath = null;
+  try {
+    // If a custom model is specified, use it directly instead of the default
+    if (model) {
+      console.log(`[RegenerateSummary] Using one-off custom model: ${model}`);
+      const originalProvider = llmService.config.provider;
+      const originalModel = llmService.getCurrentModel();
+
+      // Get Azure config if needed
+      const preferences = await getProviderPreferences();
+      const azureConfig =
+        model.startsWith('azure-') && preferences.azureEndpoint
+          ? { endpoint: preferences.azureEndpoint }
+          : null;
+
+      llmService.switchToPreference(model, azureConfig);
 
       try {
-        for (const filePath of possibleFilePaths) {
-          if (fs.existsSync(filePath)) {
-            videoExists = true;
-            videoFilePath = filePath;
-            console.log(`Found video file at: ${videoFilePath}`);
-            break;
-          }
-        }
-      } catch (err) {
-        console.error('Error checking for video files:', err);
+        return await performGeneration();
+      } finally {
+        // Restore original provider and model
+        console.log(
+          `[RegenerateSummary] Restoring LLM to ${originalProvider} with model ${originalModel}`
+        );
+        llmService.switchProvider(originalProvider, originalModel);
       }
-
-      // Create content with the AI-generated summary
-      meeting.content = `# ${meetingTitle}\n\n${summary}`;
-
-      // If video exists, store the path separately but don't add it to the content
-      if (videoExists) {
-        meeting.videoPath = videoFilePath; // Store the path for future reference
-        console.log(`Stored video path in meeting object: ${videoFilePath}`);
-      } else {
-        console.log('Video file not found or no recording ID');
-      }
-
-      meeting.hasSummary = true;
-
-      // Save the updated data with summary
-      await fileOperationManager.writeData(meetingsData);
-
-      console.log('Updated meeting note with AI summary');
-
-      // Notify the renderer to refresh the note if it's open
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('summary-generated', meetingId);
-      }
-
-      return {
-        success: true,
-        summary,
-      };
-    },
-    '[RegenerateSummary]'
-  ).catch(error => {
+    } else {
+      // Use default model via withProviderSwitch
+      return await withProviderSwitch('auto', performGeneration, '[RegenerateSummary]');
+    }
+  } catch (error) {
     console.error('Error generating meeting summary:', error);
     return { success: false, error: error.message };
-  });
+  }
 });
 
 // Handle starting a manual desktop recording
@@ -10316,15 +10401,15 @@ function mapProviderValue(providerValue) {
   if (providerValue.startsWith('claude-')) return 'anthropic';
   if (providerValue.startsWith('openai-')) return 'openai';
 
-  // Fallback to azure if unknown
-  console.warn(`[LLM] Unknown provider value: ${providerValue}, falling back to azure`);
-  return 'azure';
+  // Fallback to openai if unknown (v1.2: changed from azure to openai as primary)
+  console.warn(`[LLM] Unknown provider value: ${providerValue}, falling back to openai`);
+  return 'openai';
 }
 
 /**
- * Execute an async operation with automatic LLM provider switching
- * Switches to the user's preferred provider for the operation type, executes the callback,
- * then restores the original provider (even if callback throws)
+ * Execute an async operation with automatic LLM provider and model switching
+ * Switches to the user's preferred provider AND model for the operation type, executes the callback,
+ * then restores the original provider and model (even if callback throws)
  *
  * @param {'auto' | 'template' | 'pattern'} providerType - Which provider preference to use ('auto' for autoSummaryProvider, 'template' for templateSummaryProvider, 'pattern' for patternGenerationProvider)
  * @param {Function} callback - Async function to execute with the switched provider
@@ -10339,39 +10424,52 @@ async function withProviderSwitch(providerType, callback, logContext = '[LLM]') 
       : providerType === 'template'
         ? 'templateSummaryProvider'
         : 'patternGenerationProvider';
-  const desiredProvider = mapProviderValue(preferences[preferenceKey]);
+  const preferenceValue = preferences[preferenceKey];
+  const desiredProvider = mapProviderValue(preferenceValue);
   const originalProvider = llmService.config.provider;
+  const originalModel = llmService.getCurrentModel();
 
-  if (desiredProvider !== originalProvider) {
+  // Use switchToPreference to set both provider AND model correctly
+  if (preferenceValue) {
     console.log(
-      `${logContext} Switching LLM provider from ${originalProvider} to ${desiredProvider} (${providerType} preference: ${preferences[preferenceKey]})`
+      `${logContext} Switching LLM to ${preferenceValue} (provider: ${desiredProvider})`
     );
-    llmService.switchProvider(desiredProvider);
+
+    // Pass Azure config if switching to Azure (v1.2: dynamic Azure deployments)
+    const azureConfig =
+      desiredProvider === 'azure' && preferences.azureEndpoint
+        ? { endpoint: preferences.azureEndpoint }
+        : null;
+
+    llmService.switchToPreference(preferenceValue, azureConfig);
   }
 
   try {
     return await callback();
   } finally {
-    if (desiredProvider !== originalProvider) {
+    // Restore original provider and model
+    if (desiredProvider !== originalProvider || llmService.getCurrentModel() !== originalModel) {
       console.log(
-        `${logContext} Restoring LLM provider from ${desiredProvider} back to ${originalProvider}`
+        `${logContext} Restoring LLM to ${originalProvider} with model ${originalModel}`
       );
-      llmService.switchProvider(originalProvider);
+      llmService.switchProvider(originalProvider, originalModel);
     }
   }
 }
 
 /**
  * Get provider preferences from renderer's localStorage
- * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string, patternGenerationProvider: string}>}
+ * Default models (v1.2): OpenAI models as primary, with GPT-4o mini as balanced default
+ * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string, patternGenerationProvider: string, azureEndpoint: string}>}
  */
 async function getProviderPreferences() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     console.warn('[LLM] Main window not available, using default providers');
     return {
-      autoSummaryProvider: 'azure-gpt-5-mini',
-      templateSummaryProvider: 'azure-gpt-5-mini',
-      patternGenerationProvider: 'openai-gpt-4o-mini',
+      autoSummaryProvider: 'openai-gpt-4o-mini',
+      templateSummaryProvider: 'openai-gpt-4o-mini',
+      patternGenerationProvider: 'openai-gpt-5-nano',
+      azureEndpoint: '',
     };
   }
 
@@ -10381,15 +10479,17 @@ async function getProviderPreferences() {
         try {
           const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
           return {
-            autoSummaryProvider: settings.autoSummaryProvider || 'azure-gpt-5-mini',
-            templateSummaryProvider: settings.templateSummaryProvider || 'azure-gpt-5-mini',
-            patternGenerationProvider: settings.patternGenerationProvider || 'openai-gpt-4o-mini'
+            autoSummaryProvider: settings.autoSummaryProvider || 'openai-gpt-4o-mini',
+            templateSummaryProvider: settings.templateSummaryProvider || 'openai-gpt-4o-mini',
+            patternGenerationProvider: settings.patternGenerationProvider || 'openai-gpt-5-nano',
+            azureEndpoint: settings.azureEndpoint || ''
           };
         } catch (e) {
           return {
-            autoSummaryProvider: 'azure-gpt-5-mini',
-            templateSummaryProvider: 'azure-gpt-5-mini',
-            patternGenerationProvider: 'openai-gpt-4o-mini'
+            autoSummaryProvider: 'openai-gpt-4o-mini',
+            templateSummaryProvider: 'openai-gpt-4o-mini',
+            patternGenerationProvider: 'openai-gpt-5-nano',
+            azureEndpoint: ''
           };
         }
       })()
@@ -10398,9 +10498,10 @@ async function getProviderPreferences() {
   } catch (error) {
     console.error('[LLM] Error reading provider preferences:', error);
     return {
-      autoSummaryProvider: 'azure-gpt-5-mini',
-      templateSummaryProvider: 'azure-gpt-5-mini',
-      patternGenerationProvider: 'openai-gpt-4o-mini',
+      autoSummaryProvider: 'openai-gpt-4o-mini',
+      templateSummaryProvider: 'openai-gpt-4o-mini',
+      patternGenerationProvider: 'openai-gpt-5-nano',
+      azureEndpoint: '',
     };
   }
 }
@@ -10599,6 +10700,7 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
     }
 
     // v1.1: Add user profile context for personalized summaries
+    // This is prepended to transcript to be part of the cacheable content
     let userContextText = '';
     if (userProfile?.name) {
       const contextParts = [];
@@ -10612,24 +10714,38 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       if (userProfile.context) {
         contextParts.push(userProfile.context);
       }
-      userContextText = '\nUser Context:\n' + contextParts.join(' ');
+      userContextText = 'User Context: ' + contextParts.join(' ');
       logger.main.debug('[AutoSummary] Including user profile context:', userContextText);
     }
 
     // Load system prompt from template file or use hardcoded fallback (Phase 10.3)
     const systemMessage = loadAutoSummaryPrompt(needsTitleSuggestion);
 
-    // Prepare the user prompt
-    const userPrompt = `Summarize the following meeting transcript with the EXACT format specified in your instructions:
-${participantsText ? participantsText + '\n\n' : ''}${userContextText ? userContextText + '\n\n' : ''}
-Transcript:
-${transcriptText}`;
+    // Build cacheable content: participants + user context + transcript
+    // This entire block will be cached across multiple LLM calls (90% cost savings)
+    const cacheableParts = [];
+    if (participantsText) {
+      cacheableParts.push(participantsText);
+    }
+    if (userContextText) {
+      cacheableParts.push(userContextText);
+    }
+    cacheableParts.push(transcriptText);
+    const cacheableContent = cacheableParts.join('\n\n');
+
+    // Dynamic user prompt - only the instruction (changes per call type)
+    const userPrompt = 'Summarize the following meeting transcript with the EXACT format specified in your instructions.';
+
+    console.log(
+      `[AutoSummary] Using prompt caching: ${cacheableContent.length} chars cacheable, ${userPrompt.length} chars dynamic`
+    );
 
     // If no progress callback provided, use the non-streaming version
     if (!progressCallback) {
       const result = await llmService.generateCompletion({
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
+        cacheableContext: cacheableContent, // This will be cached across all section calls
         maxTokens: 15000, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
         temperature: 0.7,
       });
@@ -10665,6 +10781,7 @@ ${transcriptText}`;
       const fullText = await llmService.streamCompletion({
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
+        cacheableContext: cacheableContent, // This will be cached across all section calls
         maxTokens: 15000, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
         temperature: 0.7,
         onChunk: cumulativeText => {

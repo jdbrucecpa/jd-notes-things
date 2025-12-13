@@ -1,0 +1,145 @@
+name: Personal Finance Record
+description: Extract personal financial details for individual clients (not advisory firm clients)
+type: client
+cost_estimate: 0.01
+sections:
+  - title: Client Situation
+    prompt: |
+      Extract any personal/life situation details mentioned in this meeting that are relevant to financial planning.
+      
+      Format as Obsidian-compatible fields:
+      
+      ```
+      ## Client Situation
+      
+      client_name:: [[Client Name]]
+      meeting_date:: YYYY-MM-DD
+      
+      ### Life Context
+      - employment:: [Status/employer if mentioned]
+      - family:: [Relevant family details if mentioned]
+      - location:: [If mentioned]
+      - life_stage:: [Any relevant context]
+      
+      ### Recent Changes
+      - Any life changes mentioned (job, family, health, relocation, etc.)
+      
+      **Notes:** Additional context shared
+      ```
+      
+      If nothing in this category was discussed, output: "No life situation updates in this meeting."
+
+  - title: Financial Snapshot
+    prompt: |
+      Extract any financial details, accounts, or numbers mentioned in this meeting. Only include what was actually discussed.
+      
+      Format:
+      
+      ```
+      ## Financial Snapshot
+      
+      ### Accounts Mentioned
+      - account:: [Account type] at [[Institution]] — balance/details if shared
+      - account:: [Account type] at [[Institution]]
+      
+      ### Income/Cash Flow
+      - income:: [Details if mentioned]
+      - expenses:: [Any expense concerns if mentioned]
+      - savings_rate:: [If discussed]
+      
+      ### Debts
+      - debt:: [Type] — amount/rate if mentioned
+      
+      ### Insurance
+      - insurance:: [Type] — details if mentioned
+      
+      **Update notes:** Context on financial discussions
+      ```
+      
+      If no financial details were discussed, output: "No financial details discussed in this meeting."
+
+  - title: Goals & Concerns
+    prompt: |
+      Extract any financial goals, concerns, or priorities mentioned in this meeting.
+      
+      Format:
+      
+      ```
+      ## Goals & Concerns
+      
+      ### Active Goals
+      - goal:: [Specific goal] — timeline if mentioned, priority level
+      - goal:: [Another goal]
+      
+      ### Concerns Raised
+      - concern:: [Specific worry or concern] — context
+      - concern:: [Another concern]
+      
+      ### Questions They Asked
+      - [Question they wanted answered]
+      - [Another question]
+      
+      **Emotional context:** How did they seem when discussing goals/concerns? Any anxiety, excitement, confusion?
+      ```
+      
+      If nothing in this category was discussed, output: "No goals or concerns discussed in this meeting."
+
+  - title: Action Items & Recommendations
+    prompt: |
+      Extract all action items, recommendations made, and next steps from this meeting.
+      
+      Format:
+      
+      ```
+      ## Action Items & Recommendations
+      
+      ### My Recommendations
+      - recommendation:: [What I suggested] — rationale if relevant
+      - recommendation:: [Another suggestion]
+      
+      ### Their To-Dos
+      - [ ] [Task for them] — deadline if mentioned
+      - [ ] [Another task]
+      
+      ### My To-Dos
+      - [ ] [Task for me] — deadline if mentioned
+      - [ ] [Research or follow-up needed]
+      
+      ### Decisions Made
+      - [Decision reached during meeting]
+      
+      ### Next Meeting
+      - next_meeting:: [Date/timeframe if scheduled]
+      - agenda_items:: [Topics to cover next time]
+      ```
+
+  - title: Machine Context Footer
+    prompt: |
+      Create a machine-readable footer for this personal finance meeting record.
+      
+      Format:
+      
+      ```
+      ---
+      
+      ## Machine Context
+      
+      ### Client Profile Fields
+      - client:: [[Name]]
+      - meeting_date:: YYYY-MM-DD
+      - primary_topic:: [Main focus of meeting]
+      - emotional_state:: [Calm/Anxious/Excited/Uncertain/etc.]
+      
+      ### Entities
+      - **Institutions:** [[Bank1]], [[Broker1]] (all financial institutions mentioned)
+      - **People:** [[Name]] (any family members, advisors, etc. mentioned)
+      
+      ### Key Signals
+      - [Any red flags, opportunities, or important patterns noted]
+      
+      ### Tags
+      #personal-finance #client-name #relevant-topics
+      
+      ### Priority Follow-ups
+      - [Most important thing to address before next meeting]
+      ```

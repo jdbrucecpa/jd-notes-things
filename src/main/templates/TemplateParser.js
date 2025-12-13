@@ -184,63 +184,110 @@ class TemplateParser {
 
   /**
    * Pricing per million tokens
-   * Last updated: January 2025
+   * Last updated: December 2025
    * Sources: https://platform.openai.com/docs/pricing
-   *          https://docs.claude.com/en/docs/about-claude/pricing
-   *          https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/
+   *          https://docs.anthropic.com/en/docs/about-claude/pricing
    *
    * NOTE: Prices may change. Verify current pricing before major deployments.
+   *
+   * Models are organized into pricing tiers:
+   * - Budget: GPT-5 nano, GPT-4.1 nano
+   * - Balanced: GPT-4o mini, GPT-4.1 mini, GPT-5 mini
+   * - Premium: Claude Haiku 4.5
+   * - Ultra-premium: Claude Sonnet 4
    */
   static MODEL_PRICING = {
-    // OpenAI Models (verified Jan 2025)
+    // ═══════════════════════════════════════════════════════════════════
+    // BUDGET TIER - Best for high-volume, cost-sensitive tasks
+    // ═══════════════════════════════════════════════════════════════════
+    'openai-gpt-5-nano': {
+      input: 0.05, // $0.05 per 1M tokens
+      output: 0.4, // $0.40 per 1M tokens
+      tier: 'budget',
+      updated: '2025-12-12',
+    },
+    'openai-gpt-4.1-nano': {
+      input: 0.1, // $0.10 per 1M tokens
+      output: 0.4, // $0.40 per 1M tokens
+      tier: 'budget',
+      updated: '2025-12-12',
+    },
+
+    // ═══════════════════════════════════════════════════════════════════
+    // BALANCED TIER - Good balance of quality and cost
+    // ═══════════════════════════════════════════════════════════════════
     'openai-gpt-4o-mini': {
       input: 0.15, // $0.15 per 1M tokens
       output: 0.6, // $0.60 per 1M tokens
-      updated: '2025-01-18',
+      tier: 'balanced',
+      updated: '2025-12-12',
     },
-    'openai-gpt-4o': {
-      input: 2.5, // $2.50 per 1M tokens
-      output: 10.0, // $10.00 per 1M tokens
-      updated: '2025-01-18',
-    },
-
-    // Azure OpenAI Models (verified Jan 2025)
-    'azure-gpt-5-mini': {
+    'openai-gpt-5-mini': {
       input: 0.25, // $0.25 per 1M tokens
       output: 2.0, // $2.00 per 1M tokens
-      updated: '2025-01-18',
+      tier: 'balanced',
+      updated: '2025-12-12',
     },
-    'azure-gpt-5': {
-      input: 3.0, // $3.00 per 1M tokens (estimated)
-      output: 12.0, // $12.00 per 1M tokens (estimated)
-      updated: '2025-01-18',
-    },
-    'azure-gpt-4o-mini': {
-      input: 0.15, // $0.15 per 1M tokens (same as OpenAI)
-      output: 0.6, // $0.60 per 1M tokens
-      updated: '2025-01-18',
-    },
-    'azure-gpt-4o': {
-      input: 2.5, // $2.50 per 1M tokens (same as OpenAI)
-      output: 10.0, // $10.00 per 1M tokens
-      updated: '2025-01-18',
+    'openai-gpt-4.1-mini': {
+      input: 0.4, // $0.40 per 1M tokens
+      output: 1.6, // $1.60 per 1M tokens
+      tier: 'balanced',
+      updated: '2025-12-12',
     },
 
-    // Anthropic Claude Models (verified Jan 2025)
+    // ═══════════════════════════════════════════════════════════════════
+    // PREMIUM TIER - Higher quality for important summaries
+    // ═══════════════════════════════════════════════════════════════════
     'claude-haiku-4-5': {
       input: 1.0, // $1.00 per 1M tokens
       output: 5.0, // $5.00 per 1M tokens
-      updated: '2025-01-18',
+      tier: 'premium',
+      updated: '2025-12-12',
     },
+
+    // ═══════════════════════════════════════════════════════════════════
+    // ULTRA-PREMIUM TIER - Best quality for critical content
+    // ═══════════════════════════════════════════════════════════════════
     'claude-sonnet-4': {
       input: 3.0, // $3.00 per 1M tokens
       output: 15.0, // $15.00 per 1M tokens
-      updated: '2025-01-18',
+      tier: 'ultra-premium',
+      updated: '2025-12-12',
     },
-    'claude-opus-4': {
-      input: 15.0, // $15.00 per 1M tokens (estimated)
-      output: 75.0, // $75.00 per 1M tokens (estimated)
-      updated: '2025-01-18',
+    'claude-sonnet-4-5': {
+      input: 3.0, // $3.00 per 1M tokens
+      output: 15.0, // $15.00 per 1M tokens
+      tier: 'ultra-premium',
+      updated: '2025-12-12',
+    },
+
+    // ═══════════════════════════════════════════════════════════════════
+    // AZURE OPENAI (Hidden - Emergency backup only)
+    // These require custom Azure deployments and are not shown in UI
+    // ═══════════════════════════════════════════════════════════════════
+    'azure-gpt-5-mini': {
+      input: 0.25,
+      output: 2.0,
+      tier: 'azure-hidden',
+      updated: '2025-12-12',
+    },
+    'azure-gpt-5': {
+      input: 3.0,
+      output: 12.0,
+      tier: 'azure-hidden',
+      updated: '2025-12-12',
+    },
+    'azure-gpt-4o-mini': {
+      input: 0.15,
+      output: 0.6,
+      tier: 'azure-hidden',
+      updated: '2025-12-12',
+    },
+    'azure-gpt-4o': {
+      input: 2.5,
+      output: 10.0,
+      tier: 'azure-hidden',
+      updated: '2025-12-12',
     },
   };
 

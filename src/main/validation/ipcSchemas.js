@@ -95,6 +95,8 @@ const templatesGenerateSummariesSchema = z.object({
   meetingId: meetingIdSchema,
   templateIds: z.array(templateIdSchema),
   routingOverride: routingOverrideSchema,
+  mode: z.enum(['replace', 'append']).optional().default('replace'),
+  model: z.string().nullable().optional(),
 });
 
 // ===================================================

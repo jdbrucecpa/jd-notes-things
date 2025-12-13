@@ -22,7 +22,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updateMeetingField: (meetingId, field, value) =>
     ipcRenderer.invoke('updateMeetingField', meetingId, field, value),
   deleteMeeting: meetingId => ipcRenderer.invoke('deleteMeeting', meetingId),
-  generateMeetingSummary: meetingId => ipcRenderer.invoke('generateMeetingSummary', meetingId),
+  generateMeetingSummary: (meetingId, options) =>
+    ipcRenderer.invoke('generateMeetingSummary', meetingId, options),
   generateMeetingSummaryStreaming: meetingId =>
     ipcRenderer.invoke('generateMeetingSummaryStreaming', meetingId),
   startManualRecording: (meetingId, transcriptionProvider, action) =>
@@ -90,8 +91,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   templatesGetContent: templateId => ipcRenderer.invoke('templates:getContent', templateId),
   templatesEstimateCost: (templateIds, transcript, provider) =>
     ipcRenderer.invoke('templates:estimateCost', { templateIds, transcript, provider }),
-  templatesGenerateSummaries: (meetingId, templateIds, routingOverride = null) =>
-    ipcRenderer.invoke('templates:generateSummaries', { meetingId, templateIds, routingOverride }),
+  templatesGenerateSummaries: (meetingId, templateIds, options = {}) =>
+    ipcRenderer.invoke('templates:generateSummaries', {
+      meetingId,
+      templateIds,
+      routingOverride: options.routingOverride || null,
+      mode: options.mode || 'replace',
+      model: options.model || null,
+    }),
   templatesReload: () => ipcRenderer.invoke('templates:reload'),
   // Routing Configuration (Phase 10.4)
   routingGetConfig: () => ipcRenderer.invoke('routing:getConfig'),

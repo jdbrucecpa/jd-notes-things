@@ -3792,7 +3792,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // v1.2 fix: Listen for widget create-and-record with specific action
   window.electronAPI.onWidgetCreateAndRecordWithAction(async data => {
-    const { meetingId, action, transcriptionProvider } = data;
+    const { meetingId, action, _transcriptionProvider } = data;
     console.log('[Widget] Create and record with action requested:', meetingId, action);
 
     try {
@@ -5616,6 +5616,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     // CS-4.4: Save routing override before closing modal
     const savedRoutingOverride = routingOverride ? { ...routingOverride } : null;
 
+    // Get mode and model selections before closing modal
+    const modeInput = document.getElementById('generateModeInput');
+    const modelSelect = document.getElementById('generateModelSelect');
+    const mode = modeInput ? modeInput.value : 'replace';
+    const model = modelSelect ? modelSelect.value : 'default';
+
     const generateButton = document.getElementById('generateButton');
     const originalHTML = generateButton.innerHTML;
 
@@ -5629,6 +5635,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       generateButton.textContent = 'Generating';
 
       console.log('Generating summaries with templates:', templatesToGenerate);
+      console.log(`Mode: ${mode}, Model: ${model}`);
       if (savedRoutingOverride) {
         console.log('Using routing override:', savedRoutingOverride);
       }
@@ -5636,7 +5643,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       const result = await window.electronAPI.templatesGenerateSummaries(
         currentEditingMeetingId,
         templatesToGenerate,
-        savedRoutingOverride
+        {
+          routingOverride: savedRoutingOverride,
+          mode,
+          model: model === 'default' ? null : model,
+        }
       );
 
       if (result.success) {
@@ -5697,6 +5708,36 @@ document.addEventListener('DOMContentLoaded', async () => {
       closeTemplateModal();
     }
   });
+
+  // Segmented control for Summary Mode
+  const modeControl = document.getElementById('generateModeControl');
+  const modeInput = document.getElementById('generateModeInput');
+  const modeDescription = document.getElementById('generateModeDescription');
+
+  if (modeControl && modeInput) {
+    const segments = modeControl.querySelectorAll('.segment');
+    const descriptions = {
+      replace: 'Overwrite existing summaries with new ones',
+      append: 'Keep existing summaries and add new ones at the bottom',
+    };
+
+    segments.forEach(segment => {
+      segment.addEventListener('click', () => {
+        // Update active state
+        segments.forEach(s => s.classList.remove('active'));
+        segment.classList.add('active');
+
+        // Update hidden input value
+        const value = segment.getAttribute('data-value');
+        modeInput.value = value;
+
+        // Update description
+        if (modeDescription) {
+          modeDescription.textContent = descriptions[value] || '';
+        }
+      });
+    });
+  }
 
   // ========================================
   // End Template Selection Modal Logic

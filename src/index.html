@@ -436,9 +436,9 @@
           <!-- Tabbed Content Area -->
           <div class="meeting-content-tabs">
             <div class="tab-headers">
-              <button id="summaryTabBtn" class="tab-header active" data-tab="summary">Summary</button>
+              <button id="summaryTabBtn" class="tab-header active" data-tab="summary">Exec Summary</button>
+              <button id="templatesTabBtn" class="tab-header" data-tab="templates">Detailed Summary</button>
               <button id="transcriptTabBtn" class="tab-header" data-tab="transcript">Transcript</button>
-              <button id="templatesTabBtn" class="tab-header" data-tab="templates">Templates</button>
               <button id="metadataTabBtn" class="tab-header" data-tab="metadata">Metadata</button>
             </div>
 
@@ -470,6 +470,16 @@
                 </div>
               </div>
 
+              <!-- Detailed Summary Tab (formerly Templates) -->
+              <div class="tab-content" id="templatesTab">
+                <div class="templates-header">
+                  <p class="templates-description">Generate detailed summaries using custom templates. Use the Generate button in the toolbar above.</p>
+                </div>
+                <div class="generated-templates-list" id="generatedTemplatesList">
+                  <!-- Generated template summaries will appear here -->
+                </div>
+              </div>
+
               <!-- Transcript Tab -->
               <div class="tab-content" id="transcriptTab">
                 <div class="transcript-toolbar">
@@ -488,16 +498,6 @@
                 </div>
                 <div class="transcript-content" id="meetingDetailTranscript">
                   <p class="placeholder-text">No transcript available</p>
-                </div>
-              </div>
-
-              <!-- Templates Tab -->
-              <div class="tab-content" id="templatesTab">
-                <div class="templates-header">
-                  <p class="templates-description">Generate additional summaries using custom templates. Use the Generate button in the toolbar above.</p>
-                </div>
-                <div class="generated-templates-list" id="generatedTemplatesList">
-                  <!-- Generated template summaries will appear here -->
                 </div>
               </div>
 
@@ -759,6 +759,52 @@
 
           <div class="template-list" id="templateList">
             <!-- Templates will be loaded here dynamically -->
+          </div>
+
+          <!-- Generation Options -->
+          <div class="generation-options" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+            <div class="generation-option-group" style="margin-bottom: 16px;">
+              <label style="font-weight: 600; margin-bottom: 8px; display: block; font-size: 13px;">Summary Mode</label>
+              <div class="segmented-control" id="generateModeControl">
+                <button type="button" class="segment active" data-value="replace">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 6px;">
+                    <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                  </svg>
+                  Replace
+                </button>
+                <button type="button" class="segment" data-value="append">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 6px;">
+                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                  </svg>
+                  Append
+                </button>
+              </div>
+              <input type="hidden" name="generateMode" id="generateModeInput" value="replace">
+              <small style="color: var(--text-secondary); font-size: 11px; margin-top: 6px; display: block;" id="generateModeDescription">Overwrite existing summaries with new ones</small>
+            </div>
+            <div class="generation-option-group">
+              <label for="generateModelSelect" style="font-weight: 600; margin-bottom: 8px; display: block; font-size: 13px;">AI Model</label>
+              <select id="generateModelSelect" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); font-size: 13px;">
+                <option value="default">Default (from settings)</option>
+                <optgroup label="💰 Budget">
+                  <option value="openai-gpt-5-nano">GPT-5 nano — $0.05/$0.40 per 1M tokens</option>
+                  <option value="openai-gpt-4.1-nano">GPT-4.1 nano — $0.10/$0.40 per 1M tokens</option>
+                </optgroup>
+                <optgroup label="⚖️ Balanced">
+                  <option value="openai-gpt-4o-mini">GPT-4o mini — $0.15/$0.60 per 1M tokens</option>
+                  <option value="openai-gpt-5-mini">GPT-5 mini — $0.25/$2.00 per 1M tokens</option>
+                  <option value="openai-gpt-4.1-mini">GPT-4.1 mini — $0.40/$1.60 per 1M tokens</option>
+                </optgroup>
+                <optgroup label="⭐ Premium">
+                  <option value="claude-haiku-4-5">Claude Haiku 4.5 — $1.00/$5.00 per 1M tokens</option>
+                </optgroup>
+                <optgroup label="💎 Ultra-premium">
+                  <option value="claude-sonnet-4">Claude Sonnet 4 — $3.00/$15.00 per 1M tokens</option>
+                  <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per 1M tokens</option>
+                </optgroup>
+              </select>
+              <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">Select a model for this generation only (won't change your default)</small>
+            </div>
           </div>
 
           <!-- CS-4: Routing Preview -->
@@ -1358,9 +1404,22 @@
                 </div>
                 <div class="settings-item-control">
                   <select class="settings-select" id="autoSummaryProviderSelect">
-                    <option value="azure-gpt-5-mini">Azure OpenAI (gpt-5-mini)</option>
-                    <option value="claude-haiku-4-5">Anthropic Claude (Haiku 4.5)</option>
-                    <option value="openai-gpt-4o-mini">OpenAI (gpt-4o-mini)</option>
+                    <optgroup label="💰 Budget Tier">
+                      <option value="openai-gpt-5-nano">GPT-5 nano — $0.05/$0.40 per MTok</option>
+                      <option value="openai-gpt-4.1-nano">GPT-4.1 nano — $0.10/$0.40 per MTok</option>
+                    </optgroup>
+                    <optgroup label="⚖️ Balanced Tier">
+                      <option value="openai-gpt-4o-mini">GPT-4o mini — $0.15/$0.60 per MTok</option>
+                      <option value="openai-gpt-5-mini">GPT-5 mini — $0.25/$2.00 per MTok</option>
+                      <option value="openai-gpt-4.1-mini">GPT-4.1 mini — $0.40/$1.60 per MTok</option>
+                    </optgroup>
+                    <optgroup label="⭐ Premium Tier">
+                      <option value="claude-haiku-4-5">Claude Haiku 4.5 — $1.00/$5.00 per MTok</option>
+                    </optgroup>
+                    <optgroup label="💎 Ultra-Premium Tier">
+                      <option value="claude-sonnet-4">Claude Sonnet 4 — $3.00/$15.00 per MTok</option>
+                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per MTok</option>
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -1372,9 +1431,22 @@
                 </div>
                 <div class="settings-item-control">
                   <select class="settings-select" id="templateSummaryProviderSelect">
-                    <option value="azure-gpt-5-mini">Azure OpenAI (gpt-5-mini)</option>
-                    <option value="claude-haiku-4-5">Anthropic Claude (Haiku 4.5)</option>
-                    <option value="openai-gpt-4o-mini">OpenAI (gpt-4o-mini)</option>
+                    <optgroup label="💰 Budget Tier">
+                      <option value="openai-gpt-5-nano">GPT-5 nano — $0.05/$0.40 per MTok</option>
+                      <option value="openai-gpt-4.1-nano">GPT-4.1 nano — $0.10/$0.40 per MTok</option>
+                    </optgroup>
+                    <optgroup label="⚖️ Balanced Tier">
+                      <option value="openai-gpt-4o-mini">GPT-4o mini — $0.15/$0.60 per MTok</option>
+                      <option value="openai-gpt-5-mini">GPT-5 mini — $0.25/$2.00 per MTok</option>
+                      <option value="openai-gpt-4.1-mini">GPT-4.1 mini — $0.40/$1.60 per MTok</option>
+                    </optgroup>
+                    <optgroup label="⭐ Premium Tier">
+                      <option value="claude-haiku-4-5">Claude Haiku 4.5 — $1.00/$5.00 per MTok</option>
+                    </optgroup>
+                    <optgroup label="💎 Ultra-Premium Tier">
+                      <option value="claude-sonnet-4">Claude Sonnet 4 — $3.00/$15.00 per MTok</option>
+                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per MTok</option>
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -1382,14 +1454,80 @@
               <div class="settings-item">
                 <div class="settings-item-info">
                   <div class="settings-item-label">Pattern Generation Provider</div>
-                  <div class="settings-item-description">AI model for generating transcript patterns (Phase 10.8.3 - lightweight task)</div>
+                  <div class="settings-item-description">AI model for generating transcript patterns (lightweight task)</div>
                 </div>
                 <div class="settings-item-control">
                   <select class="settings-select" id="patternGenerationProviderSelect">
-                    <option value="openai-gpt-4o-mini">OpenAI (gpt-4o-mini) - Recommended</option>
-                    <option value="azure-gpt-5-mini">Azure OpenAI (gpt-5-mini)</option>
-                    <option value="claude-haiku-4-5">Anthropic Claude (Haiku 4.5)</option>
+                    <optgroup label="💰 Budget Tier (Recommended)">
+                      <option value="openai-gpt-5-nano">GPT-5 nano — $0.05/$0.40 per MTok</option>
+                      <option value="openai-gpt-4.1-nano">GPT-4.1 nano — $0.10/$0.40 per MTok</option>
+                    </optgroup>
+                    <optgroup label="⚖️ Balanced Tier">
+                      <option value="openai-gpt-4o-mini">GPT-4o mini — $0.15/$0.60 per MTok</option>
+                      <option value="openai-gpt-5-mini">GPT-5 mini — $0.25/$2.00 per MTok</option>
+                      <option value="openai-gpt-4.1-mini">GPT-4.1 mini — $0.40/$1.60 per MTok</option>
+                    </optgroup>
+                    <optgroup label="⭐ Premium Tier">
+                      <option value="claude-haiku-4-5">Claude Haiku 4.5 — $1.00/$5.00 per MTok</option>
+                    </optgroup>
+                    <optgroup label="💎 Ultra-Premium Tier">
+                      <option value="claude-sonnet-4">Claude Sonnet 4 — $3.00/$15.00 per MTok</option>
+                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per MTok</option>
+                    </optgroup>
                   </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Azure OpenAI Section (Advanced) -->
+            <div class="settings-section" id="azureSettingsSection">
+              <h3 class="settings-section-title">Azure OpenAI (Advanced)</h3>
+              <div class="settings-item-description" style="margin-bottom: 16px;">
+                Enable Azure OpenAI as an alternative provider. Requires your own Azure OpenAI deployment.
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Enable Azure OpenAI</div>
+                  <div class="settings-item-description">Show Azure deployments in model selection dropdowns</div>
+                </div>
+                <div class="settings-item-control">
+                  <div class="toggle-switch" id="azureEnabledToggle">
+                    <div class="toggle-switch-thumb"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Azure Deployments Management (shown when enabled) -->
+              <div id="azureDeploymentsContainer" style="display: none;">
+                <div class="settings-item" style="flex-direction: column; align-items: stretch;">
+                  <div class="settings-item-info" style="margin-bottom: 12px;">
+                    <div class="settings-item-label">Azure Deployments</div>
+                    <div class="settings-item-description">Configure your Azure OpenAI model deployments. Each deployment will appear in the model selection dropdowns.</div>
+                  </div>
+
+                  <!-- Deployments List -->
+                  <div id="azureDeploymentsList" class="azure-deployments-list">
+                    <div class="azure-deployment-empty" id="azureDeploymentEmpty">
+                      <span style="color: var(--text-secondary);">No deployments configured. Click "Add Deployment" to get started.</span>
+                    </div>
+                  </div>
+
+                  <!-- Add Deployment Button -->
+                  <button class="btn-secondary" id="addAzureDeploymentBtn" style="margin-top: 12px; align-self: flex-start;">
+                    <span style="margin-right: 6px;">+</span> Add Deployment
+                  </button>
+                </div>
+
+                <!-- Azure Endpoint Configuration -->
+                <div class="settings-item" style="margin-top: 16px;">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Azure Endpoint</div>
+                    <div class="settings-item-description">Your Azure OpenAI resource endpoint (e.g., https://your-resource.openai.azure.com)</div>
+                  </div>
+                  <div class="settings-item-control" style="flex: 1; max-width: 400px;">
+                    <input type="text" class="settings-input" id="azureEndpointInput" placeholder="https://your-resource.openai.azure.com">
+                  </div>
                 </div>
               </div>
             </div>

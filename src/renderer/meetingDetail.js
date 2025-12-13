@@ -8,6 +8,8 @@ import { contactsService } from './services/contactsService.js';
 import { withButtonLoadingElement } from './utils/buttonHelper.js';
 import { initializeTabs } from './utils/tabHelper.js';
 import { openSpeakerMappingModal } from './speakerMapping.js';
+import { createModal } from './utils/modalHelper.js';
+import { loadSettings } from './settings.js';
 
 // Current meeting being viewed
 let currentMeeting = null;
@@ -537,7 +539,7 @@ async function removeParticipantFromCard(index) {
 /**
  * Show contact search modal to change/replace a participant
  */
-function showParticipantChangeInput(index, buttonEl) {
+function showParticipantChangeInput(index, _buttonEl) {
   const participant = currentMeeting?.participants?.[index];
   if (!participant) return;
 
@@ -796,7 +798,7 @@ function searchTranscript(query) {
 }
 
 /**
- * Populate templates tab
+ * Populate templates tab with expand/collapse and drag-and-drop reordering
  */
 function populateTemplates(meeting) {
   const templatesList = document.getElementById('generatedTemplatesList');
@@ -805,7 +807,7 @@ function populateTemplates(meeting) {
   if (!meeting.summaries || meeting.summaries.length === 0) {
     templatesList.innerHTML = `
       <div class="placeholder-content">
-        <p>No template summaries generated yet</p>
+        <p>No detailed summaries generated yet</p>
       </div>
     `;
     return;
@@ -817,7 +819,7 @@ function populateTemplates(meeting) {
   if (templateSummaries.length === 0) {
     templatesList.innerHTML = `
       <div class="placeholder-content">
-        <p>No template summaries generated yet</p>
+        <p>No detailed summaries generated yet</p>
       </div>
     `;
     return;
@@ -825,17 +827,156 @@ function populateTemplates(meeting) {
 
   templatesList.innerHTML = '';
 
-  templateSummaries.forEach(summary => {
+  templateSummaries.forEach((summary, index) => {
     const card = document.createElement('div');
     card.className = 'template-summary-card';
+    card.setAttribute('draggable', 'true');
+    card.setAttribute('data-index', index);
+
+    const isCollapsed = summary.collapsed === true;
 
     card.innerHTML = `
-      <h4 class="template-summary-title">${escapeHtml(summary.templateName || summary.templateId || 'Untitled')}</h4>
-      <div class="template-summary-content">${markdownToSafeHtml(summary.content || '')}</div>
+      <div class="template-summary-header">
+        <div class="template-drag-handle" title="Drag to reorder">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+          </svg>
+        </div>
+        <h4 class="template-summary-title">${escapeHtml(summary.templateName || summary.templateId || 'Untitled')}</h4>
+        <button class="template-delete-btn" title="Delete this section">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+        </button>
+        <button class="template-collapse-btn" title="${isCollapsed ? 'Expand' : 'Collapse'}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="collapse-icon ${isCollapsed ? 'collapsed' : ''}">
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+          </svg>
+        </button>
+      </div>
+      <div class="template-summary-content ${isCollapsed ? 'collapsed' : ''}">${markdownToSafeHtml(summary.content || '')}</div>
     `;
+
+    // Add click handler for collapse/expand
+    const collapseBtn = card.querySelector('.template-collapse-btn');
+    const deleteBtn = card.querySelector('.template-delete-btn');
+    const header = card.querySelector('.template-summary-header');
+    const content = card.querySelector('.template-summary-content');
+    const icon = card.querySelector('.collapse-icon');
+
+    const toggleCollapse = () => {
+      const nowCollapsed = content.classList.toggle('collapsed');
+      icon.classList.toggle('collapsed', nowCollapsed);
+      collapseBtn.title = nowCollapsed ? 'Expand' : 'Collapse';
+      // Update the meeting data to persist collapse state
+      summary.collapsed = nowCollapsed;
+    };
+
+    collapseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      toggleCollapse();
+    });
+
+    // Delete button handler
+    deleteBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const templateName = summary.templateName || summary.templateId || 'this section';
+      if (confirm(`Delete "${templateName}"? This cannot be undone.`)) {
+        deleteTemplateSummary(index, templatesList);
+      }
+    });
+
+    // Allow clicking the title to toggle as well (but not the drag handle or delete button)
+    header.addEventListener('click', e => {
+      if (!e.target.closest('.template-drag-handle') && !e.target.closest('.template-delete-btn')) {
+        toggleCollapse();
+      }
+    });
+
+    // Drag and drop handlers
+    card.addEventListener('dragstart', e => {
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', index.toString());
+    });
+
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+    });
+
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const draggingCard = templatesList.querySelector('.dragging');
+      if (draggingCard && draggingCard !== card) {
+        const rect = card.getBoundingClientRect();
+        const midY = rect.top + rect.height / 2;
+        if (e.clientY < midY) {
+          templatesList.insertBefore(draggingCard, card);
+        } else {
+          templatesList.insertBefore(draggingCard, card.nextSibling);
+        }
+      }
+    });
+
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      // Update the order in the meeting data
+      updateTemplateSummaryOrder(templatesList);
+    });
 
     templatesList.appendChild(card);
   });
+}
+
+/**
+ * Update the order of template summaries after drag-and-drop
+ */
+function updateTemplateSummaryOrder(templatesList) {
+  if (!currentMeeting || !currentMeeting.summaries) return;
+
+  const cards = templatesList.querySelectorAll('.template-summary-card');
+  const newOrder = Array.from(cards).map(card => parseInt(card.getAttribute('data-index'), 10));
+
+  // Get only template summaries (non-auto-summary)
+  const templateSummaries = currentMeeting.summaries.filter(s => s.templateId !== 'auto-summary-prompt');
+  const autoSummaries = currentMeeting.summaries.filter(s => s.templateId === 'auto-summary-prompt');
+
+  // Reorder template summaries based on new order
+  const reorderedTemplates = newOrder.map(oldIndex => templateSummaries[oldIndex]);
+
+  // Update meeting summaries (keep auto-summaries, add reordered templates)
+  currentMeeting.summaries = [...autoSummaries, ...reorderedTemplates];
+
+  // Update data attributes to reflect new order
+  cards.forEach((card, newIndex) => {
+    card.setAttribute('data-index', newIndex);
+  });
+
+  console.log('[MeetingDetail] Template summaries reordered');
+}
+
+/**
+ * Delete a template summary section
+ */
+function deleteTemplateSummary(index, _templatesList) {
+  if (!currentMeeting || !currentMeeting.summaries) return;
+
+  // Get only template summaries (non-auto-summary)
+  const templateSummaries = currentMeeting.summaries.filter(s => s.templateId !== 'auto-summary-prompt');
+  const autoSummaries = currentMeeting.summaries.filter(s => s.templateId === 'auto-summary-prompt');
+
+  // Remove the summary at the given index
+  const deletedSummary = templateSummaries[index];
+  templateSummaries.splice(index, 1);
+
+  // Update meeting summaries
+  currentMeeting.summaries = [...autoSummaries, ...templateSummaries];
+
+  console.log(`[MeetingDetail] Deleted template summary: ${deletedSummary?.templateName || deletedSummary?.templateId}`);
+
+  // Re-render the templates list
+  populateTemplates(currentMeeting);
 }
 
 /**
@@ -1036,56 +1177,13 @@ async function saveMeetingInfo(onUpdate) {
 
 /**
  * Generate templates for the meeting
+ * Note: This is a stub - the main Generate button uses the template modal in renderer.js
+ * This function is kept for potential future use with a dedicated button
  */
-async function generateTemplates(onUpdate) {
-  if (!currentMeetingId) return;
-
-  const btn = document.getElementById('generateTemplatesBtn');
-  if (!btn) return;
-
-  await withButtonLoadingElement(btn, 'Generating...', async () => {
-    console.log(`[MeetingDetail] Generating templates for meeting: ${currentMeetingId}`);
-
-    // Get all available templates
-    const templates = await window.electronAPI.templatesGetAll();
-
-    if (!templates || templates.length === 0) {
-      alert('No templates available. Please add templates in Settings > Templates.');
-      return;
-    }
-
-    // Get template IDs (excluding auto-summary if present)
-    const templateIds = templates.filter(t => t.id !== 'auto-summary').map(t => t.id);
-
-    if (templateIds.length === 0) {
-      alert('No custom templates found. Only auto-summary is available.');
-      return;
-    }
-
-    // Generate summaries for all templates
-    const result = await window.electronAPI.templatesGenerateSummaries(
-      currentMeetingId,
-      templateIds
-    );
-
-    if (result.success) {
-      console.log(`[MeetingDetail] Templates generated successfully`);
-
-      // Update the meeting object with new summaries
-      if (result.data && result.data.summaries) {
-        currentMeeting.summaries = result.data.summaries;
-        populateTemplates(currentMeeting);
-      }
-
-      // Notify update
-      if (onUpdate) {
-        onUpdate(currentMeetingId, currentMeeting);
-      }
-    } else {
-      console.error('[MeetingDetail] Failed to generate templates:', result.error);
-      alert(`Failed to generate templates: ${result.error}`);
-    }
-  });
+function generateTemplates(_onUpdate) {
+  // The main Generate button opens the template modal via renderer.js
+  // This stub exists in case a dedicated generateTemplatesBtn is added in the future
+  console.log('[MeetingDetail] generateTemplates called - use main Generate button instead');
 }
 
 /**
@@ -1345,7 +1443,63 @@ async function exportToObsidian() {
 }
 
 /**
+ * Get available model options for the regenerate modal
+ * Returns array of { value, label } objects
+ */
+function getModelOptions() {
+  const settings = loadSettings();
+  const defaultModel = settings.autoSummaryProvider || 'openai-gpt-4o-mini';
+
+  // Define all available models grouped by tier
+  const models = [
+    { value: 'default', label: `Default (${getModelDisplayName(defaultModel)})` },
+    // Budget tier
+    { value: 'openai-gpt-5-nano', label: '💰 GPT-5 nano — $0.05/$0.40' },
+    { value: 'openai-gpt-4.1-nano', label: '💰 GPT-4.1 nano — $0.10/$0.40' },
+    // Balanced tier
+    { value: 'openai-gpt-4o-mini', label: '⚖️ GPT-4o mini — $0.15/$0.60' },
+    { value: 'openai-gpt-5-mini', label: '⚖️ GPT-5 mini — $0.25/$2.00' },
+    { value: 'openai-gpt-4.1-mini', label: '⚖️ GPT-4.1 mini — $0.40/$1.60' },
+    // Premium tier
+    { value: 'claude-haiku-4-5', label: '⭐ Claude Haiku 4.5 — $1.00/$5.00' },
+    // Ultra-premium tier
+    { value: 'claude-sonnet-4', label: '💎 Claude Sonnet 4 — $3.00/$15.00' },
+    { value: 'claude-sonnet-4-5', label: '💎 Claude Sonnet 4.5 — $3.00/$15.00' },
+  ];
+
+  // Add Azure models if enabled
+  if (settings.azureEnabled && settings.azureDeployments?.length > 0) {
+    settings.azureDeployments.forEach(deployment => {
+      models.push({
+        value: `azure-${deployment.name}`,
+        label: `☁️ ${deployment.displayName} — $${deployment.inputPrice}/$${deployment.outputPrice}`,
+      });
+    });
+  }
+
+  return models;
+}
+
+/**
+ * Get display name for a model preference value
+ */
+function getModelDisplayName(modelValue) {
+  const names = {
+    'openai-gpt-5-nano': 'GPT-5 nano',
+    'openai-gpt-4.1-nano': 'GPT-4.1 nano',
+    'openai-gpt-4o-mini': 'GPT-4o mini',
+    'openai-gpt-5-mini': 'GPT-5 mini',
+    'openai-gpt-4.1-mini': 'GPT-4.1 mini',
+    'claude-haiku-4-5': 'Claude Haiku 4.5',
+    'claude-sonnet-4': 'Claude Sonnet 4',
+    'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+  };
+  return names[modelValue] || modelValue;
+}
+
+/**
  * Regenerate summary for the meeting
+ * Shows a modal with options for replace/append and model selection
  */
 async function regenerateSummary(onUpdate) {
   if (!currentMeetingId) return;
@@ -1353,18 +1507,72 @@ async function regenerateSummary(onUpdate) {
   const btn = document.getElementById('regenerateSummaryBtn');
   if (!btn) return;
 
-  if (
-    !confirm(
-      'Regenerate the auto-summary for this meeting? This will replace the existing summary.'
-    )
-  ) {
-    return;
-  }
+  // Build model options for the dropdown
+  const modelOptions = getModelOptions();
+  const modelOptionsHtml = modelOptions
+    .map(m => `<option value="${m.value}">${escapeHtml(m.label)}</option>`)
+    .join('');
+
+  const modalBody = `
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <div>
+        <label style="font-weight: 600; margin-bottom: 8px; display: block;">Summary Mode</label>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="radio" name="regenerateMode" value="replace" checked style="margin: 0;">
+            <span><strong>Replace</strong> — Regenerate and replace the existing summary</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="radio" name="regenerateMode" value="append" style="margin: 0;">
+            <span><strong>Append</strong> — Add new summary below the existing content</span>
+          </label>
+        </div>
+      </div>
+      <div>
+        <label for="regenerateModelSelect" style="font-weight: 600; margin-bottom: 8px; display: block;">AI Model</label>
+        <select id="regenerateModelSelect" style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-primary); font-size: 14px;">
+          ${modelOptionsHtml}
+        </select>
+        <small style="color: var(--text-secondary); font-size: 11px; margin-top: 4px; display: block;">Select a model for this generation only (won't change your default setting)</small>
+      </div>
+    </div>
+  `;
+
+  createModal({
+    title: 'Regenerate Summary',
+    body: modalBody,
+    confirmText: 'Regenerate',
+    cancelText: 'Cancel',
+    size: 'medium',
+    onConfirm: async () => {
+      // Get selected options
+      const modeInput = document.querySelector('input[name="regenerateMode"]:checked');
+      const modelSelect = document.getElementById('regenerateModelSelect');
+      const mode = modeInput ? modeInput.value : 'replace';
+      const model = modelSelect ? modelSelect.value : 'default';
+
+      // Close modal first, then start regeneration
+      await performRegeneration(mode, model, onUpdate);
+    },
+  });
+}
+
+/**
+ * Perform the actual summary regeneration
+ */
+async function performRegeneration(mode, model, onUpdate) {
+  const btn = document.getElementById('regenerateSummaryBtn');
 
   await withButtonLoadingElement(btn, 'Regenerating...', async () => {
     console.log(`[MeetingDetail] Regenerating summary for meeting: ${currentMeetingId}`);
+    console.log(`[MeetingDetail] Mode: ${mode}, Model: ${model}`);
 
-    const result = await window.electronAPI.generateMeetingSummary(currentMeetingId);
+    const options = {
+      mode, // 'replace' or 'append'
+      model: model === 'default' ? null : model, // null means use default from settings
+    };
+
+    const result = await window.electronAPI.generateMeetingSummary(currentMeetingId, options);
 
     if (result.success) {
       console.log('[MeetingDetail] Summary regenerated successfully');
