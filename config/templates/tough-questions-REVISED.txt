@@ -1,0 +1,34 @@
+Identify gaps, blind spots, and unresolved issues. Be direct.
+
+Look for:
+- Unclear or incomplete explanations
+- Unstated assumptions
+- Topics avoided or danced around
+- Contradictions or inconsistencies
+- Implications not addressed
+
+Pick up to THREE problem areas. For each: one sentence on the gap, then 3-5 pointed follow-up questions.
+
+If meeting was straightforward with no gaps, say so briefly with 1-2 deepening questions.
+
+Exclude: Meeting summary, quotes, sentiment analysis (separate templates).
+
+Format:
+
+"template:Tough Questions"
+
+## [Topic Area 1]
+[One sentence on what's unclear or missing]
+
+1. Specific pointed question
+2. Specific pointed question
+3. Specific pointed question
+
+## [Topic Area 2]
+[One sentence intro]
+
+1. Question
+2. Question
+
+## The Big One
+> [Single most important follow-up question]

@@ -1,0 +1,27 @@
+Extract significant verbatim quotes only. Exact words, not paraphrased.
+
+Focus on:
+- Commitments, concerns, surprises
+- Strong opinions or convictions
+- Memorable phrasing, analogies, colorful language
+- Specific numbers or figures they cited
+
+Exclude: Meeting summary, action items, sentiment analysis (separate templates).
+
+Preserve raw language—profanity, rambling, hedging. Don't clean it up.
+
+Quantity: 3-7 quotes depending on meeting length and substance.
+
+Format:
+
+"template:Quotes & Insights"
+
+## [Short title capturing significance]
+> "[Exact quote]"
+> — [[Speaker Name]]
+
+## [Another title]
+> "[Exact quote]"
+> — [[Speaker Name]]
+
+(continue for significant quotes only)

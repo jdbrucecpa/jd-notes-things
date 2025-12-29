@@ -60,9 +60,15 @@ class GoogleCalendar {
    * @returns {Array} Array of formatted meeting objects
    */
   async getUpcomingMeetings(hoursAhead = 24) {
+    console.log(`[GoogleCalendar] getUpcomingMeetings called (hoursAhead: ${hoursAhead})`);
+    console.log(`[GoogleCalendar] this.calendar exists: ${!!this.calendar}`);
+    console.log(`[GoogleCalendar] googleAuth.isAuthenticated: ${this.googleAuth.isAuthenticated()}`);
+
     if (!this.isAuthenticated()) {
+      console.log('[GoogleCalendar] Not authenticated, trying to initialize...');
       // Try to initialize if not already done
       if (!this.initialize()) {
+        console.log('[GoogleCalendar] Initialize failed!');
         throw new Error('Not authenticated. Call authenticate() first.');
       }
     }
@@ -80,6 +86,7 @@ class GoogleCalendar {
 
     const now = new Date();
     const timeMax = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
+    console.log(`[GoogleCalendar] Fetching events from ${now.toISOString()} to ${timeMax.toISOString()}`);
 
     try {
       const response = await this.calendar.events.list({
@@ -92,11 +99,21 @@ class GoogleCalendar {
       });
 
       const events = response.data.items || [];
+      console.log(`[GoogleCalendar] API returned ${events.length} raw events`);
+
+      // Log each event and why it's filtered
+      events.forEach((event, i) => {
+        const hasDateTime = event.start && event.start.dateTime;
+        const hasAttendees = event.attendees && event.attendees.length > 0;
+        const platform = this._detectPlatform(event);
+        const hasMeetingLink = platform !== 'unknown';
+        console.log(`[GoogleCalendar] Event ${i}: "${event.summary}" - dateTime:${hasDateTime}, attendees:${hasAttendees}, platform:${platform}`);
+      });
 
       // Filter and format events
-      return events
-        .filter(event => this._isMeeting(event))
-        .map(event => this._formatMeeting(event));
+      const filtered = events.filter(event => this._isMeeting(event));
+      console.log(`[GoogleCalendar] After filtering: ${filtered.length} meetings`);
+      return filtered.map(event => this._formatMeeting(event));
     } catch (error) {
       console.error('[GoogleCalendar] Error fetching events:', error);
 
@@ -112,27 +129,25 @@ class GoogleCalendar {
   }
 
   /**
-   * Detect if event is a meeting (has participants and/or meeting link)
+   * Detect if event is a meeting (any timed event, not all-day)
    * @private
    */
   _isMeeting(event) {
-    // Must have a start time
+    // Must have a specific start time (not an all-day event)
     if (!event.start || !event.start.dateTime) {
       return false;
     }
 
-    // Has attendees (more than just the organizer)
-    const hasAttendees = event.attendees && event.attendees.length > 0;
+    // v1.2.2: Show all timed calendar events, not just ones with attendees/links
+    // Only filter out events the user has explicitly declined
+    if (event.attendees) {
+      const selfAttendee = event.attendees.find(a => a.self);
+      if (selfAttendee && selfAttendee.responseStatus === 'declined') {
+        return false;
+      }
+    }
 
-    // Has a meeting link
-    const hasMeetingLink = this._detectPlatform(event) !== 'unknown';
-
-    // Accepted or tentative (not declined)
-    const isAccepted =
-      !event.attendees ||
-      event.attendees.some(attendee => attendee.self && attendee.responseStatus !== 'declined');
-
-    return (hasAttendees || hasMeetingLink) && isAccepted;
+    return true;
   }
 
   /**

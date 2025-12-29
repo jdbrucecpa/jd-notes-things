@@ -3168,14 +3168,24 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
     }
 
     // Perform speaker matching if available (Phase 6)
+    // IMPORTANT: Only re-match speakers if user hasn't already applied mappings
+    // Check if transcript already has non-generic speaker names applied
+    const hasUserAppliedMappings = meeting.transcript && meeting.transcript.length > 0 &&
+      meeting.transcript.some(segment => {
+        const name = segment.speakerName || segment.speakerDisplayName;
+        // If segment has a speakerName that isn't generic (like "Speaker 1"), user has applied mappings
+        return name && !isGenericSpeakerName(name);
+      });
+
     if (
       speakerMatcher &&
       meeting.transcript &&
       meeting.transcript.length > 0 &&
-      participantEmails.length > 0
+      participantEmails.length > 0 &&
+      !hasUserAppliedMappings  // Skip if user already applied speaker mappings
     ) {
       try {
-        console.log('[ObsidianExport] Attempting speaker matching...');
+        console.log('[ObsidianExport] Attempting speaker matching (no existing mappings found)...');
 
         // SM-1: Get speech timeline for high-confidence matching
         const speechTimeline = meeting.recordingId ? getSpeechTimeline(meeting.recordingId) : null;
@@ -3219,6 +3229,14 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
         if (meeting.recordingId) {
           cleanupSpeechTimeline(meeting.recordingId);
         }
+      }
+    } else if (hasUserAppliedMappings) {
+      console.log(
+        '[ObsidianExport] Speaker matching skipped - user has already applied speaker mappings'
+      );
+      // SM-1: Clean up speech timeline even if speaker matching was skipped
+      if (meeting.recordingId) {
+        cleanupSpeechTimeline(meeting.recordingId);
       }
     } else if (meeting.transcript && meeting.transcript.length > 0) {
       console.log(
@@ -4443,10 +4461,16 @@ ipcMain.handle(
   withValidation(hoursAheadSchema, async (event, hoursAhead = 24) => {
     try {
       console.log(`[Calendar IPC] Fetching upcoming meetings (${hoursAhead} hours ahead)`);
+      console.log(`[Calendar IPC] googleCalendar exists: ${!!googleCalendar}`);
+      if (googleCalendar) {
+        console.log(`[Calendar IPC] googleCalendar.isAuthenticated(): ${googleCalendar.isAuthenticated()}`);
+      }
 
       // Check if calendar is initialized and authenticated
       if (!googleCalendar || !googleCalendar.isAuthenticated()) {
         console.log('[Calendar IPC] Calendar not authenticated - returning empty array');
+        console.log('[Calendar IPC] googleAuth exists:', !!googleAuth);
+        console.log('[Calendar IPC] googleAuth.isAuthenticated:', googleAuth?.isAuthenticated?.());
         return { success: true, meetings: [] };
       }
 
@@ -4553,6 +4577,178 @@ ipcMain.handle(
     }
   })
 );
+
+// Re-match participants to contacts for a meeting
+// v1.2.2: Rebuild from TRANSCRIPT speaker names (the true source of truth)
+// The participants array may already be corrupted - transcript is authoritative
+ipcMain.handle('contacts:rematchParticipants', async (event, meetingId) => {
+  try {
+    console.log(`[Contacts IPC] Re-matching participants for meeting ${meetingId}`);
+
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
+    }
+
+    // Find the meeting
+    let meeting = null;
+    await fileOperationManager.scheduleOperation(async data => {
+      meeting = data.pastMeetings.find(m => m.id === meetingId);
+      return data; // Don't modify yet, just read
+    });
+
+    if (!meeting) {
+      throw new Error(`Meeting ${meetingId} not found`);
+    }
+
+    // v1.2.2: Try multiple sources to find original participant names
+    // Priority: speakerMapping names > participants array > transcript speakers
+    // The participants array may have been corrupted by bad contact matching
+
+    const rebuiltParticipants = [];
+    const seenNames = new Set();
+
+    // Log available sources for debugging
+    console.log(`[Contacts IPC] Available sources:`);
+    console.log(`  - participants: ${meeting.participants?.length || 0}`);
+    console.log(`  - speakerMapping keys: ${meeting.speakerMapping ? Object.keys(meeting.speakerMapping).length : 0}`);
+    console.log(`  - transcript entries: ${meeting.transcript?.length || 0}`);
+
+    // SOURCE 0: speakerMapping - might have original names from speaker matching
+    if (meeting.speakerMapping && typeof meeting.speakerMapping === 'object') {
+      console.log(`[Contacts IPC] Checking speakerMapping for original names...`);
+      for (const [label, info] of Object.entries(meeting.speakerMapping)) {
+        if (info.name) {
+          const normalizedName = info.name.toLowerCase().trim();
+          if (!seenNames.has(normalizedName)) {
+            seenNames.add(normalizedName);
+            rebuiltParticipants.push({
+              name: info.name,
+              email: info.email || null,
+              contactMatched: !!info.email,
+              fromSpeakerMapping: true,
+            });
+            console.log(`[Contacts IPC] From speakerMapping: "${info.name}" (email: ${info.email || 'none'})`);
+          }
+        }
+      }
+      console.log(`[Contacts IPC] Got ${rebuiltParticipants.length} from speakerMapping`);
+    }
+
+    // PRIMARY SOURCE: Existing participants array (original Zoom SDK names!)
+    if (meeting.participants && meeting.participants.length > 0) {
+      console.log(`[Contacts IPC] v1.2.2: Using ${meeting.participants.length} participants from Zoom SDK`);
+
+      for (const participant of meeting.participants) {
+        // v1.2.2: Prefer originalName (immutable) over name (may be corrupted)
+        const originalName = participant.originalName || participant.name;
+        if (!originalName) continue;
+
+        // Skip generic names
+        if (originalName.match(/^(Speaker\s*[A-Z0-9]|SPK[-_]|spk_|SPEAKER_|Unknown|Host|Guest)/i)) continue;
+
+        const normalizedName = originalName.toLowerCase().trim();
+        if (seenNames.has(normalizedName)) continue;
+        seenNames.add(normalizedName);
+
+        // Preserve original Zoom name, clear potentially wrong email, re-match fresh
+        const rebuiltParticipant = {
+          id: participant.id,
+          name: originalName, // KEEP the original Zoom name!
+          isHost: participant.isHost,
+          platform: participant.platform,
+          joinTime: participant.joinTime,
+        };
+
+        // Try to find contact info (email, org) but NEVER change the name
+        try {
+          const contact = await googleContacts.findContactByName(originalName);
+          if (contact && contact.emails && contact.emails.length > 0) {
+            rebuiltParticipant.email = contact.emails[0];
+            rebuiltParticipant.organization = contact.organization || null;
+            rebuiltParticipant.contactMatched = true;
+            console.log(`[Contacts IPC] "${originalName}" -> email: ${contact.emails[0]} (name preserved)`);
+          } else {
+            rebuiltParticipant.email = null;
+            rebuiltParticipant.contactMatched = false;
+            console.log(`[Contacts IPC] "${originalName}" - no contact match (name preserved)`);
+          }
+        } catch (err) {
+          console.warn(`[Contacts IPC] Error looking up contact for "${originalName}":`, err.message);
+          rebuiltParticipant.email = null;
+          rebuiltParticipant.contactMatched = false;
+        }
+
+        rebuiltParticipants.push(rebuiltParticipant);
+      }
+
+      console.log(`[Contacts IPC] Rebuilt ${rebuiltParticipants.length} participants from Zoom SDK names`);
+    }
+
+    // SECONDARY SOURCE: Add any speakers from transcript not already in participants
+    if (meeting.transcript && meeting.transcript.length > 0) {
+      console.log(`[Contacts IPC] Checking transcript for additional speakers...`);
+      let addedFromTranscript = 0;
+
+      for (const segment of meeting.transcript) {
+        // Check multiple fields for speaker name
+        const speakerName = segment.speakerName || segment.speakerDisplayName || segment.speaker;
+        if (!speakerName) continue;
+
+        // Skip generic speaker labels
+        if (speakerName.match(/^(Speaker\s*[A-Z0-9]|SPK[-_]|spk_|SPEAKER_|Unknown)/i)) continue;
+
+        const normalizedName = speakerName.toLowerCase().trim();
+        if (seenNames.has(normalizedName)) continue;
+        seenNames.add(normalizedName);
+
+        const rebuiltParticipant = {
+          name: speakerName,
+          fromTranscript: true,
+        };
+
+        // Try contact lookup but don't change name
+        try {
+          const contact = await googleContacts.findContactByName(speakerName);
+          if (contact && contact.emails && contact.emails.length > 0) {
+            rebuiltParticipant.email = contact.emails[0];
+            rebuiltParticipant.organization = contact.organization || null;
+            rebuiltParticipant.contactMatched = true;
+          }
+        } catch (err) {
+          // Ignore
+        }
+
+        rebuiltParticipants.push(rebuiltParticipant);
+        addedFromTranscript++;
+      }
+
+      if (addedFromTranscript > 0) {
+        console.log(`[Contacts IPC] Added ${addedFromTranscript} additional speakers from transcript`);
+      }
+    }
+
+    // Save rebuilt participants
+    await fileOperationManager.scheduleOperation(async data => {
+      const meetingIndex = data.pastMeetings.findIndex(m => m.id === meetingId);
+      if (meetingIndex !== -1) {
+        data.pastMeetings[meetingIndex].participants = rebuiltParticipants;
+
+        // Rebuild participantEmails from fresh matches only
+        const emails = rebuiltParticipants
+          .filter(p => p.email && p.contactMatched)
+          .map(p => p.email.toLowerCase());
+        data.pastMeetings[meetingIndex].participantEmails = [...new Set(emails)];
+      }
+      return data;
+    });
+
+    console.log(`[Contacts IPC] Rebuild complete. ${rebuiltParticipants.length} participants (${rebuiltParticipants.filter(p => p.contactMatched).length} matched).`);
+    return { success: true, participants: rebuiltParticipants };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to rematch participants:', error);
+    return { success: false, error: error.message };
+  }
+});
 
 // Get meetings for a specific contact (CS-1)
 ipcMain.handle(
@@ -9239,6 +9435,9 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
             windowId: currentWindowId,
           });
           console.log('[Recording Start] ✓ Recording started successfully (no token)');
+
+          // v1.2.2 fix: Update widget with recording state so timer starts
+          updateWidgetRecordingState(true, newMeeting.title, id, newMeeting);
         } catch (sdkError) {
           console.error('[Recording Start] ✗ SDK failed to start recording:', sdkError);
           throw new Error(`Failed to start recording: ${sdkError.message}`);
@@ -9290,6 +9489,9 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
             uploadToken: uploadData.upload_token,
           });
           console.log(`[Recording Start] ✓ Recording started successfully with upload token`);
+
+          // v1.2.2 fix: Update widget with recording state so timer starts
+          updateWidgetRecordingState(true, newMeeting.title, id, newMeeting);
         } catch (sdkError) {
           console.error('[Recording Start] ✗ SDK failed to start recording:', sdkError);
           throw new Error(`Failed to start recording: ${sdkError.message}`);
@@ -9312,6 +9514,9 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
           windowId: currentWindowId,
         });
         console.log('[Recording Start] ✓ Fallback recording started successfully');
+
+        // v1.2.2 fix: Update widget with recording state so timer starts
+        updateWidgetRecordingState(true, newMeeting.title, id, newMeeting);
       } catch (sdkError) {
         console.error('[Recording Start] ✗ Fallback recording also failed:', sdkError);
         // Don't throw here - meeting note already created, just log the error
@@ -9382,6 +9587,9 @@ async function processVideoFrame(evt) {
 }
 
 // Function to process participant join events
+// IMPORTANT: The participant NAME from Zoom SDK is AUTHORITATIVE and should never be replaced.
+// Emails are always INFERRED from contact matching and may be wrong.
+// See CLAUDE.md "Participant Data Model" section for details.
 async function processParticipantJoin(evt) {
   try {
     const windowId = evt.window?.id;
@@ -9481,6 +9689,7 @@ async function processParticipantJoin(evt) {
       const participantObj = {
         id: participantId,
         name: participantName,
+        originalName: participantName, // v1.2.2: Store original Zoom name - NEVER overwrite this!
         email: participantEmail,
         isHost: isHost,
         platform: platform,

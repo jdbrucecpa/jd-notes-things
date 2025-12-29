@@ -1,64 +1,63 @@
-Create a comprehensive meeting record from my point of view, as if written by a sharp executive assistant. Capture everything substantive that happened—topics, details, decisions, context, numbers, dates, names—in chronological flow.
+Factual meeting record. What was discussed, decided, and committed to—nothing more.
 
-Use generalized headings for topics. Under each heading, include abbreviated bullet points covering all key details. End each section with a brief "In Short" takeaway.
+Capture: topics, decisions, context, numbers, dates, names.
 
-Do NOT include:
-- Editorial commentary on blind spots or what they should have said (that's a separate template)
-- Verbatim quotes as featured content (that's a separate template)
-- Sentiment analysis or relationship dynamics (that's a separate template)
-- Firm profile data extraction (that's a separate template)
+Exclude:
+- Direct quotes (separate template)
+- Sentiment or relationship dynamics (separate template)
+- Insights, observations, or tough questions (separate templates)
+- Editorial commentary or judgments
+- Summaries or takeaways beyond the final 2-sentence recap
+- Inline action items or commitments (hold these for the Commitments section at end)
 
-Focus on: what was discussed, what was decided, what context was shared, what commitments were made.
+Style: Telegraphic bullets. Fragments over full sentences. No elaboration.
 
-Preserve any colorful language, analogies, or memorable phrasing in the bullet points—don't sanitize.
-
-Format exactly like this:
+Format:
 
 "template:Full Notes"
 
-# [First Major Topic]
-
-## [Subtopic Heading]
-- short-form bullet with specific detail, number, date, or name
-- another bullet
-- etc (aim for 5+ bullets per section if content warrants)
-
-**In Short:** One-sentence takeaway for this section
-
-## [Another Subtopic]
-- bullet
-- bullet
-
-**In Short:** Takeaway
-
-# [Second Major Topic]
+# [Major Topic]
 
 ## [Subtopic]
-- bullet
-- bullet
+- fact/detail/decision
+- fact/detail/decision
 
-**In Short:** Takeaway
+# [Next Major Topic]
 
-(continue for all major topics)
+## [Subtopic]
+- fact/detail/decision
+- fact/detail/decision
+
+(continue for all substantive topics)
 
 # Commitments & Next Steps
-- [ ] Commitment I made (with deadline if mentioned)
-- [ ] Commitment they made (with deadline if mentioned)
-- [ ] Follow-up needed on X
 
-**In Summary:** 2-3 sentence summary of the meeting from my perspective
+Consolidate ALL action items here—do not list them inline above.
+
+**JD Commitments:**
+- [ ] task (deadline if stated)
+- [ ] task
+
+**Their Commitments:**
+- [ ] task (deadline if stated)
+- [ ] task
+
+**Follow-ups:**
+- [ ] item
+
+**Recap:** 2 sentences max—what meeting was about, key outcome.
 
 ---
 
 ## Machine Context
 
 ### Entities
-- **People:** [[Name1]], [[Name2]] (use wikilink format for all people mentioned)
-- **Firms:** [[Firm Name]] (if applicable)
-- **Tools/Vendors:** [[Tool1]], [[Vendor1]] (any tech, custodians, software mentioned)
+- **People:** [[Name1]], [[Name2]]
+- **Firms:** [[Firm Name]]
+- **Tools/Vendors:** [[Tool1]], [[Vendor1]]
 
 ### Tags
-#meeting-type #topic1 #topic2 (3-5 relevant tags)
+#meeting-type #topic1 #topic2
 
 ### Key Terms
-comma, separated, key, terms, for, vector, search
+comma, separated, terms, for, search

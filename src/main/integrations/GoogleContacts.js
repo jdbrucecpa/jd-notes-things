@@ -268,6 +268,10 @@ class GoogleContacts {
       } else {
         // Score-based matching
         let score = 0;
+        const nameParts = normalizedName.split(' ').filter(p => p.length > 0);
+        const sourceHasLastName = nameParts.length > 1;
+        const sourceFirstName = nameParts[0];
+        const sourceLastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : null;
 
         // Exact full name match is highest
         if (contactName === normalizedName) {
@@ -285,13 +289,14 @@ class GoogleContacts {
         else if (`${givenName} ${familyName}` === normalizedName) {
           score = 90;
         }
-        // First name match
-        else if (givenName === normalizedName.split(' ')[0]) {
+        // v1.2.2: Only do first-name matching if source has NO last name
+        // This prevents "Tim Peyser" from matching "Tim Rasmussen"
+        else if (!sourceHasLastName && givenName === sourceFirstName) {
           score = 50;
         }
-        // Last name match
-        else if (familyName === normalizedName.split(' ').pop()) {
-          score = 40;
+        // v1.2.2: If source has both first AND last name, require both to match
+        else if (sourceHasLastName && givenName === sourceFirstName && familyName === sourceLastName) {
+          score = 85;
         }
 
         if (score > bestScore) {
@@ -301,7 +306,8 @@ class GoogleContacts {
       }
     }
 
-    if (bestMatch && bestScore >= 40) {
+    // v1.2.2: Raise threshold - require at least score 50 for a match
+    if (bestMatch && bestScore >= 50) {
       console.log(
         `[GoogleContacts] Found contact "${bestMatch.name}" for name "${name}" (score: ${bestScore})`
       );

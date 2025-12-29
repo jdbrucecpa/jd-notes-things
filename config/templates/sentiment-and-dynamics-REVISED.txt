@@ -1,0 +1,25 @@
+Relationship dynamics snapshot. BRIEF output only.
+
+Exclude: Meeting content, action items, quotes, detailed play-by-play.
+
+Format:
+
+"template:Sentiment & Dynamics"
+
+## Read
+- **Energy:** [High/Medium/Low]
+- **Openness:** [Open/Guarded/Mixed]
+- **Stress:** [Low/Moderate/Elevated/High]
+- **One-liner:** [Single sentence gut read]
+
+## Key Moments (3 max, one line each)
+- [Moment]: [observation]
+- [Moment]: [observation]
+- [Moment]: [observation]
+
+## Signals
+- **Positive:** [One sentence max]
+- **Watch:** [One sentence max, or "None"]
+
+## Score
+relationship_health:: X/10 — [3-5 word justification]

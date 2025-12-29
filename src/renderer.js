@@ -238,6 +238,62 @@ let pastMeetingsByDate = {};
 window.isRecording = false;
 window.currentRecordingId = null;
 
+// Main screen timer state
+let mainTimerInterval = null;
+let mainTimerStartTime = null;
+
+// Format seconds as MM:SS or HH:MM:SS
+function formatTimerDisplay(seconds) {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Update the main screen timer display
+function updateMainTimer() {
+  if (mainTimerStartTime) {
+    const elapsed = Math.floor((Date.now() - mainTimerStartTime) / 1000);
+    const timerValue = document.getElementById('mainTimerValue');
+    if (timerValue) {
+      timerValue.textContent = formatTimerDisplay(elapsed);
+    }
+  }
+}
+
+// Start the main screen timer
+function startMainTimer(startTime) {
+  mainTimerStartTime = startTime || Date.now();
+  const timerDisplay = document.getElementById('mainTimerDisplay');
+  if (timerDisplay) {
+    timerDisplay.classList.add('recording');
+  }
+  // Update immediately then every second
+  updateMainTimer();
+  mainTimerInterval = setInterval(updateMainTimer, 1000);
+}
+
+// Stop the main screen timer
+function stopMainTimer() {
+  if (mainTimerInterval) {
+    clearInterval(mainTimerInterval);
+    mainTimerInterval = null;
+  }
+  mainTimerStartTime = null;
+  const timerDisplay = document.getElementById('mainTimerDisplay');
+  const timerValue = document.getElementById('mainTimerValue');
+  if (timerDisplay) {
+    timerDisplay.classList.remove('recording');
+  }
+  if (timerValue) {
+    timerValue.textContent = '00:00';
+  }
+}
+
 // Search/filter state (v1.2: Extended with company, contact, platform filters)
 const searchState = {
   query: '',
@@ -627,6 +683,11 @@ function updateRecordingButtonUI(isActive, recordingId) {
     recordButton.classList.add('recording');
     recordIcon.style.display = 'none';
     stopIcon.style.display = 'block';
+
+    // Start main screen timer if not already running
+    if (!mainTimerInterval) {
+      startMainTimer();
+    }
   } else {
     // No active recording
     console.log('Updating UI for inactive recording');
@@ -637,6 +698,9 @@ function updateRecordingButtonUI(isActive, recordingId) {
     recordButton.classList.remove('recording');
     recordIcon.style.display = 'block';
     stopIcon.style.display = 'none';
+
+    // Stop main screen timer
+    stopMainTimer();
   }
 }
 
@@ -665,8 +729,12 @@ function getDateGroupLabel(date) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
   const lastWeek = new Date(today);
   lastWeek.setDate(lastWeek.getDate() - 7);
+  const nextWeek = new Date(today);
+  nextWeek.setDate(nextWeek.getDate() + 7);
 
   const meetingDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
@@ -674,7 +742,13 @@ function getDateGroupLabel(date) {
     return 'Today';
   } else if (meetingDay.getTime() === yesterday.getTime()) {
     return 'Yesterday';
-  } else if (meetingDay >= lastWeek) {
+  } else if (meetingDay.getTime() === tomorrow.getTime()) {
+    return 'Tomorrow';
+  } else if (meetingDay > today && meetingDay <= nextWeek) {
+    // Within next 7 days - show day of week
+    const options = { weekday: 'long' };
+    return date.toLocaleDateString('en-US', options);
+  } else if (meetingDay >= lastWeek && meetingDay < today) {
     // Within last 7 days - show day of week
     const options = { weekday: 'long' };
     return date.toLocaleDateString('en-US', options);
@@ -3114,8 +3188,26 @@ function renderMeetings() {
     // Get the calendar container
     const calendarContainer = upcomingSection.querySelector('#calendar-list');
 
-    // Add calendar meetings
-    calendarMeetings.forEach(meeting => {
+    // Sort calendar meetings by date (earliest first for upcoming)
+    const sortedCalendarMeetings = [...calendarMeetings].sort((a, b) => {
+      return new Date(a.startTime) - new Date(b.startTime);
+    });
+
+    // Add calendar meetings with date grouping
+    let currentCalendarDateGroup = null;
+    sortedCalendarMeetings.forEach(meeting => {
+      const meetingDate = new Date(meeting.startTime);
+      const dateGroup = getDateGroupLabel(meetingDate);
+
+      // Add date group header if this is a new group
+      if (dateGroup !== currentCalendarDateGroup) {
+        currentCalendarDateGroup = dateGroup;
+        const dateHeader = document.createElement('div');
+        dateHeader.className = 'date-group-header';
+        dateHeader.textContent = dateGroup;
+        calendarContainer.appendChild(dateHeader);
+      }
+
       calendarContainer.appendChild(createCalendarMeetingCard(meeting));
     });
   }
@@ -4570,6 +4662,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Listen for recording state change events
   window.electronAPI.onRecordingStateChange(data => {
     console.log('Recording state change received:', data);
+
+    // v1.2.2 fix: Start main timer when ANY recording starts (not just current note)
+    if (data.state === 'recording') {
+      if (!mainTimerInterval) {
+        console.log('[Recording] Starting main timer for recording');
+        startMainTimer();
+      }
+    } else if (data.state === 'idle' || data.state === 'stopped') {
+      // Stop timer when recording stops
+      console.log('[Recording] Stopping main timer');
+      stopMainTimer();
+    }
 
     // Reset Join Meeting button when recording starts or stops
     const joinButton = document.getElementById('joinMeetingBtn');

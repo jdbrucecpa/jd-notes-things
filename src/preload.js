@@ -158,6 +158,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('contacts:createCompanyPage', company, options),
   contactsCompanyPageExists: companyName =>
     ipcRenderer.invoke('contacts:companyPageExists', companyName),
+  contactsRematchParticipants: meetingId =>
+    ipcRenderer.invoke('contacts:rematchParticipants', meetingId),
   speakersMatchSpeakers: (transcript, participantEmails, options) =>
     ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),
   speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) =>

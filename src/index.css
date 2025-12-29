@@ -43,6 +43,10 @@
   --color-gray-dark: #666;
   --color-text-muted: #888;
 
+  /* Link colors */
+  --link-color: #0066cc;
+  --link-color-hover: #0052a3;
+
   /* Gradients */
   --gradient-purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 
@@ -111,6 +115,10 @@ body.dark-theme {
   --routing-unfiled: #facc15;
   --routing-unfiled-bg: rgba(250, 204, 21, 0.2);
   --color-text-muted: #999;
+
+  /* Link colors (brighter for dark mode readability) */
+  --link-color: #58a6ff;
+  --link-color-hover: #79b8ff;
 }
 
 /* Prevent double scrollbar - html element should not scroll */
@@ -166,6 +174,123 @@ body {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/* ============================================
+   LINK STYLES (Dark mode friendly)
+   ============================================ */
+
+a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--link-color-hover);
+  text-decoration: underline;
+}
+
+a:visited {
+  color: var(--link-color);
+}
+
+/* ============================================
+   RADIO BUTTON OPTION STYLES (Regenerate modal)
+   ============================================ */
+
+.regenerate-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  background: var(--card-bg);
+}
+
+.regenerate-option:hover {
+  border-color: var(--text-secondary);
+  background: var(--card-hover);
+}
+
+.regenerate-option.selected {
+  border-color: var(--primary-color);
+  background: rgba(0, 122, 255, 0.08);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15);
+}
+
+body.dark-theme .regenerate-option.selected {
+  background: rgba(10, 132, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
+}
+
+.regenerate-option input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-color);
+}
+
+.regenerate-option-text {
+  flex: 1;
+}
+
+.regenerate-option-text strong {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--text-primary);
+}
+
+.regenerate-option-text span {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ============================================
+   MAIN SCREEN TIMER STYLES
+   ============================================ */
+
+.main-timer-display {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: rgba(255, 59, 48, 0.1);
+  border-radius: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.main-timer-display.recording {
+  display: flex;
+}
+
+.main-timer-display .timer-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--status-recording);
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.main-timer-display .timer-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--status-recording);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ============================================
+   TEMPLATE CONTENT SELECTABLE TEXT
+   ============================================ */
+
+.template-summary-content {
+  user-select: text;
+  cursor: text;
 }
 
 /* ============================================
@@ -5004,6 +5129,36 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   letter-spacing: 0.5px;
 }
 
+.refresh-templates-btn,
+.refresh-matching-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.refresh-templates-btn:hover,
+.refresh-matching-btn:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.refresh-templates-btn.refreshing svg,
+.refresh-matching-btn.refreshing svg {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .template-list-scroll {
   flex: 1;
   overflow-y: auto;
@@ -6544,6 +6699,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .template-collapse-btn,
+.template-copy-btn,
 .template-delete-btn {
   background: none;
   border: none;
@@ -6560,6 +6716,15 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 .template-collapse-btn:hover {
   background: var(--bg-secondary);
   color: var(--text-primary);
+}
+
+.template-copy-btn:hover {
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--primary-color);
+}
+
+.template-copy-btn.copied {
+  color: var(--status-success);
 }
 
 .template-delete-btn:hover {

@@ -86,6 +86,28 @@ function setupEventListeners() {
     saveTemplateBtn.addEventListener('click', saveTemplate);
   }
 
+  // Refresh templates button
+  const refreshTemplatesBtn = document.getElementById('refreshTemplatesBtn');
+  if (refreshTemplatesBtn) {
+    refreshTemplatesBtn.addEventListener('click', async () => {
+      try {
+        // Add spinning animation
+        refreshTemplatesBtn.classList.add('refreshing');
+
+        // Reload templates from backend (which re-scans disk)
+        await window.electronAPI.templatesReload();
+        await loadTemplates();
+
+        notifyInfo('Templates refreshed from disk');
+      } catch (error) {
+        console.error('[TemplateEditor] Failed to refresh templates:', error);
+        notifyError('Failed to refresh templates');
+      } finally {
+        refreshTemplatesBtn.classList.remove('refreshing');
+      }
+    });
+  }
+
   // Editor change listener for live preview
   if (editor) {
     editor.onDidChangeModelContent(() => {

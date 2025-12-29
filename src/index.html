@@ -101,6 +101,12 @@
         <span class="titlebar-title" id="titlebarTitle">JD Notes Things</span>
       </div>
 
+      <!-- Recording Timer (shown when recording) -->
+      <div class="main-timer-display" id="mainTimerDisplay">
+        <span class="timer-dot"></span>
+        <span class="timer-value" id="mainTimerValue">00:00</span>
+      </div>
+
       <!-- Right: Window Controls -->
       <div class="titlebar-right">
         <button class="titlebar-btn" id="minimizeBtn" title="Minimize">
@@ -427,6 +433,11 @@
           <div class="meeting-participants-card">
             <div class="card-header">
               <h3 class="card-title">Participants</h3>
+              <button class="refresh-matching-btn" id="refreshParticipantMatchingBtn" title="Re-match participants from contacts">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
+                </svg>
+              </button>
             </div>
             <div class="participants-list" id="meetingDetailParticipants">
               <!-- Participants will be dynamically inserted -->
@@ -1716,6 +1727,11 @@
                 <div class="template-list-sidebar">
                   <div class="template-list-header">
                     <h4>Templates</h4>
+                    <button id="refreshTemplatesBtn" class="refresh-templates-btn" title="Refresh templates from disk">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
+                      </svg>
+                    </button>
                   </div>
 
                   <div class="template-list-scroll" id="templateEditorList">
@@ -2141,7 +2157,7 @@
             <div class="settings-section">
               <div class="about-info">
                 <h3>JD Notes Things</h3>
-                <p class="version" id="appVersion">v1.2.1</p>
+                <p class="version" id="appVersion">v1.2.2</p>
                 <p>AI-Powered Meeting Transcription & Summarization</p>
                 <p style="margin-top: 12px;">
                   <a href="#" id="githubRepoLink" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">

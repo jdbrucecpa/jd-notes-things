@@ -161,6 +161,32 @@ Multi-provider support with 85-90% cost reduction:
 3. Heuristic algorithms: count-based, first speaker, most talkative
 4. Label transcript with actual names
 
+### Participant Data Model (IMPORTANT)
+
+**Data Authority Hierarchy:**
+- **`originalName`:** The IMMUTABLE participant name from Zoom SDK. This field is set once when a participant joins and should NEVER be modified. This is the source of truth.
+- **`name`:** Display name that may be updated by contact matching. Can become corrupted - always fall back to `originalName`.
+- **Emails:** NEVER authoritative. Emails are always inferred from Google Contacts matching and can be wrong. The Zoom SDK and transcription services do not provide participant emails.
+- **Organization:** Inferred from contact matching, not authoritative.
+
+**Participant Object Structure:**
+```javascript
+{
+  id: string,           // SDK participant ID
+  originalName: string, // IMMUTABLE - original Zoom display name, NEVER modify
+  name: string,         // Display name (may be updated by contact matching)
+  email: string|null,   // INFERRED from contact matching, may be wrong
+  organization: string|null,  // INFERRED from contact matching
+  isHost: boolean,
+  platform: string,
+  joinTime: string,     // ISO timestamp
+}
+```
+
+**Key Rule:** When refreshing or re-matching participants, always use `originalName` as the source of truth. Only update supplementary fields (email, organization) from contact matching - never the `originalName` field.
+
+**Why this matters:** Contact matching uses fuzzy name matching which can produce false positives (e.g., "Tim Peyser" matching to "Tim Rasmussen" contact). The `originalName` field preserves the true identity even if `name` gets corrupted.
+
 ### Security
 
 - **XSS Protection:** DOMPurify sanitization (6 attack vectors secured)

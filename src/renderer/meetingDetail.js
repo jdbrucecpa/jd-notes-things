@@ -491,6 +491,9 @@ function setupParticipantEventListeners() {
 
   // Add participant button
   setupAddParticipantButton();
+
+  // Refresh matching button
+  setupRefreshMatchingButton();
 }
 
 /**
@@ -503,6 +506,56 @@ function setupAddParticipantButton() {
       showAddParticipantDialog();
     });
   }
+}
+
+/**
+ * Set up refresh participant matching button
+ */
+function setupRefreshMatchingButton() {
+  const refreshBtn = document.getElementById('refreshParticipantMatchingBtn');
+  if (!refreshBtn) return;
+
+  // Remove existing listeners by cloning
+  const newBtn = refreshBtn.cloneNode(true);
+  refreshBtn.parentNode.replaceChild(newBtn, refreshBtn);
+
+  newBtn.addEventListener('click', async () => {
+    if (!currentMeetingId) return;
+
+    // Show loading state
+    newBtn.classList.add('refreshing');
+    newBtn.disabled = true;
+
+    try {
+      const result = await window.electronAPI.contactsRematchParticipants(currentMeetingId);
+
+      if (result.success) {
+        // Update local meeting data
+        currentMeeting.participants = result.participants;
+
+        // Re-render the participants list
+        populateParticipants(currentMeeting);
+        updateParticipantCount();
+
+        // Notify success
+        const matchedCount = result.participants.filter(p => p.contactMatched).length;
+        console.log(`[MeetingDetail] Re-matched participants: ${matchedCount} of ${result.participants.length} matched`);
+      } else {
+        console.error('[MeetingDetail] Failed to rematch participants:', result.error);
+        alert('Failed to rematch participants: ' + result.error);
+      }
+    } catch (error) {
+      console.error('[MeetingDetail] Error rematching participants:', error);
+      alert('Error rematching participants: ' + error.message);
+    } finally {
+      // Remove loading state - get fresh reference since populateParticipants clones the button
+      const currentBtn = document.getElementById('refreshParticipantMatchingBtn');
+      if (currentBtn) {
+        currentBtn.classList.remove('refreshing');
+        currentBtn.disabled = false;
+      }
+    }
+  });
 }
 
 /**
@@ -830,7 +883,7 @@ function populateTemplates(meeting) {
   templateSummaries.forEach((summary, index) => {
     const card = document.createElement('div');
     card.className = 'template-summary-card';
-    card.setAttribute('draggable', 'true');
+    // Don't make entire card draggable - only drag handle triggers drag
     card.setAttribute('data-index', index);
 
     const isCollapsed = summary.collapsed === true;
@@ -843,6 +896,11 @@ function populateTemplates(meeting) {
           </svg>
         </div>
         <h4 class="template-summary-title">${escapeHtml(summary.templateName || summary.templateId || 'Untitled')}</h4>
+        <button class="template-copy-btn" title="Copy to clipboard">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+          </svg>
+        </button>
         <button class="template-delete-btn" title="Delete this section">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -859,9 +917,28 @@ function populateTemplates(meeting) {
 
     // Add click handler for collapse/expand
     const collapseBtn = card.querySelector('.template-collapse-btn');
+    const copyBtn = card.querySelector('.template-copy-btn');
     const deleteBtn = card.querySelector('.template-delete-btn');
     const header = card.querySelector('.template-summary-header');
     const content = card.querySelector('.template-summary-content');
+
+    // Copy button handler
+    copyBtn.addEventListener('click', async e => {
+      e.stopPropagation();
+      try {
+        await navigator.clipboard.writeText(summary.content || '');
+        // Show brief feedback
+        const originalTitle = copyBtn.title;
+        copyBtn.title = 'Copied!';
+        copyBtn.classList.add('copied');
+        setTimeout(() => {
+          copyBtn.title = originalTitle;
+          copyBtn.classList.remove('copied');
+        }, 1500);
+      } catch (err) {
+        console.error('Failed to copy:', err);
+      }
+    });
     const icon = card.querySelector('.collapse-icon');
 
     const toggleCollapse = () => {
@@ -886,22 +963,44 @@ function populateTemplates(meeting) {
       }
     });
 
-    // Allow clicking the title to toggle as well (but not the drag handle or delete button)
+    // Allow clicking the title to toggle as well (but not the drag handle, copy, or delete buttons)
     header.addEventListener('click', e => {
-      if (!e.target.closest('.template-drag-handle') && !e.target.closest('.template-delete-btn')) {
+      if (!e.target.closest('.template-drag-handle') &&
+          !e.target.closest('.template-copy-btn') &&
+          !e.target.closest('.template-delete-btn')) {
         toggleCollapse();
       }
     });
 
-    // Drag and drop handlers
+    // Drag and drop handlers - only the drag handle initiates dragging
+    const dragHandle = card.querySelector('.template-drag-handle');
+
+    // Make card draggable only when drag starts from handle
+    dragHandle.addEventListener('mousedown', () => {
+      card.setAttribute('draggable', 'true');
+      // Clean up draggable on next mouseup (even if no drag occurred)
+      const cleanup = () => {
+        card.removeAttribute('draggable');
+        document.removeEventListener('mouseup', cleanup);
+      };
+      document.addEventListener('mouseup', cleanup);
+    });
+
+    // Remove draggable after drag ends to allow text selection
+    card.addEventListener('dragend', () => {
+      card.classList.remove('dragging');
+      card.removeAttribute('draggable');
+    });
+
     card.addEventListener('dragstart', e => {
+      // Only allow drag if it started from the handle
+      if (!card.hasAttribute('draggable')) {
+        e.preventDefault();
+        return;
+      }
       card.classList.add('dragging');
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', index.toString());
-    });
-
-    card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
     });
 
     card.addEventListener('dragover', e => {
@@ -959,7 +1058,7 @@ function updateTemplateSummaryOrder(templatesList) {
 /**
  * Delete a template summary section
  */
-function deleteTemplateSummary(index, _templatesList) {
+async function deleteTemplateSummary(index, _templatesList) {
   if (!currentMeeting || !currentMeeting.summaries) return;
 
   // Get only template summaries (non-auto-summary)
@@ -974,6 +1073,14 @@ function deleteTemplateSummary(index, _templatesList) {
   currentMeeting.summaries = [...autoSummaries, ...templateSummaries];
 
   console.log(`[MeetingDetail] Deleted template summary: ${deletedSummary?.templateName || deletedSummary?.templateId}`);
+
+  // Persist the deletion to disk using updateMeetingField
+  try {
+    await window.electronAPI.updateMeetingField(currentMeeting.id, 'summaries', currentMeeting.summaries);
+    console.log(`[MeetingDetail] Template summary deletion persisted to disk`);
+  } catch (err) {
+    console.error('[MeetingDetail] Failed to persist deletion:', err);
+  }
 
   // Re-render the templates list
   populateTemplates(currentMeeting);
@@ -1517,14 +1624,20 @@ async function regenerateSummary(onUpdate) {
     <div style="display: flex; flex-direction: column; gap: 20px;">
       <div>
         <label style="font-weight: 600; margin-bottom: 8px; display: block;">Summary Mode</label>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="radio" name="regenerateMode" value="replace" checked style="margin: 0;">
-            <span><strong>Replace</strong> — Regenerate and replace the existing summary</span>
+        <div style="display: flex; flex-direction: column; gap: 8px;" id="regenerateModeOptions">
+          <label class="regenerate-option selected" data-value="replace">
+            <input type="radio" name="regenerateMode" value="replace" checked>
+            <div class="regenerate-option-text">
+              <strong>Replace</strong>
+              <span>Regenerate and replace the existing summary</span>
+            </div>
           </label>
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-            <input type="radio" name="regenerateMode" value="append" style="margin: 0;">
-            <span><strong>Append</strong> — Add new summary below the existing content</span>
+          <label class="regenerate-option" data-value="append">
+            <input type="radio" name="regenerateMode" value="append">
+            <div class="regenerate-option-text">
+              <strong>Append</strong>
+              <span>Add new summary below the existing content</span>
+            </div>
           </label>
         </div>
       </div>
@@ -1555,6 +1668,22 @@ async function regenerateSummary(onUpdate) {
       await performRegeneration(mode, model, onUpdate);
     },
   });
+
+  // Add click handlers to toggle visual selection state on radio options
+  setTimeout(() => {
+    const options = document.querySelectorAll('.regenerate-option');
+    options.forEach(option => {
+      option.addEventListener('click', () => {
+        // Remove selected from all options
+        options.forEach(opt => opt.classList.remove('selected'));
+        // Add selected to clicked option
+        option.classList.add('selected');
+        // Check the radio inside
+        const radio = option.querySelector('input[type="radio"]');
+        if (radio) radio.checked = true;
+      });
+    });
+  }, 0);
 }
 
 /**

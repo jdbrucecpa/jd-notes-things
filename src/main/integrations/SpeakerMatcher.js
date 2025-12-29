@@ -214,6 +214,9 @@ class SpeakerMatcher {
     if (!participantName) return null;
 
     const nameLower = participantName.toLowerCase();
+    const nameParts = participantName.trim().split(/\s+/);
+    const hasLastName = nameParts.length > 1;
+    const firstName = nameParts[0].toLowerCase();
     const { companyHint, otherParticipantEmails = [] } = options;
 
     // Collect all matching contacts
@@ -222,13 +225,84 @@ class SpeakerMatcher {
     // Try to find by contact name
     for (const [email, contact] of contacts) {
       if (contact.name && contact.name.toLowerCase() === nameLower) {
+        // Full name exact match - always include
         matches.push({ email, contact, matchType: 'full-name' });
-      } else if (contact.givenName && contact.givenName.toLowerCase() === nameLower.split(' ')[0]) {
+      } else if (!hasLastName && contact.givenName && contact.givenName.toLowerCase() === firstName) {
+        // First-name-only matching - ONLY allowed when source name has no last name
+        // This prevents "Jonathan Fass" from matching to "Jonathan Satovsky"
         matches.push({ email, contact, matchType: 'first-name' });
       }
     }
 
-    // If we have multiple matches, try to disambiguate using company
+    // Build company context from other participants for first-name matching
+    const otherCompanies = new Set();
+    const otherDomains = new Set();
+    if (otherParticipantEmails.length > 0) {
+      for (const otherEmail of otherParticipantEmails) {
+        const otherContact = contacts.get(otherEmail);
+        if (otherContact?.organization) {
+          otherCompanies.add(otherContact.organization.toLowerCase());
+        }
+        // Also try to infer company from email domain
+        const domain = otherEmail.split('@')[1]?.toLowerCase();
+        if (
+          domain &&
+          !domain.includes('gmail') &&
+          !domain.includes('yahoo') &&
+          !domain.includes('hotmail') &&
+          !domain.includes('outlook')
+        ) {
+          otherDomains.add(domain);
+        }
+      }
+    }
+
+    // For first-name-only matches, REQUIRE company context match
+    // This ensures "Shane" only matches "Shane Mason" from BKFI if other participants are from BKFI
+    const firstNameOnlyMatches = matches.filter(m => m.matchType === 'first-name');
+    const fullNameMatches = matches.filter(m => m.matchType === 'full-name');
+
+    if (firstNameOnlyMatches.length > 0 && fullNameMatches.length === 0) {
+      // Only first-name matches - must use company context
+      if (otherCompanies.size > 0 || otherDomains.size > 0) {
+        // Filter to only matches from the same company/domain as other participants
+        const companyFilteredMatches = firstNameOnlyMatches.filter(match => {
+          const matchCompany = match.contact.organization?.toLowerCase();
+          const matchDomain = match.email.split('@')[1]?.toLowerCase();
+
+          return (
+            (matchCompany && otherCompanies.has(matchCompany)) ||
+            (matchDomain && otherDomains.has(matchDomain))
+          );
+        });
+
+        if (companyFilteredMatches.length === 1) {
+          console.log(
+            `[SpeakerMatcher] First-name match with company context -> ${companyFilteredMatches[0].email}`
+          );
+          return companyFilteredMatches[0].email;
+        } else if (companyFilteredMatches.length > 1) {
+          console.log(
+            `[SpeakerMatcher] Multiple first-name matches from same company for "${participantName}", returning first`
+          );
+          return companyFilteredMatches[0].email;
+        } else {
+          // No matches from same company - don't match at all
+          console.log(
+            `[SpeakerMatcher] First-name-only match for "${participantName}" rejected - no company context match`
+          );
+          return null;
+        }
+      } else {
+        // No company context available - don't do first-name matching
+        console.log(
+          `[SpeakerMatcher] First-name-only match for "${participantName}" rejected - no company context available`
+        );
+        return null;
+      }
+    }
+
+    // If we have multiple matches (including full-name), try to disambiguate using company
     if (matches.length > 1) {
       console.log(
         `[SpeakerMatcher] Found ${matches.length} contacts matching "${participantName}", attempting disambiguation`
@@ -247,43 +321,20 @@ class SpeakerMatcher {
         }
       }
 
-      // Try to infer company from other participants in the meeting
-      if (otherParticipantEmails.length > 0) {
-        // Find companies of other participants
-        const otherCompanies = new Set();
-        for (const otherEmail of otherParticipantEmails) {
-          const otherContact = contacts.get(otherEmail);
-          if (otherContact?.organization) {
-            otherCompanies.add(otherContact.organization.toLowerCase());
-          }
-          // Also try to infer company from email domain
-          const domain = otherEmail.split('@')[1]?.toLowerCase();
+      // Try to use company context from other participants
+      if (otherCompanies.size > 0 || otherDomains.size > 0) {
+        for (const match of matches) {
+          const matchCompany = match.contact.organization?.toLowerCase();
+          const matchDomain = match.email.split('@')[1]?.toLowerCase();
+
           if (
-            domain &&
-            !domain.includes('gmail') &&
-            !domain.includes('yahoo') &&
-            !domain.includes('hotmail') &&
-            !domain.includes('outlook')
+            (matchCompany && otherCompanies.has(matchCompany)) ||
+            (matchDomain && otherDomains.has(matchDomain))
           ) {
-            otherCompanies.add(domain);
-          }
-        }
-
-        if (otherCompanies.size > 0) {
-          // Prefer contact from the same company as other participants
-          for (const match of matches) {
-            const matchCompany = match.contact.organization?.toLowerCase();
-            const matchDomain = match.email.split('@')[1]?.toLowerCase();
-
-            if (
-              (matchCompany && otherCompanies.has(matchCompany)) ||
-              (matchDomain && otherCompanies.has(matchDomain))
-            ) {
-              console.log(
-                `[SpeakerMatcher] Disambiguated using other participant company context -> ${match.email}`
-              );
-              return match.email;
-            }
+            console.log(
+              `[SpeakerMatcher] Disambiguated using other participant company context -> ${match.email}`
+            );
+            return match.email;
           }
         }
       }
@@ -296,7 +347,7 @@ class SpeakerMatcher {
       }
     }
 
-    // Return first match if we have any
+    // Return first match if we have any (at this point, only full-name matches would remain)
     if (matches.length > 0) {
       return matches[0].email;
     }
