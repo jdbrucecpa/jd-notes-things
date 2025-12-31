@@ -3041,10 +3041,17 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
           p => p.email && p.email.toLowerCase() === speakerInfo.email.toLowerCase()
         );
 
+        // CRM Phase 1: Include googleContactId (resourceName) from Google Contacts
         const participantData = {
           name: speakerInfo.name || (contact ? contact.name : speakerInfo.email),
           email: speakerInfo.email,
         };
+
+        // Add Google Contact ID if available
+        if (contact && contact.resourceName) {
+          participantData.googleContactId = contact.resourceName;
+          participantData.organization = contact.organization || null;
+        }
 
         if (existingIndex !== -1) {
           // Update existing participant with email
@@ -3068,10 +3075,12 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
               p => p.email && p.email.toLowerCase() === email.toLowerCase()
             );
 
+            // CRM Phase 1: Include googleContactId (resourceName) from Google Contacts
             const participantData = {
               name: contact.name || speakerInfo.name,
               email: email,
               organization: contact.organization || null,
+              googleContactId: contact.resourceName || null, // CRM Phase 1
               matchedByName: true,
             };
 
@@ -3253,6 +3262,25 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
       meeting.participants = deduplicateParticipants(meeting.participants);
     }
 
+    // CRM Phase 1: Enrich participants with googleContactId from contacts cache
+    // This is the ROBUST approach - always look up from cache, don't rely on capture at every code path
+    if (meeting.participants && meeting.participants.length > 0 && googleContacts && googleContacts.isAuthenticated()) {
+      for (const participant of meeting.participants) {
+        // If participant has email but no googleContactId, look it up from cache
+        if (participant.email && !participant.googleContactId) {
+          try {
+            const contact = await googleContacts.findContactByEmail(participant.email);
+            if (contact && contact.resourceName) {
+              participant.googleContactId = contact.resourceName;
+              console.log(`[ObsidianExport] Enriched "${participant.name}" with googleContactId: ${contact.resourceName}`);
+            }
+          } catch (err) {
+            // Silently continue - this is just enrichment
+          }
+        }
+      }
+    }
+
     // Get routing decisions (or use manual override)
     let routes;
     if (routingOverride) {
@@ -3346,7 +3374,8 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
       }
 
       // Generate summary markdown (primary file)
-      const summaryContent = generateSummaryMarkdown(meeting, baseFilename);
+      // Pass route info for company linking (CRM Phase 1)
+      const summaryContent = generateSummaryMarkdown(meeting, baseFilename, route);
       fs.writeFileSync(summaryPath, summaryContent, 'utf8');
       console.log(`[ObsidianExport] Created summary: ${summaryPath}`);
 
@@ -3395,25 +3424,58 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
 
 /**
  * Generate summary markdown file with rich frontmatter
+ * CRM Phase 1: Enhanced frontmatter with structured attendees and company linking
+ * @param {Object} meeting - Meeting data
+ * @param {string} baseFilename - Base filename for the meeting
+ * @param {Object} route - Optional routing decision with organization info
  */
-function generateSummaryMarkdown(meeting, baseFilename) {
+function generateSummaryMarkdown(meeting, baseFilename, route = null) {
   const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
   const dateStr = meetingDate.toISOString().split('T')[0];
   const title = meeting.title || 'Untitled Meeting';
 
-  // Build participants as simple list of wiki-links for clean Obsidian display
-  // Obsidian Properties view displays simple string lists as nice pills/tags
-  const participantNames = [];
-  const participantEmails = [];
+  // CRM Phase 1: Build structured attendees array
+  // Filter out "Summary" placeholder and build clean attendee objects
+  const attendees = [];
+  const participantNames = []; // Legacy format for backwards compatibility
+  const participantEmails = []; // Legacy format for backwards compatibility
 
   // Use meeting.participants (from participant join events) if available
   if (meeting.participants && meeting.participants.length > 0) {
     for (const participant of meeting.participants) {
-      if (participant.name) {
-        // Use wiki-link format so participants link to contact pages
-        participantNames.push(`"[[${participant.name}]]"`);
+      // Skip "Summary" placeholder entries
+      if (
+        !participant.name ||
+        participant.name.toLowerCase() === 'summary' ||
+        participant.name.toLowerCase().includes('summary')
+      ) {
+        continue;
       }
+
+      // Build structured attendee object for CRM
+      const attendee = {
+        name: participant.name.replace(/^\[\[|\]\]$/g, ''), // Strip wiki-link syntax if present
+      };
+
       if (participant.email) {
+        attendee.email = participant.email;
+      }
+
+      // Include Google Contact ID if available
+      if (participant.googleContactId) {
+        attendee.google_contact_id = participant.googleContactId;
+      }
+
+      // Dedupe: only add if name not already in attendees
+      if (!attendees.some(a => a.name === attendee.name)) {
+        attendees.push(attendee);
+      }
+
+      // Legacy format: wiki-links for backwards compatibility
+      if (!participantNames.includes(`"[[${attendee.name}]]"`)) {
+        participantNames.push(`"[[${attendee.name}]]"`);
+      }
+      if (participant.email && !participantEmails.includes(`"${participant.email}"`)) {
         participantEmails.push(`"${participant.email}"`);
       }
     }
@@ -3426,7 +3488,16 @@ function generateSummaryMarkdown(meeting, baseFilename) {
       if (meeting.speakerMapping) {
         const mapping = Object.values(meeting.speakerMapping).find(m => m.email === email);
         if (mapping && mapping.name) {
-          participantNames.push(`"[[${mapping.name}]]"`);
+          const name = mapping.name.replace(/^\[\[|\]\]$/g, '');
+          participantNames.push(`"[[${name}]]"`);
+
+          // Also add to structured attendees
+          const attendee = { name };
+          if (email) attendee.email = email;
+          if (mapping.googleContactId) attendee.google_contact_id = mapping.googleContactId;
+          if (!attendees.some(a => a.name === name)) {
+            attendees.push(attendee);
+          }
         }
       }
     }
@@ -3436,30 +3507,72 @@ function generateSummaryMarkdown(meeting, baseFilename) {
   const tags = ['meeting'];
   if (meeting.platform) tags.push(meeting.platform.toLowerCase());
 
-  // Build frontmatter with simple lists that Obsidian displays nicely
-  // RS-2: Include meeting_id for stale link detection
-  let markdown = `---
-title: "${title}"
-date: ${dateStr}
-meeting_id: "${meeting.id || ''}"
-platform: "${meeting.platform || 'unknown'}"
-transcript_file: "${baseFilename}-transcript.md"
-participants: [${participantNames.join(', ')}]
-participant_emails: [${participantEmails.join(', ')}]
-tags: [${tags.join(', ')}]
-meeting_type: "external"
----
+  // CRM Phase 1: Determine company info from route
+  // Look up organization name from routing config (not from route object which only has slug)
+  let companyName = null;
+  let companySlug = null;
 
-# ${title}
+  if (route && (route.type === 'client' || route.type === 'industry') && routingEngine) {
+    const config = routingEngine.getConfig();
+    if (config) {
+      if (route.type === 'client' && config.clients && config.clients[route.slug]) {
+        companyName = config.clients[route.slug].name || route.slug;
+        companySlug = route.slug;
+      } else if (route.type === 'industry' && config.industry && config.industry[route.slug]) {
+        companyName = config.industry[route.slug].name || route.slug;
+        companySlug = route.slug;
+      }
+    }
+  }
 
-**Date:** ${meetingDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-**Platform:** ${meeting.platform || 'Unknown'}
+  // Determine meeting type (internal vs external)
+  const meetingType = route?.type === 'internal' ? 'internal' : 'external';
 
----
+  // CRM Phase 1: Build YAML frontmatter with structured attendees
+  // Using js-yaml style for nested objects
+  let markdown = `---\ntype: meeting\n`;
+  markdown += `title: "${title}"\n`;
+  markdown += `date: ${dateStr}\n`;
+  markdown += `platform: "${meeting.platform || 'unknown'}"\n`;
+  markdown += `meeting_type: "${meetingType}"\n`;
+  markdown += `meeting_id: "${meeting.id || ''}"\n`;
 
-## Meeting Summary
+  // Company linking (if available)
+  if (companyName) {
+    markdown += `\n# Company linking\n`;
+    markdown += `company: "[[${companyName}]]"\n`;
+    markdown += `company_slug: "${companySlug}"\n`;
+  }
 
-`;
+  // Structured attendees array (CRM Phase 1)
+  if (attendees.length > 0) {
+    markdown += `\n# Attendees - structured format with optional Google Contact ID\n`;
+    markdown += `attendees:\n`;
+    for (const attendee of attendees) {
+      markdown += `  - name: "${attendee.name}"\n`;
+      if (attendee.email) {
+        markdown += `    email: "${attendee.email}"\n`;
+      }
+      if (attendee.google_contact_id) {
+        markdown += `    google_contact_id: "${attendee.google_contact_id}"\n`;
+      }
+    }
+  }
+
+  // Legacy fields for backwards compatibility
+  markdown += `\n# Legacy fields - KEEP for backwards compatibility\n`;
+  markdown += `participants: [${participantNames.join(', ')}]\n`;
+  markdown += `participant_emails: [${participantEmails.join(', ')}]\n`;
+
+  markdown += `\ntranscript_file: "${baseFilename}-transcript.md"\n`;
+  markdown += `tags: [${tags.join(', ')}]\n`;
+  markdown += `---\n\n`;
+
+  markdown += `# ${title}\n\n`;
+  markdown += `**Date:** ${meetingDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}\n`;
+  markdown += `**Platform:** ${meeting.platform || 'Unknown'}\n`;
+
+  markdown += `\n---\n\n## Meeting Summary\n\n`;
 
   // Add summaries if they exist
   if (meeting.summaries && meeting.summaries.length > 0) {
@@ -3672,11 +3785,25 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
           continue;
         }
 
+        // CRM Phase 1: Look up googleContactId from cache if not already present
+        let googleContactId = mapping.googleContactId || null;
+        if (!googleContactId && mapping.email && googleContacts && googleContacts.isAuthenticated()) {
+          try {
+            const contact = await googleContacts.findContactByEmail(mapping.email);
+            if (contact && contact.resourceName) {
+              googleContactId = contact.resourceName;
+            }
+          } catch (err) {
+            // Silently continue
+          }
+        }
+
         const contactData = {
           name: mapping.name,
           emails: [mapping.email],
           phones: [],
           organization: mapping.organization || '',
+          resourceName: googleContactId || '',
         };
 
         const result = vaultStructure.createContactPage(contactData);
@@ -4624,10 +4751,11 @@ ipcMain.handle('contacts:rematchParticipants', async (event, meetingId) => {
             rebuiltParticipants.push({
               name: info.name,
               email: info.email || null,
+              googleContactId: info.googleContactId || null, // CRM Phase 1
               contactMatched: !!info.email,
               fromSpeakerMapping: true,
             });
-            console.log(`[Contacts IPC] From speakerMapping: "${info.name}" (email: ${info.email || 'none'})`);
+            console.log(`[Contacts IPC] From speakerMapping: "${info.name}" (email: ${info.email || 'none'})${info.googleContactId ? ` [${info.googleContactId}]` : ''}`);
           }
         }
       }
@@ -4665,8 +4793,9 @@ ipcMain.handle('contacts:rematchParticipants', async (event, meetingId) => {
           if (contact && contact.emails && contact.emails.length > 0) {
             rebuiltParticipant.email = contact.emails[0];
             rebuiltParticipant.organization = contact.organization || null;
+            rebuiltParticipant.googleContactId = contact.resourceName || null; // CRM Phase 1
             rebuiltParticipant.contactMatched = true;
-            console.log(`[Contacts IPC] "${originalName}" -> email: ${contact.emails[0]} (name preserved)`);
+            console.log(`[Contacts IPC] "${originalName}" -> email: ${contact.emails[0]} (name preserved)${contact.resourceName ? ` [${contact.resourceName}]` : ''}`);
           } else {
             rebuiltParticipant.email = null;
             rebuiltParticipant.contactMatched = false;
@@ -4712,6 +4841,7 @@ ipcMain.handle('contacts:rematchParticipants', async (event, meetingId) => {
           if (contact && contact.emails && contact.emails.length > 0) {
             rebuiltParticipant.email = contact.emails[0];
             rebuiltParticipant.organization = contact.organization || null;
+            rebuiltParticipant.googleContactId = contact.resourceName || null; // CRM Phase 1
             rebuiltParticipant.contactMatched = true;
           }
         } catch (err) {
@@ -4982,16 +5112,19 @@ ipcMain.handle(
 
       // Find contact info for the participant email
       let participantName = participantEmail;
+      let googleContactId = null; // CRM Phase 1
       if (googleContacts && googleContacts.isAuthenticated()) {
         const contact = await googleContacts.findContactByEmail(participantEmail);
         if (contact) {
           participantName = contact.name;
+          googleContactId = contact.resourceName || null; // CRM Phase 1
         }
       }
 
       meeting.speakerMapping[speakerLabel] = {
         email: participantEmail,
         name: participantName,
+        googleContactId: googleContactId, // CRM Phase 1
         confidence: 'manual',
         method: 'user-correction',
       };
@@ -7070,6 +7203,19 @@ function formatDuration(seconds) {
     return `${hrs}h ${mins}m`;
   }
   return `${mins} minutes`;
+}
+
+/**
+ * CRM Phase 1: Convert a string to a URL/filename-safe slug
+ * @param {string} text - Text to slugify
+ * @returns {string} Slugified text
+ */
+function slugifyForFilename(text) {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 // IM-1: Audio file extensions for import
@@ -9624,6 +9770,7 @@ async function processParticipantJoin(evt) {
     let participantEmail = participantData.email || null;
     let contactMatched = false;
     let organization = null;
+    let googleContactId = null; // CRM Phase 1: Google Contact resourceName
 
     // SM-1: Log full participant data to see what SDK provides
     console.log(
@@ -9655,9 +9802,10 @@ async function processParticipantJoin(evt) {
         if (contact && contact.emails && contact.emails.length > 0) {
           participantEmail = contact.emails[0];
           organization = contact.organization || null;
+          googleContactId = contact.resourceName || null; // CRM Phase 1
           contactMatched = true;
           console.log(
-            `[ParticipantJoin] Matched "${participantName}" to contact "${contact.name}" (${participantEmail})`
+            `[ParticipantJoin] Matched "${participantName}" to contact "${contact.name}" (${participantEmail})${googleContactId ? ` [${googleContactId}]` : ''}`
           );
         }
       } catch (contactError) {
@@ -9696,6 +9844,7 @@ async function processParticipantJoin(evt) {
         joinTime: new Date().toISOString(),
         status: 'active',
         ...(organization && { organization }),
+        ...(googleContactId && { googleContactId }), // CRM Phase 1
         ...(contactMatched && { matchedByName: true }),
       };
 

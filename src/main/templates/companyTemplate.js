@@ -22,6 +22,7 @@ function generateCompanyPage(company, options = {}) {
   } = options;
 
   // Generate frontmatter
+  // CRM Phase 1: Added google_org_names for Google Contacts organization matching
   const frontmatter = {
     type: 'company',
     name: name,
@@ -31,6 +32,9 @@ function generateCompanyPage(company, options = {}) {
     website: website || (domain ? `https://${domain}` : null),
     contacts: contacts.length > 0 ? contacts.map(c => `"[[${c}]]"`) : null,
     routing_folder: routingFolder || null,
+    // CRM Phase 1: Organization names as they appear in Google Contacts (for matching)
+    // Start with primary name; user can add variants manually
+    google_org_names: [name],
     tags: ['company', ...additionalTags],
     created: new Date().toISOString().split('T')[0],
   };
