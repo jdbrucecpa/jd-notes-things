@@ -34,11 +34,7 @@ export async function initializeSecurityPanel() {
  * Set up event listeners for security panel
  */
 function setupEventListeners() {
-  // Migration button
-  const migrateBtn = document.getElementById('migrateKeysBtn');
-  if (migrateBtn) {
-    migrateBtn.addEventListener('click', handleMigration);
-  }
+  // Reserved for future event listeners
 }
 
 /**
@@ -66,10 +62,6 @@ async function loadAPIKeys() {
     }
 
     const keys = result.data;
-
-    // Check if migration is needed (any keys in .env but not in credential manager)
-    const needsMigration = keys.some(key => !key.hasValue);
-    showMigrationNotice(needsMigration);
 
     console.log('[SecuritySettings] Rendering', keys.length, 'API keys');
 
@@ -131,51 +123,6 @@ async function loadAPIKeys() {
         </td>
       </tr>
     `;
-  }
-}
-
-/**
- * Show or hide migration notice
- */
-function showMigrationNotice(show) {
-  const notice = document.getElementById('migrationNotice');
-  if (notice) {
-    notice.style.display = show ? 'flex' : 'none';
-  }
-}
-
-/**
- * Handle API key migration
- */
-async function handleMigration() {
-  const btn = document.getElementById('migrateKeysBtn');
-  if (!btn) return;
-
-  try {
-    btn.disabled = true;
-    btn.textContent = 'Migrating...';
-
-    const result = await window.electronAPI.keysMigrate();
-
-    if (!result.success) {
-      throw new Error(result.error || 'Migration failed');
-    }
-
-    const { migrated, failed, skipped } = result.data;
-
-    notifySuccess(`Migration complete: ${migrated.length} migrated, ${failed.length} failed, ${skipped.length} skipped`);
-
-    if (failed.length > 0) {
-      console.error('[SecuritySettings] Migration failures:', failed);
-    }
-
-    // Reload keys table
-    await loadAPIKeys();
-  } catch (error) {
-    console.error('[SecuritySettings] Migration failed:', error);
-    notifyError(error, { prefix: 'Migration failed:' });
-    btn.disabled = false;
-    btn.textContent = 'Migrate Keys from .env';
   }
 }
 

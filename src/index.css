@@ -923,7 +923,6 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 
 .toolbar-icon-btn.connected .toolbar-status-badge {
   background: var(--status-success);
-  animation: pulse 2s ease-in-out infinite;
 }
 
 .toolbar-status-badge.disconnected {

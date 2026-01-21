@@ -185,6 +185,45 @@ class GoogleCalendar {
    * @private
    */
   _detectPlatform(event) {
+    // Check conferenceData first (used when adding video conferencing via Google Calendar dropdown)
+    if (event.conferenceData) {
+      const confSolution = event.conferenceData.conferenceSolution?.name?.toLowerCase() || '';
+      const confType = event.conferenceData.conferenceSolution?.key?.type?.toLowerCase() || '';
+
+      // Check conference solution name and type
+      if (confSolution.includes('zoom') || confType.includes('zoom')) {
+        return 'zoom';
+      }
+      if (confSolution.includes('teams') || confType.includes('teams')) {
+        return 'teams';
+      }
+      if (confSolution.includes('webex') || confType.includes('webex')) {
+        return 'webex';
+      }
+      if (confSolution.includes('whereby') || confType.includes('whereby')) {
+        return 'whereby';
+      }
+
+      // Check entry point URIs for platform detection
+      const entryPoints = event.conferenceData.entryPoints || [];
+      for (const entry of entryPoints) {
+        const uri = entry.uri || '';
+        if (uri.match(/zoom\.us|zoomgov\.com/i)) {
+          return 'zoom';
+        }
+        if (uri.match(/teams\.microsoft\.com|teams\.live\.com/i)) {
+          return 'teams';
+        }
+        if (uri.match(/webex\.com/i)) {
+          return 'webex';
+        }
+        if (uri.match(/whereby\.com/i)) {
+          return 'whereby';
+        }
+      }
+    }
+
+    // Fall back to checking description, location, and hangoutLink
     const text = `${event.description || ''} ${event.location || ''} ${event.hangoutLink || ''}`;
 
     if (event.hangoutLink || text.includes('meet.google.com')) {
@@ -213,6 +252,20 @@ class GoogleCalendar {
   _extractMeetingLink(event, platform) {
     if (event.hangoutLink) {
       return event.hangoutLink;
+    }
+
+    // Check conferenceData entry points (used when adding video conferencing via dropdown)
+    if (event.conferenceData?.entryPoints) {
+      // Prefer video entry point, fall back to others
+      const videoEntry = event.conferenceData.entryPoints.find(e => e.entryPointType === 'video');
+      if (videoEntry?.uri) {
+        return videoEntry.uri;
+      }
+      // Fall back to any entry point with a URI
+      const anyEntry = event.conferenceData.entryPoints.find(e => e.uri);
+      if (anyEntry?.uri) {
+        return anyEntry.uri;
+      }
     }
 
     const text = `${event.description || ''} ${event.location || ''}`;

@@ -457,6 +457,12 @@
               <!-- Summary Tab -->
               <div class="tab-content active" id="summaryTab">
                 <div class="summary-actions">
+                  <button class="btn btn-outline btn-sm" id="regenerateSummaryBtn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
+                    </svg>
+                    Regenerate
+                  </button>
                   <button class="btn btn-outline btn-sm" id="editSummaryBtn" style="display: none;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/>
@@ -529,15 +535,6 @@
             </div>
           </div>
 
-          <!-- Action Buttons -->
-          <div class="meeting-actions">
-            <button class="btn-subtle" id="regenerateSummaryBtn">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
-              </svg>
-              Regenerate Summary
-            </button>
-          </div>
         </div>
 
           <aside class="sidebar" id="sidebar" style="display:none;">
@@ -596,7 +593,7 @@
             <div class="upload-progress-text" id="uploadProgressText">Uploading 0%</div>
           </div>
           <div class="control-buttons">
-            <button class="control-btn record-btn" id="recordButton">
+            <button class="control-btn record-btn" id="recordButton" title="Start Recording">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="record-icon">
                 <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" fill="currentColor"/>
                 <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" fill="currentColor"/>
@@ -1571,16 +1568,6 @@
               <h3 class="settings-section-title">API Key Management</h3>
               <div class="settings-item-description" style="margin-bottom: 16px;">
                 Securely store API keys in Windows Credential Manager. Keys are encrypted and protected by your Windows account.
-              </div>
-
-              <!-- Migration Notice -->
-              <div class="migration-notice" id="migrationNotice" style="display: none;">
-                <div class="migration-notice-icon">⚠️</div>
-                <div class="migration-notice-content">
-                  <strong>Migration Required</strong>
-                  <p>We detected API keys in your .env file. Click "Migrate Keys" to move them to secure storage.</p>
-                  <button class="btn-primary" id="migrateKeysBtn">Migrate Keys from .env</button>
-                </div>
               </div>
 
               <!-- API Keys Table -->

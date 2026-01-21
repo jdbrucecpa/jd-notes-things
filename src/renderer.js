@@ -681,6 +681,7 @@ function updateRecordingButtonUI(isActive, recordingId) {
 
     // Update button UI
     recordButton.classList.add('recording');
+    recordButton.title = 'Stop Recording';
     recordIcon.style.display = 'none';
     stopIcon.style.display = 'block';
 
@@ -696,6 +697,7 @@ function updateRecordingButtonUI(isActive, recordingId) {
 
     // Update button UI
     recordButton.classList.remove('recording');
+    recordButton.title = 'Start Recording';
     recordIcon.style.display = 'block';
     stopIcon.style.display = 'none';
 
@@ -5330,11 +5332,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       // Generate vault path based on type
       const vaultPath = type === 'client' ? `clients/${slug}` : `industry/${slug}`;
-      // Convert route type to YAML section name for API call
-      const yamlSectionType = type === 'client' ? 'clients' : 'industry';
 
       const result = await window.electronAPI.routingAddOrganization(
-        yamlSectionType,
+        type, // Pass the type directly ("client" or "industry") - main process handles YAML conversion
         slug,
         vaultPath,
         emails,
