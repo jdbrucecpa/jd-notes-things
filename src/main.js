@@ -1777,10 +1777,12 @@ app.whenReady().then(async () => {
   if (!process.env.ELECTRON_IS_DEV && app.isPackaged) {
     logger.main.info('[AutoUpdater] Initializing auto-updater...');
     try {
+      // Use notifyUser: false to disable the default popup dialog
+      // We'll handle notifications ourselves with a custom in-app banner
       updateElectronApp({
         repo: 'jdbrucecpa/jd-notes-things',
         updateInterval: '1 hour',
-        notifyUser: true,
+        notifyUser: false, // Disable default popup - we use custom UI
         logger: {
           log: (...args) => logger.main.info('[AutoUpdater]', ...args),
           info: (...args) => logger.main.info('[AutoUpdater]', ...args),
@@ -1788,12 +1790,84 @@ app.whenReady().then(async () => {
           error: (...args) => logger.main.error('[AutoUpdater]', ...args),
         },
       });
+
+      // Set up custom update event handlers for in-app notification
+      const { autoUpdater } = require('electron');
+
+      autoUpdater.on('checking-for-update', () => {
+        logger.main.info('[AutoUpdater] Checking for updates...');
+        sendUpdateState('checking');
+      });
+
+      autoUpdater.on('update-available', () => {
+        logger.main.info('[AutoUpdater] Update available, downloading...');
+        // Fetch release info from GitHub to get version details
+        fetchLatestReleaseInfo().then(releaseInfo => {
+          sendUpdateState('downloading', releaseInfo);
+        });
+      });
+
+      autoUpdater.on('update-not-available', () => {
+        logger.main.info('[AutoUpdater] No update available');
+        sendUpdateState('up-to-date');
+      });
+
+      autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
+        logger.main.info('[AutoUpdater] Update downloaded:', releaseName);
+        fetchLatestReleaseInfo().then(releaseInfo => {
+          sendUpdateState('ready', {
+            ...releaseInfo,
+            releaseName: releaseName || releaseInfo?.version,
+          });
+        });
+      });
+
+      autoUpdater.on('error', error => {
+        logger.main.error('[AutoUpdater] Error:', error);
+        sendUpdateState('error', { message: error?.message || 'Update failed' });
+      });
+
       logger.main.info('[AutoUpdater] Auto-updater initialized successfully');
     } catch (error) {
       logger.main.error('[AutoUpdater] Failed to initialize auto-updater:', error);
     }
   } else {
     logger.main.info('[AutoUpdater] Skipping auto-updater in development mode');
+  }
+
+  /**
+   * Send update state to renderer process
+   */
+  function sendUpdateState(state, data = {}) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-state-changed', { state, ...data });
+    }
+  }
+
+  /**
+   * Fetch latest release info from GitHub API
+   */
+  async function fetchLatestReleaseInfo() {
+    try {
+      const response = await axios.get(
+        'https://api.github.com/repos/jdbrucecpa/jd-notes-things/releases/latest',
+        {
+          headers: { Accept: 'application/vnd.github.v3+json' },
+          timeout: 10000,
+        }
+      );
+      const release = response.data;
+      return {
+        version: release.tag_name,
+        name: release.name,
+        body: release.body, // Release notes (markdown)
+        publishedAt: release.published_at,
+        htmlUrl: release.html_url,
+      };
+    } catch (error) {
+      logger.main.warn('[AutoUpdater] Failed to fetch release info:', error.message);
+      return null;
+    }
   }
 
   // When the window is ready, send the initial meeting detection status
@@ -7640,6 +7714,44 @@ ipcMain.handle('settings:checkForUpdates', async () => {
     return {
       success: false,
       message: error.message,
+    };
+  }
+});
+
+// Install downloaded update and restart the app
+ipcMain.handle('settings:installUpdate', async () => {
+  logger.main.info('[AutoUpdater] Install update requested');
+
+  if (process.env.ELECTRON_IS_DEV || !app.isPackaged) {
+    return {
+      success: false,
+      message: 'Auto-updates are not available in development mode',
+    };
+  }
+
+  try {
+    const { autoUpdater } = require('electron');
+
+    // CRITICAL: Set isQuitting flag BEFORE calling quitAndInstall
+    // This prevents the 'close' handler from intercepting and hiding to tray
+    app.isQuitting = true;
+
+    logger.main.info('[AutoUpdater] Setting isQuitting=true and calling quitAndInstall...');
+
+    // Give a brief moment for the flag to be set, then quit and install
+    // quitAndInstall() will close the app and run the installer
+    setImmediate(() => {
+      autoUpdater.quitAndInstall();
+    });
+
+    return { success: true, message: 'Installing update...' };
+  } catch (error) {
+    logger.main.error('[AutoUpdater] Install update failed:', error);
+    // Reset the flag if install fails
+    app.isQuitting = false;
+    return {
+      success: false,
+      message: error.message || 'Failed to install update',
     };
   }
 });

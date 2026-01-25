@@ -34,6 +34,153 @@ import teamsLogo from './assets/teams.png';
 import meetLogo from './assets/meet.png';
 
 // ===================================================================
+// Update Banner (improved auto-updater UX)
+// ===================================================================
+
+/**
+ * Initialize the update banner for handling app updates
+ * Shows non-intrusive notifications when updates are available
+ */
+function initializeUpdateBanner() {
+  const banner = document.getElementById('updateBanner');
+  const message = document.getElementById('updateBannerMessage');
+  const version = document.getElementById('updateBannerVersion');
+  const actionBtn = document.getElementById('updateBannerAction');
+  const dismissBtn = document.getElementById('updateBannerDismiss');
+  const progress = document.getElementById('updateBannerProgress');
+
+  if (!banner || !message || !actionBtn || !dismissBtn) {
+    console.warn('[UpdateBanner] Banner elements not found');
+    return;
+  }
+
+  let currentState = null;
+  let dismissedForSession = false;
+
+  // Handle update state changes from main process
+  window.electronAPI.onUpdateStateChanged(data => {
+    console.log('[UpdateBanner] State changed:', data);
+    currentState = data.state;
+
+    // Don't show if user dismissed (except for 'ready' state - always show that)
+    if (dismissedForSession && data.state !== 'ready') {
+      return;
+    }
+
+    // Remove previous state classes
+    banner.classList.remove('state-ready', 'state-error', 'state-downloading', 'state-checking');
+
+    switch (data.state) {
+      case 'checking':
+        showBanner();
+        message.textContent = 'Checking for updates...';
+        version.textContent = '';
+        actionBtn.style.display = 'none';
+        progress.style.display = 'none';
+        banner.classList.add('state-checking');
+        break;
+
+      case 'downloading':
+        showBanner();
+        message.textContent = 'Downloading update...';
+        version.textContent = data.version ? `Version ${data.version}` : '';
+        actionBtn.style.display = 'none';
+        progress.style.display = 'block';
+        banner.classList.add('state-downloading');
+        break;
+
+      case 'ready':
+        showBanner();
+        dismissedForSession = false; // Reset dismiss state - always show ready
+        message.textContent = 'Update ready to install';
+        version.textContent = data.version
+          ? `Version ${data.version} downloaded`
+          : 'Restart to apply';
+        actionBtn.textContent = 'Restart Now';
+        actionBtn.style.display = 'block';
+        progress.style.display = 'none';
+        banner.classList.add('state-ready');
+        break;
+
+      case 'up-to-date':
+        // Briefly show "up to date" message then hide
+        message.textContent = 'You\'re up to date!';
+        version.textContent = '';
+        actionBtn.style.display = 'none';
+        progress.style.display = 'none';
+        showBanner();
+        setTimeout(() => hideBanner(), 3000);
+        break;
+
+      case 'error':
+        message.textContent = 'Update failed';
+        version.textContent = data.message || 'Please try again later';
+        actionBtn.textContent = 'Retry';
+        actionBtn.style.display = 'block';
+        progress.style.display = 'none';
+        banner.classList.add('state-error');
+        showBanner();
+        break;
+
+      default:
+        hideBanner();
+    }
+  });
+
+  // Action button click handler
+  actionBtn.addEventListener('click', async () => {
+    if (currentState === 'ready') {
+      // Install the update
+      actionBtn.textContent = 'Restarting...';
+      actionBtn.disabled = true;
+      try {
+        const result = await window.electronAPI.installUpdate();
+        if (!result.success) {
+          console.error('[UpdateBanner] Install failed:', result.message);
+          message.textContent = 'Failed to install';
+          version.textContent = result.message;
+          actionBtn.textContent = 'Retry';
+          actionBtn.disabled = false;
+        }
+      } catch (err) {
+        console.error('[UpdateBanner] Install error:', err);
+        actionBtn.textContent = 'Retry';
+        actionBtn.disabled = false;
+      }
+    } else if (currentState === 'error') {
+      // Retry checking for updates
+      hideBanner();
+      try {
+        await window.electronAPI.checkForUpdates();
+      } catch (err) {
+        console.error('[UpdateBanner] Retry failed:', err);
+      }
+    }
+  });
+
+  // Dismiss button click handler
+  dismissBtn.addEventListener('click', () => {
+    dismissedForSession = true;
+    hideBanner();
+  });
+
+  function showBanner() {
+    banner.classList.remove('hiding');
+    banner.style.display = 'block';
+  }
+
+  function hideBanner() {
+    banner.classList.add('hiding');
+    setTimeout(() => {
+      banner.style.display = 'none';
+      banner.classList.remove('hiding');
+    }, 300); // Match animation duration
+  }
+
+  console.log('[UpdateBanner] Initialized');
+}
+
+// ===================================================================
 // Custom Title Bar (Claude Desktop style)
 // ===================================================================
 function initializeTitleBar() {
@@ -182,8 +329,10 @@ function initializeTitleBar() {
       window.electronAPI.openExternal('https://github.com/jdbrucecpa/jd-notes-things');
     },
     menuCheckUpdates: async () => {
+      // The update banner will show the check progress and results
+      // Only show alert for dev mode where updates aren't available
       const result = await window.electronAPI.checkForUpdates();
-      if (!result.success) {
+      if (!result.success && result.message?.includes('development mode')) {
         alert(result.message);
       }
     },
@@ -1758,7 +1907,7 @@ async function handleGoogleButtonClick() {
           <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
           <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
         </svg>
-        <span id="googleStatus" class="google-status"></span>
+        <span class="toolbar-status-badge" id="googleStatus"></span>
       `;
     }
   }
@@ -3421,6 +3570,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize Custom Title Bar (Claude Desktop style)
   initializeTitleBar();
+
+  // Initialize Update Banner (improved auto-updater UX)
+  initializeUpdateBanner();
 
   // Initialize Settings UI (Phase 10.1)
   initializeSettingsUI();

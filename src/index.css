@@ -8406,3 +8406,190 @@ body.dark-theme .vocabulary-client-selector select option {
   color: var(--color-error);
   margin-top: 6px;
 }
+
+/* ===================================================================
+   Update Banner Styles
+   Non-intrusive banner for app updates (VS Code / Slack style)
+   =================================================================== */
+
+.update-banner {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  color: white;
+  padding: 0;
+  position: relative;
+  z-index: 100;
+  animation: updateBannerSlideDown 0.3s ease-out;
+}
+
+@keyframes updateBannerSlideDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes updateBannerSlideUp {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+
+.update-banner.hiding {
+  animation: updateBannerSlideUp 0.3s ease-in forwards;
+}
+
+.update-banner-content {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  gap: 12px;
+}
+
+.update-banner-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.update-banner-icon svg {
+  animation: updateIconSpin 2s linear infinite;
+}
+
+.update-banner.state-ready .update-banner-icon svg,
+.update-banner.state-error .update-banner-icon svg {
+  animation: none;
+}
+
+@keyframes updateIconSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.update-banner-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.update-banner-message {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.update-banner-version {
+  font-size: 11px;
+  opacity: 0.8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.update-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.update-banner-btn {
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.update-banner-btn-primary {
+  background: rgba(255, 255, 255, 0.95);
+  color: #4f46e5;
+  padding: 6px 14px;
+}
+
+.update-banner-btn-primary:hover {
+  background: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.update-banner-btn-primary:active {
+  transform: translateY(0);
+}
+
+.update-banner-btn-secondary {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  padding: 6px;
+  width: 28px;
+  height: 28px;
+}
+
+.update-banner-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.update-banner-progress {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  overflow: hidden;
+}
+
+.update-banner-progress-bar {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.8);
+  width: 30%;
+  animation: updateProgressIndeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes updateProgressIndeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(200%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+/* State variations */
+.update-banner.state-error {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+}
+
+.update-banner.state-ready {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+}
+
+/* Dark theme adjustments */
+body.dark-theme .update-banner-btn-primary {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+body.dark-theme .update-banner-btn-primary:hover {
+  background: white;
+}

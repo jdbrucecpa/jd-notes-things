@@ -127,6 +127,34 @@
       </div>
     </div>
 
+    <!-- Update Banner (shown when update is available/ready) -->
+    <div class="update-banner" id="updateBanner" style="display: none;">
+      <div class="update-banner-content">
+        <div class="update-banner-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="update-banner-text">
+          <span class="update-banner-message" id="updateBannerMessage">Checking for updates...</span>
+          <span class="update-banner-version" id="updateBannerVersion"></span>
+        </div>
+        <div class="update-banner-actions">
+          <button class="update-banner-btn update-banner-btn-primary" id="updateBannerAction" style="display: none;">
+            Restart
+          </button>
+          <button class="update-banner-btn update-banner-btn-secondary" id="updateBannerDismiss" title="Dismiss">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="update-banner-progress" id="updateBannerProgress" style="display: none;">
+        <div class="update-banner-progress-bar" id="updateBannerProgressBar"></div>
+      </div>
+    </div>
+
     <div class="app-container">
       <div id="mainView" style="display: block;">
       <!-- Compact Toolbar - Option 4 Design -->

@@ -209,6 +209,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Settings (Phase 10.1 + 10.3)
   getAppVersion: () => ipcRenderer.invoke('settings:getAppVersion'),
   checkForUpdates: () => ipcRenderer.invoke('settings:checkForUpdates'),
+  installUpdate: () => ipcRenderer.invoke('settings:installUpdate'),
+  onUpdateStateChanged: callback =>
+    ipcRenderer.on('update-state-changed', (_, data) => callback(data)),
   getVaultPath: () => ipcRenderer.invoke('settings:getVaultPath'),
   chooseVaultPath: () => ipcRenderer.invoke('settings:chooseVaultPath'),
   getProviderPreferences: () => ipcRenderer.invoke('settings:getProviderPreferences'),

@@ -813,6 +813,7 @@ export function initializeSettingsUI() {
   }
 
   // Check for Updates button handler
+  // Note: The update banner (at top of app) handles displaying update state
   const checkForUpdatesBtn = document.getElementById('checkForUpdatesBtn');
   const updateStatus = document.getElementById('updateStatus');
   if (checkForUpdatesBtn) {
@@ -825,9 +826,11 @@ export function initializeSettingsUI() {
 
       try {
         const result = await window.electronAPI.checkForUpdates();
+        // The update banner at the top of the app will show detailed status
+        // Here we just show a brief confirmation
         if (result.success) {
           if (updateStatus) {
-            updateStatus.textContent = result.message || 'Checking for updates...';
+            updateStatus.textContent = result.message || 'Check complete - see banner above';
           }
         } else {
           if (updateStatus) {
