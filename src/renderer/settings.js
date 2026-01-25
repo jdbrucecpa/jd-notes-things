@@ -30,6 +30,14 @@ const DEFAULT_SETTINGS = {
   azureEnabled: false, // Whether to show Azure options in model dropdowns
   azureEndpoint: '', // Azure OpenAI endpoint URL
   azureDeployments: [], // Array of { id, name, displayName, tier, inputPrice, outputPrice }
+  // CRM Integration settings (OCRM)
+  crmIntegration: {
+    enabled: false, // Master toggle for CRM integration
+    pathStructure: 'legacy', // 'legacy' | 'ocrm' - folder structure to use
+    useRequestQueue: false, // Write .crm/requests/ JSON files for obsidian-crm plugin
+    waitForAck: false, // Poll for acknowledgment from CRM plugin
+    ackTimeoutMs: 5000, // Timeout for acknowledgment polling
+  },
 };
 
 // Settings storage key
@@ -1643,3 +1651,143 @@ async function refreshStreamDeckStatus() {
     }
   }
 }
+
+// ===================================================================
+// OCRM: CRM Integration Settings
+// ===================================================================
+
+/**
+ * Initialize CRM Integration settings UI
+ */
+export function initializeCrmSettings() {
+  const settings = loadSettings();
+  const crmSettings = settings.crmIntegration || DEFAULT_SETTINGS.crmIntegration;
+
+  // Get DOM elements
+  const crmEnabledToggle = document.getElementById('crmEnabledToggle');
+  const crmSettingsContainer = document.getElementById('crmSettingsContainer');
+  const crmPathStructureSelect = document.getElementById('crmPathStructureSelect');
+  const crmRequestQueueToggle = document.getElementById('crmRequestQueueToggle');
+  const crmAckSettings = document.getElementById('crmAckSettings');
+  const crmWaitForAckToggle = document.getElementById('crmWaitForAckToggle');
+  const crmDocsLink = document.getElementById('crmDocsLink');
+
+  // Initialize UI state
+  if (crmEnabledToggle) {
+    if (crmSettings.enabled) {
+      crmEnabledToggle.classList.add('active');
+    }
+    if (crmSettingsContainer) {
+      crmSettingsContainer.style.display = crmSettings.enabled ? 'block' : 'none';
+    }
+  }
+
+  if (crmPathStructureSelect) {
+    crmPathStructureSelect.value = crmSettings.pathStructure || 'legacy';
+  }
+
+  if (crmRequestQueueToggle) {
+    if (crmSettings.useRequestQueue) {
+      crmRequestQueueToggle.classList.add('active');
+    }
+    if (crmAckSettings) {
+      crmAckSettings.style.display = crmSettings.useRequestQueue ? 'flex' : 'none';
+    }
+  }
+
+  if (crmWaitForAckToggle && crmSettings.waitForAck) {
+    crmWaitForAckToggle.classList.add('active');
+  }
+
+  // Event handlers
+  if (crmEnabledToggle) {
+    crmEnabledToggle.addEventListener('click', () => {
+      const enabled = crmEnabledToggle.classList.toggle('active');
+      updateCrmSetting('enabled', enabled);
+      if (crmSettingsContainer) {
+        crmSettingsContainer.style.display = enabled ? 'block' : 'none';
+      }
+      notifySuccess(enabled ? 'CRM Integration enabled' : 'CRM Integration disabled');
+
+      // Sync to main process
+      syncCrmSettingsToMain();
+    });
+  }
+
+  if (crmPathStructureSelect) {
+    crmPathStructureSelect.addEventListener('change', e => {
+      updateCrmSetting('pathStructure', e.target.value);
+      notifySuccess(`Path structure changed to ${e.target.value === 'ocrm' ? 'OCRM' : 'Legacy'}`);
+      syncCrmSettingsToMain();
+    });
+  }
+
+  if (crmRequestQueueToggle) {
+    crmRequestQueueToggle.addEventListener('click', () => {
+      const enabled = crmRequestQueueToggle.classList.toggle('active');
+      updateCrmSetting('useRequestQueue', enabled);
+      if (crmAckSettings) {
+        crmAckSettings.style.display = enabled ? 'flex' : 'none';
+      }
+      notifySuccess(enabled ? 'CRM Request Queue enabled' : 'CRM Request Queue disabled');
+      syncCrmSettingsToMain();
+    });
+  }
+
+  if (crmWaitForAckToggle) {
+    crmWaitForAckToggle.addEventListener('click', () => {
+      const enabled = crmWaitForAckToggle.classList.toggle('active');
+      updateCrmSetting('waitForAck', enabled);
+      notifySuccess(enabled ? 'Wait for acknowledgment enabled' : 'Wait for acknowledgment disabled');
+      syncCrmSettingsToMain();
+    });
+  }
+
+  if (crmDocsLink) {
+    crmDocsLink.addEventListener('click', e => {
+      e.preventDefault();
+      window.electronAPI?.openExternal('https://github.com/jdbruce-cpa/obsidian-crm');
+    });
+  }
+}
+
+/**
+ * Update a single CRM setting
+ */
+function updateCrmSetting(key, value) {
+  const settings = loadSettings();
+  if (!settings.crmIntegration) {
+    settings.crmIntegration = { ...DEFAULT_SETTINGS.crmIntegration };
+  }
+  settings.crmIntegration[key] = value;
+  saveSettings(settings);
+}
+
+/**
+ * Sync CRM settings to main process
+ */
+async function syncCrmSettingsToMain() {
+  try {
+    const settings = loadSettings();
+    if (window.electronAPI?.appUpdateSettings) {
+      await window.electronAPI.appUpdateSettings({
+        crmIntegration: settings.crmIntegration,
+      });
+    }
+  } catch (error) {
+    console.error('[CRM Settings] Error syncing to main process:', error);
+  }
+}
+
+/**
+ * Get CRM settings - exported for use by other modules
+ */
+export function getCrmSettings() {
+  const settings = loadSettings();
+  return settings.crmIntegration || DEFAULT_SETTINGS.crmIntegration;
+}
+
+// Initialize CRM settings when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+  initializeCrmSettings();
+});

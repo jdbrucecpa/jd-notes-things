@@ -28,6 +28,7 @@ const RoutingEngine = require('./main/routing/RoutingEngine');
 const ImportManager = require('./main/import/ImportManager');
 const TranscriptParser = require('./main/import/TranscriptParser');
 const PatternConfigLoader = require('./main/import/PatternConfigLoader');
+const { CrmRequestQueue } = require('./main/export/CrmRequestQueue');
 const { createLLMServiceFromCredentials } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
@@ -376,6 +377,14 @@ let appSettings = {
   streamDeck: {
     enabled: false, // v1.2: Enable Stream Deck WebSocket integration
   },
+  // OCRM: CRM Integration settings
+  crmIntegration: {
+    enabled: false, // Master toggle for CRM integration
+    pathStructure: 'legacy', // 'legacy' | 'ocrm' - folder structure to use
+    useRequestQueue: false, // Write .crm/requests/ JSON files
+    waitForAck: false, // Poll for acknowledgment from CRM plugin
+    ackTimeoutMs: 5000, // Timeout for acknowledgment polling
+  },
 };
 
 // Settings file path (Phase 10.7) - stored in config/ directory
@@ -408,6 +417,7 @@ function loadAppSettings() {
         notifications: { ...appSettings.notifications, ...savedSettings.notifications },
         shortcuts: { ...appSettings.shortcuts, ...savedSettings.shortcuts },
         streamDeck: { ...appSettings.streamDeck, ...savedSettings.streamDeck },
+        crmIntegration: { ...appSettings.crmIntegration, ...savedSettings.crmIntegration },
       };
       logger.main.info('App settings loaded successfully');
     }
@@ -1607,6 +1617,9 @@ app.whenReady().then(async () => {
   console.log('[ObsidianExport] Vault path:', vaultPath);
   vaultStructure = new VaultStructure(vaultPath);
 
+  // OCRM: Set settings provider for VaultStructure to access CRM integration settings
+  vaultStructure.setSettingsProvider(() => appSettings);
+
   // Always use userData/config for routing config (both dev and prod)
   // Dev uses jd-notes-things-dev, prod uses jd-notes-things
   const configPath = path.join(app.getPath('userData'), 'config', 'routing.yaml');
@@ -1618,6 +1631,8 @@ app.whenReady().then(async () => {
 
   try {
     routingEngine = new RoutingEngine(configPath);
+    // OCRM: Set settings provider for RoutingEngine to access CRM integration settings
+    routingEngine.setSettingsProvider(() => appSettings);
     console.log('[ObsidianExport] Routing engine initialized successfully');
 
     // Initialize vault structure
@@ -3484,6 +3499,45 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
             .replace(/\\/g, '/')
             .replace(/^\//, '')
         : null;
+
+    // OCRM: Write CRM request queue if enabled
+    const crmSettings = appSettings.crmIntegration || {};
+    if (crmSettings.enabled && crmSettings.useRequestQueue) {
+      try {
+        const crmQueue = new CrmRequestQueue(vaultStructure.vaultBasePath);
+
+        // Build structured attendees from participants
+        const attendees = (meeting.participants || [])
+          .filter(p => p.name && !p.name.toLowerCase().includes('summary'))
+          .map(p => ({
+            name: p.name.replace(/^\[\[|\]\]$/g, ''),
+            email: p.email || null,
+            google_contact_id: p.googleContactId || null,
+          }));
+
+        // Write meeting request
+        const firstRoute = routes[0] || {};
+        const meetingResult = await crmQueue.writeMeetingRequest(meeting, firstRoute, attendees);
+
+        if (meetingResult.success) {
+          console.log(`[ObsidianExport] CRM request written: ${meetingResult.id}`);
+
+          // Optionally wait for acknowledgment
+          if (crmSettings.waitForAck) {
+            const timeoutMs = crmSettings.ackTimeoutMs || 5000;
+            const ackResult = await crmQueue.checkAcknowledgment(meetingResult.id, timeoutMs);
+            if (ackResult.acknowledged) {
+              console.log('[ObsidianExport] CRM request acknowledged');
+            } else {
+              console.log('[ObsidianExport] CRM request acknowledgment timed out (non-blocking)');
+            }
+          }
+        }
+      } catch (crmError) {
+        // CRM queue errors should not fail the export
+        console.warn('[ObsidianExport] CRM request queue error (non-blocking):', crmError.message);
+      }
+    }
 
     return {
       success: true,

@@ -1,17 +1,61 @@
 /**
  * RoutingEngine - Determines where meeting notes should be saved based on participants
  * Phase 2: Routing System
+ * OCRM Integration: Supports dual path structure (legacy and OCRM)
  */
 
 const path = require('path');
 const ConfigLoader = require('./ConfigLoader');
 const EmailMatcher = require('./EmailMatcher');
 
+// OCRM path structure constants
+const OCRM_PATHS = {
+  meetingsClient: 'meetings/clients',
+  meetingsIndustry: 'meetings/industry',
+  meetingsInternal: 'meetings/internal',
+  meetingsUnfiled: 'meetings/_unfiled',
+};
+
 class RoutingEngine {
-  constructor(configPath = null) {
+  constructor(configPath = null, settingsProvider = null) {
     this.configLoader = new ConfigLoader(configPath);
     this.configLoader.load();
     this.emailMatcher = new EmailMatcher(this.configLoader);
+    // settingsProvider is a function that returns { crmIntegration: { enabled, pathStructure, ... } }
+    this._settingsProvider = settingsProvider;
+  }
+
+  /**
+   * Set the settings provider function (for lazy initialization)
+   * @param {Function} provider - Function that returns app settings
+   */
+  setSettingsProvider(provider) {
+    this._settingsProvider = provider;
+  }
+
+  /**
+   * Get CRM integration settings
+   * @returns {Object} CRM settings or defaults
+   */
+  getCrmSettings() {
+    if (this._settingsProvider) {
+      try {
+        const settings = this._settingsProvider();
+        return settings?.crmIntegration || { enabled: false, pathStructure: 'legacy' };
+      } catch (e) {
+        console.warn('[RoutingEngine] Failed to get CRM settings:', e.message);
+      }
+    }
+    return { enabled: false, pathStructure: 'legacy' };
+  }
+
+  /**
+   * Check if OCRM path structure is enabled
+   * @returns {boolean} True if using OCRM paths
+   */
+  isOcrmEnabled() {
+    const crmSettings = this.getCrmSettings();
+    return crmSettings.enabled && crmSettings.pathStructure === 'ocrm';
   }
 
   /**
@@ -158,7 +202,20 @@ class RoutingEngine {
 
   /**
    * Build a route object with path and metadata
+   * Supports both legacy and OCRM path structures
    * @private
+   *
+   * OCRM paths:
+   * - Client: meetings/clients/{slug}/{date-title}.md (flat file)
+   * - Industry: meetings/industry/{slug}/{date-title}.md
+   * - Internal: meetings/internal/{date-title}.md
+   * - Unfiled: meetings/_unfiled/{date-title}.md (no YYYY-MM)
+   *
+   * Legacy paths:
+   * - Client: {vault_path}/meetings/{date-title}/ (folder)
+   * - Industry: {vault_path}/meetings/{date-title}/
+   * - Internal: {vault_path}/meetings/{date-title}/
+   * - Unfiled: _unfiled/{YYYY-MM}/meetings/{date-title}/
    */
   _buildRoute(type, slug, meetingTitle, meetingDate) {
     const config = this.configLoader.getConfig();
@@ -166,23 +223,48 @@ class RoutingEngine {
     const dateStr = this._formatDate(date);
     const titleSlug = this._slugify(meetingTitle || 'untitled-meeting');
     const folderName = `${dateStr}-${titleSlug}`;
+    const useOcrm = this.isOcrmEnabled();
 
     let basePath;
-    if (type === 'client') {
-      const clientConfig = config.clients[slug];
-      basePath = clientConfig.vault_path;
-    } else if (type === 'industry') {
-      const industryConfig = config.industry[slug];
-      basePath = industryConfig.vault_path;
-    } else if (type === 'internal') {
-      basePath = config.internal.vault_path;
-    } else {
-      // Unfiled - organize by year-month
-      const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      basePath = path.join(config.settings.unfiled_path, yearMonth);
-    }
+    let fullPath;
 
-    const fullPath = path.join(basePath, 'meetings', folderName);
+    if (useOcrm) {
+      // OCRM path structure: meetings/{category}/{slug}/{date-title}
+      // Files go directly in the slug folder (flat structure)
+      if (type === 'client') {
+        basePath = path.join(OCRM_PATHS.meetingsClient, slug);
+        fullPath = path.join(basePath, folderName);
+      } else if (type === 'industry') {
+        basePath = path.join(OCRM_PATHS.meetingsIndustry, slug);
+        fullPath = path.join(basePath, folderName);
+      } else if (type === 'internal') {
+        basePath = OCRM_PATHS.meetingsInternal;
+        fullPath = path.join(basePath, folderName);
+      } else {
+        // Unfiled - no YYYY-MM subfolder in OCRM mode
+        basePath = OCRM_PATHS.meetingsUnfiled;
+        fullPath = path.join(basePath, folderName);
+      }
+
+      console.log(`[RoutingEngine] OCRM route: ${fullPath}`);
+    } else {
+      // Legacy path structure: {vault_path}/meetings/{date-title}
+      if (type === 'client') {
+        const clientConfig = config.clients[slug];
+        basePath = clientConfig.vault_path;
+      } else if (type === 'industry') {
+        const industryConfig = config.industry[slug];
+        basePath = industryConfig.vault_path;
+      } else if (type === 'internal') {
+        basePath = config.internal.vault_path;
+      } else {
+        // Unfiled - organize by year-month in legacy mode
+        const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        basePath = path.join(config.settings.unfiled_path, yearMonth);
+      }
+
+      fullPath = path.join(basePath, 'meetings', folderName);
+    }
 
     return {
       type,
@@ -192,6 +274,7 @@ class RoutingEngine {
       fullPath,
       dateStr,
       titleSlug,
+      isOcrm: useOcrm, // Include flag for downstream consumers
     };
   }
 

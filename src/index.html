@@ -2151,6 +2151,71 @@
               </div>
             </div>
 
+            <!-- CRM Integration (OCRM) -->
+            <div class="settings-section">
+              <h3 class="settings-section-title">CRM Integration</h3>
+              <p class="settings-section-description">
+                Integrate with obsidian-crm for contact and company management.
+                <a href="#" id="crmDocsLink" style="color: var(--primary-color);">Learn more</a>
+              </p>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Enable CRM Integration</div>
+                  <div class="settings-item-description">Use enhanced folder structure and frontmatter for CRM compatibility</div>
+                </div>
+                <div class="settings-item-control">
+                  <div class="toggle-switch" id="crmEnabledToggle">
+                    <div class="toggle-switch-thumb"></div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="crmSettingsContainer" style="display: none;">
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Path Structure</div>
+                    <div class="settings-item-description">Choose folder organization. OCRM uses meetings/clients/, legacy uses clients/{slug}/meetings/</div>
+                  </div>
+                  <div class="settings-item-control">
+                    <select id="crmPathStructureSelect" class="form-select" style="min-width: 120px;">
+                      <option value="legacy">Legacy</option>
+                      <option value="ocrm">OCRM</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">CRM Request Queue</div>
+                    <div class="settings-item-description">Write JSON requests to .crm/requests/ for the obsidian-crm plugin to process</div>
+                  </div>
+                  <div class="settings-item-control">
+                    <div class="toggle-switch" id="crmRequestQueueToggle">
+                      <div class="toggle-switch-thumb"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="settings-item" id="crmAckSettings" style="display: none;">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Wait for Acknowledgment</div>
+                    <div class="settings-item-description">Wait for obsidian-crm to acknowledge requests before completing export</div>
+                  </div>
+                  <div class="settings-item-control">
+                    <div class="toggle-switch" id="crmWaitForAckToggle">
+                      <div class="toggle-switch-thumb"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="settings-item-warning" style="margin-top: 12px; padding: 12px; background: var(--warning-bg, rgba(255, 193, 7, 0.1)); border-radius: 8px; border-left: 3px solid var(--color-warning, #ffc107);">
+                  <strong>Note:</strong> Changing path structure does not migrate existing files.
+                  Files will be written to the new structure going forward.
+                </div>
+              </div>
+            </div>
+
             <div class="settings-section">
               <h3 class="settings-section-title">Developer</h3>
 

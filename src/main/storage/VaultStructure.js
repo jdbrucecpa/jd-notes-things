@@ -1,14 +1,114 @@
 /**
  * VaultStructure - Creates and manages folder structure in Obsidian vault
  * Phase 2: Routing System
+ * OCRM Integration: Supports dual path structure (legacy and OCRM)
  */
 
 const fs = require('fs');
 const path = require('path');
 
+// OCRM path structure constants
+const OCRM_PATHS = {
+  meetingsClient: 'meetings/clients',
+  meetingsIndustry: 'meetings/industry',
+  meetingsInternal: 'meetings/internal',
+  meetingsUnfiled: 'meetings/_unfiled',
+  people: 'crm/people',
+  companies: 'crm/companies',
+  crmData: '.crm',
+  crmRequests: '.crm/requests',
+};
+
+// Legacy path structure constants
+const LEGACY_PATHS = {
+  people: 'People',
+  companies: 'Companies',
+};
+
 class VaultStructure {
-  constructor(vaultBasePath) {
+  constructor(vaultBasePath, settingsProvider = null) {
     this.vaultBasePath = vaultBasePath;
+    // settingsProvider is a function that returns { crmIntegration: { enabled, pathStructure, ... } }
+    this._settingsProvider = settingsProvider;
+  }
+
+  /**
+   * Set the settings provider function (for lazy initialization)
+   * @param {Function} provider - Function that returns app settings
+   */
+  setSettingsProvider(provider) {
+    this._settingsProvider = provider;
+  }
+
+  /**
+   * Get CRM integration settings
+   * @returns {Object} CRM settings or defaults
+   */
+  getCrmSettings() {
+    if (this._settingsProvider) {
+      try {
+        const settings = this._settingsProvider();
+        return settings?.crmIntegration || { enabled: false, pathStructure: 'legacy' };
+      } catch (e) {
+        console.warn('[VaultStructure] Failed to get CRM settings:', e.message);
+      }
+    }
+    return { enabled: false, pathStructure: 'legacy' };
+  }
+
+  /**
+   * Check if OCRM path structure is enabled
+   * @returns {boolean} True if using OCRM paths
+   */
+  isOcrmEnabled() {
+    const crmSettings = this.getCrmSettings();
+    return crmSettings.enabled && crmSettings.pathStructure === 'ocrm';
+  }
+
+  /**
+   * Get the path for people/contacts based on current mode
+   * @returns {string} Relative path for contacts
+   */
+  getPeoplePath() {
+    return this.isOcrmEnabled() ? OCRM_PATHS.people : LEGACY_PATHS.people;
+  }
+
+  /**
+   * Get the path for companies based on current mode
+   * @returns {string} Relative path for companies
+   */
+  getCompaniesPath() {
+    return this.isOcrmEnabled() ? OCRM_PATHS.companies : LEGACY_PATHS.companies;
+  }
+
+  /**
+   * Get the CRM requests path
+   * @returns {string} Relative path for CRM requests
+   */
+  getCrmRequestsPath() {
+    return OCRM_PATHS.crmRequests;
+  }
+
+  /**
+   * Get the base path for meetings based on route type and OCRM mode
+   * @param {string} routeType - 'client', 'industry', 'internal', or 'unfiled'
+   * @returns {string|null} Base path prefix or null if legacy mode
+   */
+  getOcrmMeetingsBasePath(routeType) {
+    if (!this.isOcrmEnabled()) return null;
+
+    switch (routeType) {
+      case 'client':
+        return OCRM_PATHS.meetingsClient;
+      case 'industry':
+        return OCRM_PATHS.meetingsIndustry;
+      case 'internal':
+        return OCRM_PATHS.meetingsInternal;
+      case 'unfiled':
+        return OCRM_PATHS.meetingsUnfiled;
+      default:
+        return OCRM_PATHS.meetingsUnfiled;
+    }
   }
 
   /**
@@ -315,24 +415,57 @@ Comprehensive meeting notes covering all discussion topics.
   /**
    * Initialize vault with default folder structure
    * Creates the base folders if they don't exist
+   * Supports both legacy and OCRM folder structures
    */
   initializeVault() {
     console.log('[VaultStructure] Initializing vault structure...');
 
-    const defaultFolders = [
-      'clients',
-      'industry',
-      'internal/meetings',
-      '_unfiled',
-      'config',
-      'config/templates',
-    ];
+    // Common folders always created
+    const commonFolders = ['config', 'config/templates'];
 
-    for (const folder of defaultFolders) {
+    // Mode-specific folders
+    let modeFolders;
+    if (this.isOcrmEnabled()) {
+      console.log('[VaultStructure] Using OCRM folder structure');
+      modeFolders = [
+        OCRM_PATHS.meetingsClient,
+        OCRM_PATHS.meetingsIndustry,
+        OCRM_PATHS.meetingsInternal,
+        OCRM_PATHS.meetingsUnfiled,
+        OCRM_PATHS.people,
+        OCRM_PATHS.companies,
+        OCRM_PATHS.crmData,
+        OCRM_PATHS.crmRequests,
+      ];
+    } else {
+      console.log('[VaultStructure] Using legacy folder structure');
+      modeFolders = [
+        'clients',
+        'industry',
+        'internal/meetings',
+        '_unfiled',
+        LEGACY_PATHS.people,
+        LEGACY_PATHS.companies,
+      ];
+    }
+
+    const allFolders = [...commonFolders, ...modeFolders];
+
+    for (const folder of allFolders) {
       this.ensureDirectory(folder);
     }
 
     console.log('[VaultStructure] Vault structure initialized');
+  }
+
+  /**
+   * Ensure CRM request queue folders exist
+   * Call this before writing CRM requests
+   */
+  ensureCrmRequestFolders() {
+    this.ensureDirectory(OCRM_PATHS.crmData);
+    this.ensureDirectory(OCRM_PATHS.crmRequests);
+    console.log('[VaultStructure] CRM request folders ensured');
   }
 
   /**
@@ -419,18 +552,29 @@ Comprehensive meeting notes covering all discussion topics.
 
   /**
    * Check if a contact page exists
+   * Checks both legacy (People/) and OCRM (crm/people/) paths
    * @param {string} contactName - Contact name
    * @returns {boolean} True if contact page exists
    */
   contactPageExists(contactName) {
     const { generateContactFilename } = require('../templates/contactTemplate.js');
     const filename = generateContactFilename(contactName);
-    const relativePath = `People/${filename}.md`;
-    return this.fileExists(relativePath);
+
+    // Check current mode path first
+    const currentPath = `${this.getPeoplePath()}/${filename}.md`;
+    if (this.fileExists(currentPath)) return true;
+
+    // Also check alternate path for backwards compatibility
+    const alternatePath = this.isOcrmEnabled()
+      ? `${LEGACY_PATHS.people}/${filename}.md`
+      : `${OCRM_PATHS.people}/${filename}.md`;
+
+    return this.fileExists(alternatePath);
   }
 
   /**
    * Create a contact page in the vault
+   * Uses OCRM path (crm/people/) when enabled, otherwise legacy (People/)
    * @param {Object} contact - Contact data from Google Contacts
    * @param {Object} options - Additional options
    * @returns {Object} Result with path and created flag
@@ -442,10 +586,11 @@ Comprehensive meeting notes covering all discussion topics.
     } = require('../templates/contactTemplate.js');
 
     const filename = generateContactFilename(contact.name);
-    const relativePath = `People/${filename}.md`;
+    const peoplePath = this.getPeoplePath();
+    const relativePath = `${peoplePath}/${filename}.md`;
 
-    // Check if page already exists
-    if (this.fileExists(relativePath) && !options.overwrite) {
+    // Check if page already exists (in either location)
+    if (this.contactPageExists(contact.name) && !options.overwrite) {
       console.log(`[VaultStructure] Contact page already exists: ${relativePath}`);
       return {
         success: true,
@@ -456,8 +601,8 @@ Comprehensive meeting notes covering all discussion topics.
     }
 
     try {
-      // Ensure People folder exists
-      this.ensureDirectory('People');
+      // Ensure folder exists
+      this.ensureDirectory(peoplePath);
 
       // Generate page content
       const content = generateContactPage(contact, options);
@@ -465,7 +610,7 @@ Comprehensive meeting notes covering all discussion topics.
       // Save the file
       const absolutePath = this.saveFile(relativePath, content);
 
-      console.log(`[VaultStructure] Created contact page: ${relativePath}`);
+      console.log(`[VaultStructure] Created contact page: ${relativePath} (mode: ${this.isOcrmEnabled() ? 'OCRM' : 'legacy'})`);
 
       return {
         success: true,
@@ -487,18 +632,29 @@ Comprehensive meeting notes covering all discussion topics.
 
   /**
    * Check if a company page exists
+   * Checks both legacy (Companies/) and OCRM (crm/companies/) paths
    * @param {string} companyName - Company name
    * @returns {boolean} True if company page exists
    */
   companyPageExists(companyName) {
     const { generateCompanyFilename } = require('../templates/companyTemplate.js');
     const filename = generateCompanyFilename(companyName);
-    const relativePath = `Companies/${filename}.md`;
-    return this.fileExists(relativePath);
+
+    // Check current mode path first
+    const currentPath = `${this.getCompaniesPath()}/${filename}.md`;
+    if (this.fileExists(currentPath)) return true;
+
+    // Also check alternate path for backwards compatibility
+    const alternatePath = this.isOcrmEnabled()
+      ? `${LEGACY_PATHS.companies}/${filename}.md`
+      : `${OCRM_PATHS.companies}/${filename}.md`;
+
+    return this.fileExists(alternatePath);
   }
 
   /**
    * Create a company page in the vault
+   * Uses OCRM path (crm/companies/) when enabled, otherwise legacy (Companies/)
    * @param {Object} company - Company data
    * @param {Object} options - Additional options
    * @returns {Object} Result with path and created flag
@@ -510,10 +666,11 @@ Comprehensive meeting notes covering all discussion topics.
     } = require('../templates/companyTemplate.js');
 
     const filename = generateCompanyFilename(company.name);
-    const relativePath = `Companies/${filename}.md`;
+    const companiesPath = this.getCompaniesPath();
+    const relativePath = `${companiesPath}/${filename}.md`;
 
-    // Check if page already exists
-    if (this.fileExists(relativePath) && !options.overwrite) {
+    // Check if page already exists (in either location)
+    if (this.companyPageExists(company.name) && !options.overwrite) {
       console.log(`[VaultStructure] Company page already exists: ${relativePath}`);
       return {
         success: true,
@@ -524,8 +681,8 @@ Comprehensive meeting notes covering all discussion topics.
     }
 
     try {
-      // Ensure Companies folder exists
-      this.ensureDirectory('Companies');
+      // Ensure folder exists
+      this.ensureDirectory(companiesPath);
 
       // Generate page content
       const content = generateCompanyPage(company, options);
@@ -533,7 +690,7 @@ Comprehensive meeting notes covering all discussion topics.
       // Save the file
       const absolutePath = this.saveFile(relativePath, content);
 
-      console.log(`[VaultStructure] Created company page: ${relativePath}`);
+      console.log(`[VaultStructure] Created company page: ${relativePath} (mode: ${this.isOcrmEnabled() ? 'OCRM' : 'legacy'})`);
 
       return {
         success: true,

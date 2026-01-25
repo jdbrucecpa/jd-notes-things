@@ -10,11 +10,41 @@
 # 4. industry contacts/domains
 # 5. internal team_emails
 # 6. unfiled (default)
+#
+# ==========================================================================
+# PATH STRUCTURE MODES
+# ==========================================================================
+# JD Notes Things supports two folder structures, controlled by the
+# "CRM Integration" setting in Settings > Advanced:
+#
+# LEGACY MODE (default):
+#   - Client meetings:   clients/{slug}/meetings/{date-title}/
+#   - Industry meetings: industry/{slug}/meetings/{date-title}/
+#   - Internal meetings: internal/meetings/{date-title}/
+#   - Unfiled meetings:  _unfiled/{YYYY-MM}/meetings/{date-title}/
+#   - Contacts:          People/{Name}.md
+#   - Companies:         Companies/{Name}.md
+#   vault_path values below are used directly
+#
+# OCRM MODE (obsidian-crm compatible):
+#   - Client meetings:   meetings/clients/{slug}/{date-title}/
+#   - Industry meetings: meetings/industry/{slug}/{date-title}/
+#   - Internal meetings: meetings/internal/{date-title}/
+#   - Unfiled meetings:  meetings/_unfiled/{date-title}/
+#   - Contacts:          crm/people/{Name}.md
+#   - Companies:         crm/companies/{Name}.md
+#   vault_path values are IGNORED - the slug determines the path
+#
+# To enable OCRM mode: Settings > Advanced > CRM Integration > Enable
+# Then set Path Structure to "OCRM"
+# ==========================================================================
 
 clients:
   # Example: Consulting client with AU domain
+  # Legacy mode: meetings saved to clients/acme-consulting/meetings/
+  # OCRM mode:   meetings saved to meetings/clients/acme-consulting/
   acme-consulting:
-    vault_path: clients/acme-consulting
+    vault_path: clients/acme-consulting  # Used in legacy mode only
     emails:
       - acmeconsulting.com.au
     contacts:
