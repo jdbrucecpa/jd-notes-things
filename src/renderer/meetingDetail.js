@@ -10,6 +10,7 @@ import { initializeTabs } from './utils/tabHelper.js';
 import { openSpeakerMappingModal } from './speakerMapping.js';
 import { createModal } from './utils/modalHelper.js';
 import { loadSettings } from './settings.js';
+import { notifyInfo, notifyError } from './utils/notificationHelper.js';
 
 // Current meeting being viewed
 let currentMeeting = null;
@@ -1687,64 +1688,50 @@ async function regenerateSummary(onUpdate) {
 }
 
 /**
- * Perform the actual summary regeneration
+ * Perform the actual summary regeneration (non-blocking - runs in background)
  */
 async function performRegeneration(mode, model, onUpdate) {
   const btn = document.getElementById('regenerateSummaryBtn');
 
-  await withButtonLoadingElement(btn, 'Regenerating...', async () => {
-    console.log(`[MeetingDetail] Regenerating summary for meeting: ${currentMeetingId}`);
-    console.log(`[MeetingDetail] Mode: ${mode}, Model: ${model}`);
+  console.log(`[MeetingDetail] Starting background summary regeneration for meeting: ${currentMeetingId}`);
+  console.log(`[MeetingDetail] Mode: ${mode}, Model: ${model}`);
 
-    const options = {
-      mode, // 'replace' or 'append'
-      model: model === 'default' ? null : model, // null means use default from settings
-    };
+  // Brief button state change to indicate starting
+  if (btn) {
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Starting...';
 
+    // Re-enable after a short delay
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }, 500);
+  }
+
+  const options = {
+    mode, // 'replace' or 'append'
+    model: model === 'default' ? null : model, // null means use default from settings
+  };
+
+  try {
     const result = await window.electronAPI.generateMeetingSummary(currentMeetingId, options);
 
     if (result.success) {
-      console.log('[MeetingDetail] Summary regenerated successfully');
+      // Background task started successfully
+      console.log(`[MeetingDetail] Background task started: ${result.taskId}`);
 
-      // Check if user has navigated away (currentMeeting would be null)
-      if (!currentMeetingId) {
-        console.log('[MeetingDetail] User navigated away, skipping summary update');
-        return;
-      }
-
-      // The backend saves the summary to meeting.content, so we need to reload the data
-      // to get the updated content
-      const meetingsData = await window.electronAPI.loadMeetingsData();
-
-      if (meetingsData.success) {
-        // Find the updated meeting
-        const allMeetings = [
-          ...meetingsData.data.upcomingMeetings,
-          ...meetingsData.data.pastMeetings,
-        ];
-        const updatedMeeting = allMeetings.find(m => m.id === currentMeetingId);
-
-        if (updatedMeeting) {
-          // Update the current meeting reference
-          currentMeeting = updatedMeeting;
-
-          // Re-render the summary tab with new content (only if still viewing this meeting)
-          if (currentMeetingId) {
-            populateSummary(currentMeeting);
-            console.log('[MeetingDetail] Summary view updated with regenerated content');
-          }
-
-          // Notify parent that data has changed (only if we have valid meeting data)
-          if (onUpdate && currentMeeting) {
-            onUpdate(currentMeetingId, currentMeeting);
-          }
-        }
-      }
+      // The existing summary-generated listener will handle updating the UI when complete
+      // (see initializeMeetingDetail which sets up onSummaryGenerated listener)
     } else {
-      console.error('[MeetingDetail] Failed to regenerate summary:', result.error);
-      alert(`Failed to regenerate summary: ${result.error}`);
+      // Immediate failure (validation error, meeting not found, etc.)
+      console.error('[MeetingDetail] Failed to start summary regeneration:', result.error);
+      notifyError(result.error, { prefix: 'Summary generation failed:', context: 'MeetingDetail' });
     }
-  });
+  } catch (error) {
+    console.error('[MeetingDetail] Error starting summary regeneration:', error);
+    notifyError(error, { prefix: 'Failed to start summary generation:', context: 'MeetingDetail' });
+  }
 }
 
 /**

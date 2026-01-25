@@ -251,4 +251,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowMaximize: () => ipcRenderer.send('window:maximize'),
   windowClose: () => ipcRenderer.send('window:close'),
   windowIsMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+
+  // Background Task Management
+  backgroundGetTasks: () => ipcRenderer.invoke('background:getTasks'),
+  backgroundCancelTask: taskId => ipcRenderer.invoke('background:cancelTask', taskId),
+  onBackgroundTaskStarted: callback =>
+    ipcRenderer.on('background:task-started', (_, task) => callback(task)),
+  onBackgroundTaskProgress: callback =>
+    ipcRenderer.on('background:task-progress', (_, data) => callback(data)),
+  onBackgroundTaskCompleted: callback =>
+    ipcRenderer.on('background:task-completed', (_, data) => callback(data)),
+  onBackgroundTaskFailed: callback =>
+    ipcRenderer.on('background:task-failed', (_, data) => callback(data)),
+  onBackgroundTasksList: callback =>
+    ipcRenderer.on('background:tasks-list', (_, tasks) => callback(tasks)),
 });

@@ -33,6 +33,7 @@ const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
 const speakerMappingService = require('./main/services/speakerMappingService');
 const vocabularyService = require('./main/services/vocabularyService');
+const backgroundTaskManager = require('./main/services/backgroundTaskManager');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
@@ -1155,6 +1156,9 @@ const createWindow = () => {
 
   // Create the browser window.
   mainWindow = new BrowserWindow(windowOptions);
+
+  // Set up background task manager with main window reference
+  backgroundTaskManager.setMainWindow(mainWindow);
 
   // Save window bounds when moved or resized (Phase 10.7)
   const saveWindowBounds = () => {
@@ -8208,6 +8212,20 @@ ipcMain.handle('window:isMaximized', () => {
 });
 
 // ===================================================================
+// Background Task Management IPC Handlers
+// ===================================================================
+
+// Get all background tasks
+ipcMain.handle('background:getTasks', () => {
+  return backgroundTaskManager.getAllTasks();
+});
+
+// Cancel a background task
+ipcMain.handle('background:cancelTask', (_event, taskId) => {
+  return backgroundTaskManager.cancelTask(taskId);
+});
+
+// ===================================================================
 // Recording Widget IPC Handlers (v1.2)
 // ===================================================================
 
@@ -8637,7 +8655,7 @@ ipcMain.handle('deleteMeeting', async (event, meetingId) => {
   }
 });
 
-// Handle generating AI summary for a meeting (non-streaming)
+// Handle generating AI summary for a meeting (non-blocking background task)
 ipcMain.handle('generateMeetingSummary', async (event, meetingId, options = {}) => {
   // Validate meetingId
   try {
@@ -8651,141 +8669,185 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId, options = {}) 
   console.log(`Manual summary generation requested for meeting: ${meetingId}`);
   console.log(`[RegenerateSummary] Mode: ${mode}, Custom model: ${model || 'default'}`);
 
-  // Helper to perform the generation
-  const performGeneration = async () => {
-    // Read current data
+  // Get meeting title for the task description
+  let meetingTitle = 'Meeting';
+  try {
     const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
     const meetingsData = JSON.parse(fileData);
-
-    // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
-      meeting => meeting.id === meetingId
-    );
-
-    if (pastMeetingIndex === -1) {
+    const meeting = meetingsData.pastMeetings.find(m => m.id === meetingId);
+    if (meeting) {
+      meetingTitle = meeting.title || 'Meeting';
+      // Validate meeting has transcript before starting background task
+      if (!meeting.transcript || meeting.transcript.length === 0) {
+        return { success: false, error: 'No transcript available for this meeting' };
+      }
+    } else {
       return { success: false, error: 'Meeting not found' };
     }
+  } catch (err) {
+    console.error('[RegenerateSummary] Error reading meeting data:', err);
+    return { success: false, error: 'Failed to read meeting data' };
+  }
 
-    const meeting = meetingsData.pastMeetings[pastMeetingIndex];
+  // Create background task immediately
+  const taskId = backgroundTaskManager.addTask({
+    type: 'regenerate-summary',
+    description: `Generating summary for "${meetingTitle}"`,
+    meetingId,
+    metadata: { mode, model },
+  });
 
-    // Check if there's a transcript to summarize
-    if (!meeting.transcript || meeting.transcript.length === 0) {
-      return {
-        success: false,
-        error: 'No transcript available for this meeting',
-      };
-    }
+  // Run the actual generation in the background
+  setImmediate(async () => {
+    // Helper to perform the generation
+    const performGeneration = async () => {
+      // Progress: Starting
+      backgroundTaskManager.updateTask(taskId, 10, 'Loading meeting data...');
 
-    // Log summary generation to console instead of showing a notification
-    console.log('Generating AI summary for meeting: ' + meetingId);
+      // Read current data
+      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
+      const meetingsData = JSON.parse(fileData);
 
-    // Generate the summary
-    const summary = await generateMeetingSummary(meeting);
+      // Find the meeting
+      const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
+        meeting => meeting.id === meetingId
+      );
 
-    // Get meeting title for use in the new content
-    const meetingTitle = meeting.title || 'Meeting Notes';
-
-    // Get recording ID
-    const recordingId = meeting.recordingId;
-
-    // Check for different possible video file patterns
-    const possibleFilePaths = recordingId
-      ? [
-          path.join(RECORDING_PATH, `${recordingId}.mp4`),
-          path.join(RECORDING_PATH, `macos-desktop-${recordingId}.mp4`),
-          path.join(RECORDING_PATH, `macos-desktop${recordingId}.mp4`),
-          path.join(RECORDING_PATH, `desktop-${recordingId}.mp4`),
-        ]
-      : [];
-
-    // Find the first video file that exists
-    let videoExists = false;
-    let videoFilePath = null;
-
-    try {
-      for (const filePath of possibleFilePaths) {
-        if (fs.existsSync(filePath)) {
-          videoExists = true;
-          videoFilePath = filePath;
-          console.log(`Found video file at: ${videoFilePath}`);
-          break;
-        }
+      if (pastMeetingIndex === -1) {
+        throw new Error('Meeting not found');
       }
-    } catch (err) {
-      console.error('Error checking for video files:', err);
-    }
 
-    // Handle mode: replace vs append
-    if (mode === 'append' && meeting.content) {
-      // Append mode: add new summary below existing content
-      const timestamp = new Date().toLocaleString();
-      meeting.content = `${meeting.content}\n\n---\n\n## Regenerated Summary (${timestamp})\n\n${summary}`;
-      console.log('[RegenerateSummary] Appended new summary to existing content');
-    } else {
-      // Replace mode (default): create new content
-      meeting.content = `# ${meetingTitle}\n\n${summary}`;
-      console.log('[RegenerateSummary] Replaced existing content with new summary');
-    }
+      const meeting = meetingsData.pastMeetings[pastMeetingIndex];
 
-    // If video exists, store the path separately but don't add it to the content
-    if (videoExists) {
-      meeting.videoPath = videoFilePath; // Store the path for future reference
-      console.log(`Stored video path in meeting object: ${videoFilePath}`);
-    } else {
-      console.log('Video file not found or no recording ID');
-    }
+      // Check if there's a transcript to summarize
+      if (!meeting.transcript || meeting.transcript.length === 0) {
+        throw new Error('No transcript available for this meeting');
+      }
 
-    meeting.hasSummary = true;
+      // Progress: Generating summary
+      backgroundTaskManager.updateTask(taskId, 30, 'Generating AI summary...');
 
-    // Save the updated data with summary
-    await fileOperationManager.writeData(meetingsData);
+      // Log summary generation to console instead of showing a notification
+      console.log('Generating AI summary for meeting: ' + meetingId);
 
-    console.log('Updated meeting note with AI summary');
+      // Generate the summary
+      const summary = await generateMeetingSummary(meeting);
 
-    // Notify the renderer to refresh the note if it's open
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('summary-generated', meetingId);
-    }
+      // Progress: Processing result
+      backgroundTaskManager.updateTask(taskId, 80, 'Saving summary...');
 
-    return {
-      success: true,
-      summary,
-    };
-  };
+      // Get meeting title for use in the new content
+      const meetingTitleContent = meeting.title || 'Meeting Notes';
 
-  try {
-    // If a custom model is specified, use it directly instead of the default
-    if (model) {
-      console.log(`[RegenerateSummary] Using one-off custom model: ${model}`);
-      const originalProvider = llmService.config.provider;
-      const originalModel = llmService.getCurrentModel();
+      // Get recording ID
+      const recordingId = meeting.recordingId;
 
-      // Get Azure config if needed
-      const preferences = await getProviderPreferences();
-      const azureConfig =
-        model.startsWith('azure-') && preferences.azureEndpoint
-          ? { endpoint: preferences.azureEndpoint }
-          : null;
+      // Check for different possible video file patterns
+      const possibleFilePaths = recordingId
+        ? [
+            path.join(RECORDING_PATH, `${recordingId}.mp4`),
+            path.join(RECORDING_PATH, `macos-desktop-${recordingId}.mp4`),
+            path.join(RECORDING_PATH, `macos-desktop${recordingId}.mp4`),
+            path.join(RECORDING_PATH, `desktop-${recordingId}.mp4`),
+          ]
+        : [];
 
-      llmService.switchToPreference(model, azureConfig);
+      // Find the first video file that exists
+      let videoExists = false;
+      let videoFilePath = null;
 
       try {
-        return await performGeneration();
-      } finally {
-        // Restore original provider and model
-        console.log(
-          `[RegenerateSummary] Restoring LLM to ${originalProvider} with model ${originalModel}`
-        );
-        llmService.switchProvider(originalProvider, originalModel);
+        for (const filePath of possibleFilePaths) {
+          if (fs.existsSync(filePath)) {
+            videoExists = true;
+            videoFilePath = filePath;
+            console.log(`Found video file at: ${videoFilePath}`);
+            break;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking for video files:', err);
       }
-    } else {
-      // Use default model via withProviderSwitch
-      return await withProviderSwitch('auto', performGeneration, '[RegenerateSummary]');
+
+      // Handle mode: replace vs append
+      if (mode === 'append' && meeting.content) {
+        // Append mode: add new summary below existing content
+        const timestamp = new Date().toLocaleString();
+        meeting.content = `${meeting.content}\n\n---\n\n## Regenerated Summary (${timestamp})\n\n${summary}`;
+        console.log('[RegenerateSummary] Appended new summary to existing content');
+      } else {
+        // Replace mode (default): create new content
+        meeting.content = `# ${meetingTitleContent}\n\n${summary}`;
+        console.log('[RegenerateSummary] Replaced existing content with new summary');
+      }
+
+      // If video exists, store the path separately but don't add it to the content
+      if (videoExists) {
+        meeting.videoPath = videoFilePath; // Store the path for future reference
+        console.log(`Stored video path in meeting object: ${videoFilePath}`);
+      } else {
+        console.log('Video file not found or no recording ID');
+      }
+
+      meeting.hasSummary = true;
+
+      // Progress: Saving
+      backgroundTaskManager.updateTask(taskId, 90, 'Finalizing...');
+
+      // Save the updated data with summary
+      await fileOperationManager.writeData(meetingsData);
+
+      console.log('Updated meeting note with AI summary');
+
+      // Notify the renderer to refresh the note if it's open
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('summary-generated', meetingId);
+      }
+
+      return { success: true, summary };
+    };
+
+    try {
+      let result;
+      // If a custom model is specified, use it directly instead of the default
+      if (model) {
+        console.log(`[RegenerateSummary] Using one-off custom model: ${model}`);
+        const originalProvider = llmService.config.provider;
+        const originalModel = llmService.getCurrentModel();
+
+        // Get Azure config if needed
+        const preferences = await getProviderPreferences();
+        const azureConfig =
+          model.startsWith('azure-') && preferences.azureEndpoint
+            ? { endpoint: preferences.azureEndpoint }
+            : null;
+
+        llmService.switchToPreference(model, azureConfig);
+
+        try {
+          result = await performGeneration();
+        } finally {
+          // Restore original provider and model
+          console.log(
+            `[RegenerateSummary] Restoring LLM to ${originalProvider} with model ${originalModel}`
+          );
+          llmService.switchProvider(originalProvider, originalModel);
+        }
+      } else {
+        // Use default model via withProviderSwitch
+        result = await withProviderSwitch('auto', performGeneration, '[RegenerateSummary]');
+      }
+
+      // Mark task as completed
+      backgroundTaskManager.completeTask(taskId, result);
+    } catch (error) {
+      console.error('Error generating meeting summary:', error);
+      backgroundTaskManager.failTask(taskId, error);
     }
-  } catch (error) {
-    console.error('Error generating meeting summary:', error);
-    return { success: false, error: error.message };
-  }
+  });
+
+  // Return immediately with the task ID
+  return { success: true, taskId, async: true };
 });
 
 // Handle starting a manual desktop recording

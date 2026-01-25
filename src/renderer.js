@@ -26,6 +26,7 @@ import {
   notifyWarning,
 } from './renderer/utils/notificationHelper.js';
 import { populateSelect, addSeparator, addOption } from './renderer/utils/dropdownHelper.js';
+import { initialize as initBackgroundTasksPanel } from './renderer/components/BackgroundTasksPanel.js';
 
 // Import platform logo images
 import zoomLogo from './assets/zoom.png';
@@ -3442,6 +3443,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initialize Quick Search (CS-2)
   initQuickSearch();
+
+  // Initialize Background Tasks Panel
+  initBackgroundTasksPanel();
 
   // Initialize Google integration (Calendar + Contacts)
   await initializeGoogle();
