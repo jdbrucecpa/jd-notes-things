@@ -259,6 +259,68 @@ class VocabularyService {
   }
 
   /**
+   * Format vocabulary for Universal-3 Pro model (keyterms_prompt)
+   *
+   * API Constraints (AssemblyAI):
+   * - Max 1,000 keyterms for Universal-3-Pro (200 for Universal-2)
+   * - Max 6 words per phrase
+   * - Avoid single common English words
+   *
+   * @param {Object} vocabulary - Merged vocabulary object
+   * @param {number} maxTerms - Maximum terms (1000 for U3P, 200 for U2)
+   * @returns {string[]} Array of keyterms
+   */
+  formatForUniversal(vocabulary, maxTerms = 1000) {
+    const keyterms = new Set();
+
+    // Extract "to" values from spelling corrections
+    if (vocabulary.spelling_corrections) {
+      vocabulary.spelling_corrections.forEach(item => {
+        if (item.to) {
+          const wordCount = item.to.trim().split(/\s+/).length;
+          if (wordCount <= 6 && wordCount >= 1) {
+            keyterms.add(item.to);
+          } else {
+            console.log(
+              `${LOG_PREFIX} Skipping "${item.to}" - exceeds 6 word limit (${wordCount} words)`
+            );
+          }
+        }
+      });
+    }
+
+    // Add keyword boosts directly
+    if (vocabulary.keyword_boosts) {
+      vocabulary.keyword_boosts.forEach(item => {
+        if (item.word) {
+          const wordCount = item.word.trim().split(/\s+/).length;
+          if (wordCount <= 6 && wordCount >= 1) {
+            keyterms.add(item.word);
+          } else {
+            console.log(`${LOG_PREFIX} Skipping "${item.word}" - exceeds 6 word limit`);
+          }
+        }
+      });
+    }
+
+    // Add any direct terms list
+    if (vocabulary.terms) {
+      vocabulary.terms.forEach(term => {
+        const wordCount = term.trim().split(/\s+/).length;
+        if (wordCount <= 6 && wordCount >= 1) {
+          keyterms.add(term);
+        }
+      });
+    }
+
+    const result = [...keyterms].slice(0, maxTerms);
+    console.log(
+      `${LOG_PREFIX} Formatted ${result.length} keyterms for Universal model (max: ${maxTerms})`
+    );
+    return result;
+  }
+
+  /**
    * Format vocabulary for Deepgram keywords parameter
    * @param {Object} vocabulary - Merged vocabulary object
    * @returns {Array} Array of "word:intensifier" strings for Deepgram
@@ -298,7 +360,7 @@ class VocabularyService {
 
   /**
    * Get provider-formatted vocabulary ready for transcription
-   * @param {string} provider - 'assemblyai' or 'deepgram'
+   * @param {string} provider - 'assemblyai', 'assemblyai-universal', or 'deepgram'
    * @param {string|null} clientSlug - Client slug for client-specific vocabulary
    * @returns {Object} Provider-specific vocabulary format
    */
@@ -307,7 +369,11 @@ class VocabularyService {
 
     switch (provider.toLowerCase()) {
       case 'assemblyai':
+      case 'assemblyai-universal':
+        // Use Universal-3 Pro keyterms format by default
         return {
+          keyterms_prompt: this.formatForUniversal(merged),
+          // Keep legacy format for backwards compatibility
           custom_spelling: this.formatForAssemblyAI(merged),
         };
 

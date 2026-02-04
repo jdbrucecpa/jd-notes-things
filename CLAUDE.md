@@ -13,7 +13,7 @@ See [`README.md`](./README.md) for project overview and setup instructions.
 - **Desktop Framework:** Electron 39.x + Node.js
 - **UI:** React 19.x (renderer process)
 - **Build System:** Webpack + Electron Forge
-- **Recording:** Recall.ai Desktop SDK 1.3.x (local audio capture)
+- **Recording:** Recall.ai Desktop SDK 2.x (local audio capture)
 - **Transcription:** Multi-provider system (AssemblyAI, Deepgram, Recall.ai) with runtime switching
 - **LLM:** Multi-provider (OpenAI, Anthropic Claude, Azure OpenAI) with prompt caching
 - **Webhooks:** Express + localtunnel + Svix signature verification
@@ -214,6 +214,16 @@ npm run make        # Create distributable installer
 npm run lint        # Run ESLint
 npm run format      # Format with Prettier
 ```
+
+## Updating the Recall.ai Desktop SDK
+
+To update the Recall.ai Desktop SDK to the latest version:
+
+```bash
+npm install @recallai/desktop-sdk
+```
+
+Check the [SDK Changelog](https://docs.recall.ai/docs/dsdk-changelog) for release notes.
 
 ## Reference Documentation
 

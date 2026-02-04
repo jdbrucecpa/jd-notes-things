@@ -3251,20 +3251,38 @@ function updateFilterCount() {
 function updateMeetingButtonPlatform(platform) {
   console.log('[Toolbar] updateMeetingButtonPlatform called with:', platform);
 
-  const iconContainer = document.getElementById('meetingPlatformIcon');
   const meetingBtn = document.getElementById('joinMeetingBtn');
+
+  // Skip update if button doesn't exist or is hidden (e.g., in editor view)
+  if (!meetingBtn) {
+    console.log('[Toolbar] Meeting button not found, skipping update');
+    return;
+  }
+
+  if (meetingBtn.style.display === 'none') {
+    console.log('[Toolbar] Meeting button is hidden, skipping update');
+    return;
+  }
+
+  // Find icon container - try direct lookup first, then fallback to querySelector within button
+  let iconContainer = document.getElementById('meetingPlatformIcon');
+  if (!iconContainer) {
+    iconContainer = meetingBtn.querySelector('.toolbar-platform-icon');
+  }
 
   console.log('[Toolbar] iconContainer found:', !!iconContainer);
   console.log('[Toolbar] meetingBtn found:', !!meetingBtn);
 
-  if (!iconContainer || !meetingBtn) {
-    console.warn(
-      '[Toolbar] Missing elements - iconContainer:',
-      !!iconContainer,
-      'meetingBtn:',
-      !!meetingBtn
-    );
-    return;
+  if (!iconContainer) {
+    console.warn('[Toolbar] Icon container not found, button innerHTML:', meetingBtn.innerHTML);
+    console.warn('[Toolbar] Button children count:', meetingBtn.children.length);
+    // Try to recreate the icon container if missing
+    const newIconContainer = document.createElement('span');
+    newIconContainer.className = 'toolbar-platform-icon';
+    newIconContainer.id = 'meetingPlatformIcon';
+    meetingBtn.insertBefore(newIconContainer, meetingBtn.firstChild);
+    iconContainer = newIconContainer;
+    console.log('[Toolbar] Recreated icon container');
   }
 
   // Normalize platform name

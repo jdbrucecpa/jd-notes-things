@@ -1785,76 +1785,31 @@
             </div>
           </div>
 
-          <!-- VC-2: Vocabulary Management Panel -->
+          <!-- VC-2: Vocabulary Management Panel (v1.2.5 - simplified to global only) -->
           <div class="settings-panel" id="vocabularyPanel" style="display: none;">
             <div class="settings-section">
-              <h3 class="settings-section-title">Vocabulary Settings</h3>
+              <h3 class="settings-section-title">Priority Terms</h3>
               <p class="settings-section-description">
-                Add custom vocabulary to improve transcription accuracy. Spelling corrections fix common mishearings,
-                while keyword boosts increase the probability of recognizing specific terms.
+                Add words or phrases that should be recognized accurately during transcription.
+                The AI will prioritize these terms — useful for names, technical terms, and industry jargon.
               </p>
 
-              <!-- Scope selector tabs -->
-              <div class="vocabulary-scope-tabs">
-                <button class="vocabulary-scope-tab active" data-scope="global">Global Vocabulary</button>
-                <button class="vocabulary-scope-tab" data-scope="client">Client-Specific</button>
-              </div>
-
-              <!-- Client selector (hidden when global is selected) -->
-              <div id="vocabularyClientSelector" class="vocabulary-client-selector" style="display: none;">
-                <label for="vocabularyClientSelect">Select Client:</label>
-                <select id="vocabularyClientSelect">
-                  <option value="">-- Select a client --</option>
-                </select>
-                <button id="addNewClientVocab" class="btn btn-secondary btn-sm">+ New Client</button>
-              </div>
-            </div>
-
-            <!-- Spelling Corrections Section -->
-            <div class="settings-section">
-              <h3 class="settings-section-title">
-                Spelling Corrections
-                <span class="settings-section-badge" id="spellingCount">0</span>
-              </h3>
-              <p class="settings-section-description">
-                Map common mishearings to correct spellings. These are applied during transcription (AssemblyAI).
-              </p>
-
-              <div class="vocabulary-add-form" id="spellingAddForm">
+              <div class="vocabulary-add-form" id="termsAddForm">
                 <div class="vocabulary-add-row">
-                  <input type="text" id="spellingFrom" placeholder="Incorrect spellings (comma-separated)" class="settings-input" />
-                  <span class="vocabulary-arrow">→</span>
-                  <input type="text" id="spellingTo" placeholder="Correct spelling" class="settings-input" />
-                  <button id="addSpellingBtn" class="btn btn-primary btn-sm">Add</button>
+                  <input type="text" id="termInput" placeholder="Word or phrase (e.g., Kubernetes, John Smith, Anthropic)" class="settings-input" style="flex: 1" />
+                  <button id="addTermBtn" class="btn btn-primary btn-sm">Add</button>
                 </div>
+                <p class="settings-hint" style="margin-top: 8px; font-size: 12px; color: var(--text-tertiary);">
+                  Tip: Add multiple terms by separating with commas (e.g., "Claude, Anthropic, LLM")
+                </p>
               </div>
 
-              <div class="vocabulary-list" id="spellingList">
-                <div class="vocabulary-empty">No spelling corrections defined</div>
-              </div>
-            </div>
-
-            <!-- Keyword Boosts Section -->
-            <div class="settings-section">
-              <h3 class="settings-section-title">
-                Keyword Boosts
-                <span class="settings-section-badge" id="keywordCount">0</span>
-              </h3>
-              <p class="settings-section-description">
-                Increase the probability of recognizing specific words. Higher intensity = stronger boost (1-10).
-                These are used by Deepgram.
-              </p>
-
-              <div class="vocabulary-add-form" id="keywordAddForm">
-                <div class="vocabulary-add-row">
-                  <input type="text" id="keywordWord" placeholder="Word or phrase" class="settings-input" />
-                  <input type="number" id="keywordIntensifier" placeholder="Boost (1-10)" class="settings-input vocabulary-intensifier" min="1" max="10" value="5" />
-                  <button id="addKeywordBtn" class="btn btn-primary btn-sm">Add</button>
-                </div>
+              <div class="vocabulary-list" id="termsList">
+                <div class="vocabulary-empty">No priority terms defined</div>
               </div>
 
-              <div class="vocabulary-list" id="keywordList">
-                <div class="vocabulary-empty">No keyword boosts defined</div>
+              <div class="vocabulary-stats" id="vocabularyStats" style="margin-top: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: 8px; font-size: 13px; color: var(--text-secondary);">
+                <span id="termsCount">0</span> terms defined
               </div>
             </div>
 
@@ -2237,7 +2192,7 @@
             <div class="settings-section">
               <div class="about-info">
                 <h3>JD Notes Things</h3>
-                <p class="version" id="appVersion">v1.2.4</p>
+                <p class="version" id="appVersion">v1.2.5</p>
                 <p>AI-Powered Meeting Transcription & Summarization</p>
                 <p style="margin-top: 12px;">
                   <a href="#" id="githubRepoLink" style="color: var(--primary-color); text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">

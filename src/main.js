@@ -39,6 +39,8 @@ const { isGenericSpeakerName } = require('./shared/speakerValidation');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
+// Wire up backgroundTaskManager to transcriptionService for progress tracking (Phase 7 v1.2.5)
+transcriptionService.setBackgroundTaskManager(backgroundTaskManager);
 const { createIpcHandler } = require('./main/utils/ipcHelpers');
 const yaml = require('js-yaml');
 // const encryptionService = require('./main/services/encryptionService'); // Not needed - Obsidian requires plain text
@@ -2693,9 +2695,11 @@ async function initSDK() {
             }
 
             // VC-3.5 & VC-3.6: Determine client vocabulary from participants
+            // v1.2.5: Enhanced with Universal-3 Pro context and speaker identification
             let vocabularyOptions = {};
             try {
               let clientSlug = null;
+              let meetingOrganization = null;
               if (participantEmails.length > 0 && routingEngine) {
                 const routingDecision = routingEngine.route({
                   participantEmails,
@@ -2706,6 +2710,7 @@ async function initSDK() {
                 const clientRoute = routingDecision.routes.find(r => r.type === 'client');
                 if (clientRoute) {
                   clientSlug = clientRoute.slug;
+                  meetingOrganization = clientRoute.organizationName || clientSlug;
                   console.log(
                     `[Transcription] VC-3: Matched client "${clientSlug}" from participants`
                   );
@@ -2717,12 +2722,58 @@ async function initSDK() {
                 clientSlug
               );
               const vocabCount =
+                vocabularyOptions.keyterms_prompt?.length ||
                 vocabularyOptions.custom_spelling?.length ||
                 vocabularyOptions.keywords?.length ||
                 0;
               console.log(
                 `[Transcription] VC-3: Using ${vocabCount} vocabulary entries for ${transcriptionProvider}`
               );
+
+              // v1.2.5 Phase 3: Build meeting context prompt for Universal-3 Pro
+              const fileData2 = await fs.promises.readFile(meetingsFilePath, 'utf8');
+              const meetingsData2 = JSON.parse(fileData2);
+              const meetingForContext = meetingsData2.pastMeetings.find(
+                m => m.recordingId === windowId
+              );
+              if (meetingForContext) {
+                const promptParts = [];
+                if (meetingForContext.title) {
+                  promptParts.push(`Meeting: ${meetingForContext.title}`);
+                }
+                if (meetingOrganization) {
+                  promptParts.push(`Organization: ${meetingOrganization}`);
+                }
+                // Add participant names from SDK (originalName is authoritative per CLAUDE.md)
+                const participantNames = (meetingForContext.participants || [])
+                  .map(p => p.originalName || p.name)
+                  .filter(Boolean);
+                if (participantNames.length > 0) {
+                  promptParts.push(`Participants: ${participantNames.join(', ')}`);
+                }
+                if (promptParts.length > 0) {
+                  vocabularyOptions.prompt = promptParts.join('. ');
+                  console.log(
+                    `[Transcription] v1.2.5: Context prompt: "${vocabularyOptions.prompt}"`
+                  );
+                }
+
+                // v1.2.5 Phase 4: Build speaker names for identification
+                // API constraints: max 10 names, each max 35 characters
+                const speakerNames = participantNames
+                  .filter(name => name && !/^(speaker|participant|guest|unknown)/i.test(name))
+                  .map(name => (name.length > 35 ? name.substring(0, 35) : name))
+                  .slice(0, 10);
+                if (speakerNames.length > 0) {
+                  vocabularyOptions.speakerNames = speakerNames;
+                  console.log(
+                    `[Transcription] v1.2.5: Speaker names for identification: ${speakerNames.join(', ')}`
+                  );
+                }
+
+                // Add meeting ID for background task tracking
+                vocabularyOptions.meetingId = meetingForContext.id;
+              }
             } catch (vocabError) {
               console.warn(
                 '[Transcription] VC-3: Failed to load vocabulary, continuing without:',
@@ -5774,6 +5825,14 @@ ipcMain.handle(
   withValidation(
     templatesGenerateSummariesSchema,
     async (event, { meetingId, templateIds, routingOverride, mode = 'replace', model = null }) => {
+      // Create background task for progress tracking (v1.2.5 Phase 7)
+      const taskId = backgroundTaskManager.addTask({
+        type: 'template-summaries',
+        description: `Generating ${templateIds.length} template summaries`,
+        meetingId,
+        metadata: { templateIds, mode, model },
+      });
+
       try {
         console.log(
           '[Template IPC] Generating summaries for meeting:',
@@ -5787,6 +5846,8 @@ ipcMain.handle(
           console.log('[Template IPC] Using routing override:', routingOverride);
         }
 
+        backgroundTaskManager.updateTask(taskId, 10, 'Loading meeting data...');
+
         // Load meeting data
         const data = await fileOperationManager.readMeetingsData();
         const meeting = [...data.upcomingMeetings, ...data.pastMeetings].find(
@@ -5794,15 +5855,19 @@ ipcMain.handle(
         );
 
         if (!meeting) {
+          backgroundTaskManager.failTask(taskId, 'Meeting not found');
           return { success: false, error: 'Meeting not found' };
         }
 
         if (!meeting.transcript) {
+          backgroundTaskManager.failTask(taskId, 'Meeting has no transcript');
           return { success: false, error: 'Meeting has no transcript' };
         }
 
         // Store existing summaries for append mode
         const existingSummaries = mode === 'append' ? [...(meeting.summaries || [])] : [];
+
+        backgroundTaskManager.updateTask(taskId, 20, 'Generating template summaries...');
 
         // Generate summaries with optional custom model
         let summaries;
@@ -5849,10 +5914,14 @@ ipcMain.handle(
         }
         // Replace mode: summaries already contains only the new ones (existingSummaries was not used)
 
+        backgroundTaskManager.updateTask(taskId, 70, 'Saving summaries...');
+
         // Save summaries to meeting object
         meeting.summaries = summaries;
         await fileOperationManager.writeData(data);
         console.log('[Template IPC] Saved summaries to meeting object');
+
+        backgroundTaskManager.updateTask(taskId, 85, 'Exporting to Obsidian...');
 
         // Auto-trigger export to Obsidian after template generation
         console.log('[Template IPC] Auto-triggering Obsidian export...');
@@ -5869,6 +5938,8 @@ ipcMain.handle(
           console.warn('[Template IPC] Auto-export failed:', exportResult.error);
         }
 
+        backgroundTaskManager.completeTask(taskId, { summaryCount: summaries.length });
+
         return {
           success: true,
           summaries,
@@ -5877,6 +5948,7 @@ ipcMain.handle(
         };
       } catch (error) {
         console.error('[Template IPC] Failed to generate summaries:', error);
+        backgroundTaskManager.failTask(taskId, error.message);
         return { success: false, error: error.message };
       }
     }
@@ -7035,13 +7107,22 @@ ipcMain.handle(
   withValidation(importTranscribeAudioSchema, async (event, { filePath, provider, options = {} }) => {
     console.log(`[Import] Transcribing audio file: ${filePath} with provider: ${provider}`);
 
+    // Create background task for progress tracking (v1.2.5 Phase 7)
+    const taskId = backgroundTaskManager.addTask({
+      type: 'import-transcribe',
+      description: `Importing: ${path.basename(filePath)}`,
+      metadata: { filePath, provider },
+    });
+
     if (!transcriptionService) {
+      backgroundTaskManager.failTask(taskId, 'Transcription service not initialized');
       return { success: false, error: 'Transcription service not initialized' };
     }
 
   // Validate provider
   const validProviders = ['assemblyai', 'deepgram'];
   if (!validProviders.includes(provider)) {
+    backgroundTaskManager.failTask(taskId, `Invalid provider: ${provider}`);
     return {
       success: false,
       error: `Invalid provider: ${provider}. Use one of: ${validProviders.join(', ')}`,
@@ -7050,10 +7131,13 @@ ipcMain.handle(
 
   // Validate file exists
   if (!fs.existsSync(filePath)) {
+    backgroundTaskManager.failTask(taskId, `File not found: ${filePath}`);
     return { success: false, error: `File not found: ${filePath}` };
   }
 
   try {
+    backgroundTaskManager.updateTask(taskId, 10, 'Starting transcription...');
+
     // Send progress update
     event.sender.send('import:progress', {
       step: 'transcribing',
@@ -7067,7 +7151,10 @@ ipcMain.handle(
       const clientSlug = options.clientSlug || null;
       vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
       const vocabCount =
-        vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
+        vocabularyOptions.keyterms_prompt?.length ||
+        vocabularyOptions.custom_spelling?.length ||
+        vocabularyOptions.keywords?.length ||
+        0;
       if (vocabCount > 0) {
         console.log(
           `[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`
@@ -7085,6 +7172,12 @@ ipcMain.handle(
       `[Import] Transcription complete. Got ${transcript.utterances?.length || 0} utterances`
     );
 
+    // Complete the background task (Phase 7)
+    backgroundTaskManager.completeTask(taskId, {
+      utterances: transcript.utterances?.length || 0,
+      duration: transcript.audio_duration || null,
+    });
+
     return {
       success: true,
       transcript: transcript.utterances || [],
@@ -7097,6 +7190,7 @@ ipcMain.handle(
     };
   } catch (error) {
     console.error('[Import] Audio transcription failed:', error);
+    backgroundTaskManager.failTask(taskId, error.message);
     return { success: false, error: error.message };
   }
   })
@@ -7108,11 +7202,20 @@ ipcMain.handle(
   withValidation(importAudioFileSchema, async (event, { filePath, provider, options = {} }) => {
   console.log(`[Import] Importing audio file: ${filePath}`);
 
+  // Create background task for full import progress tracking (v1.2.5 Phase 7)
+  const taskId = backgroundTaskManager.addTask({
+    type: 'import-audio',
+    description: `Importing audio: ${path.basename(filePath)}`,
+    metadata: { filePath, provider },
+  });
+
   if (!importManager) {
+    backgroundTaskManager.failTask(taskId, 'Import manager not initialized');
     return { success: false, error: 'Import manager not initialized' };
   }
 
   if (!transcriptionService) {
+    backgroundTaskManager.failTask(taskId, 'Transcription service not initialized');
     return { success: false, error: 'Transcription service not initialized' };
   }
 
@@ -7126,6 +7229,7 @@ ipcMain.handle(
 
   try {
     // Step 1: Transcribe the audio file
+    backgroundTaskManager.updateTask(taskId, 5, 'Starting transcription...');
     event.sender.send('import:progress', {
       step: 'transcribing',
       file: path.basename(filePath),
@@ -7137,7 +7241,10 @@ ipcMain.handle(
     try {
       vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
       const vocabCount =
-        vocabularyOptions.custom_spelling?.length || vocabularyOptions.keywords?.length || 0;
+        vocabularyOptions.keyterms_prompt?.length ||
+        vocabularyOptions.custom_spelling?.length ||
+        vocabularyOptions.keywords?.length ||
+        0;
       if (vocabCount > 0) {
         console.log(
           `[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`
@@ -7156,10 +7263,12 @@ ipcMain.handle(
     // Transcription service returns 'entries' not 'utterances'
     const entries = transcriptResult.entries || transcriptResult.utterances || [];
     if (entries.length === 0) {
+      backgroundTaskManager.failTask(taskId, 'Transcription returned no content');
       return { success: false, error: 'Transcription returned no content' };
     }
 
     console.log(`[Import] Transcription complete. Got ${entries.length} entries`);
+    backgroundTaskManager.updateTask(taskId, 40, 'Transcription complete, creating meeting...');
 
     // Step 2: Create a meeting object from the transcription
     event.sender.send('import:progress', {
@@ -7257,6 +7366,7 @@ ipcMain.handle(
 
     // Step 4: Generate auto-summary if requested
     if (generateAutoSummary && meeting.transcript.length > 0) {
+      backgroundTaskManager.updateTask(taskId, 50, 'Generating auto-summary...');
       event.sender.send('import:progress', {
         step: 'generating-auto-summary',
         file: path.basename(filePath),
@@ -7270,6 +7380,7 @@ ipcMain.handle(
 
     // Step 5: Generate template summaries if requested
     if (templateIds && templateIds.length > 0 && meeting.transcript.length > 0) {
+      backgroundTaskManager.updateTask(taskId, 65, 'Generating template summaries...');
       event.sender.send('import:progress', {
         step: 'generating-template-summaries',
         file: path.basename(filePath),
@@ -7283,6 +7394,7 @@ ipcMain.handle(
 
     // Step 6: Export to Obsidian if requested
     if (autoExport) {
+      backgroundTaskManager.updateTask(taskId, 80, 'Exporting to Obsidian...');
       event.sender.send('import:progress', { step: 'exporting', file: path.basename(filePath) });
       try {
         await importManager.exportToObsidian(meeting);
@@ -7292,10 +7404,19 @@ ipcMain.handle(
     }
 
     // Step 7: Save to meetings.json
+    backgroundTaskManager.updateTask(taskId, 90, 'Saving meeting data...');
     event.sender.send('import:progress', { step: 'saving', file: path.basename(filePath) });
     const data = await fileOperationManager.readMeetingsData();
     data.pastMeetings.unshift(meeting);
     await fileOperationManager.writeData(data);
+
+    // Complete the background task (Phase 7)
+    backgroundTaskManager.completeTask(taskId, {
+      meetingId: meeting.id,
+      title: meeting.title,
+      utteranceCount: entries.length,
+      duration: transcriptResult.audio_duration,
+    });
 
     return {
       success: true,
@@ -7308,6 +7429,7 @@ ipcMain.handle(
     };
   } catch (error) {
     console.error('[Import] Audio import failed:', error);
+    backgroundTaskManager.failTask(taskId, error.message);
     return { success: false, error: error.message };
   }
   })

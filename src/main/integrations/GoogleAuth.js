@@ -24,10 +24,12 @@ class GoogleAuth {
     this.initialized = false;
     this.pendingState = null; // CSRF protection: stores expected state parameter
 
-    // Combined scopes for both Calendar and Contacts
+    // Combined scopes for Calendar, Contacts, and User Profile
+    // Phase 6: Added userinfo.email for reliable user identification
     this.scopes = [
       'https://www.googleapis.com/auth/calendar.readonly',
       'https://www.googleapis.com/auth/contacts.readonly',
+      'https://www.googleapis.com/auth/userinfo.email', // Required for current user identification
     ];
   }
 
@@ -443,6 +445,40 @@ class GoogleAuth {
         authError.code = 'AUTH_REFRESH_FAILED';
         throw authError;
       }
+    }
+  }
+
+  /**
+   * Get the authenticated user's profile information (Phase 6)
+   * Uses Google People API 'people/me' endpoint
+   *
+   * Required scope: userinfo.email (for email) or contacts.readonly (for name)
+   * API Reference: https://developers.google.com/people/api/rest/v1/people/get
+   *
+   * @returns {Promise<{email: string, name: string}|null>} User info or null if not available
+   */
+  async getAuthenticatedUserInfo() {
+    if (!this.isAuthenticated()) return null;
+
+    try {
+      await this.refreshTokenIfNeeded();
+      const people = google.people({ version: 'v1', auth: this.oauth2Client });
+
+      const response = await people.people.get({
+        resourceName: 'people/me',
+        personFields: 'names,emailAddresses',
+      });
+
+      const result = {
+        email: response.data.emailAddresses?.[0]?.value || null,
+        name: response.data.names?.[0]?.displayName || null,
+      };
+
+      console.log(`[GoogleAuth] User info: ${result.name} <${result.email}>`);
+      return result;
+    } catch (error) {
+      console.error('[GoogleAuth] Failed to get user info:', error.message);
+      return null;
     }
   }
 }

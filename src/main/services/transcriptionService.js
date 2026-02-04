@@ -1,9 +1,17 @@
 const axios = require('axios');
 const fs = require('fs');
+const path = require('path');
 
 /**
  * Unified Transcription Service
  * Supports multiple providers: Recall.ai, AssemblyAI, Deepgram
+ *
+ * Universal-3 Pro Features (AssemblyAI):
+ * - Higher accuracy transcription
+ * - Keyterms prompting (up to 1,000 terms)
+ * - Context prompting (up to 1,500 words)
+ * - Speaker identification with names
+ * - Verbatim mode for disfluencies
  */
 class TranscriptionService {
   constructor() {
@@ -13,6 +21,27 @@ class TranscriptionService {
       deepgram: this.transcribeWithDeepgram.bind(this),
     };
     this.keyManagementService = null;
+    this.backgroundTaskManager = null;
+  }
+
+  /**
+   * Set the background task manager for progress tracking (Phase 7)
+   * @param {object} manager - Background task manager instance
+   */
+  setBackgroundTaskManager(manager) {
+    this.backgroundTaskManager = manager;
+  }
+
+  /**
+   * Update task progress if manager is available
+   * @param {string|null} taskId - Task ID (may be null)
+   * @param {number} progress - Progress percentage (0-100)
+   * @param {string} statusMessage - Status message to display
+   */
+  updateTaskProgress(taskId, progress, statusMessage) {
+    if (this.backgroundTaskManager && taskId) {
+      this.backgroundTaskManager.updateTask(taskId, progress, statusMessage);
+    }
   }
 
   /**
@@ -79,11 +108,16 @@ class TranscriptionService {
   }
 
   /**
-   * AssemblyAI Transcription
+   * AssemblyAI Transcription with Universal-3 Pro support
    * https://www.assemblyai.com/docs
    * @param {string} audioFilePath - Path to audio file
    * @param {object} options - Transcription options
-   * @param {Array} options.custom_spelling - Custom spelling corrections [{from: [], to: ""}]
+   * @param {Array} options.custom_spelling - Custom spelling corrections [{from: [], to: ""}] (legacy)
+   * @param {Array} options.keyterms_prompt - Keyterms for Universal-3 Pro (up to 1,000 terms)
+   * @param {string} options.prompt - Meeting context prompt (up to 1,500 words)
+   * @param {Array} options.speakerNames - Known speaker names for identification (max 10, 35 chars each)
+   * @param {boolean} options.verbatim - Preserve filler words (um, uh, etc.)
+   * @param {string} options.meetingId - Meeting ID for background task tracking
    */
   async transcribeWithAssemblyAI(audioFilePath, options = {}) {
     const ASSEMBLYAI_API_KEY = await this.getApiKey('ASSEMBLYAI_API_KEY');
@@ -92,27 +126,58 @@ class TranscriptionService {
       throw new Error('ASSEMBLYAI_API_KEY not configured. Set it in Settings > Security');
     }
 
-    console.log('[AssemblyAI] Step 1: Uploading audio file...');
+    let taskId = null;
 
-    // Step 1: Upload the audio file
-    const uploadUrl = await this.uploadToAssemblyAI(audioFilePath, ASSEMBLYAI_API_KEY);
-    console.log('[AssemblyAI] Upload complete');
+    // Create background task if manager available (Phase 7)
+    if (this.backgroundTaskManager) {
+      taskId = this.backgroundTaskManager.addTask({
+        type: 'transcription',
+        description: `Transcribing: ${path.basename(audioFilePath)}`,
+        meetingId: options.meetingId,
+        metadata: { audioPath: audioFilePath, provider: 'assemblyai' },
+      });
+    }
 
-    // Step 2: Request transcription with speaker diarization
-    console.log('[AssemblyAI] Step 2: Requesting transcription...');
-    const transcriptId = await this.requestAssemblyAITranscription(
-      uploadUrl,
-      ASSEMBLYAI_API_KEY,
-      options
-    );
-    console.log(`[AssemblyAI] Transcription started, ID: ${transcriptId}`);
+    try {
+      // Step 1: Upload
+      this.updateTaskProgress(taskId, 10, 'Uploading audio to AssemblyAI...');
+      console.log('[AssemblyAI] Step 1: Uploading audio file...');
+      const uploadUrl = await this.uploadToAssemblyAI(audioFilePath, ASSEMBLYAI_API_KEY);
+      console.log('[AssemblyAI] Upload complete');
 
-    // Step 3: Poll for completion
-    console.log('[AssemblyAI] Step 3: Waiting for transcription to complete...');
-    const transcript = await this.pollAssemblyAITranscript(transcriptId, ASSEMBLYAI_API_KEY);
+      // Step 2: Request transcription
+      this.updateTaskProgress(taskId, 20, 'Starting transcription...');
+      console.log('[AssemblyAI] Step 2: Requesting transcription with Universal-3 Pro...');
+      const transcriptId = await this.requestAssemblyAITranscription(
+        uploadUrl,
+        ASSEMBLYAI_API_KEY,
+        options
+      );
+      console.log(`[AssemblyAI] Transcription started, ID: ${transcriptId}`);
 
-    console.log('[AssemblyAI] ✓ Transcription complete');
-    return this.formatAssemblyAITranscript(transcript);
+      // Step 3: Poll for completion (30% to 90% during polling)
+      this.updateTaskProgress(taskId, 30, 'Waiting for AssemblyAI...');
+      console.log('[AssemblyAI] Step 3: Waiting for transcription to complete...');
+      const transcript = await this.pollAssemblyAITranscript(
+        transcriptId,
+        ASSEMBLYAI_API_KEY,
+        taskId
+      );
+
+      // Complete
+      this.updateTaskProgress(taskId, 95, 'Processing transcript...');
+      if (this.backgroundTaskManager && taskId) {
+        this.backgroundTaskManager.completeTask(taskId, { transcriptId });
+      }
+
+      console.log('[AssemblyAI] ✓ Transcription complete');
+      return this.formatAssemblyAITranscript(transcript);
+    } catch (error) {
+      if (this.backgroundTaskManager && taskId) {
+        this.backgroundTaskManager.failTask(taskId, error.message);
+      }
+      throw error;
+    }
   }
 
   async uploadToAssemblyAI(audioFilePath, apiKey) {
@@ -129,18 +194,69 @@ class TranscriptionService {
   }
 
   async requestAssemblyAITranscription(uploadUrl, apiKey, options = {}) {
+    // Build request with Universal-3 Pro features
     const requestBody = {
       audio_url: uploadUrl,
       speaker_labels: true, // Enable speaker diarization
+      speech_models: ['universal-3-pro'], // Phase 1: Higher accuracy model (array format)
     };
 
-    // Add custom spelling if vocabulary is provided (VC-3.2)
-    if (options.custom_spelling && options.custom_spelling.length > 0) {
-      requestBody.custom_spelling = options.custom_spelling;
-      console.log(
-        `[AssemblyAI] Using ${options.custom_spelling.length} custom spelling corrections`
-      );
+    // Phase 2: Keyterms prompting (up to 1,000 terms, max 6 words per phrase)
+    if (options.keyterms_prompt && options.keyterms_prompt.length > 0) {
+      requestBody.keyterms_prompt = options.keyterms_prompt;
+      console.log(`[AssemblyAI] Using ${options.keyterms_prompt.length} keyterms for Universal-3 Pro`);
+    } else if (options.custom_spelling && options.custom_spelling.length > 0) {
+      // Legacy fallback: convert custom_spelling to keyterms
+      const legacyKeyterms = options.custom_spelling.map(item => item.to).filter(Boolean);
+      if (legacyKeyterms.length > 0) {
+        requestBody.keyterms_prompt = legacyKeyterms.slice(0, 1000);
+        console.log(
+          `[AssemblyAI] Converted ${legacyKeyterms.length} custom_spelling entries to keyterms`
+        );
+      }
     }
+
+    // Phase 3: Meeting context prompting (up to 1,500 words)
+    if (options.prompt && options.prompt.trim()) {
+      // Enforce 1,500 word limit
+      const words = options.prompt.split(/\s+/);
+      if (words.length > 1500) {
+        requestBody.prompt = words.slice(0, 1500).join(' ');
+        console.log(`[AssemblyAI] Prompt truncated from ${words.length} to 1500 words`);
+      } else {
+        requestBody.prompt = options.prompt;
+      }
+      console.log(`[AssemblyAI] Using context prompt (${words.length} words)`);
+    }
+
+    // Phase 4: Speaker identification with names
+    if (options.speakerNames && options.speakerNames.length > 0) {
+      // API constraints: max 10 names, each max 35 characters
+      const validNames = options.speakerNames
+        .filter(name => name && typeof name === 'string')
+        .map(name => (name.length > 35 ? name.substring(0, 35) : name))
+        .slice(0, 10);
+
+      if (validNames.length > 0) {
+        requestBody.speech_understanding = {
+          request: {
+            speaker_identification: {
+              speaker_type: 'name',
+              known_values: validNames,
+            },
+          },
+        };
+        console.log(`[AssemblyAI] Speaker identification enabled with ${validNames.length} names`);
+      }
+    }
+
+    // Phase 5: Verbatim mode (preserve filler words)
+    if (options.verbatim === true) {
+      requestBody.disfluencies = true;
+      console.log('[AssemblyAI] Verbatim mode enabled (preserving filler words)');
+    }
+
+    console.log('[AssemblyAI] Request body:', JSON.stringify(requestBody, null, 2));
 
     const response = await axios.post('https://api.assemblyai.com/v2/transcript', requestBody, {
       headers: {
@@ -152,7 +268,7 @@ class TranscriptionService {
     return response.data.id;
   }
 
-  async pollAssemblyAITranscript(transcriptId, apiKey) {
+  async pollAssemblyAITranscript(transcriptId, apiKey, taskId = null) {
     const maxAttempts = 120; // 10 minutes max (5 second intervals)
     let attempts = 0;
 
@@ -169,6 +285,11 @@ class TranscriptionService {
       } else if (status === 'error') {
         throw new Error(`AssemblyAI transcription failed: ${response.data.error}`);
       }
+
+      // Update progress (30% to 90% linearly during polling) - Phase 7
+      const progress = Math.floor(30 + (attempts / maxAttempts) * 60);
+      const elapsedSeconds = attempts * 5;
+      this.updateTaskProgress(taskId, progress, `Transcribing... (${elapsedSeconds}s)`);
 
       // Wait 5 seconds before next poll
       await new Promise(resolve => setTimeout(resolve, 5000));

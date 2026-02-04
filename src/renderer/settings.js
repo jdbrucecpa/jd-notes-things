@@ -1014,11 +1014,9 @@ async function saveUserProfile() {
 }
 
 // ===================================================================
-// VC-2: Vocabulary Management
+// VC-2: Vocabulary Management (v1.2.5 - Simplified to global terms only)
 // ===================================================================
 
-let vocabularyScope = 'global'; // 'global' or 'client'
-let selectedClientSlug = '';
 let vocabularyConfig = null;
 
 /**
@@ -1035,7 +1033,6 @@ async function loadVocabulary() {
     if (result.success) {
       vocabularyConfig = result.data;
       renderVocabularyUI();
-      await loadClientSlugs();
     } else {
       console.error('[Vocabulary] Failed to load config:', result.error);
       notifyError('Failed to load vocabulary: ' + result.error);
@@ -1047,95 +1044,64 @@ async function loadVocabulary() {
 }
 
 /**
- * Load client slugs from routing config for the client selector
+ * Get all terms from global vocabulary (combines spelling corrections and keyword boosts)
  */
-async function loadClientSlugs() {
-  try {
-    const result = await window.electronAPI.vocabularyGetClientSlugs();
-    if (result.success) {
-      const clientSelect = document.getElementById('vocabularyClientSelect');
-      if (clientSelect) {
-        // Clear existing options except the default
-        clientSelect.innerHTML = '<option value="">-- Select a client --</option>';
+function getAllTerms() {
+  if (!vocabularyConfig?.global) return [];
 
-        // Add client slugs from routing config
-        for (const slug of result.data) {
-          const option = document.createElement('option');
-          option.value = slug;
-          option.textContent = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          clientSelect.appendChild(option);
-        }
+  const terms = [];
 
-        // Add client slugs from vocabulary config that aren't in routing
-        for (const slug of Object.keys(vocabularyConfig?.clients || {})) {
-          if (!result.data.includes(slug)) {
-            const option = document.createElement('option');
-            option.value = slug;
-            option.textContent =
-              slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) + ' (vocabulary only)';
-            clientSelect.appendChild(option);
-          }
-        }
-      }
+  // Extract terms from spelling corrections (the "to" value)
+  for (const sc of vocabularyConfig.global.spelling_corrections || []) {
+    if (sc.to) {
+      terms.push({ term: sc.to, source: 'spelling' });
     }
-  } catch (error) {
-    console.error('[Vocabulary] Error loading client slugs:', error);
   }
+
+  // Extract terms from keyword boosts
+  for (const kb of vocabularyConfig.global.keyword_boosts || []) {
+    if (kb.word) {
+      terms.push({ term: kb.word, source: 'keyword' });
+    }
+  }
+
+  return terms;
 }
 
 /**
- * Render the vocabulary UI based on current state
+ * Render the vocabulary UI
  */
 function renderVocabularyUI() {
-  const vocab = getActiveVocabulary();
+  const terms = getAllTerms();
+  renderTermsList(terms);
 
-  renderSpellingList(vocab.spelling_corrections || []);
-  renderKeywordList(vocab.keyword_boosts || []);
-
-  // Update counts
-  document.getElementById('spellingCount').textContent = (vocab.spelling_corrections || []).length;
-  document.getElementById('keywordCount').textContent = (vocab.keyword_boosts || []).length;
-}
-
-/**
- * Get the currently active vocabulary (global or client-specific)
- */
-function getActiveVocabulary() {
-  if (!vocabularyConfig) return { spelling_corrections: [], keyword_boosts: [] };
-
-  if (vocabularyScope === 'client' && selectedClientSlug) {
-    return (
-      vocabularyConfig.clients?.[selectedClientSlug] || {
-        spelling_corrections: [],
-        keyword_boosts: [],
-      }
-    );
+  // Update count
+  const countEl = document.getElementById('termsCount');
+  if (countEl) {
+    countEl.textContent = terms.length;
   }
-  return vocabularyConfig.global || { spelling_corrections: [], keyword_boosts: [] };
 }
 
 /**
- * Render the spelling corrections list
+ * Render the terms list
  */
-function renderSpellingList(corrections) {
-  const list = document.getElementById('spellingList');
+function renderTermsList(terms) {
+  const list = document.getElementById('termsList');
   if (!list) return;
 
-  if (corrections.length === 0) {
-    list.innerHTML = '<div class="vocabulary-empty">No spelling corrections defined</div>';
+  if (terms.length === 0) {
+    list.innerHTML = '<div class="vocabulary-empty">No priority terms defined</div>';
     return;
   }
 
-  list.innerHTML = corrections
+  list.innerHTML = terms
     .map(
-      (sc, index) => `
-    <div class="vocabulary-item" data-index="${index}">
+      ({ term }) => `
+    <div class="vocabulary-item">
       <div class="vocabulary-item-content">
-        <span class="vocabulary-item-from">${Array.isArray(sc.from) ? sc.from.join(', ') : sc.from}</span>
-        <span class="vocabulary-arrow">→</span>
-        <span class="vocabulary-item-to">${sc.to}</span>
+        <span class="vocabulary-item-term">${term}</span>
       </div>
-      <button class="vocabulary-item-delete" onclick="deleteSpelling('${sc.to}')" title="Delete">
+      <button class="vocabulary-item-delete" onclick="deleteTerm('${term.replace(/'/g, "\\'")}')" title="Delete">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M6 6l12 12M6 18L18 6"/>
         </svg>
@@ -1147,183 +1113,73 @@ function renderSpellingList(corrections) {
 }
 
 /**
- * Render the keyword boosts list
+ * Add one or more terms (supports comma-separated input)
  */
-function renderKeywordList(keywords) {
-  const list = document.getElementById('keywordList');
-  if (!list) return;
+async function addTerm() {
+  const input = document.getElementById('termInput');
+  const value = input?.value?.trim();
 
-  if (keywords.length === 0) {
-    list.innerHTML = '<div class="vocabulary-empty">No keyword boosts defined</div>';
+  if (!value) {
+    notifyError('Please enter a term');
     return;
   }
 
-  list.innerHTML = keywords
-    .map(
-      (kb, index) => `
-    <div class="vocabulary-item" data-index="${index}">
-      <div class="vocabulary-item-content">
-        <span class="vocabulary-item-word">${kb.word}</span>
-        <span class="vocabulary-item-intensifier">${kb.intensifier || 5}</span>
-      </div>
-      <button class="vocabulary-item-delete" onclick="deleteKeyword('${kb.word}')" title="Delete">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 6l12 12M6 18L18 6"/>
-        </svg>
-      </button>
-    </div>
-  `
-    )
-    .join('');
-}
-
-/**
- * Add a spelling correction
- */
-async function addSpelling() {
-  const fromInput = document.getElementById('spellingFrom');
-  const toInput = document.getElementById('spellingTo');
-
-  const fromValue = fromInput?.value?.trim();
-  const toValue = toInput?.value?.trim();
-
-  if (!fromValue || !toValue) {
-    notifyError('Please enter both incorrect and correct spellings');
-    return;
-  }
-
-  const fromArray = fromValue
+  // Support comma-separated terms
+  const terms = value
     .split(',')
-    .map(s => s.trim())
-    .filter(s => s);
+    .map(t => t.trim())
+    .filter(t => t.length > 0);
 
-  try {
-    let result;
-    if (vocabularyScope === 'client' && selectedClientSlug) {
-      result = await window.electronAPI.vocabularyAddClientSpelling(
-        selectedClientSlug,
-        fromArray,
-        toValue
-      );
-    } else {
-      result = await window.electronAPI.vocabularyAddGlobalSpelling(fromArray, toValue);
-    }
-
-    if (result.success) {
-      fromInput.value = '';
-      toInput.value = '';
-      await loadVocabulary();
-      notifySuccess('Spelling correction added');
-    } else {
-      notifyError('Failed to add spelling: ' + result.error);
-    }
-  } catch (error) {
-    console.error('[Vocabulary] Error adding spelling:', error);
-    notifyError(error, { prefix: 'Error adding spelling correction:' });
-  }
-}
-
-/**
- * Add a keyword boost
- */
-async function addKeyword() {
-  const wordInput = document.getElementById('keywordWord');
-  const intensifierInput = document.getElementById('keywordIntensifier');
-
-  const word = wordInput?.value?.trim();
-  const intensifier = parseInt(intensifierInput?.value) || 5;
-
-  if (!word) {
-    notifyError('Please enter a word');
+  if (terms.length === 0) {
+    notifyError('Please enter at least one term');
     return;
   }
 
   try {
-    let result;
-    if (vocabularyScope === 'client' && selectedClientSlug) {
-      result = await window.electronAPI.vocabularyAddClientKeyword(
-        selectedClientSlug,
-        word,
-        intensifier
+    let addedCount = 0;
+    for (const term of terms) {
+      // Store as keyword_boost with default intensifier (for Deepgram compatibility)
+      const result = await window.electronAPI.vocabularyAddGlobalKeyword(term, 5);
+      if (result.success) {
+        addedCount++;
+      }
+    }
+
+    if (addedCount > 0) {
+      input.value = '';
+      await loadVocabulary();
+      notifySuccess(
+        addedCount === 1 ? 'Term added' : `${addedCount} terms added`
       );
     } else {
-      result = await window.electronAPI.vocabularyAddGlobalKeyword(word, intensifier);
+      notifyError('Failed to add terms');
     }
+  } catch (error) {
+    console.error('[Vocabulary] Error adding term:', error);
+    notifyError(error, { prefix: 'Error adding term:' });
+  }
+}
 
-    if (result.success) {
-      wordInput.value = '';
-      intensifierInput.value = '5';
+/**
+ * Delete a term (removes from both spelling_corrections and keyword_boosts)
+ */
+async function deleteTerm(term) {
+  try {
+    // Try removing from keyword boosts first
+    let result = await window.electronAPI.vocabularyRemoveGlobalKeyword(term);
+
+    // Also try removing from spelling corrections (by "to" value)
+    const spellingResult = await window.electronAPI.vocabularyRemoveGlobalSpelling(term);
+
+    if (result.success || spellingResult.success) {
       await loadVocabulary();
-      notifySuccess('Keyword boost added');
+      notifySuccess('Term removed');
     } else {
-      notifyError('Failed to add keyword: ' + result.error);
+      notifyError('Failed to remove term');
     }
   } catch (error) {
-    console.error('[Vocabulary] Error adding keyword:', error);
-    notifyError(error, { prefix: 'Error adding keyword boost:' });
-  }
-}
-
-/**
- * Delete a spelling correction
- */
-async function deleteSpelling(to) {
-  try {
-    // For now, only global deletions are supported via the API
-    // Client deletions would need a separate API or direct config manipulation
-    if (vocabularyScope === 'client') {
-      // Remove from client config manually
-      if (vocabularyConfig.clients?.[selectedClientSlug]) {
-        vocabularyConfig.clients[selectedClientSlug].spelling_corrections =
-          vocabularyConfig.clients[selectedClientSlug].spelling_corrections.filter(
-            sc => sc.to !== to
-          );
-        await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
-        await loadVocabulary();
-        notifySuccess('Spelling correction removed');
-      }
-    } else {
-      const result = await window.electronAPI.vocabularyRemoveGlobalSpelling(to);
-      if (result.success) {
-        await loadVocabulary();
-        notifySuccess('Spelling correction removed');
-      } else {
-        notifyError('Failed to remove spelling: ' + result.error);
-      }
-    }
-  } catch (error) {
-    console.error('[Vocabulary] Error deleting spelling:', error);
-    notifyError(error, { prefix: 'Error removing spelling correction:' });
-  }
-}
-
-/**
- * Delete a keyword boost
- */
-async function deleteKeyword(word) {
-  try {
-    if (vocabularyScope === 'client') {
-      // Remove from client config manually
-      if (vocabularyConfig.clients?.[selectedClientSlug]) {
-        vocabularyConfig.clients[selectedClientSlug].keyword_boosts = vocabularyConfig.clients[
-          selectedClientSlug
-        ].keyword_boosts.filter(kb => kb.word !== word);
-        await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
-        await loadVocabulary();
-        notifySuccess('Keyword boost removed');
-      }
-    } else {
-      const result = await window.electronAPI.vocabularyRemoveGlobalKeyword(word);
-      if (result.success) {
-        await loadVocabulary();
-        notifySuccess('Keyword boost removed');
-      } else {
-        notifyError('Failed to remove keyword: ' + result.error);
-      }
-    }
-  } catch (error) {
-    console.error('[Vocabulary] Error deleting keyword:', error);
-    notifyError(error, { prefix: 'Error removing keyword boost:' });
+    console.error('[Vocabulary] Error deleting term:', error);
+    notifyError(error, { prefix: 'Error removing term:' });
   }
 }
 
@@ -1331,118 +1187,15 @@ async function deleteKeyword(word) {
  * Initialize vocabulary UI event listeners
  */
 function initializeVocabularyUI() {
-  // Scope tab switching
-  document.querySelectorAll('.vocabulary-scope-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.vocabulary-scope-tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-
-      vocabularyScope = tab.dataset.scope;
-      const clientSelector = document.getElementById('vocabularyClientSelector');
-
-      if (vocabularyScope === 'client') {
-        clientSelector.style.display = 'flex';
-      } else {
-        clientSelector.style.display = 'none';
-        selectedClientSlug = '';
-      }
-
-      renderVocabularyUI();
-    });
-  });
-
-  // Client selector
-  const clientSelect = document.getElementById('vocabularyClientSelect');
-  if (clientSelect) {
-    clientSelect.addEventListener('change', e => {
-      selectedClientSlug = e.target.value;
-      renderVocabularyUI();
-    });
+  // Add term button
+  const addTermBtn = document.getElementById('addTermBtn');
+  if (addTermBtn) {
+    addTermBtn.addEventListener('click', addTerm);
   }
 
-  // Add new client vocabulary
-  const addNewClientBtn = document.getElementById('addNewClientVocab');
-  if (addNewClientBtn) {
-    addNewClientBtn.addEventListener('click', () => {
-      const formId = 'addClientVocab_' + Date.now();
-
-      createModal({
-        title: 'Add Client Vocabulary',
-        body: `
-          <div class="form-group">
-            <label for="${formId}_slug">Client Slug</label>
-            <input type="text" id="${formId}_slug" class="form-control" placeholder="e.g., acme-corp" />
-            <small class="form-help">Use lowercase with hyphens (e.g., acme-corp, tech-solutions)</small>
-          </div>
-        `,
-        confirmText: 'Add Client',
-        cancelText: 'Cancel',
-        onConfirm: async () => {
-          const slugInput = document.getElementById(`${formId}_slug`);
-          const slug = slugInput?.value?.trim();
-
-          if (!slug) {
-            notifyError('Please enter a client slug');
-            throw new Error('Validation failed');
-          }
-
-          const normalizedSlug = slug.toLowerCase().replace(/\s+/g, '-');
-
-          // Validate slug format
-          if (!/^[a-z0-9-]+$/.test(normalizedSlug)) {
-            notifyError('Client slug must be lowercase alphanumeric with hyphens');
-            throw new Error('Validation failed');
-          }
-
-          if (!vocabularyConfig.clients) vocabularyConfig.clients = {};
-          if (!vocabularyConfig.clients[normalizedSlug]) {
-            vocabularyConfig.clients[normalizedSlug] = {
-              spelling_corrections: [],
-              keyword_boosts: [],
-            };
-            await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
-            await loadClientSlugs();
-            document.getElementById('vocabularyClientSelect').value = normalizedSlug;
-            selectedClientSlug = normalizedSlug;
-            renderVocabularyUI();
-            notifySuccess(`Created vocabulary for "${normalizedSlug}"`);
-          } else {
-            document.getElementById('vocabularyClientSelect').value = normalizedSlug;
-            selectedClientSlug = normalizedSlug;
-            renderVocabularyUI();
-            notifyInfo(`Client "${normalizedSlug}" already exists, selected it`);
-          }
-        },
-      });
-
-      // Focus on the input after modal is created
-      setTimeout(() => {
-        const slugInput = document.getElementById(`${formId}_slug`);
-        if (slugInput) slugInput.focus();
-      }, 150);
-    });
-  }
-
-  // Add spelling button
-  const addSpellingBtn = document.getElementById('addSpellingBtn');
-  if (addSpellingBtn) {
-    addSpellingBtn.addEventListener('click', addSpelling);
-  }
-
-  // Add keyword button
-  const addKeywordBtn = document.getElementById('addKeywordBtn');
-  if (addKeywordBtn) {
-    addKeywordBtn.addEventListener('click', addKeyword);
-  }
-
-  // Enter key support for spelling form
-  document.getElementById('spellingTo')?.addEventListener('keypress', e => {
-    if (e.key === 'Enter') addSpelling();
-  });
-
-  // Enter key support for keyword form
-  document.getElementById('keywordWord')?.addEventListener('keypress', e => {
-    if (e.key === 'Enter') addKeyword();
+  // Enter key support
+  document.getElementById('termInput')?.addEventListener('keypress', e => {
+    if (e.key === 'Enter') addTerm();
   });
 
   // Reload button
@@ -1455,7 +1208,7 @@ function initializeVocabularyUI() {
     });
   }
 
-  // Export button (placeholder - would need file dialog)
+  // Export button
   const exportBtn = document.getElementById('vocabularyExportBtn');
   if (exportBtn) {
     exportBtn.addEventListener('click', () => {
@@ -1475,7 +1228,7 @@ function initializeVocabularyUI() {
     });
   }
 
-  // Import button (placeholder)
+  // Import button
   const importBtn = document.getElementById('vocabularyImportBtn');
   if (importBtn) {
     importBtn.addEventListener('click', () => {
@@ -1489,7 +1242,7 @@ function initializeVocabularyUI() {
           reader.onload = async event => {
             try {
               const imported = JSON.parse(event.target.result);
-              // Merge with existing
+              // Merge global vocabulary only
               if (imported.global) {
                 vocabularyConfig.global.spelling_corrections.push(
                   ...(imported.global.spelling_corrections || [])
@@ -1498,23 +1251,17 @@ function initializeVocabularyUI() {
                   ...(imported.global.keyword_boosts || [])
                 );
               }
+              // Also import any keyword_boosts from client configs as global
               if (imported.clients) {
-                for (const [slug, clientVocab] of Object.entries(imported.clients)) {
-                  if (!vocabularyConfig.clients[slug]) {
-                    vocabularyConfig.clients[slug] = clientVocab;
-                  } else {
-                    vocabularyConfig.clients[slug].spelling_corrections.push(
-                      ...(clientVocab.spelling_corrections || [])
-                    );
-                    vocabularyConfig.clients[slug].keyword_boosts.push(
-                      ...(clientVocab.keyword_boosts || [])
-                    );
-                  }
+                for (const clientVocab of Object.values(imported.clients)) {
+                  vocabularyConfig.global.keyword_boosts.push(
+                    ...(clientVocab.keyword_boosts || [])
+                  );
                 }
               }
               await window.electronAPI.vocabularySaveConfig(vocabularyConfig);
               await loadVocabulary();
-              notifySuccess('Vocabulary imported and merged');
+              notifySuccess('Vocabulary imported');
             } catch (error) {
               console.error('[Vocabulary] Import error:', error);
               notifyError(error, { prefix: 'Failed to import vocabulary:' });
@@ -1528,9 +1275,8 @@ function initializeVocabularyUI() {
   }
 }
 
-// Expose delete functions globally for onclick handlers
-window.deleteSpelling = deleteSpelling;
-window.deleteKeyword = deleteKeyword;
+// Expose delete function globally for onclick handlers
+window.deleteTerm = deleteTerm;
 
 // Initialize vocabulary UI when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {

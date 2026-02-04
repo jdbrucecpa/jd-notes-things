@@ -2,11 +2,109 @@
  * SpeakerMatcher - Matches diarized speakers to meeting participants
  * Phase 6: Speaker Recognition & Contact Matching
  * SM-1: Enhanced with SDK speech timeline correlation for high-confidence matching
+ * v1.2.5: Added current user identification for improved "me" detection
  */
 
 class SpeakerMatcher {
   constructor(googleContacts) {
     this.googleContacts = googleContacts;
+  }
+
+  /**
+   * Fuzzy name matching for speaker identification (Phase 6)
+   * Handles common variations (case, middle names, nicknames)
+   *
+   * @param {string} name1 - First name to compare
+   * @param {string} name2 - Second name to compare
+   * @returns {boolean} True if names likely match the same person
+   */
+  fuzzyNameMatch(name1, name2) {
+    if (!name1 || !name2) return false;
+
+    const normalize = s => s.toLowerCase().trim();
+    const n1 = normalize(name1);
+    const n2 = normalize(name2);
+
+    // Exact match
+    if (n1 === n2) return true;
+
+    // One contains the other (handles "John" vs "John Smith")
+    if (n1.includes(n2) || n2.includes(n1)) return true;
+
+    // First name match (handles "John Smith" vs "John Doe")
+    const first1 = n1.split(' ')[0];
+    const first2 = n2.split(' ')[0];
+    if (first1 === first2 && first1.length > 2) return true;
+
+    return false;
+  }
+
+  /**
+   * Identify which speaker label corresponds to the current user (Phase 6)
+   *
+   * @param {Array} speakers - Speaker objects with labels and word counts
+   * @param {Object} currentUser - Current user identity {emails, names, primaryEmail, primaryName}
+   * @param {Array} participants - Meeting participants
+   * @returns {Object|null} - {speakerLabel, confidence, method} or null
+   */
+  identifyCurrentUserSpeaker(speakers, currentUser, participants) {
+    if (!currentUser?.emails?.length && !currentUser?.names?.length) {
+      return null;
+    }
+
+    console.log(
+      `[SpeakerMatcher] Identifying current user: ${currentUser.primaryName} <${currentUser.primaryEmail}>`
+    );
+
+    // Method 1: Find participant that matches current user by email or name
+    for (const participant of participants) {
+      const matchesByEmail =
+        participant.email &&
+        currentUser.emails.some(e => e.toLowerCase() === participant.email.toLowerCase());
+
+      const matchesByName = currentUser.names.some(name =>
+        this.fuzzyNameMatch(name, participant.originalName || participant.name)
+      );
+
+      if ((matchesByEmail || matchesByName) && participant.speakerLabel) {
+        console.log(
+          `[SpeakerMatcher] Current user identified as ${participant.speakerLabel} via ${matchesByEmail ? 'email' : 'name'} match`
+        );
+        return {
+          speakerLabel: participant.speakerLabel,
+          participantName: participant.originalName || participant.name,
+          confidence: matchesByEmail ? 'high' : 'medium',
+          method: 'current-user-match',
+        };
+      }
+    }
+
+    // Method 2: Check if host matches current user
+    const hostParticipant = participants.find(p => p.isHost);
+    if (hostParticipant) {
+      const hostMatchesByEmail =
+        hostParticipant.email &&
+        currentUser.emails.some(e => e.toLowerCase() === hostParticipant.email.toLowerCase());
+
+      const hostMatchesByName = currentUser.names.some(name =>
+        this.fuzzyNameMatch(name, hostParticipant.originalName)
+      );
+
+      if ((hostMatchesByEmail || hostMatchesByName) && hostParticipant.speakerLabel) {
+        console.log(
+          `[SpeakerMatcher] Current user is host, identified as ${hostParticipant.speakerLabel}`
+        );
+        return {
+          speakerLabel: hostParticipant.speakerLabel,
+          participantName: hostParticipant.originalName,
+          confidence: 'medium',
+          method: 'host-is-current-user',
+        };
+      }
+    }
+
+    console.log('[SpeakerMatcher] Could not identify current user among speakers');
+    return null;
   }
 
   /**

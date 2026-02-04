@@ -15,7 +15,8 @@
       "WebFetch",
       "WebSearch",
       "Bash(rm:*)",
-      "Bash(npm outdated:*)"
+      "Bash(npm outdated:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [
       "Bash(rm -rf *):*",
