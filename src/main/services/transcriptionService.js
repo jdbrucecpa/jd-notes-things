@@ -6,12 +6,14 @@ const path = require('path');
  * Unified Transcription Service
  * Supports multiple providers: Recall.ai, AssemblyAI, Deepgram
  *
- * Universal-3 Pro Features (AssemblyAI):
- * - Higher accuracy transcription
- * - Keyterms prompting (up to 1,000 terms)
- * - Context prompting (up to 1,500 words)
- * - Speaker identification with names
+ * Universal-3-Pro Features (AssemblyAI):
+ * - Higher accuracy transcription with speech_models: ['universal-3-pro', 'universal-2']
+ * - Keyterms prompting via `keyterms_prompt` (up to 1,000 domain-specific terms)
+ * - Speaker identification with names via speech_understanding
  * - Verbatim mode for disfluencies
+ *
+ * API LIMITATION: AssemblyAI only allows ONE of: prompt OR keyterms_prompt (not both)
+ * We use keyterms_prompt for better vocabulary accuracy (company names, technical terms)
  */
 class TranscriptionService {
   constructor() {
@@ -195,16 +197,20 @@ class TranscriptionService {
 
   async requestAssemblyAITranscription(uploadUrl, apiKey, options = {}) {
     // Build request with Universal-3 Pro features
+    // NOTE: To use both prompt AND keyterms_prompt, must include fallback model and language_detection
     const requestBody = {
       audio_url: uploadUrl,
       speaker_labels: true, // Enable speaker diarization
-      speech_models: ['universal-3-pro'], // Phase 1: Higher accuracy model (array format)
+      speech_models: ['universal-3-pro', 'universal-2'], // Primary + fallback (required for dual prompting)
+      language_detection: true, // Recommended for Universal-3-Pro
     };
 
-    // Phase 2: Keyterms prompting (up to 1,000 terms, max 6 words per phrase)
+    // Keyterms prompting (up to 1,000 terms for Universal-3-Pro, max 6 words per phrase)
+    // NOTE: AssemblyAI API only allows ONE of: prompt OR keyterms_prompt (not both)
+    // We prioritize keyterms_prompt for better vocabulary/terminology accuracy
     if (options.keyterms_prompt && options.keyterms_prompt.length > 0) {
       requestBody.keyterms_prompt = options.keyterms_prompt;
-      console.log(`[AssemblyAI] Using ${options.keyterms_prompt.length} keyterms for Universal-3 Pro`);
+      console.log(`[AssemblyAI] Using ${options.keyterms_prompt.length} keyterms for Universal-3-Pro`);
     } else if (options.custom_spelling && options.custom_spelling.length > 0) {
       // Legacy fallback: convert custom_spelling to keyterms
       const legacyKeyterms = options.custom_spelling.map(item => item.to).filter(Boolean);
@@ -216,17 +222,10 @@ class TranscriptionService {
       }
     }
 
-    // Phase 3: Meeting context prompting (up to 1,500 words)
+    // NOTE: Skipping prompt parameter - API only allows keyterms_prompt OR prompt, not both
+    // We chose keyterms_prompt for better vocabulary accuracy (company names, technical terms)
     if (options.prompt && options.prompt.trim()) {
-      // Enforce 1,500 word limit
-      const words = options.prompt.split(/\s+/);
-      if (words.length > 1500) {
-        requestBody.prompt = words.slice(0, 1500).join(' ');
-        console.log(`[AssemblyAI] Prompt truncated from ${words.length} to 1500 words`);
-      } else {
-        requestBody.prompt = options.prompt;
-      }
-      console.log(`[AssemblyAI] Using context prompt (${words.length} words)`);
+      console.log(`[AssemblyAI] Skipping prompt (API only allows keyterms_prompt OR prompt, not both)`);
     }
 
     // Phase 4: Speaker identification with names

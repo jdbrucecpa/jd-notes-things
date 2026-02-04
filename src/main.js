@@ -1090,6 +1090,13 @@ async function autoStartRecording(meeting) {
       summary: '',
       calendarEventId: meeting.id,
       participantEmails: meeting.participantEmails || [],
+      // v1.2.5: Store calendar data for speaker identification
+      calendarDescription: meeting.description || '',
+      calendarAttendees: (meeting.participants || []).map(p => ({
+        name: p.name,
+        email: p.email,
+        responseStatus: p.responseStatus,
+      })),
     };
 
     // Save the meeting
@@ -2744,13 +2751,30 @@ async function initSDK() {
                 if (meetingOrganization) {
                   promptParts.push(`Organization: ${meetingOrganization}`);
                 }
-                // Add participant names from SDK (originalName is authoritative per CLAUDE.md)
-                const participantNames = (meetingForContext.participants || [])
-                  .map(p => p.originalName || p.name)
-                  .filter(Boolean);
-                if (participantNames.length > 0) {
-                  promptParts.push(`Participants: ${participantNames.join(', ')}`);
+
+                // v1.2.5: Extract meeting purpose from calendar description
+                const meetingPurpose = extractMeetingPurpose(meetingForContext.calendarDescription);
+                if (meetingPurpose) {
+                  promptParts.push(`Purpose: ${meetingPurpose}`);
+                  console.log(`[Transcription] v1.2.5: Extracted meeting purpose from description`);
                 }
+
+                // v1.2.5: Resolve speaker names using fallback chain
+                // Zoom participants → Calendar attendees → Google Contacts
+                const zoomParticipants = meetingForContext.participants || [];
+                const calendarAttendees = meetingForContext.calendarAttendees || [];
+
+                // Resolve names using the fallback chain
+                const resolvedNames = await resolveSpeakerNames(
+                  zoomParticipants,
+                  calendarAttendees,
+                  googleContacts
+                );
+
+                if (resolvedNames.length > 0) {
+                  promptParts.push(`Participants: ${resolvedNames.join(', ')}`);
+                }
+
                 if (promptParts.length > 0) {
                   vocabularyOptions.prompt = promptParts.join('. ');
                   console.log(
@@ -2758,12 +2782,13 @@ async function initSDK() {
                   );
                 }
 
-                // v1.2.5 Phase 4: Build speaker names for identification
+                // v1.2.5 Phase 4: Build speaker names for AssemblyAI identification
                 // API constraints: max 10 names, each max 35 characters
-                const speakerNames = participantNames
+                const speakerNames = resolvedNames
                   .filter(name => name && !/^(speaker|participant|guest|unknown)/i.test(name))
                   .map(name => (name.length > 35 ? name.substring(0, 35) : name))
                   .slice(0, 10);
+
                 if (speakerNames.length > 0) {
                   vocabularyOptions.speakerNames = speakerNames;
                   console.log(
@@ -7457,6 +7482,154 @@ function formatDuration(seconds) {
     return `${hrs}h ${mins}m`;
   }
   return `${mins} minutes`;
+}
+
+/**
+ * v1.2.5: Parse meeting description to extract purpose text
+ * Extracts text between "What is the purpose of this meeting?:" and "Best number to reach you?:"
+ * @param {string} description - Raw calendar event description
+ * @returns {string|null} Extracted purpose text or null if not found
+ */
+function extractMeetingPurpose(description) {
+  if (!description) return null;
+
+  // Try to extract text between the markers
+  const startMarker = 'What is the purpose of this meeting?:';
+  const endMarker = 'Best number to reach you?:';
+
+  const startIndex = description.indexOf(startMarker);
+  if (startIndex === -1) return null;
+
+  const contentStart = startIndex + startMarker.length;
+  const endIndex = description.indexOf(endMarker, contentStart);
+
+  let purposeText;
+  if (endIndex !== -1) {
+    purposeText = description.substring(contentStart, endIndex);
+  } else {
+    // No end marker, take everything after start marker (up to 500 chars)
+    purposeText = description.substring(contentStart, contentStart + 500);
+  }
+
+  // Clean up the text
+  purposeText = purposeText.trim();
+
+  // Remove any remaining HTML or excessive whitespace
+  purposeText = purposeText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+
+  return purposeText.length > 0 ? purposeText : null;
+}
+
+/**
+ * v1.2.5: Fuzzy match a name to find the best match in a list
+ * @param {string} name - Name to match
+ * @param {Array} candidates - Array of {name, email, ...} objects
+ * @returns {object|null} Best matching candidate or null
+ */
+function fuzzyMatchName(name, candidates) {
+  if (!name || !candidates || candidates.length === 0) return null;
+
+  const normalizedName = name.toLowerCase().trim();
+
+  // Try exact match first
+  const exactMatch = candidates.find(
+    c => c.name && c.name.toLowerCase().trim() === normalizedName
+  );
+  if (exactMatch) return exactMatch;
+
+  // Try partial match (name contains candidate or vice versa)
+  for (const candidate of candidates) {
+    if (!candidate.name) continue;
+    const candidateName = candidate.name.toLowerCase().trim();
+
+    // Check if one contains the other
+    if (normalizedName.includes(candidateName) || candidateName.includes(normalizedName)) {
+      return candidate;
+    }
+
+    // Check first name match (for "John" matching "John Smith")
+    const nameParts = normalizedName.split(/\s+/);
+    const candidateParts = candidateName.split(/\s+/);
+    if (nameParts[0] === candidateParts[0] && nameParts[0].length > 2) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * v1.2.5: Resolve speaker names using fallback chain
+ * For each Zoom participant:
+ *   1. Try to match to calendar attendee
+ *   2. If matched: Google Contact name → Calendar displayName → Zoom name
+ *   3. If not matched (party crasher): Zoom display name
+ *
+ * @param {Array} zoomParticipants - Participants from Zoom SDK [{originalName, name, email, ...}]
+ * @param {Array} calendarAttendees - Attendees from calendar [{name, email, ...}]
+ * @param {object} googleContacts - GoogleContacts service instance
+ * @returns {Promise<Array>} Array of resolved speaker names
+ */
+async function resolveSpeakerNames(zoomParticipants, calendarAttendees, googleContacts) {
+  const resolvedNames = [];
+  const seenNames = new Set();
+
+  for (const zoomParticipant of zoomParticipants) {
+    const zoomName = zoomParticipant.originalName || zoomParticipant.name;
+    if (!zoomName) continue;
+
+    // Skip generic names
+    if (/^(speaker|participant|guest|unknown|host)/i.test(zoomName)) continue;
+
+    let resolvedName = zoomName; // Default fallback
+
+    // Step 1: Try to match Zoom participant to calendar attendee
+    const calendarMatch = fuzzyMatchName(zoomName, calendarAttendees || []);
+
+    if (calendarMatch && calendarMatch.email) {
+      // Step 2: Look up Google Contact by calendar attendee's email
+      if (googleContacts && typeof googleContacts.findContactByEmail === 'function') {
+        try {
+          const contact = await googleContacts.findContactByEmail(calendarMatch.email);
+          if (contact && contact.name) {
+            // Use Google Contact name (best option)
+            resolvedName = contact.name;
+            console.log(
+              `[SpeakerNames] Resolved "${zoomName}" → Contact "${resolvedName}" (via ${calendarMatch.email})`
+            );
+          } else if (calendarMatch.name && calendarMatch.name !== calendarMatch.email) {
+            // Use calendar displayName (fallback)
+            resolvedName = calendarMatch.name;
+            console.log(
+              `[SpeakerNames] Resolved "${zoomName}" → Calendar "${resolvedName}" (no contact found)`
+            );
+          }
+          // else: keep Zoom name
+        } catch (contactError) {
+          console.warn(`[SpeakerNames] Contact lookup failed for ${calendarMatch.email}:`, contactError.message);
+          // Use calendar displayName as fallback
+          if (calendarMatch.name && calendarMatch.name !== calendarMatch.email) {
+            resolvedName = calendarMatch.name;
+          }
+        }
+      } else if (calendarMatch.name && calendarMatch.name !== calendarMatch.email) {
+        // No Google Contacts service, use calendar displayName
+        resolvedName = calendarMatch.name;
+        console.log(`[SpeakerNames] Resolved "${zoomName}" → Calendar "${resolvedName}" (no contacts service)`);
+      }
+    } else {
+      // No calendar match (party crasher) - keep Zoom display name
+      console.log(`[SpeakerNames] No calendar match for "${zoomName}" - using Zoom name`);
+    }
+
+    // Avoid duplicates
+    if (!seenNames.has(resolvedName.toLowerCase())) {
+      seenNames.add(resolvedName.toLowerCase());
+      resolvedNames.push(resolvedName);
+    }
+  }
+
+  return resolvedNames;
 }
 
 /**
