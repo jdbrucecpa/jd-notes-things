@@ -197,6 +197,12 @@ Multi-provider support with 85-90% cost reduction:
 - **Token Files:** Windows icacls permission validation
 - **IPC Validation:** Zod schemas (2/36 handlers, infrastructure complete)
 
+## Pending Features (v1.2.5+)
+
+Features that are implemented in backend but lack UI:
+
+- **Verbatim Mode:** Transcription service supports `options.verbatim = true` to preserve filler words (um, uh, etc.) but no Settings toggle exists. To enable programmatically, pass `{ verbatim: true }` to `transcriptionService.transcribe()`.
+
 ## Important Constraints
 
 - **Personal use only** - Not for resale or multi-tenant

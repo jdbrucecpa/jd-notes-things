@@ -484,6 +484,77 @@ function saveUserProfile() {
 }
 
 /**
+ * Get current user identity from all available sources (v1.2.5 Phase 6)
+ * Combines local user profile with Google OAuth user info for speaker identification.
+ *
+ * @returns {Promise<{emails: string[], names: string[], primaryEmail: string|null, primaryName: string|null}|null>}
+ */
+async function getCurrentUserIdentity() {
+  const emails = new Set();
+  const names = new Set();
+  let primaryEmail = null;
+  let primaryName = null;
+
+  // Source 1: Local user profile (set in Settings)
+  if (userProfile?.email) {
+    emails.add(userProfile.email.toLowerCase());
+    primaryEmail = userProfile.email;
+  }
+  if (userProfile?.name) {
+    names.add(userProfile.name);
+    primaryName = userProfile.name;
+  }
+
+  // Source 2: Google OAuth authenticated user
+  if (googleAuth && googleAuth.isAuthenticated()) {
+    try {
+      const googleUserInfo = await googleAuth.getAuthenticatedUserInfo();
+      if (googleUserInfo) {
+        if (googleUserInfo.email) {
+          emails.add(googleUserInfo.email.toLowerCase());
+          // Prefer Google email as primary if no local profile email
+          if (!primaryEmail) {
+            primaryEmail = googleUserInfo.email;
+          }
+        }
+        if (googleUserInfo.name) {
+          names.add(googleUserInfo.name);
+          // Prefer Google name as primary if no local profile name
+          if (!primaryName) {
+            primaryName = googleUserInfo.name;
+          }
+        }
+        console.log(
+          `[UserIdentity] Google user: ${googleUserInfo.name} <${googleUserInfo.email}>`
+        );
+      }
+    } catch (error) {
+      console.warn('[UserIdentity] Failed to get Google user info:', error.message);
+    }
+  }
+
+  // Return null if no identity found
+  if (emails.size === 0 && names.size === 0) {
+    console.log('[UserIdentity] No user identity available');
+    return null;
+  }
+
+  const identity = {
+    emails: Array.from(emails),
+    names: Array.from(names),
+    primaryEmail,
+    primaryName,
+  };
+
+  console.log(
+    `[UserIdentity] Current user: ${identity.primaryName || 'Unknown'} ` +
+      `(${identity.emails.length} emails, ${identity.names.length} names)`
+  );
+
+  return identity;
+}
+
+/**
  * Create system tray icon and menu (Phase 10.7)
  */
 function createSystemTray() {
@@ -2665,6 +2736,14 @@ async function initSDK() {
         console.log('[Transcription] Window ID:', windowId);
         console.log('[Transcription] Provider:', transcriptionProvider);
 
+        // v1.2.5 Phase 7: Create background task for recording processing workflow
+        const recordingTaskId = backgroundTaskManager.addTask({
+          type: 'recording-processing',
+          description: 'Processing recording...',
+          meetingId: meetingId,
+          metadata: { windowId, provider: transcriptionProvider },
+        });
+
         // Check if recording file exists (SDK always creates MP3)
         const fs = require('fs');
         const recordingPath = path.join(RECORDING_PATH, `windows-desktop-${windowId}.mp3`);
@@ -2673,8 +2752,10 @@ async function initSDK() {
         if (fs.existsSync(recordingPath)) {
           const stats = fs.statSync(recordingPath);
           console.log('[Transcription] ✓ File exists, size:', (stats.size / 1024).toFixed(2), 'KB');
+          backgroundTaskManager.updateTask(recordingTaskId, 10, 'Recording file ready');
         } else {
           console.error('[Transcription] ✗ Recording file NOT found!');
+          backgroundTaskManager.failTask(recordingTaskId, 'Recording file not found');
           return;
         }
 
@@ -2737,28 +2818,13 @@ async function initSDK() {
                 `[Transcription] VC-3: Using ${vocabCount} vocabulary entries for ${transcriptionProvider}`
               );
 
-              // v1.2.5 Phase 3: Build meeting context prompt for Universal-3 Pro
+              // v1.2.5: Load meeting context for speaker identification
               const fileData2 = await fs.promises.readFile(meetingsFilePath, 'utf8');
               const meetingsData2 = JSON.parse(fileData2);
               const meetingForContext = meetingsData2.pastMeetings.find(
                 m => m.recordingId === windowId
               );
               if (meetingForContext) {
-                const promptParts = [];
-                if (meetingForContext.title) {
-                  promptParts.push(`Meeting: ${meetingForContext.title}`);
-                }
-                if (meetingOrganization) {
-                  promptParts.push(`Organization: ${meetingOrganization}`);
-                }
-
-                // v1.2.5: Extract meeting purpose from calendar description
-                const meetingPurpose = extractMeetingPurpose(meetingForContext.calendarDescription);
-                if (meetingPurpose) {
-                  promptParts.push(`Purpose: ${meetingPurpose}`);
-                  console.log(`[Transcription] v1.2.5: Extracted meeting purpose from description`);
-                }
-
                 // v1.2.5: Resolve speaker names using fallback chain
                 // Zoom participants → Calendar attendees → Google Contacts
                 const zoomParticipants = meetingForContext.participants || [];
@@ -2771,14 +2837,11 @@ async function initSDK() {
                   googleContacts
                 );
 
-                if (resolvedNames.length > 0) {
-                  promptParts.push(`Participants: ${resolvedNames.join(', ')}`);
-                }
-
-                if (promptParts.length > 0) {
-                  vocabularyOptions.prompt = promptParts.join('. ');
+                // Log meeting context for debugging (not sent to API - keyterms_prompt takes precedence)
+                if (meetingForContext.title || meetingOrganization || resolvedNames.length > 0) {
                   console.log(
-                    `[Transcription] v1.2.5: Context prompt: "${vocabularyOptions.prompt}"`
+                    `[Transcription] v1.2.5: Meeting context - Title: ${meetingForContext.title || 'N/A'}, ` +
+                      `Org: ${meetingOrganization || 'N/A'}, Participants: ${resolvedNames.length}`
                   );
                 }
 
@@ -2806,6 +2869,7 @@ async function initSDK() {
               );
             }
 
+            backgroundTaskManager.updateTask(recordingTaskId, 20, 'Starting transcription...');
             console.log(`[Transcription] Calling transcriptionService.transcribe()...`);
             const transcript = await transcriptionService.transcribe(
               transcriptionProvider,
@@ -2813,6 +2877,7 @@ async function initSDK() {
               vocabularyOptions
             );
 
+            backgroundTaskManager.updateTask(recordingTaskId, 60, 'Transcription complete, saving...');
             console.log(`[Transcription] ✓ ${transcriptionProvider} transcription complete`);
             console.log(`[Transcription] Transcript object:`, JSON.stringify(transcript, null, 2));
             console.log(
@@ -2868,6 +2933,7 @@ async function initSDK() {
               );
 
               // SM-1: Apply speaker matching immediately after transcription
+              backgroundTaskManager.updateTask(recordingTaskId, 70, 'Matching speakers...');
               const meetingForMatching = meetingsData.pastMeetings[meetingIndex];
               if (
                 speakerMatcher &&
@@ -2918,6 +2984,33 @@ async function initSDK() {
                         participantData: participants, // Pass full participant data for name-based matching
                       }
                     );
+
+                    // v1.2.5 Phase 6: Identify current user among speakers
+                    const currentUserIdentity = await getCurrentUserIdentity();
+                    if (currentUserIdentity && Object.keys(speakerMapping).length > 0) {
+                      const speakerStats = speakerMatcher.analyzeSpeakers(
+                        meetingForMatching.transcript
+                      );
+                      const speakers = Array.from(speakerStats.values());
+                      const currentUserMatch = speakerMatcher.identifyCurrentUserSpeaker(
+                        speakers,
+                        currentUserIdentity,
+                        participants
+                      );
+
+                      if (currentUserMatch) {
+                        // Mark the identified speaker as the current user in the mapping
+                        if (speakerMapping[currentUserMatch.speakerLabel]) {
+                          speakerMapping[currentUserMatch.speakerLabel].isCurrentUser = true;
+                          speakerMapping[currentUserMatch.speakerLabel].currentUserConfidence =
+                            currentUserMatch.confidence;
+                          console.log(
+                            `[Transcription] Phase 6: Current user identified as ${currentUserMatch.speakerLabel} ` +
+                              `(${currentUserMatch.confidence} confidence via ${currentUserMatch.method})`
+                          );
+                        }
+                      }
+                    }
 
                     // Apply mapping to transcript
                     if (Object.keys(speakerMapping).length > 0) {
@@ -2998,20 +3091,29 @@ async function initSDK() {
               }
 
               // Generate auto-summary for AssemblyAI/Deepgram transcriptions
+              backgroundTaskManager.updateTask(recordingTaskId, 85, 'Generating summary...');
               const updatedMeeting = meetingsData.pastMeetings[meetingIndex];
               if (updatedMeeting) {
                 await generateAndSaveAutoSummary(updatedMeeting.id, '[Auto-Summary]');
               }
 
+              // Complete the recording processing task
+              backgroundTaskManager.completeTask(recordingTaskId);
+              console.log('[Transcription] ✓ Recording processing complete');
+
               // Note: Recording cleanup and UI notification already happened immediately after recording ended
               // (see recording-ended event handler above)
             } else {
+              backgroundTaskManager.failTask(recordingTaskId, 'Meeting not found');
               console.error('[Transcription] ✗ Meeting not found with recordingId:', windowId);
             }
           }
         } catch (error) {
           console.error('[Transcription] ERROR during transcription:', error);
           console.error('[Transcription] Error stack:', error.stack);
+
+          // Fail the background task
+          backgroundTaskManager.failTask(recordingTaskId, error.message);
 
           // Notify renderer of error
           if (mainWindow && !mainWindow.isDestroyed()) {

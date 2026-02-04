@@ -10,10 +10,14 @@ const path = require('path');
  * - Higher accuracy transcription with speech_models: ['universal-3-pro', 'universal-2']
  * - Keyterms prompting via `keyterms_prompt` (up to 1,000 domain-specific terms)
  * - Speaker identification with names via speech_understanding
- * - Verbatim mode for disfluencies
+ * - Verbatim mode for disfluencies (preserves "um", "uh", etc.)
  *
  * API LIMITATION: AssemblyAI only allows ONE of: prompt OR keyterms_prompt (not both)
  * We use keyterms_prompt for better vocabulary accuracy (company names, technical terms)
+ *
+ * PENDING FEATURES:
+ * - Verbatim mode: Backend supports `options.verbatim = true` but no UI toggle exists yet.
+ *   To enable programmatically, pass { verbatim: true } in transcription options.
  */
 class TranscriptionService {
   constructor() {
@@ -116,9 +120,8 @@ class TranscriptionService {
    * @param {object} options - Transcription options
    * @param {Array} options.custom_spelling - Custom spelling corrections [{from: [], to: ""}] (legacy)
    * @param {Array} options.keyterms_prompt - Keyterms for Universal-3 Pro (up to 1,000 terms)
-   * @param {string} options.prompt - Meeting context prompt (up to 1,500 words)
    * @param {Array} options.speakerNames - Known speaker names for identification (max 10, 35 chars each)
-   * @param {boolean} options.verbatim - Preserve filler words (um, uh, etc.)
+   * @param {boolean} options.verbatim - Preserve filler words (um, uh, etc.) - No UI yet
    * @param {string} options.meetingId - Meeting ID for background task tracking
    */
   async transcribeWithAssemblyAI(audioFilePath, options = {}) {
@@ -222,11 +225,8 @@ class TranscriptionService {
       }
     }
 
-    // NOTE: Skipping prompt parameter - API only allows keyterms_prompt OR prompt, not both
-    // We chose keyterms_prompt for better vocabulary accuracy (company names, technical terms)
-    if (options.prompt && options.prompt.trim()) {
-      console.log(`[AssemblyAI] Skipping prompt (API only allows keyterms_prompt OR prompt, not both)`);
-    }
+    // NOTE: prompt parameter abandoned in v1.2.5 - API only allows keyterms_prompt OR prompt
+    // We use keyterms_prompt for better vocabulary accuracy (company names, technical terms)
 
     // Phase 4: Speaker identification with names
     if (options.speakerNames && options.speakerNames.length > 0) {
