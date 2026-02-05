@@ -1,36 +1,27 @@
-Extract the most important verbatim quotes, insights, and statements made by participants, including me, in this meeting. I want the exact words used, especially:
+Extract significant verbatim quotes only. Exact words, not paraphrased.
 
-- Commitments made
-- Concerns raised
-- Surprises or unexpected admissions
+Focus on:
+- Commitments, concerns, surprises
 - Strong opinions or convictions
-- Memorable phrasing or analogies
-- Numbers or specifics they cited
+- Memorable phrasing, analogies, colorful language
+- Specific numbers or figures they cited
 
-Preserve their exact language—don't clean it up or paraphrase. If they cursed, rambled, or used colorful language, keep it.
+Exclude: Meeting summary, action items, sentiment analysis (separate templates).
 
-Format exactly like this:
+Preserve raw language—profanity, rambling, hedging. Don't clean it up.
+
+Quantity: 3-7 quotes depending on meeting length and substance.
+
+Format:
 
 "template:Quotes & Insights"
 
-# Key Quotes
-
-## [Short Title Capturing the Quote's Significance]
-
-> "[Exact verbatim quote from the transcript]"
-> — [[Speaker Name]]
-
-## [Another Title]
-
+## [Short title capturing significance]
 > "[Exact quote]"
 > — [[Speaker Name]]
 
-(continue for all significant quotes—aim for 5-10 per hour of the meeting, so fewer if it was a shorter than an hour or light meeting)
+## [Another title]
+> "[Exact quote]"
+> — [[Speaker Name]]
 
----
-
-## Notable Mentions
-Brief bullets for smaller moments worth remembering but not worth a full quote block:
-- [[Person]] mentioned X in passing
-- [[Person]] seemed hesitant when discussing Y
-- [[Person]] referenced Z without elaborating
+(continue for significant quotes only)

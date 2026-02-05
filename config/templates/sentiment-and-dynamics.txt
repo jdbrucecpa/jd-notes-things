@@ -1,77 +1,25 @@
-Analyze the emotional and relational dynamics of this meeting. Track:
+Relationship dynamics snapshot. BRIEF output only.
 
-- Overall mood and energy of other participants
-- Shifts in tone throughout the conversation
-- Signs of confidence, stress, frustration, excitement, hesitation
-- Interpersonal dynamics (if multiple people from the client side)
-- Staff tensions or concerns hinted at
-- How they responded to difficult topics or pushback
-- Trust signals—are they being open or guarded?
-- Recurring frustrations that have come up before (based on what they said)
+Exclude: Meeting content, action items, quotes, detailed play-by-play.
 
-Be specific. Don't just say "they seemed stressed"—note WHAT they seemed stressed about and WHEN in the conversation it showed.
-
-This is for my relationship intelligence—helping me track how clients are really doing over time.
-
-Format exactly like this:
+Format:
 
 "template:Sentiment & Dynamics"
 
-# Overall Read
+## Read
+- **Energy:** [High/Medium/Low]
+- **Openness:** [Open/Guarded/Mixed]
+- **Stress:** [Low/Moderate/Elevated/High]
+- **One-liner:** [Single sentence gut read]
 
-**Energy:** [High/Medium/Low] — one sentence on general vibe
-**Openness:** [Open/Guarded/Mixed] — how forthcoming were they?
-**Stress level:** [Low/Moderate/Elevated/High] — any signs of pressure?
+## Key Moments (3 max, one line each)
+- [Moment]: [observation]
+- [Moment]: [observation]
+- [Moment]: [observation]
 
-**In a sentence:** One-line gut read on where this client/relationship is right now.
+## Signals
+- **Positive:** [One sentence max]
+- **Watch:** [One sentence max, or "None"]
 
-# Mood Shifts
-
-Track significant emotional moments or shifts during the meeting:
-
-| Timestamp/Topic | Shift Observed | Possible Trigger |
-|-----------------|----------------|------------------|
-| [Topic X] | Energy dropped | Mentioned Y |
-| [Topic Z] | Got animated | Discussing W |
-
-# Relationship Signals
-
-## Positive Indicators
-- Specific moment or statement that indicates trust, progress, or health
-- Another positive signal
-
-## Concerns or Yellow Flags
-- Specific moment or statement that warrants attention
-- Hesitation, avoidance, or guardedness observed
-- Recurring frustration patterns
-
-## Staff/Team Dynamics (if applicable)
-- Observations about how team members interacted
-- Any tensions, hierarchy signals, or alignment/misalignment
-- Individual staff sentiments if discernible
-
-# Patterns & Comparisons
-
-If anything in this meeting echoes past patterns (based on what they referenced or you observed):
-- [Pattern]: Observation
-
-# Relationship Health Score
-
-Rate 1-10 with brief justification:
-
-relationship_health:: X/10
-justification:: One sentence explaining the score
-
----
-
-## Machine Context
-
-### Sentiment Signals
-- overall_mood:: [word]
-- stress_level:: [Low/Moderate/Elevated/High]
-- openness:: [Open/Guarded/Mixed]
-- relationship_health:: X/10
-- key_concern:: [primary concern if any]
-
-### Tags
-#sentiment #relationship-tracking #relevant-tags
+## Score
+relationship_health:: X/10 — [3-5 word justification]
