@@ -2,7 +2,7 @@
  * SpeakerMatcher - Matches diarized speakers to meeting participants
  * Phase 6: Speaker Recognition & Contact Matching
  * SM-1: Enhanced with SDK speech timeline correlation for high-confidence matching
- * v1.2.5: Added current user identification for improved "me" detection
+ * v1.2.6: AssemblyAI speaker identification short-circuit for high-accuracy name matching
  */
 
 class SpeakerMatcher {
@@ -40,71 +40,89 @@ class SpeakerMatcher {
   }
 
   /**
-   * Identify which speaker label corresponds to the current user (Phase 6)
-   *
-   * @param {Array} speakers - Speaker objects with labels and word counts
-   * @param {Object} currentUser - Current user identity {emails, names, primaryEmail, primaryName}
-   * @param {Array} participants - Meeting participants
-   * @returns {Object|null} - {speakerLabel, confidence, method} or null
+   * Strict name matching for high-confidence speaker identification.
+   * Requires both names to have 2+ words for substring matching.
+   * Prevents "Ed" matching "Fred" while still allowing "JD Bruce" to match "JD Bruce Smith".
+   * @param {string} name1 - First name to compare
+   * @param {string} name2 - Second name to compare
+   * @returns {boolean} True if names match
    */
-  identifyCurrentUserSpeaker(speakers, currentUser, participants) {
-    if (!currentUser?.emails?.length && !currentUser?.names?.length) {
-      return null;
+  nameMatchStrict(name1, name2) {
+    if (!name1 || !name2) return false;
+    const n1 = name1.toLowerCase().trim();
+    const n2 = name2.toLowerCase().trim();
+    if (n1 === n2) return true;
+    // Substring matching only when both names have 2+ words
+    const words1 = n1.split(/\s+/);
+    const words2 = n2.split(/\s+/);
+    if (words1.length >= 2 && words2.length >= 2) {
+      if (n1.includes(n2) || n2.includes(n1)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Build speaker mapping directly from AssemblyAI-identified speaker names.
+   * Used when speech_understanding.speaker_identification returned real names,
+   * skipping the SM-1 timeline + heuristic pipeline entirely.
+   * @param {Array} transcript - Transcript entries with speakerIdentified flags
+   * @param {Array} participantEmails - Participant email addresses for contact resolution
+   * @param {Object} options - Matching options (uses options.participantData)
+   * @returns {Promise<Object>} Speaker mapping keyed by speaker name
+   */
+  async buildMappingFromIdentifiedSpeakers(transcript, participantEmails, options = {}) {
+    const mapping = {};
+    const identifiedNames = new Set();
+
+    for (const entry of transcript) {
+      if (entry.speakerIdentified && entry.speaker) {
+        identifiedNames.add(entry.speaker);
+      }
     }
 
     console.log(
-      `[SpeakerMatcher] Identifying current user: ${currentUser.primaryName} <${currentUser.primaryEmail}>`
+      `[SpeakerMatcher] Building mapping from ${identifiedNames.size} identified speakers: ${[...identifiedNames].join(', ')}`
     );
 
-    // Method 1: Find participant that matches current user by email or name
-    for (const participant of participants) {
-      const matchesByEmail =
-        participant.email &&
-        currentUser.emails.some(e => e.toLowerCase() === participant.email.toLowerCase());
+    const contacts = await this.googleContacts.findContactsByEmails(participantEmails);
+    const participants = options.participantData || [];
 
-      const matchesByName = currentUser.names.some(name =>
-        this.fuzzyNameMatch(name, participant.originalName || participant.name)
-      );
+    for (const speakerName of identifiedNames) {
+      let matchedEmail = null;
+      let matchedParticipant = null;
 
-      if ((matchesByEmail || matchesByName) && participant.speakerLabel) {
-        console.log(
-          `[SpeakerMatcher] Current user identified as ${participant.speakerLabel} via ${matchesByEmail ? 'email' : 'name'} match`
-        );
-        return {
-          speakerLabel: participant.speakerLabel,
-          participantName: participant.originalName || participant.name,
-          confidence: matchesByEmail ? 'high' : 'medium',
-          method: 'current-user-match',
-        };
+      // Try to match identified name to a participant using strict name matching
+      for (const p of participants) {
+        if (this.nameMatchStrict(speakerName, p.originalName || p.name)) {
+          matchedParticipant = p;
+          matchedEmail = p.email || null;
+          break;
+        }
       }
+
+      // If no email yet, try contact lookup
+      if (!matchedEmail) {
+        matchedEmail = this.findEmailForParticipant(
+          speakerName,
+          participantEmails,
+          contacts,
+          { otherParticipantEmails: participantEmails }
+        );
+      }
+
+      mapping[speakerName] = {
+        email: matchedEmail,
+        name: matchedParticipant?.originalName || matchedParticipant?.name || speakerName,
+        confidence: 'high',
+        method: 'assemblyai-speaker-identification',
+      };
     }
 
-    // Method 2: Check if host matches current user
-    const hostParticipant = participants.find(p => p.isHost);
-    if (hostParticipant) {
-      const hostMatchesByEmail =
-        hostParticipant.email &&
-        currentUser.emails.some(e => e.toLowerCase() === hostParticipant.email.toLowerCase());
-
-      const hostMatchesByName = currentUser.names.some(name =>
-        this.fuzzyNameMatch(name, hostParticipant.originalName)
-      );
-
-      if ((hostMatchesByEmail || hostMatchesByName) && hostParticipant.speakerLabel) {
-        console.log(
-          `[SpeakerMatcher] Current user is host, identified as ${hostParticipant.speakerLabel}`
-        );
-        return {
-          speakerLabel: hostParticipant.speakerLabel,
-          participantName: hostParticipant.originalName,
-          confidence: 'medium',
-          method: 'host-is-current-user',
-        };
-      }
-    }
-
-    console.log('[SpeakerMatcher] Could not identify current user among speakers');
-    return null;
+    console.log(
+      '[SpeakerMatcher] Speaker identification mapping:',
+      JSON.stringify(mapping, null, 2)
+    );
+    return mapping;
   }
 
   /**
@@ -136,6 +154,16 @@ class SpeakerMatcher {
     console.log(
       `[SpeakerMatcher] Matching ${this.getSpeakerCount(transcript)} speakers to ${participantEmails.length} participants`
     );
+
+    // Short-circuit: If transcript has speaker-identified entries (e.g. from AssemblyAI
+    // speech_understanding), build mapping directly — skip SM-1 + heuristics entirely
+    const hasIdentifiedSpeakers = transcript.some(entry => entry.speakerIdentified === true);
+    if (hasIdentifiedSpeakers) {
+      console.log(
+        '[SpeakerMatcher] Speaker identification detected — short-circuiting SM-1 + heuristics'
+      );
+      return this.buildMappingFromIdentifiedSpeakers(transcript, participantEmails, options);
+    }
 
     // Step 1: Get contact information for all participants
     const contacts = await this.googleContacts.findContactsByEmails(participantEmails);
@@ -488,13 +516,21 @@ class SpeakerMatcher {
       const speaker = utterance.speaker;
       if (!speaker) continue;
 
+      // Formatted entries use 'timestamp' (ms from start), not 'start'/'end'
+      const startMs = utterance.timestamp || utterance.start || 0;
+      let endMs = startMs;
+      if (utterance.words && utterance.words.length > 0) {
+        const lastWord = utterance.words[utterance.words.length - 1];
+        endMs = lastWord.end || startMs;
+      }
+
       if (!stats.has(speaker)) {
         stats.set(speaker, {
           label: speaker,
           wordCount: 0,
           utteranceCount: 0,
-          firstAppearance: utterance.start || 0,
-          lastAppearance: utterance.end || 0,
+          firstAppearance: startMs,
+          lastAppearance: endMs,
           totalDuration: 0,
         });
       }
@@ -503,11 +539,11 @@ class SpeakerMatcher {
       speakerData.utteranceCount++;
       speakerData.wordCount += (utterance.text || '').split(/\s+/).length;
 
-      if (utterance.start < speakerData.firstAppearance) {
-        speakerData.firstAppearance = utterance.start;
+      if (startMs < speakerData.firstAppearance) {
+        speakerData.firstAppearance = startMs;
       }
-      if (utterance.end > speakerData.lastAppearance) {
-        speakerData.lastAppearance = utterance.end;
+      if (endMs > speakerData.lastAppearance) {
+        speakerData.lastAppearance = endMs;
       }
 
       speakerData.totalDuration = speakerData.lastAppearance - speakerData.firstAppearance;

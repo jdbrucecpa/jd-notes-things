@@ -301,7 +301,7 @@ class TranscriptionService {
   formatAssemblyAITranscript(assemblyData) {
     // Convert AssemblyAI format to our standard format
     const entries = [];
-    let speakerIdentificationUsed = false;
+    let hasIdentifiedSpeakers = false;
 
     if (assemblyData.utterances) {
       assemblyData.utterances.forEach(utterance => {
@@ -321,14 +321,14 @@ class TranscriptionService {
 
         if (!isGenericLabel) {
           entry.speakerIdentified = true;
-          speakerIdentificationUsed = true;
+          hasIdentifiedSpeakers = true;
         }
 
         entries.push(entry);
       });
     }
 
-    if (speakerIdentificationUsed) {
+    if (hasIdentifiedSpeakers) {
       console.log('[AssemblyAI] speech_understanding speaker identification was used - real names found in transcript');
     }
 
@@ -338,7 +338,6 @@ class TranscriptionService {
       provider: 'assemblyai',
       confidence: assemblyData.confidence,
       audio_duration: assemblyData.audio_duration || null, // Duration in seconds
-      speakerIdentificationUsed,
     };
   }
 
