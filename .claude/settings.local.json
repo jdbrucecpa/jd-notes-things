@@ -16,7 +16,8 @@
       "WebSearch",
       "Bash(rm:*)",
       "Bash(npm outdated:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(grep:*)"
     ],
     "deny": [
       "Bash(rm -rf *):*",

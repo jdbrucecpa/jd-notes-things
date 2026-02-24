@@ -197,7 +197,7 @@ Multi-provider support with 85-90% cost reduction:
 - **Token Files:** Windows icacls permission validation
 - **IPC Validation:** Zod schemas (2/36 handlers, infrastructure complete)
 
-## Pending Features (v1.2.5+)
+## Pending Features (v1.2.6+)
 
 Features that are implemented in backend but lack UI:
 

@@ -12,7 +12,6 @@ const {
 } = require('electron');
 const path = require('node:path');
 const fs = require('fs');
-const { updateElectronApp } = require('update-electron-app');
 const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
 const sdkLogger = require('./sdk-logger');
@@ -1868,25 +1867,12 @@ app.whenReady().then(async () => {
   createSystemTray();
   registerGlobalShortcuts();
 
-  // Initialize auto-updater (only in production)
+  // Initialize auto-updater event handlers (manual check only, no automatic polling)
   if (!process.env.ELECTRON_IS_DEV && app.isPackaged) {
-    logger.main.info('[AutoUpdater] Initializing auto-updater...');
+    logger.main.info('[AutoUpdater] Initializing update event handlers (manual check only)...');
     try {
-      // Use notifyUser: false to disable the default popup dialog
-      // We'll handle notifications ourselves with a custom in-app banner
-      updateElectronApp({
-        repo: 'jdbrucecpa/jd-notes-things',
-        updateInterval: '1 hour',
-        notifyUser: false, // Disable default popup - we use custom UI
-        logger: {
-          log: (...args) => logger.main.info('[AutoUpdater]', ...args),
-          info: (...args) => logger.main.info('[AutoUpdater]', ...args),
-          warn: (...args) => logger.main.warn('[AutoUpdater]', ...args),
-          error: (...args) => logger.main.error('[AutoUpdater]', ...args),
-        },
-      });
-
       // Set up custom update event handlers for in-app notification
+      // These fire when a manual check is triggered via settings:checkForUpdates
       const { autoUpdater } = require('electron');
 
       autoUpdater.on('checking-for-update', () => {
@@ -9427,16 +9413,31 @@ ipcMain.handle(
       // Read current data using the file operation manager to ensure we get the latest cached data
       const meetingsData = await fileOperationManager.readMeetingsData();
 
-      // Find the meeting
-      const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
-        meeting => meeting.id === validatedId
+      // Find the meeting in either pastMeetings or upcomingMeetings
+      let meeting = null;
+      let pastMeetingIndex = meetingsData.pastMeetings.findIndex(
+        m => m.id === validatedId
       );
 
-      if (pastMeetingIndex === -1) {
-        return { success: false, error: 'Meeting not found' };
+      if (pastMeetingIndex !== -1) {
+        meeting = meetingsData.pastMeetings[pastMeetingIndex];
+      } else {
+        // Check upcomingMeetings - calendar-imported or auto-started meetings may be here
+        const upcomingIndex = meetingsData.upcomingMeetings.findIndex(
+          m => m.id === validatedId
+        );
+        if (upcomingIndex !== -1) {
+          // Move from upcomingMeetings to pastMeetings since recording is starting
+          meeting = meetingsData.upcomingMeetings.splice(upcomingIndex, 1)[0];
+          meetingsData.pastMeetings.unshift(meeting);
+          pastMeetingIndex = 0;
+          console.log(`[Recording] Moved meeting ${validatedId} from upcomingMeetings to pastMeetings`);
+        }
       }
 
-      const meeting = meetingsData.pastMeetings[pastMeetingIndex];
+      if (!meeting) {
+        return { success: false, error: 'Meeting not found' };
+      }
 
       // If action is 'append', save the existing transcript
       if (action === 'append' && meeting.transcript && meeting.transcript.length > 0) {
