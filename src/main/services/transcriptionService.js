@@ -301,17 +301,35 @@ class TranscriptionService {
   formatAssemblyAITranscript(assemblyData) {
     // Convert AssemblyAI format to our standard format
     const entries = [];
+    let speakerIdentificationUsed = false;
 
     if (assemblyData.utterances) {
       assemblyData.utterances.forEach(utterance => {
-        entries.push({
-          speaker: `Speaker ${utterance.speaker}`,
+        // Detect whether speaker_identification returned real names vs generic diarization labels.
+        // Generic labels are single letters ("A", "B") or single digits ("0", "1").
+        // Real names (e.g. "JD Bruce") should be used directly.
+        const rawSpeaker = String(utterance.speaker);
+        const isGenericLabel = /^[A-Z]$|^\d+$/.test(rawSpeaker);
+
+        const entry = {
+          speaker: isGenericLabel ? `Speaker ${rawSpeaker}` : rawSpeaker,
           speakerId: utterance.speaker,
           text: utterance.text,
           timestamp: utterance.start,
           words: utterance.words || [],
-        });
+        };
+
+        if (!isGenericLabel) {
+          entry.speakerIdentified = true;
+          speakerIdentificationUsed = true;
+        }
+
+        entries.push(entry);
       });
+    }
+
+    if (speakerIdentificationUsed) {
+      console.log('[AssemblyAI] speech_understanding speaker identification was used - real names found in transcript');
     }
 
     return {
@@ -320,6 +338,7 @@ class TranscriptionService {
       provider: 'assemblyai',
       confidence: assemblyData.confidence,
       audio_duration: assemblyData.audio_duration || null, // Duration in seconds
+      speakerIdentificationUsed,
     };
   }
 

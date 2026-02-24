@@ -2959,43 +2959,36 @@ async function initSDK() {
                     participantEmails.length > 0 ? participantEmails : participantNames;
 
                   if (matchIdentifiers.length > 0) {
-                    // Match speakers to participants
-                    const speakerMapping = await speakerMatcher.matchSpeakers(
-                      meetingForMatching.transcript,
-                      matchIdentifiers,
-                      {
-                        includeOrganizer: true,
-                        useWordCount: true,
-                        speechTimeline,
-                        participantData: participants, // Pass full participant data for name-based matching
-                      }
+                    let speakerMapping;
+
+                    // Short-circuit: If AssemblyAI speaker identification returned real names,
+                    // build mapping directly — skip SM-1 timeline + heuristics entirely
+                    const hasIdentifiedSpeakers = meetingForMatching.transcript.some(
+                      entry => entry.speakerIdentified === true
                     );
 
-                    // v1.2.5 Phase 6: Identify current user among speakers
-                    const currentUserIdentity = await getCurrentUserIdentity();
-                    if (currentUserIdentity && Object.keys(speakerMapping).length > 0) {
-                      const speakerStats = speakerMatcher.analyzeSpeakers(
-                        meetingForMatching.transcript
-                      );
-                      const speakers = Array.from(speakerStats.values());
-                      const currentUserMatch = speakerMatcher.identifyCurrentUserSpeaker(
-                        speakers,
-                        currentUserIdentity,
+                    if (hasIdentifiedSpeakers) {
+                      console.log('[Transcription] Speaker identification detected — short-circuiting SM-1 + heuristics');
+                      speakerMapping = await buildMappingFromIdentifiedSpeakers(
+                        meetingForMatching.transcript,
                         participants
                       );
+                    } else {
+                      // v1.2.6: Get current user identity BEFORE matching for anchor-based speaker assignment
+                      const currentUserIdentity = await getCurrentUserIdentity();
 
-                      if (currentUserMatch) {
-                        // Mark the identified speaker as the current user in the mapping
-                        if (speakerMapping[currentUserMatch.speakerLabel]) {
-                          speakerMapping[currentUserMatch.speakerLabel].isCurrentUser = true;
-                          speakerMapping[currentUserMatch.speakerLabel].currentUserConfidence =
-                            currentUserMatch.confidence;
-                          console.log(
-                            `[Transcription] Phase 6: Current user identified as ${currentUserMatch.speakerLabel} ` +
-                              `(${currentUserMatch.confidence} confidence via ${currentUserMatch.method})`
-                          );
+                      // Full pipeline: SM-1 timeline correlation + heuristic fallback
+                      speakerMapping = await speakerMatcher.matchSpeakers(
+                        meetingForMatching.transcript,
+                        matchIdentifiers,
+                        {
+                          includeOrganizer: true,
+                          useWordCount: true,
+                          speechTimeline,
+                          participantData: participants,
+                          currentUser: currentUserIdentity,
                         }
-                      }
+                      );
                     }
 
                     // Apply mapping to transcript
@@ -3009,17 +3002,25 @@ async function initSDK() {
                       // Save the speaker mapping for future reference
                       meetingsData.pastMeetings[meetingIndex].speakerMapping = speakerMapping;
 
+                      // Reconcile participant data after matching
+                      reconcileParticipantsAfterMatching(
+                        meetingsData.pastMeetings[meetingIndex].participants,
+                        speakerMapping
+                      );
+                      meetingsData.pastMeetings[meetingIndex].participants =
+                        deduplicateParticipants(meetingsData.pastMeetings[meetingIndex].participants || []);
+
                       // Write updated data with speaker names
                       await fileOperationManager.writeData(meetingsData);
                       console.log(
-                        '[Transcription] SM-1: ✓ Speaker matching complete, transcript updated with names'
+                        '[Transcription] ✓ Speaker matching complete, transcript updated with names'
                       );
                     } else {
-                      console.log('[Transcription] SM-1: No speaker matches found');
+                      console.log('[Transcription] No speaker matches found');
                     }
                   } else {
                     console.log(
-                      '[Transcription] SM-1: No participant identifiers available for matching'
+                      '[Transcription] No participant identifiers available for matching'
                     );
                   }
 
@@ -3379,6 +3380,120 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
 }
 
 /**
+ * Build speaker mapping directly from AssemblyAI-identified speaker names.
+ * When speaker_identification returned real names, we skip the entire SM-1 + heuristic
+ * pipeline and resolve emails via Google Contacts for routing.
+ * @param {Array} transcript - Transcript entries with speakerIdentified flags
+ * @param {Array} participants - Meeting participants array
+ * @returns {Promise<Object>} Speaker mapping (speakerName -> {email, name, confidence, method})
+ */
+async function buildMappingFromIdentifiedSpeakers(transcript, participants) {
+  const mapping = {};
+  const identifiedNames = new Set();
+
+  // Collect unique identified speaker names
+  for (const entry of transcript) {
+    if (entry.speakerIdentified && entry.speaker) {
+      identifiedNames.add(entry.speaker);
+    }
+  }
+
+  console.log(`[SpeakerID] Building mapping from ${identifiedNames.size} identified speakers: ${[...identifiedNames].join(', ')}`);
+
+  for (const speakerName of identifiedNames) {
+    // Try to match identified name to a participant for email/routing
+    let matchedEmail = null;
+    let matchedParticipant = null;
+
+    for (const p of participants) {
+      const pName = (p.originalName || p.name || '').toLowerCase().trim();
+      const sName = speakerName.toLowerCase().trim();
+
+      if (pName === sName || pName.includes(sName) || sName.includes(pName)) {
+        matchedParticipant = p;
+        matchedEmail = p.email || null;
+        break;
+      }
+    }
+
+    // If no participant match, try Google Contacts by name
+    if (!matchedEmail && googleContacts && typeof googleContacts.findContactByName === 'function') {
+      try {
+        const contact = await googleContacts.findContactByName(speakerName);
+        if (contact?.emails?.length > 0) {
+          matchedEmail = contact.emails[0];
+          console.log(`[SpeakerID] Resolved "${speakerName}" to ${matchedEmail} via Google Contacts`);
+        }
+      } catch (_e) {
+        // Contact lookup failed, continue without email
+      }
+    }
+
+    mapping[speakerName] = {
+      email: matchedEmail,
+      name: matchedParticipant?.originalName || matchedParticipant?.name || speakerName,
+      confidence: 'high',
+      method: 'assemblyai-speaker-identification',
+    };
+  }
+
+  console.log('[SpeakerID] Speaker identification mapping:', JSON.stringify(mapping, null, 2));
+  return mapping;
+}
+
+/**
+ * Sanitize a participant name: trim trailing commas/periods, collapse whitespace.
+ * @param {string} name - Raw participant name
+ * @returns {string} Sanitized name
+ */
+function sanitizeParticipantName(name) {
+  if (!name || typeof name !== 'string') return name;
+  return name
+    .replace(/[,.\s]+$/, '')  // Trim trailing commas, periods, whitespace
+    .replace(/\s{2,}/g, ' ')  // Collapse multiple spaces
+    .trim();
+}
+
+/**
+ * Reconcile speaker mapping results back into the participants array.
+ * Updates names/emails from matched data and sanitizes all names.
+ * @param {Array<Object>} participants - Meeting participants array (mutated in place)
+ * @param {Object} speakerMapping - Speaker label -> {email, name, confidence} mapping
+ */
+function reconcileParticipantsAfterMatching(participants, speakerMapping) {
+  if (!participants || !speakerMapping) return;
+
+  // Sanitize all participant names
+  for (const p of participants) {
+    if (p.name) p.name = sanitizeParticipantName(p.name);
+    if (p.originalName) p.originalName = sanitizeParticipantName(p.originalName);
+  }
+
+  // Merge email/name info from speaker mapping into participants
+  for (const mapping of Object.values(speakerMapping)) {
+    if (!mapping.email || !mapping.name) continue;
+
+    // Find participant by name match (fuzzy)
+    const matchedIdx = participants.findIndex(p => {
+      const pName = (p.originalName || p.name || '').toLowerCase().trim();
+      const mName = mapping.name.toLowerCase().trim();
+      return pName === mName || pName.includes(mName) || mName.includes(pName);
+    });
+
+    if (matchedIdx !== -1) {
+      const p = participants[matchedIdx];
+      // Update email if participant didn't have one and mapping resolved it
+      if (!p.email && mapping.email) {
+        p.email = mapping.email;
+        console.log(`[Reconciliation] Added email ${mapping.email} to participant "${p.originalName || p.name}"`);
+      }
+    }
+  }
+
+  console.log(`[Reconciliation] Sanitized ${participants.length} participant names`);
+}
+
+/**
  * Deduplicate participants by email (primary) or name (fallback)
  * @param {Array<Object>} participants - Array of participant objects
  * @returns {Array<Object>} Deduplicated array
@@ -3453,20 +3568,36 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
       try {
         console.log('[ObsidianExport] Attempting speaker matching (no existing mappings found)...');
 
-        // SM-1: Get speech timeline for high-confidence matching
-        const speechTimeline = meeting.recordingId ? getSpeechTimeline(meeting.recordingId) : null;
-        if (speechTimeline) {
-          console.log(
-            `[ObsidianExport] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`
+        let speakerMapping;
+
+        // Short-circuit: If AssemblyAI speaker identification returned real names,
+        // build mapping directly — skip SM-1 timeline + heuristics entirely
+        const hasIdentifiedSpeakers = meeting.transcript.some(
+          entry => entry.speakerIdentified === true
+        );
+
+        if (hasIdentifiedSpeakers) {
+          console.log('[ObsidianExport] Speaker identification detected — short-circuiting SM-1 + heuristics');
+          speakerMapping = await buildMappingFromIdentifiedSpeakers(
+            meeting.transcript,
+            meeting.participants || []
+          );
+        } else {
+          // SM-1: Get speech timeline for high-confidence matching
+          const speechTimeline = meeting.recordingId ? getSpeechTimeline(meeting.recordingId) : null;
+          if (speechTimeline) {
+            console.log(
+              `[ObsidianExport] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`
+            );
+          }
+
+          // Full pipeline: SM-1 timeline correlation + heuristic fallback
+          speakerMapping = await speakerMatcher.matchSpeakers(
+            meeting.transcript,
+            participantEmails,
+            { includeOrganizer: true, useWordCount: true, speechTimeline }
           );
         }
-
-        // Match speakers to participants
-        const speakerMapping = await speakerMatcher.matchSpeakers(
-          meeting.transcript,
-          participantEmails,
-          { includeOrganizer: true, useWordCount: true, speechTimeline }
-        );
 
         // Apply mapping to transcript
         meeting.transcript = speakerMatcher.applyMappingToTranscript(
@@ -5341,19 +5472,35 @@ ipcMain.handle(
         throw new Error('Speaker matcher not initialized');
       }
 
-      // SM-1: Get speech timeline for high-confidence matching if recordingId provided
-      const speechTimeline = recordingId ? getSpeechTimeline(recordingId) : null;
-      if (speechTimeline) {
-        console.log(
-          `[Speakers IPC] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`
-        );
-      }
+      let speakerMapping;
 
-      // Perform speaker matching
-      const speakerMapping = await speakerMatcher.matchSpeakers(transcript, participantEmails, {
-        ...options,
-        speechTimeline,
-      });
+      // Short-circuit: If AssemblyAI speaker identification returned real names,
+      // build mapping directly — skip SM-1 timeline + heuristics entirely
+      const hasIdentifiedSpeakers = transcript.some(
+        entry => entry.speakerIdentified === true
+      );
+
+      if (hasIdentifiedSpeakers) {
+        console.log('[Speakers IPC] Speaker identification detected — short-circuiting SM-1 + heuristics');
+        speakerMapping = await buildMappingFromIdentifiedSpeakers(
+          transcript,
+          options?.participantData || []
+        );
+      } else {
+        // SM-1: Get speech timeline for high-confidence matching if recordingId provided
+        const speechTimeline = recordingId ? getSpeechTimeline(recordingId) : null;
+        if (speechTimeline) {
+          console.log(
+            `[Speakers IPC] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`
+          );
+        }
+
+        // Full pipeline: SM-1 timeline correlation + heuristic fallback
+        speakerMapping = await speakerMatcher.matchSpeakers(transcript, participantEmails, {
+          ...options,
+          speechTimeline,
+        });
+      }
 
       // Apply mapping to transcript
       const updatedTranscript = speakerMatcher.applyMappingToTranscript(transcript, speakerMapping);
@@ -10544,15 +10691,30 @@ function processSpeechOn(evt) {
       return;
     }
 
+    // Diagnostic: log SDK timestamp structure (first event only per window)
+    const evtTimestamp = evt.data?.data?.timestamp;
+    if (evtTimestamp && !processSpeechOn._loggedTimestampFields) {
+      console.log('[SpeechTimeline] Event timestamp fields:', JSON.stringify(evtTimestamp));
+      processSpeechOn._loggedTimestampFields = true;
+    }
+
     const participantId = participantData.id;
     const participantName = participantData.name || 'Unknown';
-    const timestamp = Date.now();
+
+    // Prefer SDK-provided relative timestamp (seconds from recording start) over Date.now()
+    // This eliminates clock drift between SDK internal clock and system clock
+    let relativeTimeMs;
+    if (evtTimestamp?.relative != null) {
+      relativeTimeMs = evtTimestamp.relative * 1000; // SDK provides seconds, we use ms
+    } else {
+      relativeTimeMs = null; // Will compute from Date.now() below
+    }
 
     // Get or create timeline for this window
     let timeline = speechTimelines.get(windowId);
     if (!timeline) {
       // Recording might have started before we could initialize
-      initializeSpeechTimeline(windowId, timestamp);
+      initializeSpeechTimeline(windowId, Date.now());
       timeline = speechTimelines.get(windowId);
     }
 
@@ -10574,10 +10736,12 @@ function processSpeechOn(evt) {
     }
 
     // Record speech start (relative to recording start)
-    const relativeTime = timestamp - timeline.recordingStartTime;
-    participant.currentStart = relativeTime;
+    if (relativeTimeMs == null) {
+      relativeTimeMs = Date.now() - timeline.recordingStartTime;
+    }
+    participant.currentStart = relativeTimeMs;
 
-    console.log(`[SpeechTimeline] ${participantName} started speaking at ${relativeTime}ms`);
+    console.log(`[SpeechTimeline] ${participantName} started speaking at ${relativeTimeMs}ms${evtTimestamp?.relative != null ? ' (SDK timestamp)' : ' (Date.now fallback)'}`);
   } catch (error) {
     console.error('[SpeechTimeline] Error processing speech_on:', error);
   }
@@ -10599,7 +10763,15 @@ function processSpeechOff(evt) {
     }
 
     const participantId = participantData.id;
-    const timestamp = Date.now();
+
+    // Prefer SDK-provided relative timestamp over Date.now()
+    const evtTimestamp = evt.data?.data?.timestamp;
+    let relativeTimeMs;
+    if (evtTimestamp?.relative != null) {
+      relativeTimeMs = evtTimestamp.relative * 1000;
+    } else {
+      relativeTimeMs = null; // Will compute from Date.now() below
+    }
 
     const timeline = speechTimelines.get(windowId);
     if (!timeline) {
@@ -10614,15 +10786,17 @@ function processSpeechOff(evt) {
     }
 
     // Record completed speech segment
-    const relativeTime = timestamp - timeline.recordingStartTime;
+    if (relativeTimeMs == null) {
+      relativeTimeMs = Date.now() - timeline.recordingStartTime;
+    }
     participant.segments.push({
       start: participant.currentStart,
-      end: relativeTime,
+      end: relativeTimeMs,
     });
     participant.currentStart = null;
 
     console.log(
-      `[SpeechTimeline] ${participant.name} stopped speaking at ${relativeTime}ms (segment: ${participant.segments.length})`
+      `[SpeechTimeline] ${participant.name} stopped speaking at ${relativeTimeMs}ms (segment: ${participant.segments.length})`
     );
   } catch (error) {
     console.error('[SpeechTimeline] Error processing speech_off:', error);

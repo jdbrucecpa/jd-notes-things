@@ -552,12 +552,14 @@ class SpeakerMatcher {
     // SM-1: Use participantData from options if available, otherwise build from identifiers
     let participants;
     if (options.participantData && options.participantData.length > 0) {
-      // Use full participant objects directly
+      // Use full participant objects directly (preserve isHost and originalName for identity-aware matching)
       participants = options.participantData
         .filter(p => !alreadyAssignedParticipants.has(p.email) && !alreadyAssignedNames.has(p.name))
         .map(p => ({
           email: p.email || null,
           name: p.name || 'Unknown',
+          originalName: p.originalName || p.name || 'Unknown',
+          isHost: p.isHost || false,
           givenName: p.givenName || '',
           familyName: p.familyName || '',
           contact: contacts.get(p.email) || null,
@@ -609,40 +611,74 @@ class SpeakerMatcher {
       return mapping;
     }
 
-    // Heuristic 1: If number of speakers equals participants, do simple 1:1 matching
+    // Heuristic 1: If number of speakers equals participants, assign positionally
+    // For 2-person meetings without SM-1 or speaker identification data, we assign
+    // with low confidence + needsVerification rather than guessing speaking order.
     if (speakers.length === participants.length) {
+      if (speakers.length === 2) {
+        // 2-person fallback: assign alphabetically by speaker label, mark as unverified
+        // We do NOT assume host speaks first — that assumption frequently swaps names.
+        const sorted = [...speakers].sort((a, b) => a.label.localeCompare(b.label));
+        for (let i = 0; i < sorted.length; i++) {
+          mapping[sorted[i].label] = {
+            email: participants[i].email,
+            name: participants[i].name,
+            confidence: 'low',
+            method: 'positional-fallback',
+            needsVerification: true,
+          };
+        }
+        console.log(
+          `[SpeakerMatcher] 2-person fallback (no speaker ID, no SM-1): assigned positionally with needsVerification`
+        );
+        return mapping;
+      }
+
+      // 3+ speakers: positional match (speakers sorted by word count, participants in original order)
       for (let i = 0; i < speakers.length; i++) {
         mapping[speakers[i].label] = {
           email: participants[i].email,
           name: participants[i].name,
-          confidence: 'medium',
+          confidence: 'low',
           method: 'count-match',
         };
       }
       return mapping;
     }
 
-    // Heuristic 2: First speaker is often the meeting organizer
-    // (This would require organizer info from calendar, which we'll add later)
+    // Heuristic 2: First speaker is often the meeting host (use isHost if available)
     if (speakers.length > 0 && participants.length > 0 && options.includeOrganizer) {
-      mapping[speakers[0].label] = {
-        email: participants[0].email,
-        name: participants[0].name,
-        confidence: 'low',
-        method: 'first-speaker',
-      };
+      const hostParticipant = participants.find(p => p.isHost);
+      if (hostParticipant) {
+        // Find first speaker by appearance time, not word count
+        const firstSpeaker = [...speakers].sort(
+          (a, b) => a.firstAppearance - b.firstAppearance
+        )[0];
+        mapping[firstSpeaker.label] = {
+          email: hostParticipant.email,
+          name: hostParticipant.name,
+          confidence: 'low',
+          method: 'first-speaker-host',
+        };
+      }
     }
 
-    // Heuristic 3: Most talkative speaker is likely host/organizer
+    // Heuristic 3: Most talkative speaker mapped to host (only if isHost is available)
     if (speakers.length > 1 && participants.length > 1) {
-      const mostTalkative = speakers[0];
+      const mostTalkative = speakers[0]; // Already sorted by word count
       if (!mapping[mostTalkative.label]) {
-        mapping[mostTalkative.label] = {
-          email: participants[0].email,
-          name: participants[0].name,
-          confidence: 'low',
-          method: 'most-talkative',
-        };
+        const hostParticipant = participants.find(p => p.isHost);
+        if (hostParticipant) {
+          // Only assign if host wasn't already mapped by Heuristic 2
+          if (!Object.values(mapping).some(m => m.email === hostParticipant.email)) {
+            mapping[mostTalkative.label] = {
+              email: hostParticipant.email,
+              name: hostParticipant.name,
+              confidence: 'low',
+              method: 'most-talkative-host',
+            };
+          }
+        }
       }
     }
 
