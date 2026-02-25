@@ -378,9 +378,9 @@ function validateIpcInput(schema, data) {
  * @returns {Function} Wrapped handler with validation
  */
 function withValidation(schema, handler) {
-  return async (event, data) => {
+  return async (event, data, ...rest) => {
     const validatedData = validateIpcInput(schema, data);
-    return handler(event, validatedData);
+    return handler(event, validatedData, ...rest);
   };
 }
 

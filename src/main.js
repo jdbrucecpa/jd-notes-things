@@ -9,6 +9,7 @@ const {
   shell,
   screen,
   nativeImage,
+  session,
 } = require('electron');
 const path = require('node:path');
 const fs = require('fs');
@@ -1702,6 +1703,22 @@ app.whenReady().then(async () => {
   // v1.1: Load user profile
   loadUserProfile();
   logger.main.info('[v1.1] User profile loaded');
+
+  // Set production Content-Security-Policy via HTTP headers
+  // In dev mode, forge.config.js devContentSecurityPolicy handles this (allows unsafe-eval for webpack HMR)
+  if (app.isPackaged) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' https:;",
+          ],
+        },
+      });
+    });
+    logger.main.info('Production CSP headers configured');
+  }
 
   // Make mainWindow available to server.js for IPC communication
   // This allows server.js to send webhook events to the main process
@@ -4775,7 +4792,7 @@ ipcMain.handle(
       if (!googleCalendar || !googleCalendar.isAuthenticated()) {
         console.log('[Calendar IPC] Calendar not authenticated - returning empty array');
         console.log('[Calendar IPC] googleAuth exists:', !!googleAuth);
-        console.log('[Calendar IPC] googleAuth.isAuthenticated:', googleAuth?.isAuthenticated?.());
+        console.log('[Calendar IPC] googleAuth.isAuthenticated:', !!googleAuth?.isAuthenticated?.());
         return { success: true, meetings: [] };
       }
 

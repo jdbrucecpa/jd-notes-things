@@ -261,7 +261,7 @@ class GoogleAuth {
     }
 
     const credentials = this.oauth2Client.credentials;
-    return credentials && (credentials.access_token || credentials.refresh_token);
+    return !!(credentials && (credentials.access_token || credentials.refresh_token));
   }
 
   /**

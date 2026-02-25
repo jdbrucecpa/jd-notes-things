@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' https:;">
+    <!-- CSP is set via HTTP headers in main.js (production) or forge.config.js (development) -->
     <title>JD Notes Things</title>
     <style>
       /* Prevent FOUC (Flash of Unstyled Content) */
