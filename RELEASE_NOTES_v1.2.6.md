@@ -2,7 +2,7 @@
 
 ## Highlights
 
-This release fixes false-positive speaker matching, adds AssemblyAI speaker identification short-circuiting, and includes a comprehensive code review that eliminated 17 lint warnings, fixed 5 critical bugs, patched 5 security issues, plugged 4 memory leaks, and removed ~600 lines of dead code. All 24 updatable dependencies have been brought to their latest versions.
+This release fixes false-positive speaker matching, adds AssemblyAI speaker identification short-circuiting, and includes a comprehensive code review that eliminated 17 lint warnings, fixed 5 critical bugs, patched 5 security issues, plugged 4 memory leaks, and removed ~600 lines of dead code. All 24 updatable dependencies have been brought to their latest versions. We rocked it today!
 
 ---
 
