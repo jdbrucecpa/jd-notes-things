@@ -54,6 +54,30 @@ const {
   SERVER_HOST,
   WS_STREAMDECK_ENDPOINT,
   WEBHOOK_RECALL_PATH,
+  // Timeouts
+  IPC_RESPONSE_TIMEOUT_MS,
+  RECALL_API_TIMEOUT_MS,
+  GITHUB_API_TIMEOUT_MS,
+  OAUTH_TIMEOUT_MS,
+  WEBSOCKET_TIMEOUT_MS,
+  AUTO_UPDATE_CHECK_TIMEOUT_MS,
+  // Delays & Intervals
+  WINDOW_BOUNDS_DEBOUNCE_MS,
+  RECALL_RATE_LIMIT_DELAY_MS,
+  SDK_SHUTDOWN_GRACE_MS,
+  SDK_INIT_DELAY_MS,
+  FILE_WRITE_GRACE_MS,
+  TRANSCRIPT_POLL_INTERVAL_MS,
+  UPCOMING_MEETINGS_CHECK_MS,
+  BACKUP_IPC_DELAY_MS,
+  CACHE_INVALIDATION_MS,
+  // Limits & Sizes
+  LLM_SECTION_MAX_TOKENS,
+  LLM_PROMPT_TOKEN_BUFFER,
+  LOG_ENTRIES_DEFAULT_LIMIT,
+  MEETING_PURPOSE_MAX_CHARS,
+  // Data Thresholds
+  OLD_MEETING_CLEANUP_MS,
 } = require('./shared/constants');
 // IPC Input Validation - Phase 9 Security Hardening
 // ===================================================
@@ -483,75 +507,127 @@ function saveUserProfile() {
 }
 
 /**
- * Get current user identity from all available sources (v1.2.5 Phase 6)
- * Combines local user profile with Google OAuth user info for speaker identification.
- *
- * @returns {Promise<{emails: string[], names: string[], primaryEmail: string|null, primaryName: string|null}|null>}
+ * Build the tray context menu template (Phase 10.7)
+ * @param {boolean} isRecording - Whether a recording is currently active
+ * @returns {Electron.MenuItemConstructorOptions[]} Menu template array
  */
-// eslint-disable-next-line no-unused-vars
-async function getCurrentUserIdentity() {
-  const emails = new Set();
-  const names = new Set();
-  let primaryEmail = null;
-  let primaryName = null;
+function buildTrayMenu(isRecording = false) {
+  const isDev = process.env.NODE_ENV === 'development';
+  const appLabel = isDev ? 'JD Notes Things Dev' : 'JD Notes Things';
 
-  // Source 1: Local user profile (set in Settings)
-  if (userProfile?.email) {
-    emails.add(userProfile.email.toLowerCase());
-    primaryEmail = userProfile.email;
-  }
-  if (userProfile?.name) {
-    names.add(userProfile.name);
-    primaryName = userProfile.name;
-  }
-
-  // Source 2: Google OAuth authenticated user
-  if (googleAuth && googleAuth.isAuthenticated()) {
-    try {
-      const googleUserInfo = await googleAuth.getAuthenticatedUserInfo();
-      if (googleUserInfo) {
-        if (googleUserInfo.email) {
-          emails.add(googleUserInfo.email.toLowerCase());
-          // Prefer Google email as primary if no local profile email
-          if (!primaryEmail) {
-            primaryEmail = googleUserInfo.email;
-          }
+  return [
+    {
+      label: `Open ${appLabel}`,
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+        } else {
+          createWindow();
         }
-        if (googleUserInfo.name) {
-          names.add(googleUserInfo.name);
-          // Prefer Google name as primary if no local profile name
-          if (!primaryName) {
-            primaryName = googleUserInfo.name;
-          }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Quick Note',
+      accelerator: appSettings.shortcuts.quickRecord,
+      enabled: !isRecording, // Disable when recording
+      click: async () => {
+        try {
+          await startQuickRecord();
+        } catch (error) {
+          logger.main.error('Quick record failed:', error);
         }
-        console.log(
-          `[UserIdentity] Google user: ${googleUserInfo.name} <${googleUserInfo.email}>`
-        );
-      }
-    } catch (error) {
-      console.warn('[UserIdentity] Failed to get Google user info:', error.message);
-    }
-  }
+      },
+    },
+    {
+      label: 'Record Meeting',
+      accelerator: appSettings.shortcuts.startStopRecording,
+      enabled: !isRecording, // Disable when recording
+      click: async () => {
+        try {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('toggle-recording-shortcut');
+          }
+        } catch (error) {
+          logger.main.error('Toggle recording failed:', error);
+        }
+      },
+    },
+    {
+      label: 'Stop Recording',
+      accelerator: appSettings.shortcuts.stopRecording,
+      enabled: isRecording, // Enable only when recording
+      id: 'stop-recording',
+      click: async () => {
+        try {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('stop-recording-requested');
+          }
+        } catch (error) {
+          logger.main.error('Stop recording failed:', error);
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Open Vault Folder',
+      click: async () => {
+        try {
+          // Use the properly initialized vault path from vaultStructure
+          const vaultPath = vaultStructure?.vaultBasePath;
 
-  // Return null if no identity found
-  if (emails.size === 0 && names.size === 0) {
-    console.log('[UserIdentity] No user identity available');
-    return null;
-  }
+          if (!vaultPath) {
+            logger.main.error('[Tray] Vault path not configured');
+            return;
+          }
 
-  const identity = {
-    emails: Array.from(emails),
-    names: Array.from(names),
-    primaryEmail,
-    primaryName,
-  };
+          logger.main.info('[Tray] Opening vault folder:', vaultPath);
+          const result = await shell.openPath(vaultPath);
 
-  console.log(
-    `[UserIdentity] Current user: ${identity.primaryName || 'Unknown'} ` +
-      `(${identity.emails.length} emails, ${identity.names.length} names)`
-  );
-
-  return identity;
+          if (result) {
+            // openPath returns an error string if it fails, empty string on success
+            logger.main.error('[Tray] Failed to open vault folder:', result);
+          }
+        } catch (error) {
+          logger.main.error('[Tray] Error opening vault folder:', error);
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Settings',
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.webContents.send('open-settings');
+        }
+      },
+    },
+    {
+      label: 'View Logs',
+      click: () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.webContents.send('open-logs-viewer');
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      accelerator: 'CommandOrControl+Q',
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      },
+    },
+  ];
 }
 
 /**
@@ -650,118 +726,7 @@ function createSystemTray() {
     }
 
     const appLabel = isDev ? 'JD Notes Things Dev' : 'JD Notes Things';
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: `Open ${appLabel}`,
-        click: () => {
-          if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-          } else {
-            createWindow();
-          }
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Quick Note',
-        accelerator: appSettings.shortcuts.quickRecord,
-        click: async () => {
-          try {
-            await startQuickRecord();
-          } catch (error) {
-            logger.main.error('Quick record failed:', error);
-          }
-        },
-      },
-      {
-        label: 'Record Meeting',
-        accelerator: appSettings.shortcuts.startStopRecording,
-        click: async () => {
-          try {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('toggle-recording-shortcut');
-            }
-          } catch (error) {
-            logger.main.error('Toggle recording failed:', error);
-          }
-        },
-      },
-      {
-        label: 'Stop Recording',
-        accelerator: appSettings.shortcuts.stopRecording,
-        enabled: false, // Will be enabled when recording is active
-        id: 'stop-recording',
-        click: async () => {
-          try {
-            // Trigger stop recording
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('stop-recording-requested');
-            }
-          } catch (error) {
-            logger.main.error('Stop recording failed:', error);
-          }
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Open Vault Folder',
-        click: async () => {
-          try {
-            // Use the properly initialized vault path from vaultStructure
-            const vaultPath = vaultStructure?.vaultBasePath;
-
-            if (!vaultPath) {
-              logger.main.error('[Tray] Vault path not configured');
-              return;
-            }
-
-            logger.main.info('[Tray] Opening vault folder:', vaultPath);
-            const result = await shell.openPath(vaultPath);
-
-            if (result) {
-              // openPath returns an error string if it fails, empty string on success
-              logger.main.error('[Tray] Failed to open vault folder:', result);
-            }
-          } catch (error) {
-            logger.main.error('[Tray] Error opening vault folder:', error);
-          }
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Settings',
-        click: () => {
-          if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-            mainWindow.webContents.send('open-settings');
-          }
-        },
-      },
-      {
-        label: 'View Logs',
-        click: () => {
-          if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-            mainWindow.webContents.send('open-logs-viewer');
-          }
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Quit',
-        accelerator: 'CommandOrControl+Q',
-        click: () => {
-          app.isQuitting = true;
-          app.quit();
-        },
-      },
-    ]);
+    const contextMenu = Menu.buildFromTemplate(buildTrayMenu(false));
 
     tray.setToolTip(appLabel);
     tray.setContextMenu(contextMenu);
@@ -796,137 +761,13 @@ function updateSystemTrayMenu() {
   try {
     const isDev = process.env.NODE_ENV === 'development';
     const appLabel = isDev ? 'JD Notes Things Dev' : 'JD Notes Things';
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: `Open ${appLabel}`,
-        click: () => {
-          if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-          } else {
-            createWindow();
-          }
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Quick Note',
-        accelerator: appSettings.shortcuts.quickRecord,
-        enabled: !isRecording, // Disable when recording
-        click: async () => {
-          try {
-            await startQuickRecord();
-          } catch (error) {
-            logger.main.error('Quick record failed:', error);
-          }
-        },
-      },
-      {
-        label: 'Record Meeting',
-        accelerator: appSettings.shortcuts.startStopRecording,
-        enabled: !isRecording, // Disable when recording
-        click: async () => {
-          try {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('toggle-recording-shortcut');
-            }
-          } catch (error) {
-            logger.main.error('Toggle recording failed:', error);
-          }
-        },
-      },
-      {
-        label: 'Stop Recording',
-        accelerator: appSettings.shortcuts.stopRecording,
-        enabled: isRecording, // Enable only when recording
-        click: async () => {
-          try {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('stop-recording-requested');
-            }
-          } catch (error) {
-            logger.main.error('Stop recording failed:', error);
-          }
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Open Vault Folder',
-        click: async () => {
-          try {
-            const vaultPath = vaultStructure?.vaultBasePath;
-            if (!vaultPath) {
-              logger.main.error('[Tray] Vault path not configured');
-              return;
-            }
-            logger.main.info('[Tray] Opening vault folder:', vaultPath);
-            const result = await shell.openPath(vaultPath);
-            if (result) {
-              logger.main.error('[Tray] Failed to open vault folder:', result);
-            }
-          } catch (error) {
-            logger.main.error('[Tray] Error opening vault folder:', error);
-          }
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Settings',
-        click: () => {
-          if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-            mainWindow.webContents.send('open-settings');
-          }
-        },
-      },
-      {
-        label: 'View Logs',
-        click: () => {
-          if (mainWindow) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.show();
-            mainWindow.focus();
-            mainWindow.webContents.send('open-logs-viewer');
-          }
-        },
-      },
-      { type: 'separator' },
-      {
-        label: 'Quit',
-        accelerator: 'CommandOrControl+Q',
-        click: () => {
-          app.isQuitting = true;
-          app.quit();
-        },
-      },
-    ]);
+    const contextMenu = Menu.buildFromTemplate(buildTrayMenu(isRecording));
 
     tray.setContextMenu(contextMenu);
     tray.setToolTip(isRecording ? `${appLabel} - Recording` : appLabel);
     logger.main.debug('[Tray] Menu updated, recording:', isRecording);
   } catch (error) {
     logger.main.error('[Tray] Failed to update tray menu:', error);
-  }
-}
-
-/**
- * Update tray menu to reflect recording state (Phase 10.7)
- * Note: Currently unused - tray menu is recreated on each recording state change
- * Kept for potential future dynamic menu updates
- */
-// eslint-disable-next-line no-unused-vars
-function updateTrayMenu(isRecording) {
-  if (!tray) return;
-
-  const menu = tray.getContextMenu();
-  if (menu) {
-    const stopRecordingItem = menu.getMenuItemById('stop-recording');
-    if (stopRecordingItem) {
-      stopRecordingItem.enabled = isRecording;
-    }
   }
 }
 
@@ -1006,7 +847,7 @@ function startMeetingMonitor() {
   // Then check every minute
   meetingMonitorInterval = setInterval(() => {
     checkUpcomingMeetings();
-  }, 60000); // 60 seconds
+  }, UPCOMING_MEETINGS_CHECK_MS); // 60 seconds
 }
 
 /**
@@ -1106,7 +947,7 @@ async function checkUpcomingMeetings() {
     }
 
     // Clean up old meeting IDs (remove meetings from more than 1 hour ago)
-    const oneHourAgo = now - 60 * 60 * 1000;
+    const oneHourAgo = now - OLD_MEETING_CLEANUP_MS;
     for (const meeting of meetings) {
       const startTime = new Date(meeting.startTime);
       if (startTime < oneHourAgo) {
@@ -1272,12 +1113,12 @@ const createWindow = () => {
   let saveTimeout;
   mainWindow.on('resize', () => {
     clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(saveWindowBounds, 500);
+    saveTimeout = setTimeout(saveWindowBounds, WINDOW_BOUNDS_DEBOUNCE_MS);
   });
 
   mainWindow.on('move', () => {
     clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(saveWindowBounds, 500);
+    saveTimeout = setTimeout(saveWindowBounds, WINDOW_BOUNDS_DEBOUNCE_MS);
   });
 
   // Minimize to tray behavior (Phase 10.7)
@@ -1320,6 +1161,11 @@ const createWindow = () => {
     }
   });
 
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+    global.mainWindow = null;
+  });
+
   // Allow the debug panel header to act as a drag region
   mainWindow.on('ready-to-show', () => {
     try {
@@ -1341,15 +1187,18 @@ const createWindow = () => {
     // mainWindow.webContents.openDevTools();
   }
 
-  // Listen for navigation events
-  ipcMain.on('navigate', (event, page) => {
+};
+
+// Listen for navigation events (registered once, outside createWindow to prevent duplicate listeners)
+ipcMain.on('navigate', (event, page) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
     if (page === 'note-editor') {
       mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY + '/../note-editor/index.html');
     } else if (page === 'home') {
       mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
     }
-  });
-};
+  }
+});
 
 // ===================================================================
 // Recording Widget Window (v1.2 - Krisp-style floating widget)
@@ -1935,7 +1784,7 @@ app.whenReady().then(async () => {
         'https://api.github.com/repos/jdbrucecpa/jd-notes-things/releases/latest',
         {
           headers: { Accept: 'application/vnd.github.v3+json' },
-          timeout: 10000,
+          timeout: GITHUB_API_TIMEOUT_MS,
         }
       );
       const release = response.data;
@@ -2102,7 +1951,7 @@ const fileOperationManager = {
 
     // If we have cached data that's recent (less than 500ms old), use it
     const now = Date.now();
-    if (this.cachedData && now - this.lastReadTime < 500) {
+    if (this.cachedData && now - this.lastReadTime < CACHE_INVALIDATION_MS) {
       return JSON.parse(JSON.stringify(this.cachedData)); // Deep clone
     }
 
@@ -2210,17 +2059,27 @@ const fileOperationManager = {
 // ===================================================================
 
 /**
+ * Retrieve Recall.ai API credentials from Windows Credential Manager with fallback to env vars.
+ * Centralises the repeated credential lookup pattern used across Recall.ai API calls.
+ * @returns {Promise<{apiUrl: string, apiKey: string|undefined}>}
+ */
+async function getRecallCredentials() {
+  const apiUrl =
+    (await keyManagementService.getKey('RECALLAI_API_URL')) ||
+    process.env.RECALLAI_API_URL ||
+    'https://api.recall.ai';
+  const apiKey =
+    (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+  return { apiUrl, apiKey };
+}
+
+/**
  * List all SDK uploads from Recall.ai
  * @returns {Promise<Array>} List of SDK uploads
  */
 async function listRecallRecordings() {
   try {
-    const RECALLAI_API_URL =
-      (await keyManagementService.getKey('RECALLAI_API_URL')) ||
-      process.env.RECALLAI_API_URL ||
-      'https://api.recall.ai';
-    const RECALLAI_API_KEY =
-      (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+    const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
 
     if (!RECALLAI_API_KEY) {
       console.error('[Recall Storage] API key not configured');
@@ -2235,7 +2094,7 @@ async function listRecallRecordings() {
       console.log(`[Recall Storage] Fetching: ${nextUrl}`);
       const response = await axios.get(nextUrl, {
         headers: { Authorization: `Token ${RECALLAI_API_KEY}` },
-        timeout: 30000,
+        timeout: RECALL_API_TIMEOUT_MS,
       });
 
       if (response.data.results) {
@@ -2259,12 +2118,7 @@ async function listRecallRecordings() {
  */
 async function deleteRecallRecording(recordingId) {
   try {
-    const RECALLAI_API_URL =
-      (await keyManagementService.getKey('RECALLAI_API_URL')) ||
-      process.env.RECALLAI_API_URL ||
-      'https://api.recall.ai';
-    const RECALLAI_API_KEY =
-      (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+    const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
 
     if (!RECALLAI_API_KEY) {
       return { error: 'RECALLAI_API_KEY is not configured' };
@@ -2275,7 +2129,7 @@ async function deleteRecallRecording(recordingId) {
 
     await axios.delete(url, {
       headers: { Authorization: `Token ${RECALLAI_API_KEY}` },
-      timeout: 30000,
+      timeout: RECALL_API_TIMEOUT_MS,
     });
 
     console.log(`[Recall Storage] ✓ Deleted recording: ${recordingId}`);
@@ -2335,7 +2189,7 @@ async function deleteAllRecallRecordings() {
     }
 
     // Small delay to avoid rate limiting (300 req/min = 5 req/sec)
-    await new Promise(resolve => setTimeout(resolve, 250));
+    await new Promise(resolve => setTimeout(resolve, RECALL_RATE_LIMIT_DELAY_MS));
   }
 
   console.log(`[Recall Storage] Cleanup complete: ${deleted} deleted, ${failed} failed`);
@@ -2345,12 +2199,7 @@ async function deleteAllRecallRecordings() {
 // Create a desktop SDK upload token directly (no separate server needed)
 async function createDesktopSdkUpload() {
   try {
-    const RECALLAI_API_URL =
-      (await keyManagementService.getKey('RECALLAI_API_URL')) ||
-      process.env.RECALLAI_API_URL ||
-      'https://api.recall.ai';
-    const RECALLAI_API_KEY =
-      (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+    const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
 
     if (!RECALLAI_API_KEY) {
       console.error('RECALLAI_API_KEY is missing! Configure it in Settings > Security');
@@ -2396,7 +2245,7 @@ async function createDesktopSdkUpload() {
 
     const response = await axios.post(url, requestBody, {
       headers: { Authorization: `Token ${RECALLAI_API_KEY}` },
-      timeout: 9000,
+      timeout: WEBSOCKET_TIMEOUT_MS,
     });
 
     console.log('[Upload Token] Response:', JSON.stringify(response.data, null, 2));
@@ -2417,10 +2266,7 @@ async function initSDK() {
   console.log('Initializing Recall.ai SDK');
 
   // Retrieve API URL from Windows Credential Manager (with .env fallback)
-  const RECALLAI_API_URL =
-    (await keyManagementService.getKey('RECALLAI_API_URL')) ||
-    process.env.RECALLAI_API_URL ||
-    'https://api.recall.ai';
+  const { apiUrl: RECALLAI_API_URL } = await getRecallCredentials();
 
   console.log('[SDK] Using Recall.ai API URL:', RECALLAI_API_URL);
 
@@ -2468,7 +2314,7 @@ async function initSDK() {
       logger.main.info('[SDK] Shutdown complete');
 
       // Wait a moment for SDK process to fully terminate
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, SDK_SHUTDOWN_GRACE_MS));
 
       // Restore console.error
       console.error = originalConsoleError;
@@ -2488,7 +2334,7 @@ async function initSDK() {
         mainWindow.webContents.send('sdk-ready');
       }
     }
-  }, 3000); // Wait 3 seconds after initial SDK init
+  }, SDK_INIT_DELAY_MS); // Wait 3 seconds after initial SDK init
 
   // SDK event listeners are now registered below
 
@@ -3015,6 +2861,9 @@ async function initSDK() {
                     '[Transcription] SM-1: Speaker matching failed:',
                     matchError.message
                   );
+                  if (windowId) {
+                    cleanupSpeechTimeline(windowId);
+                  }
                 }
               }
 
@@ -3093,7 +2942,7 @@ async function initSDK() {
             });
           }
         }
-      }, 3000); // 3 second delay to ensure file is fully written
+      }, FILE_WRITE_GRACE_MS); // 3 second delay to ensure file is fully written
     } catch (error) {
       console.error('Error handling recording ended:', error);
     }
@@ -3132,10 +2981,6 @@ async function initSDK() {
       });
     }
   });
-
-  // Note: upload-complete is a webhook event, not an SDK event
-  // Desktop apps can't receive webhooks, so we poll the API instead
-  // See pollForUploadCompletion() function below
 
   RecallAiSdk.addEventListener('permissions-granted', async _evt => {
     logger.main.info('[SDK] Permissions granted');
@@ -3429,10 +3274,10 @@ function deduplicateParticipants(participants) {
   const result = [];
 
   for (const participant of participants) {
-    // Use email as primary key (case-insensitive)
+    // Use email as primary key (case-insensitive), fall back to originalName (immutable source of truth)
     const key = participant.email
       ? participant.email.toLowerCase()
-      : participant.name?.toLowerCase() || `unknown-${result.length}`;
+      : (participant.originalName || participant.name)?.toLowerCase() || `unknown-${result.length}`;
 
     if (!seen.has(key)) {
       seen.set(key, true);
@@ -4274,7 +4119,7 @@ async function executeTemplateSectionTask(llmService, task, transcriptText) {
       userPrompt: task.sectionPrompt,
       cacheableContext: transcriptText, // This will be cached across all section calls
       temperature: 0.7,
-      maxTokens: 15000, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
+      maxTokens: LLM_SECTION_MAX_TOKENS, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
     });
 
     console.log(
@@ -4392,7 +4237,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
       }
 
       // Estimate tokens per request (rough estimate: 1 token ≈ 4 chars)
-      const estimatedTokensPerRequest = Math.ceil(transcriptText.length / 4) + 200; // +200 for prompts
+      const estimatedTokensPerRequest = Math.ceil(transcriptText.length / 4) + LLM_PROMPT_TOKEN_BUFFER; // +200 for prompts
 
       // Azure limit: 200k tokens/min. Use 70% to be safe
       const tokenBudgetPerMinute = 140000;
@@ -4402,8 +4247,6 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
         1,
         Math.floor(tokenBudgetPerMinute / estimatedTokensPerRequest)
       );
-      const _actualConcurrency = Math.min(3, safeConcurrency); // Cap at 3 for safety (reserved for future use)
-
       console.log(`[TemplateSummary] Transcript: ~${estimatedTokensPerRequest} tokens/request`);
       console.log(
         `[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`
@@ -4872,7 +4715,7 @@ ipcMain.handle('google:openAuthWindow', async () => {
             resolve({ success: false, error: 'Authentication timeout (5 minutes)' });
           }
         },
-        5 * 60 * 1000
+        OAUTH_TIMEOUT_MS
       );
 
       // Define redirect handler
@@ -5054,7 +4897,7 @@ ipcMain.handle(
 // Re-match participants to contacts for a meeting
 // v1.2.2: Rebuild from TRANSCRIPT speaker names (the true source of truth)
 // The participants array may already be corrupted - transcript is authoritative
-ipcMain.handle('contacts:rematchParticipants', async (event, meetingId) => {
+ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, async (event, meetingId) => {
   try {
     console.log(`[Contacts IPC] Re-matching participants for meeting ${meetingId}`);
 
@@ -5224,7 +5067,7 @@ ipcMain.handle('contacts:rematchParticipants', async (event, meetingId) => {
     console.error('[Contacts IPC] Failed to rematch participants:', error);
     return { success: false, error: error.message };
   }
-});
+}));
 
 // Get meetings for a specific contact (CS-1)
 ipcMain.handle(
@@ -5237,67 +5080,63 @@ ipcMain.handle(
         return { success: true, meetings: [] };
       }
 
-    // Load meetings from storage
-    const meetingsPath = require('path').join(app.getPath('userData'), 'meetings.json');
-    let meetings = [];
+      // Load meetings via fileOperationManager to avoid race conditions with concurrent writes
+      let meetings = [];
+      await fileOperationManager.scheduleOperation(async data => {
+        const upcomingMeetings = data.upcomingMeetings || [];
+        const pastMeetings = data.pastMeetings || [];
+        meetings = [...upcomingMeetings, ...pastMeetings];
+        return data; // Read-only, don't modify
+      });
 
-    if (require('fs').existsSync(meetingsPath)) {
-      const data = require('fs').readFileSync(meetingsPath, 'utf8');
-      const parsed = JSON.parse(data);
-      // Meetings file stores { upcomingMeetings: [...], pastMeetings: [...] }
-      const upcomingMeetings = parsed.upcomingMeetings || [];
-      const pastMeetings = parsed.pastMeetings || [];
-      meetings = [...upcomingMeetings, ...pastMeetings];
-    }
+      const normalizedEmail = contactEmail.toLowerCase().trim();
+      console.log(
+        `[Contacts IPC] Searching ${meetings.length} meetings for email: ${normalizedEmail}`
+      );
 
-    const normalizedEmail = contactEmail.toLowerCase().trim();
-    console.log(
-      `[Contacts IPC] Searching ${meetings.length} meetings for email: ${normalizedEmail}`
-    );
+      // Filter meetings where contact participated
+      const contactMeetings = meetings.filter(meeting => {
+        // Check participantEmails
+        if (meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+          const hasEmail = meeting.participantEmails.some(
+            email => email && email.toLowerCase().trim() === normalizedEmail
+          );
+          if (hasEmail) return true;
+        }
 
-    // Filter meetings where contact participated
-    const contactMeetings = meetings.filter(meeting => {
-      // Check participantEmails
-      if (meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
-        const hasEmail = meeting.participantEmails.some(
-          email => email && email.toLowerCase().trim() === normalizedEmail
-        );
-        if (hasEmail) return true;
-      }
+        // Check participants array
+        if (meeting.participants && Array.isArray(meeting.participants)) {
+          const hasParticipant = meeting.participants.some(
+            p => p && p.email && p.email.toLowerCase().trim() === normalizedEmail
+          );
+          if (hasParticipant) return true;
+        }
 
-      // Check participants array
-      if (meeting.participants && Array.isArray(meeting.participants)) {
-        const hasParticipant = meeting.participants.some(
-          p => p && p.email && p.email.toLowerCase().trim() === normalizedEmail
-        );
-        if (hasParticipant) return true;
-      }
+        // Check attendees array (from calendar events)
+        if (meeting.attendees && Array.isArray(meeting.attendees)) {
+          const hasAttendee = meeting.attendees.some(
+            a => a && a.email && a.email.toLowerCase().trim() === normalizedEmail
+          );
+          if (hasAttendee) return true;
+        }
 
-      // Check attendees array (from calendar events)
-      if (meeting.attendees && Array.isArray(meeting.attendees)) {
-        const hasAttendee = meeting.attendees.some(
-          a => a && a.email && a.email.toLowerCase().trim() === normalizedEmail
-        );
-        if (hasAttendee) return true;
-      }
+        return false;
+      });
 
-      return false;
-    });
+      // Sort by date descending
+      contactMeetings.sort((a, b) => new Date(b.date) - new Date(a.date));
 
-    // Sort by date descending
-    contactMeetings.sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    console.log(`[Contacts IPC] Found ${contactMeetings.length} meetings for ${contactEmail}`);
-    return {
-      success: true,
-      meetings: contactMeetings.map(m => ({
-        id: m.id,
-        title: m.title,
-        date: m.date,
-        platform: m.platform,
-        obsidianLink: m.obsidianLink,
-      })),
-    };
+      console.log(`[Contacts IPC] Found ${contactMeetings.length} meetings for ${contactEmail}`);
+      return {
+        success: true,
+        meetings: contactMeetings.map(m => ({
+          id: m.id,
+          title: m.title,
+          date: m.date,
+          platform: m.platform,
+          obsidianLink: m.obsidianLink,
+        })),
+      };
     } catch (error) {
       console.error('[Contacts IPC] Failed to get meetings for contact:', error);
       return { success: false, error: error.message };
@@ -7647,7 +7486,7 @@ function extractMeetingPurpose(description) {
     purposeText = description.substring(contentStart, endIndex);
   } else {
     // No end marker, take everything after start marker (up to 500 chars)
-    purposeText = description.substring(contentStart, contentStart + 500);
+    purposeText = description.substring(contentStart, contentStart + MEETING_PURPOSE_MAX_CHARS);
   }
 
   // Clean up the text
@@ -7796,16 +7635,6 @@ const TRANSCRIPT_EXTENSIONS = ['txt', 'md', 'vtt', 'srt'];
 function isAudioFile(filePath) {
   const ext = path.extname(filePath).toLowerCase().slice(1);
   return AUDIO_EXTENSIONS.includes(ext);
-}
-
-/**
- * Check if a file is a transcript file based on extension
- * @param {string} filePath - Path to the file
- * @returns {boolean} True if transcript file
- */
-function _isTranscriptFile(filePath) {
-  const ext = path.extname(filePath).toLowerCase().slice(1);
-  return TRANSCRIPT_EXTENSIONS.includes(ext);
 }
 
 // Select files for import using Electron dialog (IM-1: now includes audio files)
@@ -8164,7 +7993,7 @@ ipcMain.handle('settings:checkForUpdates', async () => {
       const timeout = setTimeout(() => {
         cleanup();
         resolve({ success: false, message: 'Update check timed out' });
-      }, 30000);
+      }, AUTO_UPDATE_CHECK_TIMEOUT_MS);
 
       const onUpdateAvailable = () => {
         cleanup();
@@ -8482,7 +8311,7 @@ ipcMain.handle(
   'app:getLogs',
   withValidation(logsOptionsSchema, async (event, options = {}) => {
     try {
-      const { limit = 1000, level = 'all' } = options || {};
+      const { limit = LOG_ENTRIES_DEFAULT_LIMIT, level = 'all' } = options || {};
 
     // Read log file
     const logPath = log.transports.file.getFile().path;
@@ -8766,9 +8595,20 @@ ipcMain.handle(
 // ===================================================================
 
 // Handle open-external IPC (for opening URLs in default browser)
+// Only allow safe protocols to prevent arbitrary protocol execution
+const ALLOWED_EXTERNAL_PROTOCOLS = ['https:', 'http:', 'zoommtg:', 'msteams:', 'tel:', 'mailto:'];
 ipcMain.on('open-external', (event, url) => {
-  console.log('[IPC] open-external called with url:', url);
-  require('electron').shell.openExternal(url);
+  try {
+    const parsed = new URL(url);
+    if (!ALLOWED_EXTERNAL_PROTOCOLS.includes(parsed.protocol)) {
+      console.warn(`[IPC] open-external blocked URL with disallowed protocol: ${parsed.protocol}`);
+      return;
+    }
+    console.log('[IPC] open-external called with url:', url);
+    shell.openExternal(url);
+  } catch (err) {
+    console.warn('[IPC] open-external called with invalid URL:', url);
+  }
 });
 
 // Handle toggle-dev-tools IPC (for custom titlebar menu)
@@ -8925,16 +8765,18 @@ ipcMain.handle('widget:start-recording', async (event, meetingId) => {
           transcriptionProvider: transcriptionProvider,
         });
 
-        // Listen for response
-        ipcMain.once('widget:recording-result', (e, res) => {
+        // Listen for response (remove listener on timeout to prevent stale listeners)
+        const handler = (e, res) => {
+          clearTimeout(timeoutId);
           resolve(res);
-        });
+        };
+        ipcMain.once('widget:recording-result', handler);
 
         // Timeout after 30 seconds
-        setTimeout(
-          () => resolve({ success: false, error: 'Timeout waiting for recording to start' }),
-          30000
-        );
+        const timeoutId = setTimeout(() => {
+          ipcMain.removeListener('widget:recording-result', handler);
+          resolve({ success: false, error: 'Timeout waiting for recording to start' });
+        }, IPC_RESPONSE_TIMEOUT_MS);
       } else {
         resolve({ success: false, error: 'Main window not available' });
       }
@@ -8968,12 +8810,17 @@ ipcMain.handle('widget:start-recording-with-action', async (event, { meetingId, 
       transcriptionProvider: appSettings.transcriptionProvider || 'assemblyai',
     });
 
-    // Wait for response
+    // Wait for response (remove listener on timeout to prevent stale listeners)
     const result = await new Promise(resolve => {
-      ipcMain.once('widget:recording-result', (e, res) => {
+      const handler = (e, res) => {
+        clearTimeout(timeoutId);
         resolve(res);
-      });
-      setTimeout(() => resolve({ success: false, error: 'Timeout' }), 30000);
+      };
+      ipcMain.once('widget:recording-result', handler);
+      const timeoutId = setTimeout(() => {
+        ipcMain.removeListener('widget:recording-result', handler);
+        resolve({ success: false, error: 'Timeout' });
+      }, IPC_RESPONSE_TIMEOUT_MS);
     });
 
     if (result.success) {
@@ -8997,11 +8844,16 @@ ipcMain.handle('widget:stop-recording', async () => {
       mainWindow.webContents.send('widget:stop-recording-request');
 
       const result = await new Promise(resolve => {
-        ipcMain.once('widget:stop-recording-result', (e, res) => {
+        const handler = (e, res) => {
+          clearTimeout(timeoutId);
           resolve(res);
-        });
+        };
+        ipcMain.once('widget:stop-recording-result', handler);
         // Timeout after 30 seconds
-        setTimeout(() => resolve({ success: false, error: 'Timeout' }), 30000);
+        const timeoutId = setTimeout(() => {
+          ipcMain.removeListener('widget:stop-recording-result', handler);
+          resolve({ success: false, error: 'Timeout' });
+        }, IPC_RESPONSE_TIMEOUT_MS);
       });
 
       if (result.success) {
@@ -9729,12 +9581,7 @@ global.webhookHandlers = {
     console.log(`[Webhook] Transcript ready. ID: ${transcriptId}, Recording: ${recordingId}`);
 
     try {
-      const RECALLAI_API_URL =
-        (await keyManagementService.getKey('RECALLAI_API_URL')) ||
-        process.env.RECALLAI_API_URL ||
-        'https://api.recall.ai';
-      const RECALLAI_API_KEY =
-        (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+      const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
 
       // Fetch the transcript
       const response = await axios.get(`${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`, {
@@ -9816,12 +9663,7 @@ ipcMain.on('webhook-transcript-done', async (event, { transcriptId, recordingId 
   console.log(`[Webhook] Transcript ready. ID: ${transcriptId}, Recording: ${recordingId}`);
 
   try {
-    const RECALLAI_API_URL =
-      (await keyManagementService.getKey('RECALLAI_API_URL')) ||
-      process.env.RECALLAI_API_URL ||
-      'https://api.recall.ai';
-    const RECALLAI_API_KEY =
-      (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+    const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
 
     // Fetch the transcript
     const response = await axios.get(`${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`, {
@@ -9916,78 +9758,78 @@ ipcMain.handle(
     try {
       console.log(`Streaming summary generation requested for meeting: ${meetingId}`);
 
-    // Read current data
-    const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-    const meetingsData = JSON.parse(fileData);
+      // Read current data
+      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
+      const meetingsData = JSON.parse(fileData);
 
-    // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
-      meeting => meeting.id === meetingId
-    );
+      // Find the meeting
+      const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
+        meeting => meeting.id === meetingId
+      );
 
-    if (pastMeetingIndex === -1) {
-      return { success: false, error: 'Meeting not found' };
-    }
-
-    const meeting = meetingsData.pastMeetings[pastMeetingIndex];
-
-    // Check if there's a transcript to summarize
-    if (!meeting.transcript || meeting.transcript.length === 0) {
-      return {
-        success: false,
-        error: 'No transcript available for this meeting',
-      };
-    }
-
-    // Log summary generation to console instead of showing a notification
-    console.log('Generating streaming summary for meeting: ' + meetingId);
-
-    // Get meeting title for use in the new content
-    const meetingTitle = meeting.title || 'Meeting Notes';
-
-    // Initial content with placeholders
-    meeting.content = `# ${meetingTitle}\n\nGenerating summary...`;
-
-    // Update the note on the frontend right away
-    mainWindow.webContents.send('summary-update', {
-      meetingId,
-      content: meeting.content,
-    });
-
-    // Create progress callback for streaming updates
-    const streamProgress = currentText => {
-      // Update content with current streaming text
-      meeting.content = `# ${meetingTitle}\n\n## AI-Generated Meeting Summary\n${currentText}`;
-
-      // Send immediate update to renderer - don't debounce or delay this
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        try {
-          // Force immediate send of the update
-          mainWindow.webContents.send('summary-update', {
-            meetingId,
-            content: meeting.content,
-            timestamp: Date.now(), // Add timestamp to ensure uniqueness
-          });
-        } catch (err) {
-          console.error('Error sending streaming update to renderer:', err);
-        }
+      if (pastMeetingIndex === -1) {
+        return { success: false, error: 'Meeting not found' };
       }
-    };
 
-    // Generate summary with streaming
-    const summary = await generateMeetingSummary(meeting, streamProgress);
+      const meeting = meetingsData.pastMeetings[pastMeetingIndex];
 
-    // Make sure the final content is set correctly
-    meeting.content = `# ${meetingTitle}\n\n${summary}`;
-    meeting.hasSummary = true;
+      // Check if there's a transcript to summarize
+      if (!meeting.transcript || meeting.transcript.length === 0) {
+        return {
+          success: false,
+          error: 'No transcript available for this meeting',
+        };
+      }
 
-    // Save the updated data with summary
-    await fileOperationManager.writeData(meetingsData);
+      // Log summary generation to console instead of showing a notification
+      console.log('Generating streaming summary for meeting: ' + meetingId);
 
-    console.log('Updated meeting note with AI summary (streaming)');
+      // Get meeting title for use in the new content
+      const meetingTitle = meeting.title || 'Meeting Notes';
 
-    // Final notification to renderer
-    mainWindow.webContents.send('summary-generated', meetingId);
+      // Initial content with placeholders
+      meeting.content = `# ${meetingTitle}\n\nGenerating summary...`;
+
+      // Update the note on the frontend right away
+      mainWindow.webContents.send('summary-update', {
+        meetingId,
+        content: meeting.content,
+      });
+
+      // Create progress callback for streaming updates
+      const streamProgress = currentText => {
+        // Update content with current streaming text
+        meeting.content = `# ${meetingTitle}\n\n## AI-Generated Meeting Summary\n${currentText}`;
+
+        // Send immediate update to renderer - don't debounce or delay this
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          try {
+            // Force immediate send of the update
+            mainWindow.webContents.send('summary-update', {
+              meetingId,
+              content: meeting.content,
+              timestamp: Date.now(), // Add timestamp to ensure uniqueness
+            });
+          } catch (err) {
+            console.error('Error sending streaming update to renderer:', err);
+          }
+        }
+      };
+
+      // Generate summary with streaming
+      const summary = await generateMeetingSummary(meeting, streamProgress);
+
+      // Make sure the final content is set correctly
+      meeting.content = `# ${meetingTitle}\n\n${summary}`;
+      meeting.hasSummary = true;
+
+      // Save the updated data with summary
+      await fileOperationManager.writeData(meetingsData);
+
+      console.log('Updated meeting note with AI summary (streaming)');
+
+      // Final notification to renderer
+      mainWindow.webContents.send('summary-generated', meetingId);
 
       return {
         success: true,
@@ -10039,7 +9881,7 @@ ipcMain.handle(
 
     // Start polling for transcript in background
     // We don't await this - let it run async
-    pollRecallAITranscript(meeting.recordingId, meeting.recordingId, meetingId)
+    pollRecallAITranscript(meeting.recordingId, meeting.recordingId, null, meetingId)
       .then(() => {
         console.log(`[IPC] Transcript fetch completed for meeting: ${meetingId}`);
       })
@@ -10188,7 +10030,7 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
               setTimeout(() => {
                 console.log(`Sending backup IPC message to open meeting note: ${id}`);
                 mainWindow.webContents.send('open-meeting-note', id);
-              }, 2000);
+              }, BACKUP_IPC_DELAY_MS);
             } catch (error) {
               console.error('Error before sending open-meeting-note message:', error);
             }
@@ -10733,9 +10575,11 @@ function getSpeechTimeline(windowId) {
       const closeTime = timeline.usingSdkTimestamps
         ? timeline.lastSdkTimestampMs  // Use last known SDK timestamp to avoid mixed basis
         : Date.now() - timeline.recordingStartTime;
+      // Guard against negative-duration segments (e.g., lastSdkTimestampMs still 0)
+      const safeCloseTime = Math.max(closeTime, data.currentStart);
       data.segments.push({
         start: data.currentStart,
-        end: closeTime,
+        end: safeCloseTime,
       });
       data.currentStart = null;
     }
@@ -10765,234 +10609,9 @@ function cleanupSpeechTimeline(windowId) {
   }
 }
 
-// Store speaker labels per window (AssemblyAI speaker diarization)
-const windowSpeakerLabels = new Map(); // windowId -> latest speaker label
-
-/**
- * Match speaker labels to participant names using simple heuristics
- * @param {Object} meeting - Meeting object with transcript and participants
- * Note: Currently unused - replaced by SpeakerMatcher service
- */
-// eslint-disable-next-line no-unused-vars
-async function matchSpeakersToParticipants(meeting) {
-  if (!meeting.transcript || !meeting.participants) {
-    return;
-  }
-
-  // Analyze speakers in transcript - count words per speaker label
-  const speakerStats = new Map();
-  for (const entry of meeting.transcript) {
-    if (entry.speakerLabel !== undefined) {
-      if (!speakerStats.has(entry.speakerLabel)) {
-        speakerStats.set(entry.speakerLabel, {
-          label: entry.speakerLabel,
-          wordCount: 0,
-          utteranceCount: 0,
-          firstAppearance: entry.timestamp,
-        });
-      }
-      const stats = speakerStats.get(entry.speakerLabel);
-      stats.wordCount += entry.text.split(/\s+/).length;
-      stats.utteranceCount++;
-    }
-  }
-
-  if (speakerStats.size === 0) {
-    console.log('[Speaker Matching] No speaker labels found in transcript');
-    return;
-  }
-
-  console.log(
-    `[Speaker Matching] Found ${speakerStats.size} unique speakers and ${meeting.participants.length} participants`
-  );
-
-  // Sort speakers by word count (most talkative first)
-  const sortedSpeakers = Array.from(speakerStats.values()).sort(
-    (a, b) => b.wordCount - a.wordCount
-  );
-
-  // Sort participants (host first if available, then by join order)
-  const sortedParticipants = [...meeting.participants].sort((a, b) => {
-    if (a.isHost && !b.isHost) return -1;
-    if (!a.isHost && b.isHost) return 1;
-    return 0;
-  });
-
-  // Create speaker mapping
-  const speakerMapping = new Map();
-
-  // Simple heuristic: match speakers to participants in order
-  // Most talkative speaker -> host (or first participant)
-  // Second most talkative -> second participant, etc.
-  for (let i = 0; i < Math.min(sortedSpeakers.length, sortedParticipants.length); i++) {
-    speakerMapping.set(sortedSpeakers[i].label, sortedParticipants[i].name);
-    console.log(
-      `[Speaker Matching] Speaker ${String.fromCharCode(65 + sortedSpeakers[i].label)} -> ${sortedParticipants[i].name}`
-    );
-  }
-
-  // Update transcript entries with matched names
-  let matchedCount = 0;
-  for (const entry of meeting.transcript) {
-    if (entry.speakerLabel !== undefined && speakerMapping.has(entry.speakerLabel)) {
-      const matchedName = speakerMapping.get(entry.speakerLabel);
-      const oldSpeaker = entry.speaker;
-      entry.speaker = matchedName;
-      entry.speakerMatched = true;
-      if (matchedCount < 3) {
-        // Only log first few to avoid spam
-        console.log(`[Speaker Matching] Updated "${oldSpeaker}" -> "${matchedName}"`);
-      }
-      matchedCount++;
-    }
-  }
-  console.log(
-    `[Speaker Matching] Updated ${matchedCount} transcript entries with matched speaker names`
-  );
-
-  // Store the mapping in the meeting object for reference
-  meeting.speakerMapping = Object.fromEntries(
-    Array.from(speakerMapping.entries()).map(([label, name]) => [
-      `Speaker ${String.fromCharCode(65 + label)}`,
-      { name, email: null, confidence: 'medium', method: 'participant-match' },
-    ])
-  );
-}
-
 // ============================================================================
 // Recall.ai Async Transcription (Phase 6 - Better Quality than Real-Time)
 // ============================================================================
-
-/**
- * Poll Recall.ai API to check if upload is complete
- * (Webhooks don't work for desktop apps, so we poll instead)
- * @param {string} windowId - Window ID from Desktop SDK
- * Note: Currently unused - using webhook-based transcription instead
- */
-// eslint-disable-next-line no-unused-vars
-async function pollForUploadCompletion(windowId) {
-  const RECALLAI_API_URL =
-    (await keyManagementService.getKey('RECALLAI_API_URL')) ||
-    process.env.RECALLAI_API_URL ||
-    'https://api.recall.ai';
-  const RECALLAI_API_KEY =
-    (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
-
-  if (!RECALLAI_API_KEY) {
-    throw new Error('RECALLAI_API_KEY not configured. Set it in Settings > Security');
-  }
-
-  console.log(`[Upload] Polling for upload completion: ${windowId}`);
-
-  // Poll every 5 seconds for up to 5 minutes
-  const maxAttempts = 60; // 5 minutes
-  let attempts = 0;
-
-  while (attempts < maxAttempts) {
-    try {
-      attempts++;
-
-      // Query SDK uploads API to find our recording
-      const url = `${RECALLAI_API_URL}/api/v1/sdk_upload/`;
-      const response = await axios.get(url, {
-        headers: {
-          Authorization: `Token ${RECALLAI_API_KEY}`,
-        },
-      });
-
-      // Debug: Log the raw API response on first attempt
-      if (attempts === 1) {
-        console.log(
-          '[Upload] API Response structure:',
-          JSON.stringify(response.data, null, 2).substring(0, 2000)
-        );
-      }
-
-      // Find the upload with our windowId
-      const uploads = response.data.results || [];
-      console.log(`[Upload] Found ${uploads.length} total uploads in API response`);
-
-      if (uploads.length > 0 && attempts === 1) {
-        console.log(
-          '[Upload] First upload example:',
-          JSON.stringify(uploads[0], null, 2).substring(0, 500)
-        );
-      }
-
-      // Get the upload_token for this recording from the meeting data
-      const meetingsData = await fileOperationManager.readMeetingsData();
-      const meeting = meetingsData.pastMeetings.find(m => m.recordingId === windowId);
-
-      if (!meeting) {
-        console.log(`[Upload] Could not find meeting with recordingId: ${windowId}`);
-        console.log(
-          `[Upload] Available recordingIds in pastMeetings:`,
-          meetingsData.pastMeetings.map(m => m.recordingId || 'none').join(', ')
-        );
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        continue;
-      }
-
-      // Debug: Show what fields the meeting has
-      if (attempts === 1) {
-        console.log(
-          `[Upload] Meeting found! ID: ${meeting.id}, has uploadToken: ${!!meeting.uploadToken}`
-        );
-        console.log(`[Upload] Meeting fields:`, Object.keys(meeting));
-        if (meeting.uploadToken) {
-          console.log(`[Upload] uploadToken value: ${meeting.uploadToken.substring(0, 8)}...`);
-        }
-      }
-
-      if (!meeting.uploadToken) {
-        console.log(
-          `[Upload] Meeting ${meeting.id} found but no uploadToken field yet (attempt ${attempts}/${maxAttempts})`
-        );
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        continue;
-      }
-
-      console.log(`[Upload] Looking for upload_token: ${meeting.uploadToken.substring(0, 8)}...`);
-      const ourUpload = uploads.find(upload => upload.upload_token === meeting.uploadToken);
-
-      if (ourUpload) {
-        const statusCode = ourUpload.status?.code;
-        console.log(`[Upload] Upload status: ${statusCode}`);
-
-        if (statusCode === 'complete') {
-          const recordingId = ourUpload.recording_id;
-          console.log(`[Upload] Upload complete! Recording ID: ${recordingId}`);
-
-          // Start async transcription
-          try {
-            await startRecallAIAsyncTranscription(recordingId, windowId);
-            return; // Success - exit polling loop
-          } catch (transcriptionError) {
-            console.error(
-              '[Upload] Failed to start transcription:',
-              transcriptionError.response?.data || transcriptionError.message
-            );
-            // Stop retrying - transcription errors are usually permanent (e.g., missing video)
-            throw new Error(`Transcription failed: ${transcriptionError.message}`);
-          }
-        } else if (statusCode === 'failed') {
-          throw new Error(`Upload failed for window ${windowId}`);
-        }
-      } else {
-        console.log(`[Upload] Upload not found yet (attempt ${attempts}/${maxAttempts})`);
-      }
-
-      // Wait 5 seconds before next poll
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    } catch (error) {
-      console.error('[Upload] Polling error:', error.response?.data || error.message);
-      // Continue polling even on errors (might be transient)
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-  }
-
-  throw new Error(`Upload polling timed out after ${maxAttempts} attempts for window ${windowId}`);
-}
 
 /**
  * Start async transcription through Recall.ai after upload completes
@@ -11002,12 +10621,7 @@ async function pollForUploadCompletion(windowId) {
 async function startRecallAIAsyncTranscription(recordingId, windowId) {
   console.log(`[Recall.ai] Starting async transcription for recording: ${recordingId}`);
 
-  const RECALLAI_API_URL =
-    (await keyManagementService.getKey('RECALLAI_API_URL')) ||
-    process.env.RECALLAI_API_URL ||
-    'https://api.recall.ai';
-  const RECALLAI_API_KEY =
-    (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+  const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
 
   if (!RECALLAI_API_KEY) {
     throw new Error('RECALLAI_API_KEY not configured. Set it in Settings > Security');
@@ -11076,21 +10690,20 @@ async function startRecallAIAsyncTranscription(recordingId, windowId) {
  * @param {string} meetingId - Our meeting ID
  */
 async function pollRecallAITranscript(recordingId, transcriptId, windowId, meetingId) {
-  const RECALLAI_API_URL =
-    (await keyManagementService.getKey('RECALLAI_API_URL')) ||
-    process.env.RECALLAI_API_URL ||
-    'https://api.recall.ai';
-  const RECALLAI_API_KEY =
-    (await keyManagementService.getKey('RECALLAI_API_KEY')) || process.env.RECALLAI_API_KEY;
+  const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
 
   // Poll the specific transcript endpoint
   const pollingEndpoint = `${RECALLAI_API_URL}/api/v1/transcript/${transcriptId}/`;
+
+  const MAX_POLL_ATTEMPTS = 120; // 10 minutes max at 5-second intervals (matches AssemblyAI timeout)
+  let attempts = 0;
 
   console.log(
     `[Recall.ai] Polling for transcript completion. Recording: ${recordingId}, Transcript: ${transcriptId}`
   );
 
-  while (true) {
+  while (attempts < MAX_POLL_ATTEMPTS) {
+    attempts++;
     try {
       const response = await axios.get(pollingEndpoint, {
         headers: {
@@ -11134,12 +10747,12 @@ async function pollRecallAITranscript(recordingId, transcriptId, windowId, meeti
       }
 
       // Wait 5 seconds before next poll
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, TRANSCRIPT_POLL_INTERVAL_MS));
     } catch (error) {
       // If it's a 404, the transcript might not be available yet
       if (error.response?.status === 404) {
         console.log('[Recall.ai] Transcript not found yet (404) - continuing to poll');
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, TRANSCRIPT_POLL_INTERVAL_MS));
         continue;
       }
 
@@ -11151,6 +10764,8 @@ async function pollRecallAITranscript(recordingId, transcriptId, windowId, meeti
       throw error;
     }
   }
+
+  throw new Error(`Recall.ai transcript polling timed out after ${MAX_POLL_ATTEMPTS * 5} seconds for recording ${recordingId}`);
 }
 
 /**
@@ -11321,143 +10936,6 @@ async function processRecallAITranscript(transcript, meetingId, _windowId) {
   } catch (error) {
     console.error('[Recall.ai] Error processing transcript:', error);
     throw error;
-  }
-}
-
-// Function to process transcript data and store it with the meeting note
-// Note: Currently unused - using webhook-based processing instead
-// eslint-disable-next-line no-unused-vars
-async function processTranscriptData(evt) {
-  try {
-    const windowId = evt.window?.id;
-    if (!windowId) {
-      console.error('Missing window ID in transcript event');
-      return;
-    }
-
-    // Check if we have this meeting in our active meetings
-    if (!global.activeMeetingIds || !global.activeMeetingIds[windowId]) {
-      console.log(`No active meeting found for window ID: ${windowId}`);
-      return;
-    }
-
-    const noteId = global.activeMeetingIds[windowId].noteId;
-    if (!noteId) {
-      console.log(`No note ID found for window ID: ${windowId}`);
-      return;
-    }
-
-    // Extract the transcript data
-    const words = evt.data.data.words || [];
-    if (words.length === 0) {
-      return; // No words to process
-    }
-
-    // Get speaker information from AssemblyAI diarization
-    const speakerLabel = windowSpeakerLabels.get(windowId);
-    let speaker;
-    let speakerLabelStored = null;
-
-    // Debug: Log participant data from RecallAI
-    const participantName = evt.data.data.participant?.name;
-    const participantId = evt.data.data.participant?.id;
-    console.log(
-      `[Transcript] Participant from RecallAI: "${participantName}" (ID: ${participantId}), Speaker label from AssemblyAI: ${speakerLabel}`
-    );
-
-    // Try to match participant to stored participants in meeting.participants array
-    // This is more reliable than the participant info from transcript events
-    let matchedParticipant = null;
-    await fileOperationManager.scheduleOperation(async meetingsData => {
-      const noteIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === noteId);
-      if (noteIndex !== -1) {
-        const meeting = meetingsData.pastMeetings[noteIndex];
-        if (meeting.participants && meeting.participants.length > 0) {
-          // Try to find participant by ID first
-          matchedParticipant = meeting.participants.find(p => p.id === participantId);
-
-          // If not found and we have exactly one non-host participant, use that
-          if (!matchedParticipant) {
-            const nonHostParticipants = meeting.participants.filter(
-              p => !p.isHost && p.name !== 'Host' && p.name !== 'Guest'
-            );
-            if (nonHostParticipants.length === 1) {
-              matchedParticipant = nonHostParticipants[0];
-              console.log(`[Transcript] Matched to stored participant: ${matchedParticipant.name}`);
-            }
-          }
-        }
-      }
-      return null; // No changes to data
-    });
-
-    // Determine speaker name
-    if (matchedParticipant) {
-      speaker = matchedParticipant.name;
-      console.log(`[Transcript] Using matched participant: ${speaker}`);
-    } else if (participantName && participantName !== 'Host' && participantName !== 'Guest') {
-      speaker = participantName;
-      console.log(`[Transcript] Using RecallAI participant name: ${speaker}`);
-    } else if (speakerLabel !== undefined && speakerLabel !== null) {
-      // Use AssemblyAI speaker label (rarely available in streaming)
-      speaker = `Speaker ${String.fromCharCode(65 + speakerLabel)}`; // Convert 0->A, 1->B, etc.
-      speakerLabelStored = speakerLabel;
-      console.log(`[Transcript] Using AssemblyAI speaker label: ${speaker}`);
-    } else {
-      speaker = 'Unknown Speaker';
-      console.log(`[Transcript] No speaker info available - using Unknown Speaker`);
-    }
-
-    // Combine all words into a single text
-    const text = words.map(word => word.text).join(' ');
-
-    console.log(`[Transcript] Final: ${speaker}: "${text.substring(0, 50)}..."`);
-
-    // Use the file operation manager to safely update the meetings data
-    await fileOperationManager.scheduleOperation(async meetingsData => {
-      // Find the meeting note with this ID
-      const noteIndex = meetingsData.pastMeetings.findIndex(meeting => meeting.id === noteId);
-      if (noteIndex === -1) {
-        console.log(`No meeting note found with ID: ${noteId}`);
-        return null; // Return null to indicate no changes needed
-      }
-
-      // Add the transcript data
-      const meeting = meetingsData.pastMeetings[noteIndex];
-
-      // Initialize transcript array if it doesn't exist
-      if (!meeting.transcript) {
-        meeting.transcript = [];
-      }
-
-      // Add the new transcript entry with speaker label for later matching
-      const transcriptEntry = {
-        text,
-        speaker,
-        timestamp: new Date().toISOString(),
-      };
-
-      // Include AssemblyAI speaker label if available (for speaker matching)
-      if (speakerLabelStored !== null) {
-        transcriptEntry.speakerLabel = speakerLabelStored;
-      }
-
-      meeting.transcript.push(transcriptEntry);
-
-      console.log(`Added transcript data for meeting: ${noteId}`);
-
-      // Notify the renderer if this note is currently being edited
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('transcript-updated', noteId);
-      }
-
-      // Return the updated data to be written
-      return meetingsData;
-    });
-
-    console.log(`Processed transcript data for meeting: ${noteId}`);
-  } catch (error) {
-    console.error('Error processing transcript data:', error);
   }
 }
 
@@ -11820,7 +11298,7 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
         cacheableContext: cacheableContent, // This will be cached across all section calls
-        maxTokens: 15000, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
+        maxTokens: LLM_SECTION_MAX_TOKENS, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
         temperature: 0.7,
       });
 
@@ -11856,7 +11334,7 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
         cacheableContext: cacheableContent, // This will be cached across all section calls
-        maxTokens: 15000, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
+        maxTokens: LLM_SECTION_MAX_TOKENS, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
         temperature: 0.7,
         onChunk: cumulativeText => {
           if (progressCallback) {

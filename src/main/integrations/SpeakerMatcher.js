@@ -11,35 +11,6 @@ class SpeakerMatcher {
   }
 
   /**
-   * Fuzzy name matching for speaker identification (Phase 6)
-   * Handles common variations (case, middle names, nicknames)
-   *
-   * @param {string} name1 - First name to compare
-   * @param {string} name2 - Second name to compare
-   * @returns {boolean} True if names likely match the same person
-   */
-  fuzzyNameMatch(name1, name2) {
-    if (!name1 || !name2) return false;
-
-    const normalize = s => s.toLowerCase().trim();
-    const n1 = normalize(name1);
-    const n2 = normalize(name2);
-
-    // Exact match
-    if (n1 === n2) return true;
-
-    // One contains the other (handles "John" vs "John Smith")
-    if (n1.includes(n2) || n2.includes(n1)) return true;
-
-    // First name match (handles "John Smith" vs "John Doe")
-    const first1 = n1.split(' ')[0];
-    const first2 = n2.split(' ')[0];
-    if (first1 === first2 && first1.length > 2) return true;
-
-    return false;
-  }
-
-  /**
    * Strict name matching for high-confidence speaker identification.
    * Requires both names to have 2+ words for substring matching.
    * Prevents "Ed" matching "Fred" while still allowing "JD Bruce" to match "JD Bruce Smith".
@@ -90,17 +61,19 @@ class SpeakerMatcher {
     for (const speakerName of identifiedNames) {
       let matchedEmail = null;
       let matchedParticipant = null;
+      let emailSource = null; // Track how the email was resolved
 
       // Try to match identified name to a participant using strict name matching
       for (const p of participants) {
         if (this.nameMatchStrict(speakerName, p.originalName || p.name)) {
           matchedParticipant = p;
           matchedEmail = p.email || null;
+          if (matchedEmail) emailSource = 'participant-data';
           break;
         }
       }
 
-      // If no email yet, try contact lookup
+      // If no email yet, try contact lookup from participant emails
       if (!matchedEmail) {
         matchedEmail = this.findEmailForParticipant(
           speakerName,
@@ -108,13 +81,36 @@ class SpeakerMatcher {
           contacts,
           { otherParticipantEmails: participantEmails }
         );
+        if (matchedEmail) emailSource = 'contact-lookup';
       }
+
+      // Broader fallback: search entire contacts cache by name (handles speakers
+      // not already in participantEmails list)
+      if (!matchedEmail && this.googleContacts?.findContactByName) {
+        try {
+          const contactByName = await this.googleContacts.findContactByName(speakerName, false);
+          if (contactByName?.email) {
+            matchedEmail = contactByName.email;
+            emailSource = 'contact-name-search';
+            console.log(
+              `[SpeakerMatcher] Found email via contacts cache name search: ${speakerName} -> ${matchedEmail}`
+            );
+          }
+        } catch (_err) {
+          // Silently continue — contacts cache may not be available
+        }
+      }
+
+      // Speaker name confidence is high (from AssemblyAI), but email confidence depends
+      // on how it was resolved. Emails from contacts are NEVER authoritative per data model.
+      const confidence = emailSource === 'participant-data' ? 'high' : matchedEmail ? 'medium' : 'high';
 
       mapping[speakerName] = {
         email: matchedEmail,
         name: matchedParticipant?.originalName || matchedParticipant?.name || speakerName,
-        confidence: 'high',
+        confidence,
         method: 'assemblyai-speaker-identification',
+        emailSource: emailSource || 'none',
       };
     }
 
@@ -682,38 +678,35 @@ class SpeakerMatcher {
       return mapping;
     }
 
-    // Heuristic 2: First speaker is often the meeting host (use isHost if available)
+    // Heuristic 2: First speaker is often the meeting host
     if (speakers.length > 0 && participants.length > 0 && options.includeOrganizer) {
-      const hostParticipant = participants.find(p => p.isHost);
-      if (hostParticipant) {
-        // Find first speaker by appearance time, not word count
-        const firstSpeaker = [...speakers].sort(
-          (a, b) => a.firstAppearance - b.firstAppearance
-        )[0];
-        mapping[firstSpeaker.label] = {
-          email: hostParticipant.email,
-          name: hostParticipant.name,
-          confidence: 'low',
-          method: 'first-speaker-host',
-        };
-      }
+      const hostParticipant = participants.find(p => p.isHost) || participants[0];
+      // Find first speaker by appearance time, not word count
+      const firstSpeaker = [...speakers].sort(
+        (a, b) => a.firstAppearance - b.firstAppearance
+      )[0];
+      mapping[firstSpeaker.label] = {
+        email: hostParticipant.email,
+        name: hostParticipant.name,
+        confidence: 'low',
+        method: hostParticipant.isHost ? 'first-speaker-host' : 'first-speaker-first-participant',
+      };
     }
 
-    // Heuristic 3: Most talkative speaker mapped to host (only if isHost is available)
+    // Heuristic 3: Most talkative speaker mapped to host (or second participant if no host)
     if (speakers.length > 1 && participants.length > 1) {
       const mostTalkative = speakers[0]; // Already sorted by word count
       if (!mapping[mostTalkative.label]) {
         const hostParticipant = participants.find(p => p.isHost);
-        if (hostParticipant) {
-          // Only assign if host wasn't already mapped by Heuristic 2
-          if (!Object.values(mapping).some(m => m.email === hostParticipant.email)) {
-            mapping[mostTalkative.label] = {
-              email: hostParticipant.email,
-              name: hostParticipant.name,
-              confidence: 'low',
-              method: 'most-talkative-host',
-            };
-          }
+        const targetParticipant = hostParticipant || participants[1];
+        // Only assign if target wasn't already mapped by Heuristic 2
+        if (!Object.values(mapping).some(m => m.email === targetParticipant.email)) {
+          mapping[mostTalkative.label] = {
+            email: targetParticipant.email,
+            name: targetParticipant.name,
+            confidence: 'low',
+            method: hostParticipant ? 'most-talkative-host' : 'most-talkative-fallback',
+          };
         }
       }
     }

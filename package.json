@@ -83,7 +83,6 @@
     "react-dom": "^19.1.0",
     "svix": "^1.41.0",
     "unzipper": "^0.12.3",
-    "update-electron-app": "^3.1.1",
     "zod": "^4.1.12"
   }
 }

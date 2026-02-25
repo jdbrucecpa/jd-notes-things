@@ -14,6 +14,7 @@ class TunnelManager {
     this.isReconnecting = false;
     this.errorCount = 0;
     this.lastErrorTime = null;
+    this._reconnectTimer = null;
   }
 
   /**
@@ -139,7 +140,8 @@ class TunnelManager {
       `[Tunnel] Scheduling reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay / 1000}s...`
     );
 
-    setTimeout(async () => {
+    this._reconnectTimer = setTimeout(async () => {
+      this._reconnectTimer = null;
       this.isReconnecting = false;
 
       try {
@@ -165,6 +167,11 @@ class TunnelManager {
    * Stop tunnel
    */
   async stop() {
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+
     if (this.tunnel && this.connected) {
       console.log('[Tunnel] Closing tunnel...');
 

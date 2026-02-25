@@ -131,7 +131,7 @@ class BackgroundTaskManager {
     this.emit('background:tasks-list', this.getAllTasks());
 
     // Schedule cleanup
-    setTimeout(() => this.removeTask(taskId), this.COMPLETED_CLEANUP_DELAY);
+    task._cleanupTimer = setTimeout(() => this.removeTask(taskId), this.COMPLETED_CLEANUP_DELAY);
   }
 
   /**
@@ -162,7 +162,7 @@ class BackgroundTaskManager {
     this.emit('background:tasks-list', this.getAllTasks());
 
     // Schedule cleanup (longer delay for failed tasks)
-    setTimeout(() => this.removeTask(taskId), this.FAILED_CLEANUP_DELAY);
+    task._cleanupTimer = setTimeout(() => this.removeTask(taskId), this.FAILED_CLEANUP_DELAY);
   }
 
   /**
@@ -189,6 +189,11 @@ class BackgroundTaskManager {
    */
   removeTask(taskId) {
     if (this.tasks.has(taskId)) {
+      const task = this.tasks.get(taskId);
+      if (task._cleanupTimer) {
+        clearTimeout(task._cleanupTimer);
+        task._cleanupTimer = null;
+      }
       this.tasks.delete(taskId);
       console.log(`[BackgroundTask] Removed task: ${taskId}`);
       this.emit('background:tasks-list', this.getAllTasks());

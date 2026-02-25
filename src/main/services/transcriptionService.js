@@ -186,13 +186,15 @@ class TranscriptionService {
   }
 
   async uploadToAssemblyAI(audioFilePath, apiKey) {
-    const audioData = fs.readFileSync(audioFilePath);
+    const audioStream = fs.createReadStream(audioFilePath);
 
-    const response = await axios.post('https://api.assemblyai.com/v2/upload', audioData, {
+    const response = await axios.post('https://api.assemblyai.com/v2/upload', audioStream, {
       headers: {
         authorization: apiKey,
         'content-type': 'application/octet-stream',
       },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
     });
 
     return response.data.upload_url;
@@ -357,7 +359,7 @@ class TranscriptionService {
 
     console.log('[Deepgram] Uploading and transcribing...');
 
-    const audioData = fs.readFileSync(audioFilePath);
+    const audioStream = fs.createReadStream(audioFilePath);
 
     // Build URL with base parameters
     let url = 'https://api.deepgram.com/v1/listen?diarize=true&punctuate=true&utterances=true';
@@ -372,11 +374,13 @@ class TranscriptionService {
       console.log(`[Deepgram] Using ${options.keywords.length} keyword boosts`);
     }
 
-    const response = await axios.post(url, audioData, {
+    const response = await axios.post(url, audioStream, {
       headers: {
         Authorization: `Token ${DEEPGRAM_API_KEY}`,
         'Content-Type': 'audio/mpeg',
       },
+      maxBodyLength: Infinity,
+      maxContentLength: Infinity,
     });
 
     console.log('[Deepgram] ✓ Transcription complete');

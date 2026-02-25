@@ -6,6 +6,7 @@
  */
 
 import { notifySuccess, notifyError, notifyInfo } from './utils/notificationHelper.js';
+import { escapeHtml } from './security.js';
 
 let currentEditingKey = null;
 
@@ -34,7 +35,23 @@ export async function initializeSecurityPanel() {
  * Set up event listeners for security panel
  */
 function setupEventListeners() {
-  // Reserved for future event listeners
+  const tableBody = document.getElementById('apiKeysTableBody');
+  if (tableBody) {
+    tableBody.addEventListener('click', event => {
+      const btn = event.target.closest('[data-action]');
+      if (!btn) return;
+      const action = btn.dataset.action;
+      if (action === 'retry-load') {
+        location.reload();
+        return;
+      }
+      const key = btn.dataset.key;
+      if (!key) return;
+      if (action === 'edit') window.editAPIKey(key);
+      else if (action === 'test') window.testAPIKey(key);
+      else if (action === 'delete') window.deleteAPIKey(key);
+    });
+  }
 }
 
 /**
@@ -72,9 +89,9 @@ async function loadAPIKeys() {
         const statusText = key.hasValue ? 'Stored' : 'Not Set';
 
         const html = `
-        <tr data-key="${key.key}">
-          <td class="api-key-service">${key.name}</td>
-          <td class="api-key-value">${key.obfuscatedValue || '-'}</td>
+        <tr data-key="${escapeHtml(key.key)}">
+          <td class="api-key-service">${escapeHtml(key.name)}</td>
+          <td class="api-key-value">${escapeHtml(key.obfuscatedValue || '-')}</td>
           <td>
             <div class="api-key-status ${statusClass}">
               <div class="api-key-status-indicator"></div>
@@ -83,14 +100,14 @@ async function loadAPIKeys() {
           </td>
           <td>
             <div class="api-key-actions">
-              <button class="api-key-action-btn" onclick="window.editAPIKey('${key.key}')">
+              <button class="api-key-action-btn" data-action="edit" data-key="${escapeHtml(key.key)}">
                 ${key.hasValue ? 'Edit' : 'Set'}
               </button>
               ${
                 key.hasValue
                   ? `
-                <button class="api-key-action-btn" onclick="window.testAPIKey('${key.key}')">Test</button>
-                <button class="api-key-action-btn danger" onclick="window.deleteAPIKey('${key.key}')">Delete</button>
+                <button class="api-key-action-btn" data-action="test" data-key="${escapeHtml(key.key)}">Test</button>
+                <button class="api-key-action-btn danger" data-action="delete" data-key="${escapeHtml(key.key)}">Delete</button>
               `
                   : ''
               }
@@ -118,8 +135,8 @@ async function loadAPIKeys() {
     tableBody.innerHTML = `
       <tr>
         <td colspan="4" style="text-align: center; padding: 32px; color: var(--color-error);">
-          <p>Failed to load API keys: ${error.message}</p>
-          <button class="api-key-action-btn" onclick="location.reload()" style="margin-top: 12px;">Retry</button>
+          <p>Failed to load API keys: ${escapeHtml(error.message)}</p>
+          <button class="api-key-action-btn" data-action="retry-load" style="margin-top: 12px;">Retry</button>
         </td>
       </tr>
     `;
@@ -160,17 +177,23 @@ window.editAPIKey = async function (keyName) {
         <input
           type="password"
           class="api-key-edit-input"
-          placeholder="Enter ${keyName}..."
-          value="${currentValue}"
-          id="editInput_${keyName}"
+          placeholder="Enter ${escapeHtml(keyName)}..."
+          id="editInput_${escapeHtml(keyName)}"
         />
         <div class="api-key-edit-actions">
-          <button class="api-key-edit-btn save" onclick="window.saveAPIKey('${keyName}')">Save</button>
-          <button class="api-key-edit-btn cancel" onclick="window.cancelEditAPIKey()">Cancel</button>
+          <button class="api-key-edit-btn save" data-action="save">Save</button>
+          <button class="api-key-edit-btn cancel" data-action="cancel">Cancel</button>
         </div>
       </div>
     </td>
   `;
+
+  editRow.addEventListener('click', event => {
+    const btn = event.target.closest('[data-action]');
+    if (!btn) return;
+    if (btn.dataset.action === 'save') window.saveAPIKey(keyName);
+    else if (btn.dataset.action === 'cancel') window.cancelEditAPIKey();
+  });
 
   row.after(editRow);
   document.getElementById(`editInput_${keyName}`).focus();

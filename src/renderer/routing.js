@@ -8,6 +8,7 @@ import { createModal } from './utils/modalHelper.js';
 import { callIpc } from './utils/ipcWrapper.js';
 import { initializeTabs } from './utils/tabHelper.js';
 import { notifySuccess, notifyError, notifyWarning } from './utils/notificationHelper.js';
+import { escapeHtml } from './security.js';
 
 let routingEditor = null;
 let routingConfig = null;
@@ -460,17 +461,17 @@ async function runRoutingTest() {
       resultsDiv.style.display = 'block';
 
       let html = '<div class="routing-test-result">';
-      html += `<div class="routing-test-path"><strong>Vault Path:</strong> ${response.vaultPath || 'Unknown'}</div>`;
-      html += `<div class="routing-test-reason"><strong>Reason:</strong> ${response.reason || 'No reason provided'}</div>`;
+      html += `<div class="routing-test-path"><strong>Vault Path:</strong> ${escapeHtml(response.vaultPath || 'Unknown')}</div>`;
+      html += `<div class="routing-test-reason"><strong>Reason:</strong> ${escapeHtml(response.reason || 'No reason provided')}</div>`;
 
       if (response.matchedOrganizations && response.matchedOrganizations.length > 0) {
-        html += `<div class="routing-test-matches"><strong>Matched Organizations:</strong> ${response.matchedOrganizations.join(', ')}</div>`;
+        html += `<div class="routing-test-matches"><strong>Matched Organizations:</strong> ${response.matchedOrganizations.map(escapeHtml).join(', ')}</div>`;
       }
 
       if (response.matchedEmails && response.matchedEmails.length > 0) {
         html += '<div class="routing-test-emails"><strong>Matched Emails:</strong><ul>';
         response.matchedEmails.forEach(match => {
-          html += `<li>${match}</li>`;
+          html += `<li>${escapeHtml(match)}</li>`;
         });
         html += '</ul></div>';
       }

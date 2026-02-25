@@ -9,6 +9,7 @@
 import { initializeSecurityPanel } from './securitySettings.js';
 import { updateEditorTheme } from './templates.js';
 import { updateRoutingEditorTheme } from './routing.js';
+import { escapeHtml } from './security.js';
 import {
   initialize as initializePatternTestingPanel,
   updateEditorTheme as updatePatternEditorTheme,
@@ -725,14 +726,14 @@ export function initializeSettingsUI() {
         } else {
           notifyError('Export failed: ' + result.error);
           if (exportStatus) {
-            exportStatus.innerHTML = `<span style="color: var(--color-error);">Export failed:</span> ${result.error}`;
+            exportStatus.innerHTML = `<span style="color: var(--color-error);">Export failed:</span> ${escapeHtml(result.error)}`;
           }
         }
       } catch (error) {
         console.error('Error exporting settings:', error);
         notifyError(error, { prefix: 'Export failed:' });
         if (exportStatus) {
-          exportStatus.innerHTML = `<span style="color: var(--color-error);">Export failed:</span> ${error.message}`;
+          exportStatus.innerHTML = `<span style="color: var(--color-error);">Export failed:</span> ${escapeHtml(error.message)}`;
         }
       } finally {
         exportAllSettingsBtn.disabled = false;
@@ -779,14 +780,14 @@ export function initializeSettingsUI() {
         } else {
           notifyError('Import failed: ' + result.error);
           if (exportStatus) {
-            exportStatus.innerHTML = `<span style="color: var(--color-error);">Import failed:</span> ${result.error}`;
+            exportStatus.innerHTML = `<span style="color: var(--color-error);">Import failed:</span> ${escapeHtml(result.error)}`;
           }
         }
       } catch (error) {
         console.error('Error importing settings:', error);
         notifyError(error, { prefix: 'Import failed:' });
         if (exportStatus) {
-          exportStatus.innerHTML = `<span style="color: var(--color-error);">Import failed:</span> ${error.message}`;
+          exportStatus.innerHTML = `<span style="color: var(--color-error);">Import failed:</span> ${escapeHtml(error.message)}`;
         }
       } finally {
         importAllSettingsBtn.disabled = false;
@@ -1099,7 +1100,7 @@ function renderTermsList(terms) {
       ({ term }) => `
     <div class="vocabulary-item">
       <div class="vocabulary-item-content">
-        <span class="vocabulary-item-term">${term}</span>
+        <span class="vocabulary-item-term">${escapeHtml(term)}</span>
       </div>
       <button class="vocabulary-item-delete" onclick="deleteTerm('${term.replace(/'/g, "\\'")}')" title="Delete">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1166,7 +1167,7 @@ async function addTerm() {
 async function deleteTerm(term) {
   try {
     // Try removing from keyword boosts first
-    let result = await window.electronAPI.vocabularyRemoveGlobalKeyword(term);
+    const result = await window.electronAPI.vocabularyRemoveGlobalKeyword(term);
 
     // Also try removing from spelling corrections (by "to" value)
     const spellingResult = await window.electronAPI.vocabularyRemoveGlobalSpelling(term);

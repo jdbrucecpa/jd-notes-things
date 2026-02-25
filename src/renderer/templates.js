@@ -6,6 +6,7 @@
 import * as monaco from 'monaco-editor';
 import { initializeTabs } from './utils/tabHelper.js';
 import { notifyInfo, notifyError } from './utils/notificationHelper.js';
+import { escapeHtml } from './security.js';
 
 let editor = null;
 let currentTemplateId = null;
@@ -165,9 +166,9 @@ function renderTemplateList() {
 
   let html = '';
   templates.forEach(t => {
-    html += `<div class="template-list-item" data-id="${t.id}">`;
-    html += `<strong>${t.name}</strong>`;
-    html += `<small>${t.id}${t.format}</small>`;
+    html += `<div class="template-list-item" data-id="${escapeHtml(t.id)}">`;
+    html += `<strong>${escapeHtml(t.name)}</strong>`;
+    html += `<small>${escapeHtml(t.id)}${escapeHtml(t.format)}</small>`;
     html += `</div>`;
   });
 
@@ -260,18 +261,18 @@ function updatePreview() {
 
   // Simple preview based on format
   if (template.format === '.md') {
-    previewContent.innerHTML = `<div style="font-size: 14px; line-height: 1.6;">${content.replace(/\n/g, '<br>')}</div>`;
+    previewContent.innerHTML = `<div style="font-size: 14px; line-height: 1.6;">${escapeHtml(content).replace(/\n/g, '<br>')}</div>`;
   } else if (template.format === '.yaml' || template.format === '.yml') {
-    previewContent.innerHTML = `<pre style="font-size: 13px; font-family: monospace; white-space: pre-wrap;">${content}</pre>`;
+    previewContent.innerHTML = `<pre style="font-size: 13px; font-family: monospace; white-space: pre-wrap;">${escapeHtml(content)}</pre>`;
   } else if (template.format === '.json') {
     try {
       const parsed = JSON.parse(content);
-      previewContent.innerHTML = `<pre style="font-size: 13px; font-family: monospace; white-space: pre-wrap;">${JSON.stringify(parsed, null, 2)}</pre>`;
+      previewContent.innerHTML = `<pre style="font-size: 13px; font-family: monospace; white-space: pre-wrap;">${escapeHtml(JSON.stringify(parsed, null, 2))}</pre>`;
     } catch {
-      previewContent.innerHTML = `<pre style="font-size: 13px; font-family: monospace; white-space: pre-wrap;">${content}</pre>`;
+      previewContent.innerHTML = `<pre style="font-size: 13px; font-family: monospace; white-space: pre-wrap;">${escapeHtml(content)}</pre>`;
     }
   } else {
-    previewContent.innerHTML = `<pre style="font-size: 13px; font-family: monospace; white-space: pre-wrap;">${content}</pre>`;
+    previewContent.innerHTML = `<pre style="font-size: 13px; font-family: monospace; white-space: pre-wrap;">${escapeHtml(content)}</pre>`;
   }
 }
 
