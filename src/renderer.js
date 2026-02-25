@@ -919,9 +919,6 @@ function getDateGroupLabel(date) {
 
 // Save meetings data back to file
 async function saveMeetingsData() {
-  // Save to localStorage as a backup
-  localStorage.setItem('meetingsData', JSON.stringify(meetingsData));
-
   // Save to the actual file using IPC
   try {
     console.log('Saving meetings data to file...');
@@ -2347,11 +2344,13 @@ async function createNewMeeting(calendarMeeting = null) {
   pastMeetingsByDate[dateKey].unshift(newMeeting);
 
   // Save the data to file
+  let saveFailed = false;
   try {
     await saveMeetingsData();
     console.log('New meeting created and saved:', newMeeting.title);
   } catch (error) {
     console.error('Error saving new meeting:', error);
+    saveFailed = true;
   }
 
   // Set current editing ID to the new meeting ID BEFORE showing the editor
@@ -2366,6 +2365,13 @@ async function createNewMeeting(calendarMeeting = null) {
 
   // Now show the editor view with the new meeting
   showEditorView(id);
+
+  // Only auto-start recording if the save succeeded (main process needs the meeting in the file)
+  if (saveFailed) {
+    console.error('[Auto-start] Skipping auto-start recording because meeting save failed');
+    notifyError('Meeting note could not be saved. Please try again.');
+    return id;
+  }
 
   // Automatically start recording for the new note
   try {
