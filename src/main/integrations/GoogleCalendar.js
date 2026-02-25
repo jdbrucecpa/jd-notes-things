@@ -106,7 +106,7 @@ class GoogleCalendar {
         const hasDateTime = event.start && event.start.dateTime;
         const hasAttendees = event.attendees && event.attendees.length > 0;
         const platform = this._detectPlatform(event);
-        const hasMeetingLink = platform !== 'unknown';
+        const _hasMeetingLink = platform !== 'unknown';
         console.log(`[GoogleCalendar] Event ${i}: "${event.summary}" - dateTime:${hasDateTime}, attendees:${hasAttendees}, platform:${platform}`);
       });
 

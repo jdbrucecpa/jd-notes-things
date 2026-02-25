@@ -211,7 +211,7 @@ class CrmRequestQueue {
               acknowledged: true,
               data: ackData,
             });
-          } catch (e) {
+          } catch (_e) {
             resolve({
               acknowledged: true,
               data: null,
@@ -277,7 +277,7 @@ class CrmRequestQueue {
 
       const files = fs.readdirSync(this.requestsFolder);
       return files.filter(f => f.endsWith('.json')).length;
-    } catch (error) {
+    } catch (_error) {
       return 0;
     }
   }
@@ -300,7 +300,7 @@ class CrmRequestQueue {
           const filePath = path.join(this.requestsFolder, file);
           const content = fs.readFileSync(filePath, 'utf8');
           requests.push(JSON.parse(content));
-        } catch (e) {
+        } catch (_e) {
           // Skip invalid files
         }
       }

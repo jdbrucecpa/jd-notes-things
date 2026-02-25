@@ -75,7 +75,6 @@ const {
   LLM_SECTION_MAX_TOKENS,
   LLM_PROMPT_TOKEN_BUFFER,
   LOG_ENTRIES_DEFAULT_LIMIT,
-  MEETING_PURPOSE_MAX_CHARS,
   // Data Thresholds
   OLD_MEETING_CLEANUP_MS,
 } = require('./shared/constants');
@@ -3426,7 +3425,7 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
               participant.googleContactId = contact.resourceName;
               console.log(`[ObsidianExport] Enriched "${participant.name}" with googleContactId: ${contact.resourceName}`);
             }
-          } catch (err) {
+          } catch (_err) {
             // Silently continue - this is just enrichment
           }
         }
@@ -3984,7 +3983,7 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
             if (contact && contact.resourceName) {
               googleContactId = contact.resourceName;
             }
-          } catch (err) {
+          } catch (_err) {
             // Silently continue
           }
         }
@@ -4237,17 +4236,7 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
       }
 
       // Estimate tokens per request (rough estimate: 1 token ≈ 4 chars)
-      const estimatedTokensPerRequest = Math.ceil(transcriptText.length / 4) + LLM_PROMPT_TOKEN_BUFFER; // +200 for prompts
-
-      // Azure limit: 200k tokens/min. Use 70% to be safe
-      const tokenBudgetPerMinute = 140000;
-
-      // Calculate safe concurrency based on token budget
-      const safeConcurrency = Math.max(
-        1,
-        Math.floor(tokenBudgetPerMinute / estimatedTokensPerRequest)
-      );
-      console.log(`[TemplateSummary] Transcript: ~${estimatedTokensPerRequest} tokens/request`);
+      console.log(`[TemplateSummary] Transcript: ~${Math.ceil(transcriptText.length / 4) + LLM_PROMPT_TOKEN_BUFFER} tokens/request (est.)`);
       console.log(
         `[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`
       );
@@ -4932,7 +4921,7 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
     // SOURCE 0: speakerMapping - might have original names from speaker matching
     if (meeting.speakerMapping && typeof meeting.speakerMapping === 'object') {
       console.log(`[Contacts IPC] Checking speakerMapping for original names...`);
-      for (const [label, info] of Object.entries(meeting.speakerMapping)) {
+      for (const [_label, info] of Object.entries(meeting.speakerMapping)) {
         if (info.name) {
           const normalizedName = info.name.toLowerCase().trim();
           if (!seenNames.has(normalizedName)) {
@@ -5033,7 +5022,7 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
             rebuiltParticipant.googleContactId = contact.resourceName || null; // CRM Phase 1
             rebuiltParticipant.contactMatched = true;
           }
-        } catch (err) {
+        } catch (_err) {
           // Ignore
         }
 
@@ -7463,42 +7452,6 @@ function formatDuration(seconds) {
 }
 
 /**
- * v1.2.5: Parse meeting description to extract purpose text
- * Extracts text between "What is the purpose of this meeting?:" and "Best number to reach you?:"
- * @param {string} description - Raw calendar event description
- * @returns {string|null} Extracted purpose text or null if not found
- */
-function extractMeetingPurpose(description) {
-  if (!description) return null;
-
-  // Try to extract text between the markers
-  const startMarker = 'What is the purpose of this meeting?:';
-  const endMarker = 'Best number to reach you?:';
-
-  const startIndex = description.indexOf(startMarker);
-  if (startIndex === -1) return null;
-
-  const contentStart = startIndex + startMarker.length;
-  const endIndex = description.indexOf(endMarker, contentStart);
-
-  let purposeText;
-  if (endIndex !== -1) {
-    purposeText = description.substring(contentStart, endIndex);
-  } else {
-    // No end marker, take everything after start marker (up to 500 chars)
-    purposeText = description.substring(contentStart, contentStart + MEETING_PURPOSE_MAX_CHARS);
-  }
-
-  // Clean up the text
-  purposeText = purposeText.trim();
-
-  // Remove any remaining HTML or excessive whitespace
-  purposeText = purposeText.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-
-  return purposeText.length > 0 ? purposeText : null;
-}
-
-/**
  * v1.2.5: Fuzzy match a name to find the best match in a list
  * @param {string} name - Name to match
  * @param {Array} candidates - Array of {name, email, ...} objects
@@ -7608,19 +7561,6 @@ async function resolveSpeakerNames(zoomParticipants, calendarAttendees, googleCo
   }
 
   return resolvedNames;
-}
-
-/**
- * CRM Phase 1: Convert a string to a URL/filename-safe slug
- * @param {string} text - Text to slugify
- * @returns {string} Slugified text
- */
-function slugifyForFilename(text) {
-  if (!text) return '';
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
 }
 
 // IM-1: Audio file extensions for import
@@ -8606,7 +8546,7 @@ ipcMain.on('open-external', (event, url) => {
     }
     console.log('[IPC] open-external called with url:', url);
     shell.openExternal(url);
-  } catch (err) {
+  } catch (_err) {
     console.warn('[IPC] open-external called with invalid URL:', url);
   }
 });

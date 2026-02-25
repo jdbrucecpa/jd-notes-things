@@ -278,7 +278,7 @@ function renderTasks() {
 
   // Add click handlers for meeting navigation
   listEl.querySelectorAll('.background-task-item[data-meeting-id]').forEach(item => {
-    item.addEventListener('click', (e) => {
+    item.addEventListener('click', (_e) => {
       const meetingId = item.getAttribute('data-meeting-id');
       if (meetingId && meetingId !== 'null' && meetingId !== '') {
         navigateToMeeting(meetingId);

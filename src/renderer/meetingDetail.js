@@ -10,7 +10,7 @@ import { initializeTabs } from './utils/tabHelper.js';
 import { openSpeakerMappingModal } from './speakerMapping.js';
 import { createModal } from './utils/modalHelper.js';
 import { loadSettings } from './settings.js';
-import { notifyInfo, notifyError } from './utils/notificationHelper.js';
+import { notifyError } from './utils/notificationHelper.js';
 
 // Current meeting being viewed
 let currentMeeting = null;
@@ -1690,7 +1690,7 @@ async function regenerateSummary(onUpdate) {
 /**
  * Perform the actual summary regeneration (non-blocking - runs in background)
  */
-async function performRegeneration(mode, model, onUpdate) {
+async function performRegeneration(mode, model, _onUpdate) {
   const btn = document.getElementById('regenerateSummaryBtn');
 
   console.log(`[MeetingDetail] Starting background summary regeneration for meeting: ${currentMeetingId}`);

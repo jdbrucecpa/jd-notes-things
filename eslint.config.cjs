@@ -35,7 +35,7 @@ module.exports = [
       react: reactPlugin,
     },
     rules: {
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-console': 'off',
       'eqeqeq': ['error', 'always', { null: 'ignore' }],
       'no-var': 'error',

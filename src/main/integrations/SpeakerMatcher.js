@@ -96,7 +96,7 @@ class SpeakerMatcher {
               `[SpeakerMatcher] Found email via contacts cache name search: ${speakerName} -> ${matchedEmail}`
             );
           }
-        } catch (_err) {
+        } catch {
           // Silently continue — contacts cache may not be available
         }
       }

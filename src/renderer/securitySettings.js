@@ -157,17 +157,6 @@ window.editAPIKey = async function (keyName) {
 
   currentEditingKey = keyName;
 
-  // Get current value if it exists
-  let currentValue = '';
-  try {
-    const result = await window.electronAPI.keysGet(keyName);
-    if (result.success && result.data) {
-      currentValue = result.data;
-    }
-  } catch (error) {
-    console.error(`[SecuritySettings] Failed to get key ${keyName}:`, error);
-  }
-
   // Create edit row
   const editRow = document.createElement('tr');
   editRow.className = 'api-key-edit-row';
