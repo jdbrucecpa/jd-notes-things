@@ -57,6 +57,22 @@ module.exports = [
       },
     },
   },
+  // Vitest test files
+  {
+    files: ['tests/unit/**/*.test.js'],
+    languageOptions: {
+      globals: {
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        vi: 'readonly',
+      },
+    },
+  },
   // Disable conflicting Prettier rules
   prettier,
 ];

@@ -10,7 +10,8 @@ import { initializeTabs } from './utils/tabHelper.js';
 import { openSpeakerMappingModal } from './speakerMapping.js';
 import { createModal } from './utils/modalHelper.js';
 import { loadSettings } from './settings.js';
-import { notifyError } from './utils/notificationHelper.js';
+import { notifyError, notifySuccess } from './utils/notificationHelper.js';
+import { isGenericSpeakerName } from '../shared/speakerValidation.js';
 
 // Current meeting being viewed
 let currentMeeting = null;
@@ -382,6 +383,33 @@ function populateParticipants(meeting) {
   const speakerStats = calculateSpeakerStatsFromTranscript(meeting.transcript);
 
   participantsList.innerHTML = '';
+
+  // Check for participant/speaker mismatch and show warning if needed
+  if (meeting.transcript && meeting.transcript.length > 0) {
+    const uniqueSpeakers = new Set();
+    for (const utterance of meeting.transcript) {
+      const speakerName = utterance.speakerName || utterance.speaker;
+      if (speakerName && !isGenericSpeakerName(speakerName)) {
+        uniqueSpeakers.add(speakerName.toLowerCase().trim());
+      }
+    }
+    const speakerCount = uniqueSpeakers.size;
+    const participantCount = meeting.participants.length;
+
+    if (speakerCount > participantCount) {
+      const warningBanner = document.createElement('div');
+      warningBanner.className = 'participant-mismatch-warning';
+      warningBanner.innerHTML = `
+        <div class="mismatch-warning-content">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+          </svg>
+          <span>${speakerCount} speakers found in transcript but only ${participantCount} participant${participantCount !== 1 ? 's' : ''} listed. Use <strong>+ Add Participant</strong> below to add missing ones.</span>
+        </div>
+      `;
+      participantsList.appendChild(warningBanner);
+    }
+  }
 
   meeting.participants.forEach((participant, index) => {
     const participantItem = document.createElement('div');
@@ -881,6 +909,13 @@ function renderObsidianLinksSection(participant) {
  * Handle "Add to Google Contacts" button click.
  */
 async function handleAddToContacts(name, email, index, meeting) {
+  // Find the button to show loading state
+  const btn = document.querySelector(`.add-to-contacts-btn[data-index="${index}"]`);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+  }
+
   try {
     // Infer organization from email domain
     let organization = '';
@@ -907,13 +942,25 @@ async function handleAddToContacts(name, email, index, meeting) {
         meeting.participants[index].googleContactResource = result.contact.resourceName;
       }
 
+      notifySuccess(`Added "${name}" to Google Contacts`);
+
       // Re-render
       populateParticipants(meeting);
     } else {
       console.error('[ParticipantCard] Failed to create contact:', result?.error);
+      notifyError(`Failed to add contact: ${result?.error || 'Unknown error'}`);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '+ Add to Google Contacts';
+      }
     }
   } catch (error) {
     console.error('[ParticipantCard] Error creating contact:', error);
+    notifyError(`Error adding contact: ${error.message}`);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '+ Add to Google Contacts';
+    }
   }
 }
 

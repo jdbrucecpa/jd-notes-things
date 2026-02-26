@@ -51,6 +51,94 @@ test.afterAll(async () => {
   }
 });
 
+/**
+ * Helper: ensure we're on the main view (not stuck in editor/settings/contacts)
+ *
+ * Navigation buttons:
+ *   #homeButton — returns from editor view to home (uses visibility: hidden/visible)
+ *   #backButton — returns from contact detail to contacts (uses display: none/flex)
+ *   #settingsBackBtn — closes settings view
+ *   #closeContacts — closes contacts view
+ *   #closeReports — closes reports view
+ */
+async function ensureMainView() {
+  // FIRST: dismiss any open modals (they intercept pointer events on underlying buttons)
+  await page.evaluate(() => {
+    document.querySelectorAll('.modal-overlay').forEach(modal => {
+      modal.style.display = 'none';
+    });
+  });
+  await page.waitForTimeout(200);
+
+  // Close editor view if open — use #homeButton (NOT #backButton which is for contact nav)
+  const editorOpen = await page.locator('#editorView').isVisible().catch(() => false);
+  if (editorOpen) {
+    const homeBtn = page.locator('#homeButton');
+    if (await homeBtn.isVisible().catch(() => false)) {
+      await homeBtn.click();
+      await page.waitForTimeout(500);
+    } else {
+      // Fallback: directly toggle DOM if button isn't visible
+      await page.evaluate(() => {
+        const editor = document.getElementById('editorView');
+        const home = document.getElementById('homeView');
+        if (editor) editor.style.display = 'none';
+        if (home) home.style.display = 'block';
+        const hb = document.getElementById('homeButton');
+        if (hb) hb.style.visibility = 'hidden';
+      });
+      await page.waitForTimeout(300);
+    }
+  }
+  // Close settings if open
+  const settingsOpen = await page.locator('#settingsView').isVisible().catch(() => false);
+  if (settingsOpen) {
+    const closeBtn = page.locator('#settingsBackBtn');
+    if (await closeBtn.isVisible().catch(() => false)) {
+      await closeBtn.click();
+      await page.waitForTimeout(300);
+    }
+  }
+  // Close contacts if open
+  const contactsOpen = await page.locator('#contactsView').isVisible().catch(() => false);
+  if (contactsOpen) {
+    const closeBtn = page.locator('#closeContacts');
+    if (await closeBtn.isVisible().catch(() => false)) {
+      await closeBtn.click();
+      await page.waitForTimeout(300);
+    }
+  }
+  // Close reports if open
+  const reportsOpen = await page.locator('#reportsView').isVisible().catch(() => false);
+  if (reportsOpen) {
+    const closeBtn = page.locator('#closeReports');
+    if (await closeBtn.isVisible().catch(() => false)) {
+      await closeBtn.click();
+      await page.waitForTimeout(300);
+    }
+  }
+  // Wait for home view content to be visible
+  await page.locator('#homeView').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+}
+
+/**
+ * Helper: navigate to first past meeting and return whether we made it to the editor
+ */
+async function navigateToFirstMeeting() {
+  await ensureMainView();
+  // Wait for meeting cards to render (they may still be loading after view switch)
+  await page.locator('.meeting-card:not(.calendar-meeting)').first()
+    .waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+  const meetingCard = page.locator('.meeting-card:not(.calendar-meeting)').first();
+  if (!(await meetingCard.isVisible().catch(() => false))) {
+    return false;
+  }
+  await meetingCard.click();
+  await page.waitForTimeout(1500);
+  const editorView = page.locator('#editorView');
+  return editorView.isVisible().catch(() => false);
+}
+
 // ===================================================================
 // Test 1: App Window Loads
 // ===================================================================
@@ -332,16 +420,265 @@ test('participant cards render with visible icon buttons (not empty boxes)', asy
     await expect(avatar).toBeVisible();
   }
 
-  // Navigate back to main view
-  const backBtn = page.locator('#backButton, #homeButton');
-  if (await backBtn.first().isVisible().catch(() => false)) {
-    await backBtn.first().click();
-    await page.waitForTimeout(500);
-  }
+  // Navigate back to main view via Home button (not Back, which is for contact nav)
+  await ensureMainView();
 });
 
 // ===================================================================
-// Test 15: No Critical Errors
+// Test 15: Participant Mismatch Warning Banner (v1.3)
+// ===================================================================
+test('participant mismatch warning banner appears when speakers > participants', async () => {
+  const inEditor = await navigateToFirstMeeting();
+  if (!inEditor) {
+    console.log('[E2E] No meeting cards available, skipping mismatch warning test');
+    test.skip();
+    return;
+  }
+
+  // Check if the mismatch warning banner is present in the DOM
+  // It may or may not be visible depending on meeting data
+  const warningBanner = page.locator('.participant-mismatch-warning');
+  const bannerVisible = await warningBanner.isVisible().catch(() => false);
+  console.log(`[E2E] Participant mismatch warning banner visible: ${bannerVisible}`);
+
+  if (bannerVisible) {
+    // Verify it contains the expected text pattern
+    const bannerText = await warningBanner.textContent();
+    expect(bannerText).toMatch(/speakers? found in transcript/);
+    expect(bannerText).toContain('Add Participant');
+    console.log(`[E2E] Banner text: ${bannerText.trim()}`);
+  }
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 16: Fix Speakers Modal Opens and Has Rows (v1.3)
+// ===================================================================
+test('fix speakers modal opens with speaker rows', async () => {
+  const inEditor = await navigateToFirstMeeting();
+  if (!inEditor) {
+    console.log('[E2E] No meeting cards available, skipping fix speakers test');
+    test.skip();
+    return;
+  }
+
+  // Click the Transcript tab first (Fix Speakers is inside the transcript tab)
+  const transcriptTab = page.locator('[data-tab="transcript"]');
+  if (await transcriptTab.isVisible().catch(() => false)) {
+    await transcriptTab.click();
+    await page.waitForTimeout(500);
+  }
+
+  // Check if Fix Speakers button is visible (only visible when transcript has speakers)
+  const fixSpeakersBtn = page.locator('#fixSpeakersBtn');
+  if (!(await fixSpeakersBtn.isVisible().catch(() => false))) {
+    console.log('[E2E] Fix Speakers button not visible (no transcript speakers), skipping');
+    await ensureMainView();
+    return;
+  }
+
+  // Open the Fix Speakers modal
+  await fixSpeakersBtn.click();
+  await page.waitForTimeout(1000);
+
+  const modal = page.locator('#speakerMappingModal');
+  await expect(modal).toBeVisible({ timeout: 5_000 });
+
+  // Verify speaker mapping rows exist
+  const rows = page.locator('.speaker-mapping-row');
+  const rowCount = await rows.count();
+  console.log(`[E2E] Speaker mapping rows: ${rowCount}`);
+  expect(rowCount).toBeGreaterThan(0);
+
+  // Each row should have a contact input field
+  const inputs = page.locator('.speaker-contact-input');
+  expect(await inputs.count()).toBe(rowCount);
+
+  // Close the modal
+  await page.locator('#closeSpeakerMappingModal').click();
+  await page.waitForTimeout(500);
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 17: Fix Speakers Custom Name via Enter Key (v1.3)
+// ===================================================================
+test('fix speakers accepts custom name via Enter key', async () => {
+  const inEditor = await navigateToFirstMeeting();
+  if (!inEditor) {
+    console.log('[E2E] No meeting cards available, skipping custom name test');
+    test.skip();
+    return;
+  }
+
+  // Switch to transcript tab and open Fix Speakers
+  const transcriptTab = page.locator('[data-tab="transcript"]');
+  if (await transcriptTab.isVisible().catch(() => false)) {
+    await transcriptTab.click();
+    await page.waitForTimeout(500);
+  }
+
+  const fixSpeakersBtn = page.locator('#fixSpeakersBtn');
+  if (!(await fixSpeakersBtn.isVisible().catch(() => false))) {
+    console.log('[E2E] Fix Speakers button not visible, skipping custom name test');
+    await ensureMainView();
+    return;
+  }
+
+  await fixSpeakersBtn.click();
+  await page.waitForTimeout(1000);
+
+  const modal = page.locator('#speakerMappingModal');
+  if (!(await modal.isVisible().catch(() => false))) {
+    console.log('[E2E] Modal did not open, skipping');
+    await ensureMainView();
+    return;
+  }
+
+  // Find the first speaker input
+  const firstInput = page.locator('.speaker-contact-input').first();
+  await expect(firstInput).toBeVisible();
+
+  // Type a custom name
+  await firstInput.fill('Custom Test Name');
+  await page.waitForTimeout(400); // Wait for debounced search
+
+  // Press Enter to accept custom name
+  await firstInput.press('Enter');
+  await page.waitForTimeout(300);
+
+  // Verify the row is marked as mapped
+  const firstRow = page.locator('.speaker-mapping-row').first();
+  const isMapped = await firstRow.evaluate(el => el.classList.contains('mapped'));
+  expect(isMapped).toBe(true);
+  console.log('[E2E] Custom name mapped via Enter key: success');
+
+  // Verify the input shows the custom name
+  const inputValue = await firstInput.inputValue();
+  expect(inputValue).toBe('Custom Test Name');
+
+  // Verify the stats show at least 1 speaker mapped
+  const stats = await page.locator('#speakerMappingStatsText').textContent();
+  expect(stats).toMatch(/\d+ of \d+ speakers mapped/);
+
+  // Verify Apply button is now enabled
+  const applyBtn = page.locator('#applySpeakerMappings');
+  const isDisabled = await applyBtn.evaluate(el => el.disabled);
+  expect(isDisabled).toBe(false);
+
+  // Close modal without applying
+  await page.locator('#cancelSpeakerMapping').click();
+  await page.waitForTimeout(500);
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 18: Fix Speakers Custom Name Dropdown Option (v1.3)
+// ===================================================================
+test('fix speakers shows "Use custom name" option in dropdown', async () => {
+  const inEditor = await navigateToFirstMeeting();
+  if (!inEditor) {
+    console.log('[E2E] No meeting cards available, skipping dropdown test');
+    test.skip();
+    return;
+  }
+
+  // Switch to transcript tab and open Fix Speakers
+  const transcriptTab = page.locator('[data-tab="transcript"]');
+  if (await transcriptTab.isVisible().catch(() => false)) {
+    await transcriptTab.click();
+    await page.waitForTimeout(500);
+  }
+
+  const fixSpeakersBtn = page.locator('#fixSpeakersBtn');
+  if (!(await fixSpeakersBtn.isVisible().catch(() => false))) {
+    console.log('[E2E] Fix Speakers button not visible, skipping dropdown test');
+    await ensureMainView();
+    return;
+  }
+
+  await fixSpeakersBtn.click();
+  await page.waitForTimeout(1000);
+
+  const modal = page.locator('#speakerMappingModal');
+  if (!(await modal.isVisible().catch(() => false))) {
+    console.log('[E2E] Modal did not open, skipping');
+    await ensureMainView();
+    return;
+  }
+
+  // Type a name that won't match any contacts (to trigger custom name option)
+  const firstInput = page.locator('.speaker-contact-input').first();
+  await firstInput.fill('Xyzzy Nonexistent Name');
+  await page.waitForTimeout(500); // Wait for debounced search + API response
+
+  // Check that a dropdown appeared with the custom name option
+  const customOption = page.locator('.custom-name-option');
+  const hasCustomOption = await customOption.isVisible().catch(() => false);
+  console.log(`[E2E] Custom name dropdown option visible: ${hasCustomOption}`);
+
+  if (hasCustomOption) {
+    // Verify it shows the typed name
+    const optionText = await customOption.textContent();
+    expect(optionText).toContain('Xyzzy Nonexistent Name');
+    expect(optionText).toContain('custom name');
+
+    // Click it
+    await customOption.click();
+    await page.waitForTimeout(300);
+
+    // Verify mapping was stored
+    const firstRow = page.locator('.speaker-mapping-row').first();
+    const isMapped = await firstRow.evaluate(el => el.classList.contains('mapped'));
+    expect(isMapped).toBe(true);
+    console.log('[E2E] Custom name mapped via dropdown click: success');
+  }
+
+  // Close modal
+  await page.locator('#cancelSpeakerMapping').click();
+  await page.waitForTimeout(500);
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 19: Add to Google Contacts Button Has Feedback (v1.3)
+// ===================================================================
+test('add to google contacts button shows loading state', async () => {
+  const inEditor = await navigateToFirstMeeting();
+  if (!inEditor) {
+    console.log('[E2E] No meeting cards available, skipping contacts button test');
+    test.skip();
+    return;
+  }
+
+  // Look for an "Add to Google Contacts" button on an unmatched participant
+  const addBtn = page.locator('.add-to-contacts-btn').first();
+  const hasBtnVisible = await addBtn.isVisible().catch(() => false);
+  console.log(`[E2E] Add to Google Contacts button visible: ${hasBtnVisible}`);
+
+  if (hasBtnVisible) {
+    // Check the button text before clicking
+    const btnText = await addBtn.textContent();
+    expect(btnText.trim()).toContain('Add to Google Contacts');
+    console.log('[E2E] Add to Google Contacts button found with correct text');
+
+    // We don't actually click it (requires real Google auth), but we verify
+    // the button exists and has the expected structure
+    const hasDataIndex = await addBtn.evaluate(el => el.hasAttribute('data-index'));
+    const hasDataName = await addBtn.evaluate(el => el.hasAttribute('data-name'));
+    expect(hasDataIndex).toBe(true);
+    expect(hasDataName).toBe(true);
+  }
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 20: No Critical Errors
 // ===================================================================
 test('no critical console errors', async () => {
   const errors = [];

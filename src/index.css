@@ -5971,6 +5971,29 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   gap: 12px;
 }
 
+.participant-mismatch-warning {
+  background: color-mix(in srgb, var(--warning-color, #f59e0b) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning-color, #f59e0b) 40%, transparent);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 4px;
+}
+
+.mismatch-warning-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.mismatch-warning-content svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--warning-color, #f59e0b);
+}
+
 .participant-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -8055,6 +8078,12 @@ body.dark-theme .pattern-error {
 .speaker-contact-option.participant-suggestion {
   border-left: 3px solid var(--color-primary);
   margin-left: 3px;
+}
+
+.speaker-contact-option.custom-name-option {
+  border-top: 1px solid var(--border-color);
+  margin-top: 2px;
+  padding-top: 10px;
 }
 
 .no-speakers-message {

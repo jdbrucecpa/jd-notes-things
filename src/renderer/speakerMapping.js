@@ -447,6 +447,18 @@ function setupRowEventListeners(row, speakerId) {
     }
   });
 
+  // Enter key: store typed text as a custom name mapping
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const typedText = input.value.trim();
+      if (typedText.length >= 1) {
+        selectContact(row, speakerId, { name: typedText, email: null, emails: [] });
+        hideAllDropdowns();
+      }
+    }
+  });
+
   // Focus handling - show participant suggestions when focused
   input.addEventListener('focus', () => {
     const query = input.value.trim();
@@ -560,9 +572,10 @@ async function searchContacts(row, speakerId, query) {
     const result = await window.electronAPI.contactsSearchContacts(query);
 
     if (result.success && result.contacts.length > 0) {
-      showDropdown(row, speakerId, result.contacts);
+      showDropdown(row, speakerId, result.contacts, query);
     } else {
-      hideDropdown(row);
+      // No contacts found — show dropdown with just the custom name option
+      showDropdown(row, speakerId, [], query);
     }
   } catch (error) {
     console.error('[SpeakerMapping] Contact search error:', error);
@@ -645,8 +658,9 @@ function showParticipantSuggestions(row, speakerId) {
 /**
  * Show contact dropdown
  * Uses fixed positioning to avoid clipping by overflow:auto containers
+ * @param {string} customQuery - Optional query text for "Use custom name" option
  */
-function showDropdown(row, speakerId, contacts) {
+function showDropdown(row, speakerId, contacts, customQuery = '') {
   // Remove existing dropdown
   hideAllDropdowns();
 
@@ -683,6 +697,26 @@ function showDropdown(row, speakerId, contacts) {
     });
 
     dropdown.appendChild(option);
+  }
+
+  // Always append "Use custom name" option when there's a query
+  if (customQuery) {
+    const customOption = document.createElement('div');
+    customOption.className = 'speaker-contact-option custom-name-option';
+    customOption.innerHTML = `
+      <div class="contact-avatar" style="background: var(--accent-color, #6366f1); color: white; font-size: 11px;">✎</div>
+      <div class="contact-info">
+        <div class="contact-name">Use custom name: "${escapeHtml(customQuery)}"</div>
+        <div class="contact-email" style="color: var(--text-tertiary);">No contact — just use this name</div>
+      </div>
+    `;
+
+    customOption.addEventListener('click', () => {
+      selectContact(row, speakerId, { name: customQuery, email: null, emails: [] });
+      hideAllDropdowns();
+    });
+
+    dropdown.appendChild(customOption);
   }
 
   // Append to body to avoid clipping

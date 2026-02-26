@@ -3092,9 +3092,20 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
           p => p.email && p.email.toLowerCase() === speakerInfo.email.toLowerCase()
         );
 
+        // Resolve email-as-name: if speakerInfo.name contains '@', use contact name or extract from email
+        let resolvedName = speakerInfo.name || (contact ? contact.name : speakerInfo.email);
+        if (resolvedName && resolvedName.includes('@')) {
+          const contactName = contact?.name || contactsMap.get(speakerInfo.email)?.name;
+          resolvedName = contactName || (speakerMatcher
+            ? speakerMatcher.extractNameFromEmail(resolvedName)
+            : resolvedName.split('@')[0]);
+          console.log(`[ParticipantPopulation] Resolved email-as-name "${speakerInfo.name}" -> "${resolvedName}"`);
+        }
+
         // CRM Phase 1: Include googleContactResource (resourceName) from Google Contacts
         const participantData = {
-          name: speakerInfo.name || (contact ? contact.name : speakerInfo.email),
+          name: resolvedName,
+          originalName: resolvedName,
           email: speakerInfo.email,
         };
 
@@ -3111,8 +3122,8 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
             ...participantData,
           };
         } else {
-          // Add new participant
-          meeting.participants.push(participantData);
+          // v1.3: Don't add new participants — SDK list is source of truth
+          console.log(`[ParticipantPopulation] Skipping new participant "${participantData.name}" (enrich-only)`);
         }
       } else if (speakerInfo.name && typeof googleContacts.findContactByName === 'function') {
         // v1.1: Speaker has name but no email - try name-based contact lookup
@@ -3121,10 +3132,22 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
           if (contact && contact.emails && contact.emails.length > 0) {
             const email = contact.emails[0];
 
-            // Check if participant already exists by email
-            const existingIndex = meeting.participants.findIndex(
+            // Check if participant already exists by email or name
+            const existingByEmail = meeting.participants.findIndex(
               p => p.email && p.email.toLowerCase() === email.toLowerCase()
             );
+            const existingByName = meeting.participants.findIndex(p => {
+              const pName = (p.originalName || p.name || '').toLowerCase().trim();
+              const sName = speakerInfo.name.toLowerCase().trim();
+              if (pName === sName) return true;
+              const pWords = pName.split(/\s+/);
+              const sWords = sName.split(/\s+/);
+              if (pWords.length >= 2 && sWords.length >= 2) {
+                return pName.includes(sName) || sName.includes(pName);
+              }
+              return false;
+            });
+            const existingIndex = existingByEmail !== -1 ? existingByEmail : existingByName;
 
             // CRM Phase 1: Include googleContactResource (resourceName) from Google Contacts
             const participantData = {
@@ -3141,19 +3164,21 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
                 ...meeting.participants[existingIndex],
                 ...participantData,
               };
+
+              // Add email to participantEmails for routing if not present
+              if (!meeting.participantEmails.includes(email)) {
+                meeting.participantEmails.push(email);
+              }
+
+              console.log(
+                `[ParticipantPopulation] Enriched "${speakerInfo.name}" with contact "${contact.name}" (${email})`
+              );
             } else {
-              // Add new participant
-              meeting.participants.push(participantData);
+              // v1.3: Don't add new participants — SDK list is source of truth
+              console.log(
+                `[ParticipantPopulation] Skipping new participant "${speakerInfo.name}" (enrich-only)`
+              );
             }
-
-            // Add email to participantEmails for routing if not present
-            if (!meeting.participantEmails.includes(email)) {
-              meeting.participantEmails.push(email);
-            }
-
-            console.log(
-              `[ParticipantPopulation] Matched "${speakerInfo.name}" to contact "${contact.name}" (${email})`
-            );
           }
         } catch (nameError) {
           console.warn(
@@ -3236,8 +3261,21 @@ function reconcileParticipantsAfterMatching(participants, speakerMapping) {
  * @returns {Array<Object>} Deduplicated array
  */
 function deduplicateParticipants(participants) {
-  const seen = new Map();
+  const seen = new Map(); // key -> index in result array
   const result = [];
+
+  /**
+   * Score a participant entry by richness: real name, org, contact resource.
+   * Higher score = richer entry that should be preferred.
+   */
+  const richness = (p) => {
+    let score = 0;
+    if (p.name && !p.name.includes('@')) score += 2; // real name, not email-as-name
+    if (p.organization) score += 1;
+    if (p.googleContactResource) score += 1;
+    if (p.originalName && !p.originalName.includes('@')) score += 1;
+    return score;
+  };
 
   for (const participant of participants) {
     // Use email as primary key (case-insensitive), fall back to originalName (immutable source of truth)
@@ -3245,8 +3283,15 @@ function deduplicateParticipants(participants) {
       ? participant.email.toLowerCase()
       : (participant.originalName || participant.name)?.toLowerCase() || `unknown-${result.length}`;
 
-    if (!seen.has(key)) {
-      seen.set(key, true);
+    if (seen.has(key)) {
+      // Prefer the richer entry (real name, org, googleContactResource)
+      const existingIdx = seen.get(key);
+      if (richness(participant) > richness(result[existingIdx])) {
+        console.log(`[Deduplication] Replacing "${result[existingIdx].name}" with richer "${participant.name}" for key "${key}"`);
+        result[existingIdx] = participant;
+      }
+    } else {
+      seen.set(key, result.length);
       result.push(participant);
     }
   }
@@ -4495,7 +4540,7 @@ async function initializeGoogleServices(forceReinitialize = false) {
     // Initialize Speaker Matcher
     if (googleContacts && (!speakerMatcher || forceReinitialize)) {
       console.log('[Google Services] Initializing Speaker Matcher...');
-      speakerMatcher = new SpeakerMatcher(googleContacts);
+      speakerMatcher = new SpeakerMatcher(googleContacts, userProfile);
     } else if (googleContacts) {
       console.log('[Google Services] Speaker Matcher already initialized');
     }
@@ -5110,6 +5155,7 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
 
     const rebuiltParticipants = [];
     const seenNames = new Set();
+    const seenEmails = new Set();
 
     // Log available sources for debugging
     console.log(`[Contacts IPC] Available sources:`);
@@ -5117,31 +5163,9 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
     console.log(`  - speakerMapping keys: ${meeting.speakerMapping ? Object.keys(meeting.speakerMapping).length : 0}`);
     console.log(`  - transcript entries: ${meeting.transcript?.length || 0}`);
 
-    // SOURCE 0: speakerMapping - might have original names from speaker matching
-    if (meeting.speakerMapping && typeof meeting.speakerMapping === 'object') {
-      console.log(`[Contacts IPC] Checking speakerMapping for original names...`);
-      for (const [_label, info] of Object.entries(meeting.speakerMapping)) {
-        if (info.name) {
-          const normalizedName = info.name.toLowerCase().trim();
-          if (!seenNames.has(normalizedName)) {
-            seenNames.add(normalizedName);
-            rebuiltParticipants.push({
-              name: info.name,
-              email: info.email || null,
-              googleContactResource: info.googleContactResource || null,
-              contactMatched: !!info.email,
-              fromSpeakerMapping: true,
-            });
-            console.log(`[Contacts IPC] From speakerMapping: "${info.name}" (email: ${info.email || 'none'})${info.googleContactResource ? ` [${info.googleContactResource}]` : ''}`);
-          }
-        }
-      }
-      console.log(`[Contacts IPC] Got ${rebuiltParticipants.length} from speakerMapping`);
-    }
-
-    // PRIMARY SOURCE: Existing participants array (original Zoom SDK names!)
+    // PRIMARY SOURCE (processed FIRST): SDK participants array — source of truth
     if (meeting.participants && meeting.participants.length > 0) {
-      console.log(`[Contacts IPC] v1.2.2: Using ${meeting.participants.length} participants from Zoom SDK`);
+      console.log(`[Contacts IPC] v1.3: Using ${meeting.participants.length} participants from SDK (source of truth)`);
 
       for (const participant of meeting.participants) {
         // v1.2.2: Prefer originalName (immutable) over name (may be corrupted)
@@ -5153,12 +5177,15 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
 
         const normalizedName = originalName.toLowerCase().trim();
         if (seenNames.has(normalizedName)) continue;
+        // Also skip if this participant's email was already seen (email-based dedup)
+        if (participant.email && seenEmails.has(participant.email.toLowerCase())) continue;
         seenNames.add(normalizedName);
 
         // Preserve original Zoom name, clear potentially wrong email, re-match fresh
         const rebuiltParticipant = {
           id: participant.id,
           name: originalName, // KEEP the original Zoom name!
+          originalName: originalName,
           isHost: participant.isHost,
           platform: participant.platform,
           joinTime: participant.joinTime,
@@ -5168,10 +5195,17 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
         try {
           const contact = await googleContacts.findContactByName(originalName);
           if (contact && contact.emails && contact.emails.length > 0) {
+            const resolvedEmail = contact.emails[0].toLowerCase();
+            // Skip if this email was already seen from another source
+            if (seenEmails.has(resolvedEmail)) {
+              console.log(`[Contacts IPC] "${originalName}" -> email ${resolvedEmail} already seen, skipping`);
+              continue;
+            }
             rebuiltParticipant.email = contact.emails[0];
             rebuiltParticipant.organization = contact.organization || null;
             rebuiltParticipant.googleContactResource = contact.resourceName || null;
             rebuiltParticipant.contactMatched = true;
+            seenEmails.add(resolvedEmail);
             console.log(`[Contacts IPC] "${originalName}" -> email: ${contact.emails[0]} (name preserved)${contact.resourceName ? ` [${contact.resourceName}]` : ''}`);
           } else {
             rebuiltParticipant.email = null;
@@ -5187,52 +5221,56 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
         rebuiltParticipants.push(rebuiltParticipant);
       }
 
-      console.log(`[Contacts IPC] Rebuilt ${rebuiltParticipants.length} participants from Zoom SDK names`);
+      console.log(`[Contacts IPC] Rebuilt ${rebuiltParticipants.length} participants from SDK names`);
     }
 
-    // SECONDARY SOURCE: Add any speakers from transcript not already in participants
-    if (meeting.transcript && meeting.transcript.length > 0) {
-      console.log(`[Contacts IPC] Checking transcript for additional speakers...`);
-      let addedFromTranscript = 0;
+    // ENRICHMENT SOURCE: speakerMapping — only enrich existing participants, never add new ones
+    if (meeting.speakerMapping && typeof meeting.speakerMapping === 'object') {
+      console.log(`[Contacts IPC] Enriching participants from speakerMapping (enrich-only)...`);
+      let enriched = 0;
 
-      for (const segment of meeting.transcript) {
-        // Check multiple fields for speaker name
-        const speakerName = segment.speakerName || segment.speakerDisplayName || segment.speaker;
-        if (!speakerName) continue;
+      for (const [_label, info] of Object.entries(meeting.speakerMapping)) {
+        if (!info.name) continue;
 
-        // Skip generic speaker labels
-        if (speakerName.match(/^(Speaker\s*[A-Z0-9]|SPK[-_]|spk_|SPEAKER_|Unknown)/i)) continue;
-
-        const normalizedName = speakerName.toLowerCase().trim();
-        if (seenNames.has(normalizedName)) continue;
-        seenNames.add(normalizedName);
-
-        const rebuiltParticipant = {
-          name: speakerName,
-          fromTranscript: true,
-        };
-
-        // Try contact lookup but don't change name
-        try {
-          const contact = await googleContacts.findContactByName(speakerName);
-          if (contact && contact.emails && contact.emails.length > 0) {
-            rebuiltParticipant.email = contact.emails[0];
-            rebuiltParticipant.organization = contact.organization || null;
-            rebuiltParticipant.googleContactResource = contact.resourceName || null;
-            rebuiltParticipant.contactMatched = true;
+        // Find existing participant that matches this speakerMapping entry
+        const matchIdx = rebuiltParticipants.findIndex(p => {
+          const pName = (p.originalName || p.name || '').toLowerCase().trim();
+          const mName = info.name.toLowerCase().trim();
+          if (pName === mName) return true;
+          // Multi-word substring match
+          const pWords = pName.split(/\s+/);
+          const mWords = mName.split(/\s+/);
+          if (pWords.length >= 2 && mWords.length >= 2) {
+            return pName.includes(mName) || mName.includes(pName);
           }
-        } catch (_err) {
-          // Ignore
+          return false;
+        });
+
+        if (matchIdx !== -1) {
+          const existing = rebuiltParticipants[matchIdx];
+          // Enrich with email/org/contactResource if missing
+          if (!existing.email && info.email) {
+            const normalizedEmail = info.email.toLowerCase();
+            if (!seenEmails.has(normalizedEmail)) {
+              existing.email = info.email;
+              existing.contactMatched = true;
+              seenEmails.add(normalizedEmail);
+              enriched++;
+              console.log(`[Contacts IPC] Enriched "${existing.name}" with email ${info.email} from speakerMapping`);
+            }
+          }
+          if (!existing.googleContactResource && info.googleContactResource) {
+            existing.googleContactResource = info.googleContactResource;
+          }
+        } else {
+          console.log(`[Contacts IPC] speakerMapping name "${info.name}" not in SDK participants — skipped (enrich-only)`);
         }
-
-        rebuiltParticipants.push(rebuiltParticipant);
-        addedFromTranscript++;
       }
-
-      if (addedFromTranscript > 0) {
-        console.log(`[Contacts IPC] Added ${addedFromTranscript} additional speakers from transcript`);
-      }
+      console.log(`[Contacts IPC] Enriched ${enriched} participants from speakerMapping`);
     }
+
+    // NOTE: Transcript speakers are NOT added as participants (v1.3).
+    // SDK participant list is the sole source of truth for who was in the meeting.
 
     // Save rebuilt participants
     await fileOperationManager.scheduleOperation(async data => {
@@ -5740,19 +5778,29 @@ ipcMain.handle(
           };
           console.log(`[SpeakerMapping IPC] Replaced participant ${speakerId} with ${contactName}`);
         } else {
-          // Check if contact already exists (by name or email)
-          const contactExists = meeting.participants.find(
-            p => p.name === contactName || (contactEmail && p.email === contactEmail)
-          );
+          // v1.3: Don't add new participants — SDK list is source of truth.
+          // Try to find existing participant by fuzzy name match to enrich.
+          const fuzzyIdx = meeting.participants.findIndex(p => {
+            const pName = (p.originalName || p.name || '').toLowerCase().trim();
+            const cName = contactName.toLowerCase().trim();
+            if (pName === cName) return true;
+            const pWords = pName.split(/\s+/);
+            const cWords = cName.split(/\s+/);
+            if (pWords.length >= 2 && cWords.length >= 2) {
+              return pName.includes(cName) || cName.includes(pName);
+            }
+            return false;
+          });
 
-          if (!contactExists) {
-            // Add as new participant
-            meeting.participants.push({
-              name: contactName,
-              email: contactEmail || null,
+          if (fuzzyIdx !== -1) {
+            meeting.participants[fuzzyIdx] = {
+              ...meeting.participants[fuzzyIdx],
+              email: contactEmail || meeting.participants[fuzzyIdx].email || null,
               mappedFromSpeakerId: speakerId,
-            });
-            console.log(`[SpeakerMapping IPC] Added participant: ${contactName}`);
+            };
+            console.log(`[SpeakerMapping IPC] Enriched existing participant "${meeting.participants[fuzzyIdx].name}" from speaker ${speakerId}`);
+          } else {
+            console.log(`[SpeakerMapping IPC] Skipping new participant "${contactName}" (enrich-only, SDK is source of truth)`);
           }
         }
 
@@ -5790,7 +5838,35 @@ ipcMain.handle(
         }
       }
 
-      meeting.participants = deduped;
+      // Second dedup pass: email-based (catches entries with different names but same email)
+      const seenEmails = new Map();
+      const emailDeduped = [];
+
+      for (const p of deduped) {
+        if (p.email) {
+          const normalizedEmail = p.email.toLowerCase();
+          if (seenEmails.has(normalizedEmail)) {
+            const existingIdx = seenEmails.get(normalizedEmail);
+            const existing = emailDeduped[existingIdx];
+            // Prefer entry with real name (no @) over email-as-name
+            const pHasRealName = p.name && !p.name.includes('@');
+            const existingHasRealName = existing.name && !existing.name.includes('@');
+            if (pHasRealName && !existingHasRealName) {
+              emailDeduped[existingIdx] = p;
+              console.log(`[SpeakerMapping IPC] Email dedup: replaced "${existing.name}" with "${p.name}" (same email ${normalizedEmail})`);
+            } else {
+              console.log(`[SpeakerMapping IPC] Email dedup: skipping "${p.name}" (same email as "${existing.name}")`);
+            }
+          } else {
+            seenEmails.set(normalizedEmail, emailDeduped.length);
+            emailDeduped.push(p);
+          }
+        } else {
+          emailDeduped.push(p);
+        }
+      }
+
+      meeting.participants = emailDeduped;
       console.log(`[SpeakerMapping IPC] Final participant count: ${meeting.participants.length}`);
 
       // Deduplicate participantEmails
@@ -8295,6 +8371,11 @@ ipcMain.handle(
 
       // Save to disk
       saveUserProfile();
+
+      // Sync updated profile to SpeakerMatcher for identity-first heuristic
+      if (speakerMatcher) {
+        speakerMatcher.setUserProfile(userProfile);
+      }
 
       logger.main.info('[v1.1] User profile saved:', {
         name: userProfile.name,

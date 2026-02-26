@@ -6,8 +6,17 @@
  */
 
 class SpeakerMatcher {
-  constructor(googleContacts) {
+  constructor(googleContacts, userProfile = null) {
     this.googleContacts = googleContacts;
+    this.userProfile = userProfile; // { name, email } from My Profile settings
+  }
+
+  /**
+   * Update the user profile (called after profile saves in settings)
+   * @param {Object} profile - User profile with name and email
+   */
+  setUserProfile(profile) {
+    this.userProfile = profile;
   }
 
   /**
@@ -151,15 +160,7 @@ class SpeakerMatcher {
       `[SpeakerMatcher] Matching ${this.getSpeakerCount(transcript)} speakers to ${participantEmails.length} participants`
     );
 
-    // Short-circuit: If transcript has speaker-identified entries (e.g. from AssemblyAI
-    // speech_understanding), build mapping directly — skip SM-1 + heuristics entirely
     const hasIdentifiedSpeakers = transcript.some(entry => entry.speakerIdentified === true);
-    if (hasIdentifiedSpeakers) {
-      console.log(
-        '[SpeakerMatcher] Speaker identification detected — short-circuiting SM-1 + heuristics'
-      );
-      return this.buildMappingFromIdentifiedSpeakers(transcript, participantEmails, options);
-    }
 
     // Step 1: Get contact information for all participants
     const contacts = await this.googleContacts.findContactsByEmails(participantEmails);
@@ -170,7 +171,8 @@ class SpeakerMatcher {
     // Step 2: Analyze speakers in transcript
     const speakerStats = this.analyzeSpeakers(transcript);
 
-    // Step 3: SM-1 - Try high-confidence matching using SDK speech timeline first
+    // Step 3: SDK speech timeline ALWAYS runs first when available (v1.3)
+    // This gives us high-confidence matches from authoritative SDK participant names
     let speakerMapping = {};
     if (speechTimeline && speechTimeline.participants && speechTimeline.participants.length > 0) {
       console.log('[SpeakerMatcher] SM-1: Using SDK speech timeline for high-confidence matching');
@@ -182,25 +184,62 @@ class SpeakerMatcher {
       );
     }
 
-    // Step 4: Fall back to heuristics for unmatched speakers
+    // Step 4: For unmatched speakers, use AssemblyAI identified names as supplementary
     const matchedSpeakers = new Set(Object.keys(speakerMapping));
     const unmatchedStats = new Map(
       Array.from(speakerStats.entries()).filter(([label]) => !matchedSpeakers.has(label))
     );
 
-    if (unmatchedStats.size > 0) {
+    if (unmatchedStats.size > 0 && hasIdentifiedSpeakers) {
       console.log(
-        `[SpeakerMatcher] Using heuristics for ${unmatchedStats.size} unmatched speakers`
+        `[SpeakerMatcher] Using AssemblyAI names as supplementary for ${unmatchedStats.size} unmatched speakers`
+      );
+      const identifiedMapping = await this.buildMappingFromIdentifiedSpeakers(
+        transcript,
+        participantEmails,
+        options
+      );
+
+      // Only take mappings for speakers not already matched by timeline
+      for (const [speakerLabel, mapping] of Object.entries(identifiedMapping)) {
+        if (!speakerMapping[speakerLabel]) {
+          speakerMapping[speakerLabel] = mapping;
+          matchedSpeakers.add(speakerLabel);
+        }
+      }
+    }
+
+    // Step 5: Fall back to heuristics for any still-unmatched speakers
+    const stillUnmatchedStats = new Map(
+      Array.from(speakerStats.entries()).filter(([label]) => !matchedSpeakers.has(label))
+    );
+
+    if (stillUnmatchedStats.size > 0) {
+      console.log(
+        `[SpeakerMatcher] Using heuristics for ${stillUnmatchedStats.size} still-unmatched speakers`
       );
       const heuristicMapping = this.createSpeakerMapping(
-        unmatchedStats,
+        stillUnmatchedStats,
         participantEmails,
         contacts,
         options,
         speakerMapping // Pass existing mapping to avoid duplicate assignments
       );
 
-      // Merge heuristic matches with timeline matches
+      // Merge heuristic matches with existing matches
+      speakerMapping = { ...speakerMapping, ...heuristicMapping };
+    } else if (!hasIdentifiedSpeakers && unmatchedStats.size > 0) {
+      // No AssemblyAI names and some unmatched — go straight to heuristics
+      console.log(
+        `[SpeakerMatcher] Using heuristics for ${unmatchedStats.size} unmatched speakers (no AssemblyAI names)`
+      );
+      const heuristicMapping = this.createSpeakerMapping(
+        unmatchedStats,
+        participantEmails,
+        contacts,
+        options,
+        speakerMapping
+      );
       speakerMapping = { ...speakerMapping, ...heuristicMapping };
     }
 
@@ -643,91 +682,83 @@ class SpeakerMatcher {
       return mapping;
     }
 
-    // Heuristic 1: If number of speakers equals participants, assign positionally
-    // For 2-person meetings without SM-1 or speaker identification data, we assign
-    // with low confidence + needsVerification rather than guessing speaking order.
-    if (speakers.length === participants.length) {
-      if (speakers.length === 2) {
-        // 2-person fallback: assign alphabetically by speaker label, mark as unverified
-        // We do NOT assume host speaks first — that assumption frequently swaps names.
-        const sorted = [...speakers].sort((a, b) => a.label.localeCompare(b.label));
-        for (let i = 0; i < sorted.length; i++) {
-          mapping[sorted[i].label] = {
-            email: participants[i].email,
-            name: participants[i].name,
-            confidence: 'low',
-            method: 'positional-fallback',
-            needsVerification: true,
-          };
-        }
-        console.log(
-          `[SpeakerMatcher] 2-person fallback (no speaker ID, no SM-1): assigned positionally with needsVerification`
-        );
-        return mapping;
-      }
+    // Unified identity-first heuristic: use known identities (host, user) before
+    // falling back to positional assignment. Works identically for any meeting size.
 
-      // 3+ speakers: positional match (speakers sorted by word count, participants in original order)
-      for (let i = 0; i < speakers.length; i++) {
-        mapping[speakers[i].label] = {
-          email: participants[i].email,
-          name: participants[i].name,
-          confidence: 'low',
-          method: 'count-match',
-        };
+    // Sort speakers by first appearance (earliest speaker first)
+    const speakersByAppearance = [...speakers].sort(
+      (a, b) => a.firstAppearance - b.firstAppearance
+    );
+
+    // Step 1: Identify known participants
+    const hostParticipant = participants.find(p => p.isHost) || null;
+    let userParticipant = null;
+    if (this.userProfile?.email || this.userProfile?.name) {
+      userParticipant = participants.find(p => {
+        if (this.userProfile.email && p.email) {
+          return p.email.toLowerCase() === this.userProfile.email.toLowerCase();
+        }
+        if (this.userProfile.name) {
+          return this.nameMatchStrict(this.userProfile.name, p.originalName || p.name);
+        }
+        return false;
+      }) || null;
+      // If user IS the host, don't double-assign
+      if (userParticipant && hostParticipant && userParticipant === hostParticipant) {
+        userParticipant = null;
       }
-      return mapping;
     }
 
-    // Heuristic 2: First speaker is often the meeting host
-    if (speakers.length > 0 && participants.length > 0 && options.includeOrganizer) {
-      const hostParticipant = participants.find(p => p.isHost) || participants[0];
-      // Find first speaker by appearance time, not word count
-      const firstSpeaker = [...speakers].sort(
-        (a, b) => a.firstAppearance - b.firstAppearance
-      )[0];
-      mapping[firstSpeaker.label] = {
+    const assignedSpeakers = new Set();
+    const assignedParticipantKeys = new Set();
+    const participantKey = (p) => p.email?.toLowerCase() || p.name?.toLowerCase();
+
+    // Step 2: Assign earliest-appearing speakers to known participants
+    if (hostParticipant && speakersByAppearance.length > 0) {
+      const earliest = speakersByAppearance[0];
+      mapping[earliest.label] = {
         email: hostParticipant.email,
         name: hostParticipant.name,
-        confidence: 'low',
-        method: hostParticipant.isHost ? 'first-speaker-host' : 'first-speaker-first-participant',
+        confidence: 'medium',
+        method: 'identity-first-speaker',
       };
+      assignedSpeakers.add(earliest.label);
+      assignedParticipantKeys.add(participantKey(hostParticipant));
+      console.log(`[SpeakerMatcher] Assigned earliest speaker ${earliest.label} -> host "${hostParticipant.name}"`);
     }
 
-    // Heuristic 3: Most talkative speaker mapped to host (or second participant if no host)
-    if (speakers.length > 1 && participants.length > 1) {
-      const mostTalkative = speakers[0]; // Already sorted by word count
-      if (!mapping[mostTalkative.label]) {
-        const hostParticipant = participants.find(p => p.isHost);
-        const targetParticipant = hostParticipant || participants[1];
-        // Only assign if target wasn't already mapped by Heuristic 2
-        if (!Object.values(mapping).some(m => m.email === targetParticipant.email)) {
-          mapping[mostTalkative.label] = {
-            email: targetParticipant.email,
-            name: targetParticipant.name,
-            confidence: 'low',
-            method: hostParticipant ? 'most-talkative-host' : 'most-talkative-fallback',
-          };
-        }
+    if (userParticipant) {
+      const nextSpeaker = speakersByAppearance.find(s => !assignedSpeakers.has(s.label));
+      if (nextSpeaker) {
+        mapping[nextSpeaker.label] = {
+          email: userParticipant.email,
+          name: userParticipant.name,
+          confidence: 'medium',
+          method: 'identity-first-speaker',
+        };
+        assignedSpeakers.add(nextSpeaker.label);
+        assignedParticipantKeys.add(participantKey(userParticipant));
+        console.log(`[SpeakerMatcher] Assigned next speaker ${nextSpeaker.label} -> user "${userParticipant.name}"`);
       }
     }
 
-    // Heuristic 4: Map remaining speakers to remaining participants
-    const mappedSpeakers = new Set(Object.keys(mapping));
-    const mappedEmails = new Set(Object.values(mapping).map(m => m.email));
+    // Step 3: Pair remaining speakers with remaining participants
+    const remainingSpeakers = speakersByAppearance.filter(s => !assignedSpeakers.has(s.label));
+    const remainingParticipants = participants
+      .filter(p => !assignedParticipantKeys.has(participantKey(p)))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || '')); // alphabetical for determinism
 
-    const unmappedSpeakers = speakers.filter(s => !mappedSpeakers.has(s.label));
-    const unmappedParticipants = participants.filter(p => !mappedEmails.has(p.email));
-
-    for (let i = 0; i < Math.min(unmappedSpeakers.length, unmappedParticipants.length); i++) {
-      mapping[unmappedSpeakers[i].label] = {
-        email: unmappedParticipants[i].email,
-        name: unmappedParticipants[i].name,
+    for (let i = 0; i < Math.min(remainingSpeakers.length, remainingParticipants.length); i++) {
+      mapping[remainingSpeakers[i].label] = {
+        email: remainingParticipants[i].email,
+        name: remainingParticipants[i].name,
         confidence: 'low',
-        method: 'sequential',
+        method: 'unverified-positional',
+        needsVerification: true,
       };
     }
 
-    // Mark any speakers without matches as "Unknown"
+    // Step 4: Excess speakers become Unknown
     for (const speaker of speakers) {
       if (!mapping[speaker.label]) {
         mapping[speaker.label] = {
@@ -738,6 +769,8 @@ class SpeakerMatcher {
         };
       }
     }
+
+    console.log(`[SpeakerMatcher] Unified heuristic assigned ${Object.keys(mapping).length} speakers`);
 
     return mapping;
   }
