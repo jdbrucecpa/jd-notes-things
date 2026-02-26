@@ -158,6 +158,15 @@ class GoogleCalendar {
     const platform = this._detectPlatform(event);
     const meetingLink = this._extractMeetingLink(event, platform);
 
+    // v1.3.0: Extract jdNotes extended properties if present
+    const jdNotesProps = {};
+    const privateProps = event.extendedProperties?.private || {};
+    for (const [key, value] of Object.entries(privateProps)) {
+      if (key.startsWith('jdNotes')) {
+        jdNotesProps[key] = value;
+      }
+    }
+
     return {
       id: event.id,
       title: event.summary || 'Untitled Meeting',
@@ -175,6 +184,9 @@ class GoogleCalendar {
           }
         : null,
       status: event.status || 'confirmed',
+      htmlLink: event.htmlLink || null,               // v1.3.0: Direct link to Google Calendar event
+      jdNotesProperties: jdNotesProps,                 // v1.3.0: Our custom extended properties
+      hasRecording: !!jdNotesProps.jdNotesRecordingId, // v1.3.0: Quick check for existing recording
       // Metadata for routing
       participantEmails: (event.attendees || []).map(a => a.email).filter(Boolean),
     };
@@ -310,6 +322,115 @@ class GoogleCalendar {
         optional: attendee.optional || false,
         organizer: attendee.organizer || false,
       }));
+  }
+
+  // ======================================================================
+  // v1.3.0: Extended Properties + Event Updates
+  // ======================================================================
+
+  /**
+   * v1.3.0: Write jdNotes extended properties to a calendar event.
+   * Used to mark events as having recordings, Obsidian links, etc.
+   * @param {string} eventId - Google Calendar event ID
+   * @param {Object} properties - Key-value pairs to set (e.g., { jdNotesRecordingId: 'meeting-123' })
+   * @returns {Promise<Object>} Updated event
+   */
+  async updateEventProperties(eventId, properties) {
+    if (!this.isAuthenticated()) {
+      throw new Error('Not authenticated');
+    }
+    await this.googleAuth.refreshTokenIfNeeded();
+
+    // Merge with existing private properties
+    const event = await this.calendar.events.get({
+      calendarId: 'primary',
+      eventId: eventId,
+    });
+
+    const existingPrivate = event.data.extendedProperties?.private || {};
+    const updatedPrivate = { ...existingPrivate, ...properties };
+
+    const response = await this.calendar.events.patch({
+      calendarId: 'primary',
+      eventId: eventId,
+      requestBody: {
+        extendedProperties: {
+          private: updatedPrivate,
+        },
+      },
+    });
+
+    console.log(`[GoogleCalendar] Updated extendedProperties for event ${eventId}:`, Object.keys(properties));
+    return response.data;
+  }
+
+  /**
+   * v1.3.0: Get calendar events in a date range (for reports).
+   * @param {string|Date} startDate
+   * @param {string|Date} endDate
+   * @returns {Promise<Array>} Formatted meeting objects
+   */
+  async getEventsInRange(startDate, endDate) {
+    if (!this.isAuthenticated()) {
+      if (!this.initialize()) {
+        throw new Error('Not authenticated');
+      }
+    }
+    await this.googleAuth.refreshTokenIfNeeded();
+
+    const timeMin = new Date(startDate).toISOString();
+    const timeMax = new Date(endDate).toISOString();
+
+    const allEvents = [];
+    let pageToken = null;
+
+    do {
+      const response = await this.calendar.events.list({
+        calendarId: 'primary',
+        timeMin,
+        timeMax,
+        singleEvents: true,
+        orderBy: 'startTime',
+        maxResults: 250,
+        pageToken: pageToken || undefined,
+      });
+
+      const events = response.data.items || [];
+      allEvents.push(...events.filter(e => this._isMeeting(e)));
+      pageToken = response.data.nextPageToken;
+    } while (pageToken);
+
+    console.log(`[GoogleCalendar] getEventsInRange: ${allEvents.length} events from ${timeMin} to ${timeMax}`);
+    return allEvents.map(e => this._formatMeeting(e));
+  }
+
+  /**
+   * v1.3.0: Search for a calendar event by its jdNotesRecordingId.
+   * @param {string} recordingId
+   * @returns {Promise<Object|null>} Event or null
+   */
+  async findEventByRecordingId(recordingId) {
+    if (!this.isAuthenticated()) {
+      throw new Error('Not authenticated');
+    }
+    await this.googleAuth.refreshTokenIfNeeded();
+
+    try {
+      const response = await this.calendar.events.list({
+        calendarId: 'primary',
+        privateExtendedProperty: `jdNotesRecordingId=${recordingId}`,
+        maxResults: 1,
+      });
+
+      const events = response.data.items || [];
+      if (events.length > 0) {
+        return this._formatMeeting(events[0]);
+      }
+      return null;
+    } catch (error) {
+      console.error(`[GoogleCalendar] Error searching for recording ${recordingId}:`, error.message);
+      return null;
+    }
   }
 
   /**

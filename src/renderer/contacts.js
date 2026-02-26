@@ -60,9 +60,14 @@ export async function openContactsView(emailToSelect) {
   const mainView = document.getElementById('mainView');
   const settingsView = document.getElementById('settingsView');
 
-  // Close settings if open
+  const reportsView = document.getElementById('reportsView');
+
+  // Close other views if open
   if (settingsView) {
     settingsView.style.display = 'none';
+  }
+  if (reportsView) {
+    reportsView.style.display = 'none';
   }
 
   if (contactsView) {

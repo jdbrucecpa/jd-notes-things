@@ -7,7 +7,7 @@ module.exports = [
     use: 'node-loader',
   },
   {
-    // Handle all .node files (native binaries like keytar)
+    // Handle all .node files (native binaries like better-sqlite3)
     test: /\.node$/,
     use: 'node-loader',
   },

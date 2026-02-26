@@ -376,6 +376,179 @@ class GoogleContacts {
       console.error('[GoogleContacts] Failed to send auth expiration notification:', error.message);
     }
   }
+
+  // ======================================================================
+  // v1.3.0: Write capabilities — create contacts, custom fields
+  // ======================================================================
+
+  /**
+   * v1.3.0: Create a new Google Contact.
+   * @param {Object} contactData - { name, email, organization, title }
+   * @returns {Promise<Object>} Created contact in processed format
+   */
+  async createContact(contactData) {
+    if (!this.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
+    }
+    await this.googleAuth.refreshTokenIfNeeded();
+
+    const { name, email, organization, title } = contactData;
+
+    // Build the contact resource
+    const requestBody = {
+      names: name ? [{ givenName: name.split(' ')[0], familyName: name.split(' ').slice(1).join(' ') || '' }] : [],
+      emailAddresses: email ? [{ value: email, type: 'work' }] : [],
+    };
+
+    if (organization || title) {
+      requestBody.organizations = [{
+        name: organization || undefined,
+        title: title || undefined,
+      }];
+    }
+
+    const response = await this.people.people.createContact({
+      requestBody,
+      personFields: 'names,emailAddresses,organizations,phoneNumbers,photos',
+    });
+
+    const contact = this.processContact(response.data);
+    console.log(`[GoogleContacts] Created contact: ${contact?.name} (${contact?.resourceName})`);
+
+    // Add to cache
+    if (contact && contact.emails) {
+      for (const contactEmail of contact.emails) {
+        this.contactsCache.set(contactEmail.toLowerCase(), contact);
+      }
+    }
+
+    return contact;
+  }
+
+  /**
+   * v1.3.0: Update custom fields (userDefined) on a Google Contact.
+   * Used for jdNotes_ data bridge fields.
+   * @param {string} resourceName - Google People API resourceName (e.g., 'people/c123')
+   * @param {Array<{key: string, value: string}>} fields - Custom field key-value pairs
+   * @returns {Promise<Object>} Updated contact
+   */
+  async updateContactCustomFields(resourceName, fields) {
+    if (!this.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
+    }
+    await this.googleAuth.refreshTokenIfNeeded();
+
+    // First, get current contact to preserve existing userDefined fields
+    const current = await this.people.people.get({
+      resourceName,
+      personFields: 'userDefined',
+    });
+
+    const existingFields = current.data.userDefined || [];
+
+    // Merge: update existing keys, add new keys
+    const fieldMap = new Map(existingFields.map(f => [f.key, f.value]));
+    for (const { key, value } of fields) {
+      fieldMap.set(key, value);
+    }
+
+    const updatedFields = Array.from(fieldMap.entries()).map(([key, value]) => ({ key, value }));
+
+    const response = await this.people.people.updateContact({
+      resourceName,
+      updatePersonFields: 'userDefined',
+      requestBody: {
+        etag: current.data.etag,
+        userDefined: updatedFields,
+      },
+    });
+
+    console.log(`[GoogleContacts] Updated ${fields.length} custom fields on ${resourceName}`);
+    return response.data;
+  }
+
+  /**
+   * v1.3.0: Read custom fields (userDefined) from a Google Contact.
+   * @param {string} resourceName
+   * @returns {Promise<Array<{key: string, value: string}>>}
+   */
+  async getContactCustomFields(resourceName) {
+    if (!this.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
+    }
+    await this.googleAuth.refreshTokenIfNeeded();
+
+    const response = await this.people.people.get({
+      resourceName,
+      personFields: 'userDefined',
+    });
+
+    return response.data.userDefined || [];
+  }
+
+  /**
+   * v1.3.0: Append a note to a Google Contact's biographies field.
+   * @param {string} resourceName
+   * @param {string} note - Text to append
+   * @returns {Promise<Object>}
+   */
+  async addContactNote(resourceName, note) {
+    if (!this.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
+    }
+    await this.googleAuth.refreshTokenIfNeeded();
+
+    // Get current biographies
+    const current = await this.people.people.get({
+      resourceName,
+      personFields: 'biographies',
+    });
+
+    const existingBio = current.data.biographies?.[0]?.value || '';
+    const separator = existingBio ? '\n\n---\n\n' : '';
+    const updatedBio = existingBio + separator + note;
+
+    const response = await this.people.people.updateContact({
+      resourceName,
+      updatePersonFields: 'biographies',
+      requestBody: {
+        etag: current.data.etag,
+        biographies: [{ value: updatedBio, contentType: 'TEXT_PLAIN' }],
+      },
+    });
+
+    console.log(`[GoogleContacts] Added note to ${resourceName}`);
+    return response.data;
+  }
+
+  /**
+   * v1.3.0: Update jdNotes_ meeting stats on a contact after a meeting.
+   * @param {string} resourceName
+   * @param {Object} meetingInfo - { date, meetingCount, company }
+   */
+  async updateMeetingStats(resourceName, meetingInfo) {
+    const fields = [];
+
+    if (meetingInfo.date) {
+      fields.push({ key: 'jdNotes_lastMeetingDate', value: meetingInfo.date });
+    }
+    if (meetingInfo.meetingCount != null) {
+      fields.push({ key: 'jdNotes_meetingCount', value: String(meetingInfo.meetingCount) });
+    }
+    if (meetingInfo.firstMeetingDate) {
+      fields.push({ key: 'jdNotes_firstMeetingDate', value: meetingInfo.firstMeetingDate });
+    }
+    if (meetingInfo.company) {
+      fields.push({ key: 'jdNotes_primaryCompany', value: meetingInfo.company });
+    }
+    if (meetingInfo.obsidianContactPage) {
+      fields.push({ key: 'jdNotes_obsidianContactPage', value: meetingInfo.obsidianContactPage });
+    }
+
+    if (fields.length > 0) {
+      await this.updateContactCustomFields(resourceName, fields);
+    }
+  }
 }
 
 module.exports = GoogleContacts;

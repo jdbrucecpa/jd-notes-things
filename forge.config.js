@@ -5,7 +5,7 @@ module.exports = {
   packagerConfig: {
     executableName: 'JDNotesThings',
     asar: {
-      unpack: '**/{@recallai,keytar}/**',
+      unpack: '**/{@recallai,better-sqlite3}/**',
     },
     extraResource: ['./config'],
     osxSign: {
@@ -88,7 +88,7 @@ module.exports = {
     {
       name: '@timfish/forge-externals-plugin',
       config: {
-        externals: ['@recallai/desktop-sdk', 'keytar'],
+        externals: ['@recallai/desktop-sdk', 'better-sqlite3'],
         includeDeps: true,
       },
     },

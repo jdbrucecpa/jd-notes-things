@@ -102,4 +102,3 @@ config-backup/
 
 # Test files and Git Bash artifacts
 nul
-test-keytar.js

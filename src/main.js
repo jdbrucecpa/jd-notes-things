@@ -11,6 +11,11 @@ const {
   nativeImage,
   session,
 } = require('electron');
+
+// Enable remote debugging for Playwright E2E tests
+if (process.env.E2E_TEST) {
+  app.commandLine.appendSwitch('remote-debugging-port', process.env.E2E_DEBUG_PORT || '9222');
+}
 const path = require('node:path');
 const fs = require('fs');
 const RecallAiSdk = require('@recallai/desktop-sdk');
@@ -35,6 +40,7 @@ const keyManagementService = require('./main/services/keyManagementService');
 const speakerMappingService = require('./main/services/speakerMappingService');
 const vocabularyService = require('./main/services/vocabularyService');
 const backgroundTaskManager = require('./main/services/backgroundTaskManager');
+const databaseService = require('./main/services/databaseService');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
@@ -358,6 +364,10 @@ let importManager = null;
 // Speaker recognition system (Phase 6)
 let googleContacts = null;
 let speakerMatcher = null;
+
+// v1.3.0: Gmail integration
+const Gmail = require('./main/integrations/Gmail');
+let gmail = null;
 
 let mainWindow;
 let recordingWidget = null; // Floating recording widget window (v1.2)
@@ -1472,22 +1482,30 @@ app.whenReady().then(async () => {
     logger.main.error("Couldn't create the recording path:", e);
   }
 
-  // Create meetings file if it doesn't exist
-  try {
-    if (!fs.existsSync(meetingsFilePath)) {
-      const initialData = { upcomingMeetings: [], pastMeetings: [] };
-      fs.writeFileSync(meetingsFilePath, JSON.stringify(initialData, null, 2));
-      logger.main.info('Created meetings data file:', meetingsFilePath);
-    }
-  } catch (e) {
-    logger.main.error("Couldn't create the meetings file:", e);
-  }
+  // v1.3.0: meetings.json creation removed — database handles storage now
+  // The meetingsFilePath is still used by the JSON → SQLite migration in databaseService
 
   // Load app settings from disk (Phase 10.7)
   loadAppSettings();
 
   // Load user profile (v1.1)
   loadUserProfile();
+
+  // v1.3.0: Migrate keys from keytar → safeStorage (one-time, runs only once)
+  try {
+    await keyManagementService.migrateFromKeytar();
+  } catch (error) {
+    logger.main.warn('keytar → safeStorage migration failed (non-fatal):', error.message);
+  }
+
+  // v1.3.0: Initialize SQLite database and migrate from meetings.json if needed
+  try {
+    databaseService.initialize();
+    databaseService.migrateFromJson(meetingsFilePath);
+    logger.main.info('Database service initialized');
+  } catch (error) {
+    logger.main.error('Database initialization failed:', error.message);
+  }
 
   // Initialize LLM service from Windows Credential Manager (with .env fallback)
   try {
@@ -1712,7 +1730,7 @@ app.whenReady().then(async () => {
         responseHeaders: {
           ...details.responseHeaders,
           'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' https:;",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://lh3.googleusercontent.com; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' https:;",
           ],
         },
       });
@@ -1876,6 +1894,14 @@ app.on('before-quit', async () => {
   unregisterGlobalShortcuts();
   console.log('[Phase 10.7] Global shortcuts unregistered');
 
+  // v1.3.0: Close SQLite database connection
+  try {
+    databaseService.close();
+    console.log('[Database] Closed database connection');
+  } catch (error) {
+    console.error('[Database] Error closing database:', error.message);
+  }
+
   // Note: IPC listeners are automatically cleaned up by Electron on app quit
   // Event listeners on individual windows (like auth window) must be cleaned up manually
   // See google:openAuthWindow handler for proper event listener cleanup pattern
@@ -1948,125 +1974,46 @@ const activeRecordings = {
   },
 };
 
-// File operation manager to prevent race conditions on both reads and writes
+// v1.3.0: Database-backed compatibility shim replacing the old JSON fileOperationManager.
+// Maintains the same API surface (readMeetingsData, writeData, scheduleOperation) so that
+// all existing callsites work without modification while reading from/writing to SQLite.
 const fileOperationManager = {
-  isProcessing: false,
-  pendingOperations: [],
-  readWaiters: [],
-  cachedData: null,
-  lastReadTime: 0,
-
-  // Read the meetings data with caching to reduce file I/O
-  readMeetingsData: async function (skipWait = false) {
-    // If a write is in progress, wait for it to complete (unless called internally)
-    if (!skipWait && (this.isProcessing || this.pendingOperations.length > 0)) {
-      await new Promise(resolve => {
-        this.readWaiters.push(resolve);
-      });
-    }
-
-    // If we have cached data that's recent (less than 500ms old), use it
-    const now = Date.now();
-    if (this.cachedData && now - this.lastReadTime < CACHE_INVALIDATION_MS) {
-      return JSON.parse(JSON.stringify(this.cachedData)); // Deep clone
-    }
-
+  // Read meetings data from SQLite, returned in legacy { upcomingMeetings, pastMeetings } format
+  readMeetingsData: async function (_skipWait = false) {
     try {
-      // Read from file
-      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-      const data = JSON.parse(fileData);
-
-      // Update cache
-      this.cachedData = data;
-      this.lastReadTime = now;
-
-      return data;
+      return databaseService.getAllMeetings();
     } catch (error) {
-      console.error('Error reading meetings data:', error);
-      // If file doesn't exist or is invalid, return empty structure
+      console.error('Error reading meetings data from database:', error);
       return { upcomingMeetings: [], pastMeetings: [] };
     }
   },
 
-  // Schedule an operation that needs to update the meetings data
+  // Schedule an operation: read current data, pass to operationFn, write result back
   scheduleOperation: async function (operationFn) {
-    return new Promise((resolve, reject) => {
-      // Add this operation to the queue
-      this.pendingOperations.push({
-        operationFn, // This function will receive the current data and return updated data
-        resolve,
-        reject,
-      });
-
-      // Process the queue if not already processing
-      if (!this.isProcessing) {
-        this.processQueue();
-      }
-    });
-  },
-
-  // Process the operation queue sequentially
-  processQueue: async function () {
-    if (this.pendingOperations.length === 0 || this.isProcessing) {
-      return;
-    }
-
-    this.isProcessing = true;
-
     try {
-      // Get the next operation
-      const nextOp = this.pendingOperations.shift();
+      const currentData = databaseService.getAllMeetings();
+      const updatedData = await operationFn(currentData);
 
-      // Read the latest data (skipWait = true to avoid deadlock)
-      const currentData = await this.readMeetingsData(true);
-
-      try {
-        // Execute the operation function with the current data
-        const updatedData = await nextOp.operationFn(currentData);
-
-        // If the operation returned data, write it
-        if (updatedData) {
-          // Update cache immediately
-          this.cachedData = updatedData;
-          this.lastReadTime = Date.now();
-
-          // Write to file
-          await fs.promises.writeFile(meetingsFilePath, JSON.stringify(updatedData, null, 2));
-        }
-
-        // Resolve the operation's promise
-        nextOp.resolve({ success: true });
-      } catch (opError) {
-        console.error('Error in file operation:', opError);
-        nextOp.reject(opError);
+      if (updatedData) {
+        databaseService.saveAllMeetings(updatedData);
       }
+
+      return { success: true };
     } catch (error) {
-      console.error('Error in file operation manager:', error);
-
-      // If there was an operation that failed, reject its promise
-      if (this.pendingOperations.length > 0) {
-        const failedOp = this.pendingOperations.shift();
-        failedOp.reject(error);
-      }
-    } finally {
-      this.isProcessing = false;
-
-      // Notify any waiting readers that the write is complete
-      if (this.readWaiters.length > 0) {
-        const waiters = this.readWaiters.splice(0); // Get all and clear
-        waiters.forEach(resolve => resolve());
-      }
-
-      // Check if more operations were added while we were processing
-      if (this.pendingOperations.length > 0) {
-        setImmediate(() => this.processQueue());
-      }
+      console.error('Error in database operation:', error);
+      throw error;
     }
   },
 
-  // Helper to write data directly - internally uses scheduleOperation
+  // Write data directly to the database
   writeData: async function (data) {
-    return this.scheduleOperation(() => data); // Simply return the data to write
+    try {
+      databaseService.saveAllMeetings(data);
+      return { success: true };
+    } catch (error) {
+      console.error('Error writing meetings data to database:', error);
+      throw error;
+    }
   },
 };
 
@@ -2532,8 +2479,7 @@ async function initSDK() {
       let meetingId = null;
       let participantEmails = [];
       try {
-        const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-        const meetingsData = JSON.parse(fileData);
+        const meetingsData = await fileOperationManager.readMeetingsData();
         const meeting = meetingsData.pastMeetings.find(m => m.recordingId === windowId);
         if (meeting) {
           meetingId = meeting.id;
@@ -2668,8 +2614,7 @@ async function initSDK() {
               );
 
               // v1.2.5: Load meeting context for speaker identification
-              const fileData2 = await fs.promises.readFile(meetingsFilePath, 'utf8');
-              const meetingsData2 = JSON.parse(fileData2);
+              const meetingsData2 = await fileOperationManager.readMeetingsData();
               const meetingForContext = meetingsData2.pastMeetings.find(
                 m => m.recordingId === windowId
               );
@@ -2735,8 +2680,7 @@ async function initSDK() {
 
             // Update the meeting with the transcript
             console.log('[Transcription] Reading meetings data to save transcript...');
-            const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-            const meetingsData = JSON.parse(fileData);
+            const meetingsData = await fileOperationManager.readMeetingsData();
             const meetingIndex = meetingsData.pastMeetings.findIndex(
               m => m.recordingId === windowId
             );
@@ -4550,6 +4494,15 @@ async function initializeGoogleServices(forceReinitialize = false) {
       console.log('[Google Services] Speaker Matcher already initialized');
     }
 
+    // v1.3.0: Initialize Gmail service
+    if (!gmail || forceReinitialize) {
+      console.log('[Google Services] Initializing Gmail service...');
+      gmail = new Gmail(googleAuth);
+      gmail.initialize();
+    } else {
+      console.log('[Google Services] Gmail service already initialized');
+    }
+
     // Preload contacts (runs in background, doesn't block)
     if (googleContacts) {
       try {
@@ -4631,6 +4584,7 @@ ipcMain.handle(
     const contactCount = googleContacts ? googleContacts.contactCount : 0;
     const calendarReady = googleCalendar && googleCalendar.isAuthenticated();
     const contactsReady = googleContacts && googleContacts.isAuthenticated();
+    const scopeUpgradeNeeded = googleAuth ? googleAuth.needsScopeUpgrade() : false;
 
     return {
       success: true,
@@ -4638,6 +4592,7 @@ ipcMain.handle(
       calendarReady,
       contactsReady,
       contactCount,
+      scopeUpgradeNeeded, // v1.3.0: true if user needs to re-authorize for new scopes
     };
   })
 );
@@ -4807,6 +4762,214 @@ ipcMain.handle(
 );
 
 // ===================================================================
+// v1.3.0: Calendar Extended Properties, Linking & Reports
+// ===================================================================
+
+// Update extendedProperties on a calendar event
+ipcMain.handle('calendar:updateEventProperties', async (event, eventId, properties) => {
+  try {
+    if (!googleCalendar || !googleCalendar.isAuthenticated()) {
+      return { success: false, error: 'Google Calendar not authenticated' };
+    }
+    const result = await googleCalendar.updateEventProperties(eventId, properties);
+    return { success: true, event: result };
+  } catch (error) {
+    console.error('[Calendar IPC] Failed to update event properties:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get events in a date range (for reports)
+ipcMain.handle('calendar:getEventsInRange', async (event, startDate, endDate) => {
+  try {
+    if (!googleCalendar || !googleCalendar.isAuthenticated()) {
+      return { success: true, events: [] };
+    }
+    const events = await googleCalendar.getEventsInRange(startDate, endDate);
+    return { success: true, events };
+  } catch (error) {
+    console.error('[Calendar IPC] Failed to get events in range:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Check if a calendar event already has a recording (dedup)
+ipcMain.handle('calendar:checkDuplicate', async (event, calendarEventId) => {
+  try {
+    const existing = databaseService.getMeetingByCalendarEvent(calendarEventId);
+    return {
+      success: true,
+      hasDuplicate: !!existing,
+      existingMeetingId: existing ? existing.id : null,
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Link a recording to a calendar event (manual linking)
+ipcMain.handle('calendar:linkMeeting', async (event, meetingId, calendarEventId) => {
+  try {
+    // Update meeting in database
+    databaseService.updateMeetingField(meetingId, 'calendarEventId', calendarEventId);
+
+    // Write extendedProperty to Google Calendar event
+    if (googleCalendar && googleCalendar.isAuthenticated()) {
+      const meeting = databaseService.getMeeting(meetingId);
+      await googleCalendar.updateEventProperties(calendarEventId, {
+        jdNotesRecordingId: meetingId,
+        jdNotesObsidianLink: meeting?.obsidianLink || '',
+        jdNotesSyncedAt: new Date().toISOString(),
+        jdNotesSummaryStatus: meeting?.summary ? 'complete' : 'pending',
+      });
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Calendar IPC] Failed to link meeting:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Reports: meetings without recordings
+ipcMain.handle('calendar:reportMeetingsWithoutRecordings', async (event, startDate, endDate) => {
+  try {
+    const meetings = databaseService.getMeetingsWithoutRecordings(startDate, endDate);
+    return { success: true, meetings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Reports: recordings without calendar events
+ipcMain.handle('calendar:reportRecordingsWithoutCalendar', async (event, startDate, endDate) => {
+  try {
+    const meetings = databaseService.getRecordingsWithoutCalendarEvents(startDate, endDate);
+    return { success: true, meetings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Database query: meetings for a contact
+ipcMain.handle('db:getMeetingsForContact', async (event, email) => {
+  try {
+    const meetings = databaseService.getMeetingsForContact(email);
+    return { success: true, meetings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Database query: meeting count for a contact
+ipcMain.handle('db:getMeetingCountForContact', async (event, email) => {
+  try {
+    const count = databaseService.getMeetingCountForContact(email);
+    return { success: true, count };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Database query: meetings in date range with filters
+ipcMain.handle('db:getMeetingsInRange', async (event, startDate, endDate, filters) => {
+  try {
+    const meetings = databaseService.getMeetingsInRange(startDate, endDate, filters || {});
+    return { success: true, meetings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// Database query: meetings for an organization
+ipcMain.handle('db:getMeetingsForOrganization', async (event, organization) => {
+  try {
+    const meetings = databaseService.getMeetingsForOrganization(organization);
+    return { success: true, meetings };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// ===================================================================
+// v1.3.0: Gmail IPC Handlers
+// ===================================================================
+
+// Get email threads for a contact
+ipcMain.handle('gmail:getThreadsByContact', async (event, email, maxResults = 10) => {
+  try {
+    if (!gmail || !gmail.isAuthenticated()) {
+      return { success: false, error: 'Gmail not authenticated' };
+    }
+    const threads = await gmail.getThreadsByContact(email, maxResults);
+    return { success: true, threads };
+  } catch (error) {
+    console.error('[Gmail IPC] Failed to get threads:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// ===================================================================
+// v1.3.0: Google Contacts Write IPC Handlers
+// ===================================================================
+
+// Create a new Google Contact
+ipcMain.handle('contacts:createContact', async (event, contactData) => {
+  try {
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      return { success: false, error: 'Google Contacts not authenticated' };
+    }
+    const contact = await googleContacts.createContact(contactData);
+    return { success: true, contact };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to create contact:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Update custom fields on a contact
+ipcMain.handle('contacts:updateCustomFields', async (event, resourceName, fields) => {
+  try {
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      return { success: false, error: 'Google Contacts not authenticated' };
+    }
+    await googleContacts.updateContactCustomFields(resourceName, fields);
+    return { success: true };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to update custom fields:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Get custom fields from a contact
+ipcMain.handle('contacts:getCustomFields', async (event, resourceName) => {
+  try {
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      return { success: false, error: 'Google Contacts not authenticated' };
+    }
+    const fields = await googleContacts.getContactCustomFields(resourceName);
+    return { success: true, fields };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to get custom fields:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+// Update meeting stats on a contact (after meeting completes)
+ipcMain.handle('contacts:updateMeetingStats', async (event, resourceName, meetingInfo) => {
+  try {
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      return { success: false, error: 'Google Contacts not authenticated' };
+    }
+    await googleContacts.updateMeetingStats(resourceName, meetingInfo);
+    return { success: true };
+  } catch (error) {
+    console.error('[Contacts IPC] Failed to update meeting stats:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
 // Google Contacts & Speaker Matching Service-Specific IPC Handlers
 // ===================================================================
 
@@ -9004,47 +9167,11 @@ ipcMain.handle('deleteMeeting', async (event, meetingId) => {
     const validatedId = MeetingIdSchema.parse(meetingId);
     console.log(`Deleting meeting with ID: ${validatedId}`);
 
-    // Read current data
-    const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-    const meetingsData = JSON.parse(fileData);
+    const { deleted, recordingId } = databaseService.deleteMeeting(validatedId);
 
-    // Find the meeting
-    const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
-      meeting => meeting.id === validatedId
-    );
-    const upcomingMeetingIndex = meetingsData.upcomingMeetings.findIndex(
-      meeting => meeting.id === validatedId
-    );
-
-    let meetingDeleted = false;
-    let recordingId = null;
-
-    // Remove from past meetings if found
-    if (pastMeetingIndex !== -1) {
-      // Store the recording ID for later cleanup if needed
-      recordingId = meetingsData.pastMeetings[pastMeetingIndex].recordingId;
-
-      // Remove the meeting
-      meetingsData.pastMeetings.splice(pastMeetingIndex, 1);
-      meetingDeleted = true;
-    }
-
-    // Remove from upcoming meetings if found
-    if (upcomingMeetingIndex !== -1) {
-      // Store the recording ID for later cleanup if needed
-      recordingId = meetingsData.upcomingMeetings[upcomingMeetingIndex].recordingId;
-
-      // Remove the meeting
-      meetingsData.upcomingMeetings.splice(upcomingMeetingIndex, 1);
-      meetingDeleted = true;
-    }
-
-    if (!meetingDeleted) {
+    if (!deleted) {
       return { success: false, error: 'Meeting not found' };
     }
-
-    // Save the updated data
-    await fileOperationManager.writeData(meetingsData);
 
     // If the meeting had a recording, cleanup the reference in the global tracking
     if (recordingId && global.activeMeetingIds && global.activeMeetingIds[recordingId]) {
@@ -9081,9 +9208,7 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId, options = {}) 
   // Get meeting title for the task description
   let meetingTitle = 'Meeting';
   try {
-    const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-    const meetingsData = JSON.parse(fileData);
-    const meeting = meetingsData.pastMeetings.find(m => m.id === meetingId);
+    const meeting = databaseService.getMeeting(meetingId);
     if (meeting) {
       meetingTitle = meeting.title || 'Meeting';
       // Validate meeting has transcript before starting background task
@@ -9113,20 +9238,11 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId, options = {}) 
       // Progress: Starting
       backgroundTaskManager.updateTask(taskId, 10, 'Loading meeting data...');
 
-      // Read current data
-      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-      const meetingsData = JSON.parse(fileData);
-
-      // Find the meeting
-      const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
-        meeting => meeting.id === meetingId
-      );
-
-      if (pastMeetingIndex === -1) {
+      // Read meeting from database
+      const meeting = databaseService.getMeeting(meetingId);
+      if (!meeting) {
         throw new Error('Meeting not found');
       }
-
-      const meeting = meetingsData.pastMeetings[pastMeetingIndex];
 
       // Check if there's a transcript to summarize
       if (!meeting.transcript || meeting.transcript.length === 0) {
@@ -9203,8 +9319,8 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId, options = {}) 
       // Progress: Saving
       backgroundTaskManager.updateTask(taskId, 90, 'Finalizing...');
 
-      // Save the updated data with summary
-      await fileOperationManager.writeData(meetingsData);
+      // Save the updated meeting to database
+      databaseService.saveMeeting(meeting);
 
       console.log('Updated meeting note with AI summary');
 
@@ -9715,20 +9831,11 @@ ipcMain.handle(
     try {
       console.log(`Streaming summary generation requested for meeting: ${meetingId}`);
 
-      // Read current data
-      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-      const meetingsData = JSON.parse(fileData);
-
-      // Find the meeting
-      const pastMeetingIndex = meetingsData.pastMeetings.findIndex(
-        meeting => meeting.id === meetingId
-      );
-
-      if (pastMeetingIndex === -1) {
+      // Read meeting from database
+      const meeting = databaseService.getMeeting(meetingId);
+      if (!meeting) {
         return { success: false, error: 'Meeting not found' };
       }
-
-      const meeting = meetingsData.pastMeetings[pastMeetingIndex];
 
       // Check if there's a transcript to summarize
       if (!meeting.transcript || meeting.transcript.length === 0) {
@@ -9780,8 +9887,8 @@ ipcMain.handle(
       meeting.content = `# ${meetingTitle}\n\n${summary}`;
       meeting.hasSummary = true;
 
-      // Save the updated data with summary
-      await fileOperationManager.writeData(meetingsData);
+      // Save the updated meeting to database
+      databaseService.saveMeeting(meeting);
 
       console.log('Updated meeting note with AI summary (streaming)');
 
@@ -9893,11 +10000,10 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
     global.activeMeetingIds = global.activeMeetingIds || {};
     global.activeMeetingIds[detectedMeeting.window.id] = { platformName };
 
-    // Read the current meetings data
+    // Read the current meetings data from database
     let meetingsData;
     try {
-      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-      meetingsData = JSON.parse(fileData);
+      meetingsData = await fileOperationManager.readMeetingsData();
     } catch (error) {
       console.error('Error reading meetings data:', error);
       meetingsData = { upcomingMeetings: [], pastMeetings: [] };
@@ -9952,11 +10058,9 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
     console.log(`Saving meeting data to ${meetingsFilePath} with ID: ${id}`);
     await fileOperationManager.writeData(meetingsData);
 
-    // Verify the file was written by reading it back
+    // Verify the meeting was saved by reading it back from database
     try {
-      const verifyData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-      const parsedData = JSON.parse(verifyData);
-      const verifyMeeting = parsedData.pastMeetings.find(m => m.id === id);
+      const verifyMeeting = databaseService.getMeeting(id);
 
       if (verifyMeeting) {
         console.log(`[Meeting Creation] ✓ Verified meeting ${id} was saved to file`);
@@ -9977,9 +10081,6 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
           // This ensures the renderer has time to process the file and recognize the new meeting
           setTimeout(async () => {
             try {
-              // Force a file reload before sending the message
-              await fs.promises.readFile(meetingsFilePath, 'utf8');
-
               console.log(`Sending IPC message to open meeting note: ${id}`);
               mainWindow.webContents.send('open-meeting-note', id);
 
@@ -11348,8 +11449,7 @@ async function updateNoteWithRecordingInfo(recordingId) {
     // Read the current meetings data
     let meetingsData;
     try {
-      const fileData = await fs.promises.readFile(meetingsFilePath, 'utf8');
-      meetingsData = JSON.parse(fileData);
+      meetingsData = await fileOperationManager.readMeetingsData();
     } catch (error) {
       console.error('Error reading meetings data:', error);
       return;

@@ -24,13 +24,16 @@ class GoogleAuth {
     this.initialized = false;
     this.pendingState = null; // CSRF protection: stores expected state parameter
 
-    // Combined scopes for Calendar, Contacts, and User Profile
-    // Phase 6: Added userinfo.email for reliable user identification
+    // v1.3.0: Upgraded scopes for read/write Calendar, Contacts, and Gmail
     this.scopes = [
-      'https://www.googleapis.com/auth/calendar.readonly',
-      'https://www.googleapis.com/auth/contacts.readonly',
-      'https://www.googleapis.com/auth/userinfo.email', // Required for current user identification
+      'https://www.googleapis.com/auth/calendar.events',   // Read/write events (extendedProperties)
+      'https://www.googleapis.com/auth/contacts',           // Read/write contacts (custom fields, create)
+      'https://www.googleapis.com/auth/gmail.readonly',     // Read email threads
+      'https://www.googleapis.com/auth/userinfo.email',     // Current user identification
     ];
+
+    // Track whether a scope upgrade is needed (existing token has old scopes)
+    this.scopeUpgradeNeeded = false;
   }
 
   /**
@@ -99,6 +102,10 @@ class GoogleAuth {
       const token = JSON.parse(tokenData);
       this.oauth2Client.setCredentials(token);
       console.log('[GoogleAuth] Token loaded from:', this.tokenPath);
+
+      // v1.3.0: Check if the token has the required scopes
+      this._checkScopeUpgrade(token);
+
       return true;
     } catch (error) {
       if (error.code !== 'ENOENT') {
@@ -106,6 +113,40 @@ class GoogleAuth {
       }
       return false;
     }
+  }
+
+  /**
+   * v1.3.0: Check if saved token needs scope upgrade.
+   * Google tokens include a 'scope' field listing granted scopes.
+   * If any required scopes are missing, the user must re-authorize.
+   * @param {Object} token
+   */
+  _checkScopeUpgrade(token) {
+    if (!token.scope) {
+      // Token doesn't have scope info — assume upgrade needed
+      this.scopeUpgradeNeeded = true;
+      console.log('[GoogleAuth] Token missing scope field — scope upgrade needed');
+      return;
+    }
+
+    const grantedScopes = token.scope.split(' ');
+    const missingScopes = this.scopes.filter(s => !grantedScopes.includes(s));
+
+    if (missingScopes.length > 0) {
+      this.scopeUpgradeNeeded = true;
+      console.log('[GoogleAuth] Scope upgrade needed. Missing:', missingScopes);
+    } else {
+      this.scopeUpgradeNeeded = false;
+      console.log('[GoogleAuth] All required scopes are present');
+    }
+  }
+
+  /**
+   * v1.3.0: Check if scope upgrade is needed.
+   * @returns {boolean}
+   */
+  needsScopeUpgrade() {
+    return this.scopeUpgradeNeeded;
   }
 
   /**

@@ -1,14 +1,14 @@
 /**
- * Key Management Service (Phase 10.2)
- * Securely stores and retrieves API keys using Windows Credential Manager via keytar
- * Replaces plain-text .env storage with encrypted credential storage
+ * Key Management Service (v1.3.0)
+ * Securely stores and retrieves API keys using Electron safeStorage (DPAPI on Windows).
+ * Migrated from keytar (archived Dec 2022) to Electron's built-in safeStorage.
+ *
+ * On first v1.3 launch, attempts to migrate existing keys from keytar → safeStorage.
+ * If keytar is unavailable (native build failure, already removed), migration is skipped.
  */
 
-const keytar = require('keytar');
 const log = require('electron-log');
-
-// Service name for Windows Credential Manager
-const SERVICE_NAME = 'JD Notes Things';
+const SafeStorageKeyManager = require('./safeStorageKeyManager');
 
 // Supported API key types
 const API_KEY_TYPES = {
@@ -28,14 +28,76 @@ const API_KEY_TYPES = {
   TUNNEL_SUBDOMAIN: 'Localtunnel Subdomain (not recommended)',
 };
 
+// Try to load keytar for one-time migration (optional — may not be installed)
+let keytar = null;
+try {
+  keytar = require('keytar');
+} catch {
+  // keytar not available — fresh install or already removed
+}
+
+const KEYTAR_SERVICE_NAME = 'JD Notes Things';
+
 class KeyManagementService {
   constructor() {
-    this.serviceName = SERVICE_NAME;
     this.keyTypes = API_KEY_TYPES;
+    this.backend = new SafeStorageKeyManager();
+    this._migrationDone = false;
   }
 
   /**
-   * Store an API key securely in Windows Credential Manager
+   * One-time migration from keytar → safeStorage.
+   * Must be called after app.whenReady() since safeStorage requires it.
+   * Safe to call multiple times — runs only once.
+   */
+  async migrateFromKeytar() {
+    if (this._migrationDone) return;
+    this._migrationDone = true;
+
+    if (!keytar) {
+      log.info('[KeyManagement] keytar not available — skipping migration');
+      return;
+    }
+
+    if (!this.backend.isAvailable()) {
+      log.warn('[KeyManagement] safeStorage not available — skipping migration');
+      return;
+    }
+
+    // Check if we already have keys in safeStorage (migration already ran)
+    const existingKeys = this.backend.listStoredKeys();
+    if (existingKeys.length > 0) {
+      log.info(`[KeyManagement] safeStorage already has ${existingKeys.length} keys — skipping keytar migration`);
+      return;
+    }
+
+    log.info('[KeyManagement] Starting one-time migration from keytar → safeStorage');
+
+    let migrated = 0;
+    let failed = 0;
+
+    try {
+      const credentials = await keytar.findCredentials(KEYTAR_SERVICE_NAME);
+
+      for (const { account, password } of credentials) {
+        try {
+          this.backend.setKey(account, password);
+          migrated++;
+          log.info(`[KeyManagement] Migrated key: ${account}`);
+        } catch (error) {
+          failed++;
+          log.error(`[KeyManagement] Failed to migrate key ${account}:`, error.message);
+        }
+      }
+
+      log.info(`[KeyManagement] Migration complete: ${migrated} migrated, ${failed} failed out of ${credentials.length} total`);
+    } catch (error) {
+      log.error('[KeyManagement] keytar read failed during migration:', error.message);
+    }
+  }
+
+  /**
+   * Store an API key securely via safeStorage
    * @param {string} keyName - Key identifier (e.g., 'RECALLAI_API_KEY')
    * @param {string} value - Key value to store
    * @returns {Promise<boolean>} Success status
@@ -46,7 +108,7 @@ class KeyManagementService {
         throw new Error('Key name and value are required');
       }
 
-      await keytar.setPassword(this.serviceName, keyName, value);
+      this.backend.setKey(keyName, value);
       log.info(`[KeyManagement] Stored key: ${keyName}`);
       return true;
     } catch (error) {
@@ -56,13 +118,13 @@ class KeyManagementService {
   }
 
   /**
-   * Retrieve an API key from Windows Credential Manager
+   * Retrieve an API key from safeStorage
    * @param {string} keyName - Key identifier
    * @returns {Promise<string|null>} Key value or null if not found
    */
   async getKey(keyName) {
     try {
-      const value = await keytar.getPassword(this.serviceName, keyName);
+      const value = this.backend.getKey(keyName);
       if (value) {
         log.debug(`[KeyManagement] Retrieved key: ${keyName}`);
       } else {
@@ -76,13 +138,13 @@ class KeyManagementService {
   }
 
   /**
-   * Delete an API key from Windows Credential Manager
+   * Delete an API key from safeStorage
    * @param {string} keyName - Key identifier
    * @returns {Promise<boolean>} Success status
    */
   async deleteKey(keyName) {
     try {
-      const deleted = await keytar.deletePassword(this.serviceName, keyName);
+      const deleted = this.backend.deleteKey(keyName);
       if (deleted) {
         log.info(`[KeyManagement] Deleted key: ${keyName}`);
       } else {
@@ -101,10 +163,8 @@ class KeyManagementService {
    */
   async listKeys() {
     try {
-      const credentials = await keytar.findCredentials(this.serviceName);
-      const storedKeyNames = credentials.map(c => c.account);
+      const storedKeyNames = this.backend.listStoredKeys();
 
-      // Return all possible keys with their storage status
       const keyList = Object.keys(this.keyTypes).map(keyName => ({
         key: keyName,
         name: this.keyTypes[keyName],
@@ -126,8 +186,7 @@ class KeyManagementService {
    */
   async hasKey(keyName) {
     try {
-      const value = await keytar.getPassword(this.serviceName, keyName);
-      return value !== null;
+      return this.backend.hasKey(keyName);
     } catch (error) {
       log.error(`[KeyManagement] Failed to check key ${keyName}:`, error);
       return false;
@@ -135,7 +194,7 @@ class KeyManagementService {
   }
 
   /**
-   * Migrate API keys from .env file to Windows Credential Manager
+   * Migrate API keys from .env file to safeStorage
    * @param {Object} envVars - Environment variables from .env file
    * @returns {Promise<{migrated: Array, failed: Array, skipped: Array}>}
    */
@@ -146,27 +205,24 @@ class KeyManagementService {
       skipped: [],
     };
 
-    log.info('[KeyManagement] Starting migration from .env to Credential Manager');
+    log.info('[KeyManagement] Starting migration from .env to safeStorage');
 
     for (const keyName of Object.keys(this.keyTypes)) {
       try {
         const envValue = envVars[keyName];
 
-        // Skip if no value in .env
         if (!envValue) {
           results.skipped.push(keyName);
           continue;
         }
 
-        // Check if already exists in credential manager
         const existingValue = await this.getKey(keyName);
         if (existingValue) {
-          log.info(`[KeyManagement] Key ${keyName} already exists in Credential Manager, skipping`);
+          log.info(`[KeyManagement] Key ${keyName} already exists in safeStorage, skipping`);
           results.skipped.push(keyName);
           continue;
         }
 
-        // Store in credential manager
         await this.setKey(keyName, envValue);
         results.migrated.push(keyName);
       } catch (error) {
@@ -211,7 +267,6 @@ class KeyManagementService {
       return { valid: false, message: 'Key value cannot be empty' };
     }
 
-    // Basic format validation based on key type
     switch (keyName) {
       case 'RECALLAI_API_KEY':
       case 'ASSEMBLYAI_API_KEY':
@@ -271,16 +326,9 @@ class KeyManagementService {
    */
   async clearAllKeys() {
     try {
-      const credentials = await keytar.findCredentials(this.serviceName);
-      let deleted = 0;
-
-      for (const credential of credentials) {
-        await keytar.deletePassword(this.serviceName, credential.account);
-        deleted++;
-      }
-
-      log.warn(`[KeyManagement] Cleared ${deleted} stored credentials`);
-      return deleted;
+      const count = this.backend.clearAll();
+      log.warn(`[KeyManagement] Cleared ${count} stored credentials`);
+      return count;
     } catch (error) {
       log.error('[KeyManagement] Failed to clear credentials:', error);
       throw error;

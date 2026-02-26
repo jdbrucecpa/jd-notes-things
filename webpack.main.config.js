@@ -13,7 +13,7 @@ module.exports = {
   },
   externals: {
     '@recallai/desktop-sdk': 'commonjs @recallai/desktop-sdk',
-    keytar: 'commonjs keytar',
+    'better-sqlite3': 'commonjs better-sqlite3',
     // Optional dependency for unzipper S3 support - not used
     '@aws-sdk/client-s3': 'commonjs @aws-sdk/client-s3',
   },

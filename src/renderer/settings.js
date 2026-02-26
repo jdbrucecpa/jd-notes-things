@@ -107,9 +107,11 @@ export function openSettingsTab(tabName) {
   const settingsView = document.getElementById('settingsView');
   const mainView = document.getElementById('mainView');
   const contactsView = document.getElementById('contactsView');
+  const reportsView = document.getElementById('reportsView');
 
-  // Close contacts view if open
+  // Close other views if open
   if (contactsView) contactsView.style.display = 'none';
+  if (reportsView) reportsView.style.display = 'none';
 
   // Show settings view
   if (mainView) mainView.style.display = 'none';
@@ -169,9 +171,11 @@ export function initializeSettingsUI() {
   // Open settings (full-page view)
   if (settingsBtn) {
     settingsBtn.addEventListener('click', async () => {
-      // Close contacts view if open
+      // Close other views if open
       const contactsView = document.getElementById('contactsView');
+      const reportsView = document.getElementById('reportsView');
       if (contactsView) contactsView.style.display = 'none';
+      if (reportsView) reportsView.style.display = 'none';
 
       mainView.style.display = 'none';
       settingsView.style.display = 'block';

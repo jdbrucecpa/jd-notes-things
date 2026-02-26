@@ -385,36 +385,24 @@ function populateParticipants(meeting) {
 
   meeting.participants.forEach((participant, index) => {
     const participantItem = document.createElement('div');
-    participantItem.className = 'participant-item';
+    participantItem.className = 'participant-card';
     participantItem.dataset.index = index;
 
-    // Create initials for avatar
     const name = participant.name || participant.email || 'Unknown';
     const initials = getInitials(name);
-
-    // Determine if linked to a contact (has email or contactId)
     const isLinked = !!(participant.email || participant.contactId);
-
-    // Find speaker stats for this participant
     const participantStats = findParticipantSpeakerStats(participant, speakerStats);
+    const organization = participant.company || participant.organization || '';
 
-    // Build sub-info line: email and/or company
-    let subInfo = '';
-    if (participant.email) {
-      subInfo += `<div class="participant-email">${escapeHtml(participant.email)}</div>`;
+    // Status indicator
+    let statusBadge;
+    if (isLinked) {
+      statusBadge = '<span class="participant-status participant-status-matched" title="Matched to Google Contact"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>';
+    } else {
+      statusBadge = '<span class="participant-status participant-status-unmatched" title="No Google Contact">?</span>';
     }
-    if (participant.company || participant.organization) {
-      const company = participant.company || participant.organization;
-      subInfo += `<div class="participant-company">${escapeHtml(company)}</div>`;
-    }
 
-    // Name with optional link to contact and checkmark
-    const checkmarkIcon = '<svg class="linked-check" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
-    const nameHtml = isLinked && participant.email
-      ? `<a href="#" class="participant-name-link" data-email="${escapeHtml(participant.email)}">${escapeHtml(name)}</a>${checkmarkIcon}`
-      : escapeHtml(name);
-
-    // Build talk time badge if we have stats
+    // Talk time badge
     const talkTimeBadge = participantStats
       ? `<div class="participant-talk-time" title="${participantStats.wordCount} words">
            <span class="talk-time-percent">${participantStats.talkTimePercent}%</span>
@@ -424,25 +412,60 @@ function populateParticipants(meeting) {
          </div>`
       : '';
 
-    participantItem.innerHTML = `
-      <div class="participant-avatar">${escapeHtml(initials)}</div>
-      <div class="participant-info">
-        <div class="participant-name-row">
-          <span class="participant-name">${nameHtml}</span>
-          ${talkTimeBadge}
+    // Sub-info (email + org on collapsed card)
+    let subInfo = '';
+    if (participant.email) {
+      subInfo += `<div class="participant-email">${escapeHtml(participant.email)}</div>`;
+    }
+    if (organization) {
+      subInfo += `<div class="participant-company">${escapeHtml(organization)}</div>`;
+    }
+
+    // Collapsed state (always visible)
+    const collapsedHtml = `
+      <div class="participant-card-header" data-index="${index}">
+        <div class="participant-avatar">${escapeHtml(initials)}</div>
+        <div class="participant-info">
+          <div class="participant-name-row">
+            <span class="participant-name">${escapeHtml(name)}</span>
+            ${statusBadge}
+            ${talkTimeBadge}
+          </div>
+          ${subInfo}
         </div>
-        ${subInfo}
-      </div>
-      <div class="participant-actions">
-        <button class="btn btn-outline btn-xs change-btn" data-index="${index}">Change</button>
-        <button class="icon-btn remove-btn" title="Remove participant" data-index="${index}">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
-          </svg>
-        </button>
+        <div class="participant-actions">
+          <button class="btn btn-outline btn-xs change-btn" data-index="${index}">Change</button>
+          <button class="icon-btn remove-btn" title="Remove participant" data-index="${index}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/>
+            </svg>
+          </button>
+          <button class="icon-btn expand-btn" title="Show details" data-index="${index}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+          </button>
+        </div>
       </div>
     `;
 
+    // Expanded state (hidden by default, loaded on demand)
+    const expandedHtml = `
+      <div class="participant-card-expanded" data-index="${index}" style="display: none;">
+        <div class="expanded-section" id="participant-details-${index}">
+          <div class="expanded-section-loading">Loading details...</div>
+        </div>
+      </div>
+    `;
+
+    // Unmatched CTA (shown for unmatched participants)
+    const unmatchedCta = !isLinked ? `
+      <div class="participant-unmatched-cta" data-index="${index}">
+        <button class="btn btn-outline btn-xs add-to-contacts-btn" data-index="${index}" data-name="${escapeHtml(participant.originalName || name)}" data-email="${escapeHtml(participant.email || '')}">
+          + Add to Google Contacts
+        </button>
+      </div>
+    ` : '';
+
+    participantItem.innerHTML = collapsedHtml + unmatchedCta + expandedHtml;
     participantsList.appendChild(participantItem);
   });
 
@@ -454,6 +477,7 @@ function populateParticipants(meeting) {
 
   // Set up event listeners
   setupParticipantEventListeners();
+  setupExpandableCards(meeting);
 }
 
 /**
@@ -559,10 +583,306 @@ function setupRefreshMatchingButton() {
   });
 }
 
+// ===================================================================
+// v1.3.0: Expandable participant cards with deep Google integration
+// ===================================================================
+
+/**
+ * Set up expandable card toggle and lazy-load expanded content.
+ */
+function setupExpandableCards(meeting) {
+  const participantsList = document.getElementById('meetingDetailParticipants');
+  if (!participantsList) return;
+
+  // Expand/collapse toggles
+  participantsList.querySelectorAll('.expand-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const index = parseInt(btn.dataset.index);
+      toggleExpandedCard(index, meeting);
+    });
+  });
+
+  // Click on card header to expand
+  participantsList.querySelectorAll('.participant-card-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      // Don't expand if clicking buttons
+      if (e.target.closest('.btn') || e.target.closest('.icon-btn')) return;
+      const index = parseInt(header.dataset.index);
+      toggleExpandedCard(index, meeting);
+    });
+  });
+
+  // "Add to Google Contacts" buttons
+  participantsList.querySelectorAll('.add-to-contacts-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const name = btn.dataset.name;
+      const email = btn.dataset.email;
+      await handleAddToContacts(name, email, parseInt(btn.dataset.index), meeting);
+    });
+  });
+}
+
+/**
+ * Toggle expanded state of a participant card.
+ */
+function toggleExpandedCard(index, meeting) {
+  const expandedEl = document.querySelector(`.participant-card-expanded[data-index="${index}"]`);
+  const expandBtn = document.querySelector(`.expand-btn[data-index="${index}"]`);
+  if (!expandedEl) return;
+
+  const isVisible = expandedEl.style.display !== 'none';
+
+  // Collapse all other expanded cards
+  document.querySelectorAll('.participant-card-expanded').forEach(el => {
+    el.style.display = 'none';
+  });
+  document.querySelectorAll('.expand-btn').forEach(btn => {
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>';
+  });
+
+  if (!isVisible) {
+    expandedEl.style.display = 'block';
+    if (expandBtn) {
+      expandBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>';
+    }
+    // Load expanded content lazily
+    loadExpandedContent(index, meeting);
+  }
+}
+
+/**
+ * Load expanded card content (contact details, meeting history, emails, obsidian links).
+ */
+async function loadExpandedContent(index, meeting) {
+  const container = document.getElementById(`participant-details-${index}`);
+  if (!container) return;
+
+  const participant = meeting.participants[index];
+  if (!participant) return;
+
+  const sections = [];
+
+  // Contact Details Section
+  sections.push(renderContactDetailsSection(participant));
+
+  // Meeting History Section (async)
+  sections.push(await renderMeetingHistorySection(participant));
+
+  // Recent Emails Section (async)
+  sections.push(await renderRecentEmailsSection(participant));
+
+  // Obsidian Links Section
+  sections.push(renderObsidianLinksSection(participant));
+
+  container.innerHTML = sections.filter(Boolean).join('');
+
+  // Set up click handlers for external links
+  container.querySelectorAll('.external-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      const url = link.dataset.url;
+      if (url && window.electronAPI?.openExternal) {
+        window.electronAPI.openExternal(url);
+      }
+    });
+  });
+}
+
+/**
+ * Render contact details section (emails, phones, org, Google Contacts link).
+ */
+function renderContactDetailsSection(participant) {
+  const items = [];
+
+  if (participant.email) {
+    items.push(`<div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">${escapeHtml(participant.email)}</span></div>`);
+  }
+  if (participant.organization || participant.company) {
+    items.push(`<div class="detail-row"><span class="detail-label">Organization</span><span class="detail-value">${escapeHtml(participant.organization || participant.company)}</span></div>`);
+  }
+  if (participant.title) {
+    items.push(`<div class="detail-row"><span class="detail-label">Title</span><span class="detail-value">${escapeHtml(participant.title)}</span></div>`);
+  }
+  if (participant.googleContactResource) {
+    const contactUrl = `https://contacts.google.com/person/${participant.googleContactResource.replace('people/', '')}`;
+    items.push(`<div class="detail-row"><a href="#" class="external-link" data-url="${contactUrl}">Open in Google Contacts</a></div>`);
+  }
+
+  if (items.length === 0) return '';
+  return `<div class="expanded-section-group"><div class="expanded-section-title">Contact Details</div>${items.join('')}</div>`;
+}
+
+/**
+ * Render meeting history section (count, last meeting, recent list).
+ */
+async function renderMeetingHistorySection(participant) {
+  if (!participant.email) return '';
+
+  try {
+    const countResult = await window.electronAPI.dbGetMeetingCountForContact(participant.email);
+    if (!countResult?.success || countResult.count === 0) return '';
+
+    const meetingsResult = await window.electronAPI.dbGetMeetingsForContact(participant.email);
+    const meetings = meetingsResult?.meetings || [];
+    const recentMeetings = meetings.slice(0, 5);
+
+    const listHtml = recentMeetings.map(m => {
+      const date = new Date(m.date).toLocaleDateString();
+      return `<div class="history-meeting-item" data-meeting-id="${escapeHtml(m.id)}">${escapeHtml(m.title)} <span class="history-date">${date}</span></div>`;
+    }).join('');
+
+    return `
+      <div class="expanded-section-group">
+        <div class="expanded-section-title">Meeting History (${countResult.count})</div>
+        ${listHtml}
+      </div>
+    `;
+  } catch (error) {
+    console.error('[ParticipantCard] Error loading meeting history:', error);
+    return '';
+  }
+}
+
+/**
+ * Render recent email threads section (from Gmail).
+ */
+async function renderRecentEmailsSection(participant) {
+  if (!participant.email) return '';
+
+  try {
+    const result = await window.electronAPI.gmailGetThreadsByContact(participant.email, 5);
+    if (!result?.success || !result.threads || result.threads.length === 0) return '';
+
+    const threadsHtml = result.threads.map(t => {
+      const date = t.lastMessageDate ? new Date(t.lastMessageDate).toLocaleDateString() : '';
+      return `
+        <div class="email-thread-item">
+          <a href="#" class="external-link email-subject" data-url="${escapeHtml(t.gmailLink)}">${escapeHtml(t.subject)}</a>
+          <span class="email-meta">${date} (${t.messageCount})</span>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="expanded-section-group">
+        <div class="expanded-section-title">Recent Emails</div>
+        ${threadsHtml}
+      </div>
+    `;
+  } catch (error) {
+    console.error('[ParticipantCard] Error loading email threads:', error);
+    return '';
+  }
+}
+
+/**
+ * Render Obsidian links section (contact page, company page).
+ */
+function renderObsidianLinksSection(participant) {
+  const items = [];
+  const name = participant.name || participant.originalName;
+  const company = participant.organization || participant.company;
+
+  if (name) {
+    items.push(`<div class="detail-row"><span class="obsidian-link-check" data-type="contact" data-name="${escapeHtml(name)}">Contact page: checking...</span></div>`);
+  }
+  if (company) {
+    items.push(`<div class="detail-row"><span class="obsidian-link-check" data-type="company" data-name="${escapeHtml(company)}">Company page: checking...</span></div>`);
+  }
+
+  if (items.length === 0) return '';
+
+  // Check page existence asynchronously after render
+  setTimeout(async () => {
+    for (const el of document.querySelectorAll('.obsidian-link-check')) {
+      const type = el.dataset.type;
+      const checkName = el.dataset.name;
+      try {
+        const exists = type === 'contact'
+          ? await window.electronAPI.contactsContactPageExists(checkName)
+          : await window.electronAPI.contactsCompanyPageExists(checkName);
+
+        if (exists?.exists) {
+          el.innerHTML = `${type === 'contact' ? 'Contact' : 'Company'} page exists`;
+          el.classList.add('obsidian-exists');
+        } else {
+          const btnLabel = type === 'contact' ? 'Create Contact Page' : 'Create Company Page';
+          el.innerHTML = `<button class="btn btn-outline btn-xs create-obsidian-page-btn" data-type="${type}" data-name="${escapeHtml(checkName)}">${btnLabel}</button>`;
+
+          // Set up click handler
+          el.querySelector('.create-obsidian-page-btn')?.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const btn = e.target;
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+            try {
+              if (type === 'contact') {
+                await window.electronAPI.contactsCreateContactPage({ name: checkName }, {});
+              } else {
+                await window.electronAPI.contactsCreateCompanyPage({ name: checkName }, {});
+              }
+              el.innerHTML = `${type === 'contact' ? 'Contact' : 'Company'} page created`;
+              el.classList.add('obsidian-exists');
+            } catch (_err) {
+              btn.disabled = false;
+              btn.textContent = 'Failed - retry';
+            }
+          });
+        }
+      } catch {
+        el.textContent = `${type === 'contact' ? 'Contact' : 'Company'} page: unknown`;
+      }
+    }
+  }, 100);
+
+  return `<div class="expanded-section-group"><div class="expanded-section-title">Obsidian Vault</div>${items.join('')}</div>`;
+}
+
+/**
+ * Handle "Add to Google Contacts" button click.
+ */
+async function handleAddToContacts(name, email, index, meeting) {
+  try {
+    // Infer organization from email domain
+    let organization = '';
+    if (email && email.includes('@')) {
+      const domain = email.split('@')[1];
+      if (domain && !domain.match(/gmail|yahoo|hotmail|outlook|aol|icloud/i)) {
+        organization = domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
+      }
+    }
+
+    const result = await window.electronAPI.contactsCreateContact({
+      name: name,
+      email: email || undefined,
+      organization: organization || undefined,
+    });
+
+    if (result?.success && result.contact) {
+      console.log('[ParticipantCard] Created Google Contact:', result.contact.name);
+
+      // Update participant data
+      if (meeting.participants[index]) {
+        meeting.participants[index].email = result.contact.emails?.[0] || email;
+        meeting.participants[index].organization = result.contact.organization || organization;
+        meeting.participants[index].googleContactResource = result.contact.resourceName;
+      }
+
+      // Re-render
+      populateParticipants(meeting);
+    } else {
+      console.error('[ParticipantCard] Failed to create contact:', result?.error);
+    }
+  } catch (error) {
+    console.error('[ParticipantCard] Error creating contact:', error);
+  }
+}
+
 /**
  * Remove participant from card and save
- * Note: No confirmation dialog - user is already in edit mode and clicking remove is intentional.
- * Using confirm() causes Electron focus issues with subsequent modals.
+ * Note: No confirmation dialog - user is already in edit mode and clicking remove is intentional
  */
 async function removeParticipantFromCard(index) {
   if (!currentMeeting || !currentMeeting.participants) return;

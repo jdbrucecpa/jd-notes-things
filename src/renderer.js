@@ -301,6 +301,9 @@ function initializeTitleBar() {
     menuExit: () => {
       window.electronAPI.windowClose();
     },
+    menuReports: () => {
+      openReportsView();
+    },
     menuReload: () => location.reload(),
     menuToggleDevTools: () => {
       // Dev tools toggling needs to be done via main process
@@ -444,7 +447,7 @@ function stopMainTimer() {
   }
 }
 
-// Search/filter state (v1.2: Extended with company, contact, platform filters)
+// Search/filter state (v1.2: Extended with company, contact, platform filters; v1.3: recording, calendar)
 const searchState = {
   query: '',
   filters: {
@@ -455,6 +458,8 @@ const searchState = {
     contact: '', // v1.2: Filter by contact email
     platform: '', // v1.2: Filter by platform (zoom, teams, etc.)
     syncStatus: '', // v1.2: Filter by sync status ('synced', 'not-synced', '')
+    recordingStatus: '', // v1.3: Filter by recording status ('has-recording', 'no-recording', '')
+    calendarStatus: '', // v1.3: Filter by calendar link ('linked', 'not-linked', '')
   },
 };
 
@@ -1799,6 +1804,7 @@ function createCalendarMeetingCard(meeting) {
 // Google authentication state (unified for Calendar and Contacts)
 let googleAuthenticated = false;
 let contactsCount = 0;
+let scopeUpgradeNeeded = false;
 
 // Function to initialize Google integration (unified for Calendar and Contacts)
 async function initializeGoogle() {
@@ -1814,7 +1820,14 @@ async function initializeGoogle() {
       console.log('Google already authenticated');
       googleAuthenticated = true;
       contactsCount = statusResult.contactCount || 0;
+      scopeUpgradeNeeded = statusResult.scopeUpgradeNeeded || false;
       updateGoogleStatus(true);
+
+      // v1.3: Show scope upgrade banner if token has insufficient scopes
+      if (scopeUpgradeNeeded) {
+        showScopeUpgradeBanner();
+      }
+
       return true;
     } else {
       console.log('Google not authenticated');
@@ -1836,11 +1849,67 @@ function updateGoogleStatus(isConnected) {
 
   if (isConnected) {
     googleBtn.classList.add('connected');
-    googleBtn.title = `Google Connected (${contactsCount} contacts) - Click to disconnect`;
+    const upgradeHint = scopeUpgradeNeeded ? ' (scope upgrade needed)' : '';
+    googleBtn.title = `Google Connected (${contactsCount} contacts)${upgradeHint} - Click to disconnect`;
   } else {
     googleBtn.classList.remove('connected');
     googleBtn.title = 'Connect Google (Calendar + Contacts)';
   }
+}
+
+// v1.3: Show banner when Google token needs scope upgrade for new features
+function showScopeUpgradeBanner() {
+  // Don't show if already dismissed this session
+  if (document.getElementById('scopeUpgradeBanner')) return;
+
+  const banner = document.createElement('div');
+  banner.id = 'scopeUpgradeBanner';
+  banner.className = 'scope-upgrade-banner';
+  banner.innerHTML = `
+    <div class="scope-upgrade-content">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/>
+      </svg>
+      <span>
+        <strong>v1.3 Update:</strong> New features (Gmail, Contacts editing, Calendar linking) require updated Google permissions.
+      </span>
+      <button class="scope-upgrade-btn" id="scopeUpgradeBtn">Re-authorize Google</button>
+      <button class="scope-upgrade-dismiss" id="scopeUpgradeDismiss" title="Dismiss">&times;</button>
+    </div>
+  `;
+
+  // Insert at top of main content area
+  const mainContent = document.querySelector('.main-content') || document.body;
+  mainContent.prepend(banner);
+
+  // Handle re-authorize click
+  document.getElementById('scopeUpgradeBtn').addEventListener('click', async () => {
+    try {
+      // Sign out first to clear old token, then re-auth with new scopes
+      await window.electronAPI.googleSignOut();
+      const result = await window.electronAPI.googleOpenAuthWindow();
+      if (result.success) {
+        scopeUpgradeNeeded = false;
+        banner.remove();
+        showToast('Google permissions updated successfully!', 'success');
+        // Refresh status
+        const statusResult = await window.electronAPI.googleGetStatus();
+        if (statusResult.success) {
+          contactsCount = statusResult.contactCount || 0;
+        }
+        updateGoogleStatus(true);
+        await fetchCalendarMeetings();
+      }
+    } catch (error) {
+      console.error('Scope upgrade failed:', error);
+      showToast('Failed to update Google permissions. Please try again.', 'error');
+    }
+  });
+
+  // Handle dismiss
+  document.getElementById('scopeUpgradeDismiss').addEventListener('click', () => {
+    banner.remove();
+  });
 }
 
 // Function to handle Google button click
@@ -1907,6 +1976,282 @@ async function handleGoogleButtonClick() {
         <span class="toolbar-status-badge" id="googleStatus"></span>
       `;
     }
+  }
+}
+
+// ===================================================================
+// v1.3: Reports View
+// ===================================================================
+
+let activeReportType = 'no-recording';
+
+function openReportsView() {
+  const reportsView = document.getElementById('reportsView');
+  const mainView = document.getElementById('mainView');
+  const settingsView = document.getElementById('settingsView');
+  const contactsView = document.getElementById('contactsView');
+
+  // Close other views
+  if (settingsView) settingsView.style.display = 'none';
+  if (contactsView) contactsView.style.display = 'none';
+  if (mainView) mainView.style.display = 'none';
+
+  if (reportsView) {
+    reportsView.style.display = 'flex';
+    initializeReportsView();
+  }
+}
+
+function closeReportsView() {
+  const reportsView = document.getElementById('reportsView');
+  const mainView = document.getElementById('mainView');
+  if (reportsView) reportsView.style.display = 'none';
+  if (mainView) mainView.style.display = 'block';
+}
+
+function initializeReportsView() {
+  // Set default date range to last 30 days
+  const today = new Date();
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(today.getDate() - 30);
+
+  const dateFrom = document.getElementById('reportDateFrom');
+  const dateTo = document.getElementById('reportDateTo');
+  if (dateFrom && !dateFrom.value) dateFrom.value = thirtyDaysAgo.toISOString().split('T')[0];
+  if (dateTo && !dateTo.value) dateTo.value = today.toISOString().split('T')[0];
+
+  // Close button
+  const closeBtn = document.getElementById('closeReports');
+  if (closeBtn) {
+    closeBtn.onclick = closeReportsView;
+  }
+
+  // Date range presets
+  document.querySelectorAll('[data-report-range]').forEach(btn => {
+    btn.onclick = () => {
+      const days = parseInt(btn.dataset.reportRange, 10);
+      const to = new Date();
+      const from = new Date(to);
+      from.setDate(to.getDate() - days);
+      if (dateFrom) dateFrom.value = from.toISOString().split('T')[0];
+      if (dateTo) dateTo.value = to.toISOString().split('T')[0];
+      runReport();
+    };
+  });
+
+  // Date change listeners
+  if (dateFrom) dateFrom.onchange = runReport;
+  if (dateTo) dateTo.onchange = runReport;
+
+  // Report type tabs
+  document.querySelectorAll('.reports-tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.reports-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      activeReportType = tab.dataset.report;
+      renderReportResults();
+    };
+  });
+
+  // Run initial report
+  runReport();
+}
+
+// Cached report data
+const reportData = { noRecording: [], noCalendar: [] };
+
+async function runReport() {
+  const dateFrom = document.getElementById('reportDateFrom')?.value;
+  const dateTo = document.getElementById('reportDateTo')?.value;
+
+  if (!dateFrom || !dateTo) return;
+
+  const resultsEl = document.getElementById('reportsResults');
+  if (resultsEl) {
+    resultsEl.innerHTML = '<div class="reports-loading">Loading report data...</div>';
+  }
+
+  try {
+    // Fetch both report types in parallel
+    const [noRecResult, noCalResult] = await Promise.all([
+      window.electronAPI.calendarReportMeetingsWithoutRecordings(dateFrom, dateTo),
+      window.electronAPI.calendarReportRecordingsWithoutCalendar(dateFrom, dateTo),
+    ]);
+
+    reportData.noRecording = noRecResult.success ? noRecResult.meetings : [];
+    reportData.noCalendar = noCalResult.success ? noCalResult.meetings : [];
+
+    // Update tab counts
+    const noRecCount = document.getElementById('noRecordingCount');
+    const noCalCount = document.getElementById('noCalendarCount');
+    if (noRecCount) noRecCount.textContent = reportData.noRecording.length;
+    if (noCalCount) noCalCount.textContent = reportData.noCalendar.length;
+
+    renderReportResults();
+  } catch (error) {
+    console.error('Report error:', error);
+    if (resultsEl) {
+      resultsEl.innerHTML = `<div class="reports-empty-state"><p>Error loading report: ${error.message}</p></div>`;
+    }
+  }
+}
+
+function renderReportResults() {
+  const resultsEl = document.getElementById('reportsResults');
+  if (!resultsEl) return;
+
+  const meetings = activeReportType === 'no-recording'
+    ? reportData.noRecording
+    : reportData.noCalendar;
+
+  if (meetings.length === 0) {
+    const message = activeReportType === 'no-recording'
+      ? 'All calendar meetings in this range have recordings.'
+      : 'All recordings in this range are linked to calendar events.';
+    resultsEl.innerHTML = `
+      <div class="reports-empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor" opacity="0.3"/>
+        </svg>
+        <p>${message}</p>
+      </div>`;
+    return;
+  }
+
+  resultsEl.innerHTML = meetings.map(meeting => {
+    const date = meeting.date ? new Date(meeting.date).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric'
+    }) : 'Unknown date';
+    const time = meeting.startTime ? new Date(meeting.startTime).toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit'
+    }) : '';
+    const platform = meeting.platform || 'Unknown';
+    const participantCount = meeting.participants?.length || meeting.participantEmails?.length || 0;
+
+    // Action button depends on report type
+    const actionBtn = activeReportType === 'no-recording'
+      ? '' // No action for missing recordings — user needs to record
+      : `<button class="btn btn-outline btn-sm report-link-btn" data-meeting-id="${meeting.id}" title="Link to a calendar event">Link to Calendar</button>`;
+
+    return `
+      <div class="report-card" data-meeting-id="${meeting.id}">
+        <div class="report-card-info">
+          <div class="report-card-title">${escapeHtml(meeting.title || 'Untitled Meeting')}</div>
+          <div class="report-card-meta">
+            <span>${date}${time ? ' at ' + time : ''}</span>
+            <span>${platform}</span>
+            ${participantCount ? `<span>${participantCount} participants</span>` : ''}
+          </div>
+        </div>
+        <div class="report-card-actions">
+          ${actionBtn}
+          <button class="btn btn-outline btn-sm report-open-btn" data-meeting-id="${meeting.id}">Open</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Bind click handlers
+  resultsEl.querySelectorAll('.report-open-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const meetingId = btn.dataset.meetingId;
+      closeReportsView();
+      showEditorView(meetingId);
+    });
+  });
+
+  resultsEl.querySelectorAll('.report-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const meetingId = card.dataset.meetingId;
+      closeReportsView();
+      showEditorView(meetingId);
+    });
+  });
+
+  // Link to calendar button handlers
+  resultsEl.querySelectorAll('.report-link-btn').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const meetingId = btn.dataset.meetingId;
+      await showCalendarLinkingDialog(meetingId);
+    });
+  });
+}
+
+// Calendar linking dialog for orphaned recordings
+async function showCalendarLinkingDialog(meetingId) {
+  const dateFrom = document.getElementById('reportDateFrom')?.value;
+  const dateTo = document.getElementById('reportDateTo')?.value;
+
+  if (!dateFrom || !dateTo) return;
+
+  try {
+    // Fetch calendar events in the date range
+    const result = await window.electronAPI.calendarGetEventsInRange(dateFrom, dateTo);
+    if (!result.success || !result.meetings?.length) {
+      showToast('No calendar events found in this date range.', 'warning');
+      return;
+    }
+
+    // Filter out events that already have recordings
+    const availableEvents = result.meetings.filter(e => !e.hasRecording);
+    if (availableEvents.length === 0) {
+      showToast('All calendar events in this range already have recordings.', 'warning');
+      return;
+    }
+
+    // Build a simple selection dialog
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;';
+
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:var(--card-bg);border-radius:12px;padding:24px;max-width:500px;width:90%;max-height:70vh;display:flex;flex-direction:column;';
+    modal.innerHTML = `
+      <h3 style="margin:0 0 16px;color:var(--text-primary);">Link to Calendar Event</h3>
+      <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+        ${availableEvents.map(event => {
+          const evDate = new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          const evTime = event.startTime ? new Date(event.startTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+          return `<button class="report-card calendar-link-option" data-event-id="${event.calendarEventId}" style="text-align:left;cursor:pointer;border:1px solid var(--border-color);border-radius:8px;padding:10px 14px;background:var(--card-bg);">
+            <div class="report-card-title">${escapeHtml(event.title || 'Untitled')}</div>
+            <div class="report-card-meta"><span>${evDate}${evTime ? ' at ' + evTime : ''}</span></div>
+          </button>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+        <button class="btn btn-secondary" id="cancelLinkDialog">Cancel</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Cancel
+    document.getElementById('cancelLinkDialog').onclick = () => overlay.remove();
+    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+    // Select event
+    modal.querySelectorAll('.calendar-link-option').forEach(opt => {
+      opt.addEventListener('click', async () => {
+        const calendarEventId = opt.dataset.eventId;
+        try {
+          const linkResult = await window.electronAPI.calendarLinkMeeting(meetingId, calendarEventId);
+          if (linkResult.success) {
+            showToast('Meeting linked to calendar event!', 'success');
+            overlay.remove();
+            runReport(); // Refresh report
+          } else {
+            showToast('Failed to link: ' + (linkResult.error || 'Unknown error'), 'error');
+          }
+        } catch (err) {
+          showToast('Link failed: ' + err.message, 'error');
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Calendar linking error:', error);
+    showToast('Error loading calendar events: ' + error.message, 'error');
   }
 }
 
@@ -2423,7 +2768,7 @@ async function createNewMeeting(calendarMeeting = null) {
 function filterMeetings(meetings) {
   const { filters } = searchState;
 
-  // v1.2: Check if any filters are active
+  // v1.2/v1.3: Check if any filters are active
   const hasActiveFilters =
     searchState.query ||
     filters.dateFrom ||
@@ -2432,7 +2777,9 @@ function filterMeetings(meetings) {
     filters.company ||
     filters.contact ||
     filters.platform ||
-    filters.syncStatus;
+    filters.syncStatus ||
+    filters.recordingStatus ||
+    filters.calendarStatus;
 
   if (!hasActiveFilters) {
     return meetings; // No filters active, return all meetings
@@ -2529,6 +2876,28 @@ function filterMeetings(meetings) {
         if (meetingPlatform !== filters.platform.toLowerCase()) {
           return false;
         }
+      }
+    }
+
+    // v1.3: Recording status filter
+    if (filters.recordingStatus) {
+      const hasRecording = !!(meeting.recordingId || meeting.videoFile || meeting.recordingComplete);
+      if (filters.recordingStatus === 'has-recording' && !hasRecording) {
+        return false;
+      }
+      if (filters.recordingStatus === 'no-recording' && hasRecording) {
+        return false;
+      }
+    }
+
+    // v1.3: Calendar link status filter
+    if (filters.calendarStatus) {
+      const isLinked = !!(meeting.calendarEventId || meeting.calendarHtmlLink);
+      if (filters.calendarStatus === 'linked' && !isLinked) {
+        return false;
+      }
+      if (filters.calendarStatus === 'not-linked' && isLinked) {
+        return false;
       }
     }
 
@@ -2797,6 +3166,8 @@ function countActiveFilters() {
   if (filters.platform) count++;
   if (filters.syncStatus) count++;
   if (filters.notSynced) count++; // legacy
+  if (filters.recordingStatus) count++;
+  if (filters.calendarStatus) count++;
 
   return count;
 }
@@ -2828,17 +3199,23 @@ function clearAllFilters() {
   searchState.filters.platform = '';
   searchState.filters.syncStatus = '';
   searchState.filters.notSynced = false;
+  searchState.filters.recordingStatus = '';
+  searchState.filters.calendarStatus = '';
 
   // Reset dropdowns
   const companySelect = document.getElementById('filterCompany');
   const contactSelect = document.getElementById('filterContact');
   const platformSelect = document.getElementById('filterPlatform');
   const syncSelect = document.getElementById('filterSyncStatus');
+  const recordingSelect = document.getElementById('filterRecordingStatus');
+  const calendarSelect = document.getElementById('filterCalendarStatus');
 
   if (companySelect) companySelect.value = '';
   if (contactSelect) contactSelect.value = '';
   if (platformSelect) platformSelect.value = '';
   if (syncSelect) syncSelect.value = '';
+  if (recordingSelect) recordingSelect.value = '';
+  if (calendarSelect) calendarSelect.value = '';
 
   // Clear active view
   savedViews.activeViewId = null;
@@ -2964,17 +3341,23 @@ function applyView(viewId) {
   searchState.filters.platform = view.filters.platform || '';
   searchState.filters.syncStatus = view.filters.syncStatus || '';
   searchState.filters.notSynced = view.filters.syncStatus === 'not-synced';
+  searchState.filters.recordingStatus = view.filters.recordingStatus || '';
+  searchState.filters.calendarStatus = view.filters.calendarStatus || '';
 
   // Update dropdowns
   const companySelect = document.getElementById('filterCompany');
   const contactSelect = document.getElementById('filterContact');
   const platformSelect = document.getElementById('filterPlatform');
   const syncSelect = document.getElementById('filterSyncStatus');
+  const recordingSelect = document.getElementById('filterRecordingStatus');
+  const calendarSelect = document.getElementById('filterCalendarStatus');
 
   if (companySelect) companySelect.value = searchState.filters.company;
   if (contactSelect) contactSelect.value = searchState.filters.contact;
   if (platformSelect) platformSelect.value = searchState.filters.platform;
   if (syncSelect) syncSelect.value = searchState.filters.syncStatus;
+  if (recordingSelect) recordingSelect.value = searchState.filters.recordingStatus;
+  if (calendarSelect) calendarSelect.value = searchState.filters.calendarStatus;
 
   updateFilterCountBadge();
   renderMeetings();
@@ -3031,6 +3414,8 @@ async function saveCurrentFiltersAsView() {
           contact: searchState.filters.contact,
           platform: searchState.filters.platform,
           syncStatus: searchState.filters.syncStatus,
+          recordingStatus: searchState.filters.recordingStatus,
+          calendarStatus: searchState.filters.calendarStatus,
         },
         createdAt: new Date().toISOString(),
       };
@@ -3807,13 +4192,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Listen for quick record shortcut (starts in-person meeting recording)
   window.electronAPI.onQuickRecordRequested(() => {
-    // Switch to main view if settings are open
+    // Switch to main view if another view is open
     const settingsView = document.getElementById('settingsView');
+    const reportsView = document.getElementById('reportsView');
     const mainView = document.getElementById('mainView');
-    if (settingsView && mainView && settingsView.style.display !== 'none') {
-      settingsView.style.display = 'none';
-      mainView.style.display = 'block';
-    }
+    if (settingsView) settingsView.style.display = 'none';
+    if (reportsView) reportsView.style.display = 'none';
+    if (mainView) mainView.style.display = 'block';
 
     const newNoteBtn = document.getElementById('newNoteBtn');
     if (newNoteBtn) {
@@ -3825,13 +4210,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Listen for toggle recording shortcut
   window.electronAPI.onToggleRecordingShortcut(() => {
-    // Switch to main view if settings are open
+    // Switch to main view if another view is open
     const settingsView = document.getElementById('settingsView');
+    const reportsView = document.getElementById('reportsView');
     const mainView = document.getElementById('mainView');
-    if (settingsView && mainView && settingsView.style.display !== 'none') {
-      settingsView.style.display = 'none';
-      mainView.style.display = 'block';
-    }
+    if (settingsView) settingsView.style.display = 'none';
+    if (reportsView) reportsView.style.display = 'none';
+    if (mainView) mainView.style.display = 'block';
 
     const stopRecordingBtn = document.getElementById('stopRecordingBtn');
     const joinMeetingBtn = document.getElementById('joinMeetingBtn');
@@ -4297,6 +4682,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         searchState.filters.syncStatus = filterSyncStatus.value;
         // Also update legacy notSynced flag for compatibility
         searchState.filters.notSynced = filterSyncStatus.value === 'not-synced';
+        updateFilterCountBadge();
+        renderMeetings();
+      });
+    }
+
+    // v1.3: Recording status filter
+    const filterRecordingStatus = document.getElementById('filterRecordingStatus');
+    if (filterRecordingStatus) {
+      filterRecordingStatus.addEventListener('change', () => {
+        searchState.filters.recordingStatus = filterRecordingStatus.value;
+        updateFilterCountBadge();
+        renderMeetings();
+      });
+    }
+
+    // v1.3: Calendar link status filter
+    const filterCalendarStatus = document.getElementById('filterCalendarStatus');
+    if (filterCalendarStatus) {
+      filterCalendarStatus.addEventListener('change', () => {
+        searchState.filters.calendarStatus = filterCalendarStatus.value;
         updateFilterCountBadge();
         renderMeetings();
       });

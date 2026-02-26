@@ -85,6 +85,31 @@ contextBridge.exposeInMainWorld('electronAPI', {
   googleOpenAuthWindow: () => ipcRenderer.invoke('google:openAuthWindow'),
   // Google Calendar integration
   getCalendarMeetings: hours => ipcRenderer.invoke('calendar:getUpcomingMeetings', hours),
+  // v1.3.0: Calendar extended properties, linking, reports
+  calendarUpdateEventProperties: (eventId, properties) =>
+    ipcRenderer.invoke('calendar:updateEventProperties', eventId, properties),
+  calendarGetEventsInRange: (startDate, endDate) =>
+    ipcRenderer.invoke('calendar:getEventsInRange', startDate, endDate),
+  calendarCheckDuplicate: calendarEventId =>
+    ipcRenderer.invoke('calendar:checkDuplicate', calendarEventId),
+  calendarLinkMeeting: (meetingId, calendarEventId) =>
+    ipcRenderer.invoke('calendar:linkMeeting', meetingId, calendarEventId),
+  calendarReportMeetingsWithoutRecordings: (startDate, endDate) =>
+    ipcRenderer.invoke('calendar:reportMeetingsWithoutRecordings', startDate, endDate),
+  calendarReportRecordingsWithoutCalendar: (startDate, endDate) =>
+    ipcRenderer.invoke('calendar:reportRecordingsWithoutCalendar', startDate, endDate),
+  // v1.3.0: Gmail integration
+  gmailGetThreadsByContact: (email, maxResults) =>
+    ipcRenderer.invoke('gmail:getThreadsByContact', email, maxResults),
+  // v1.3.0: Database query shortcuts
+  dbGetMeetingsForContact: email =>
+    ipcRenderer.invoke('db:getMeetingsForContact', email),
+  dbGetMeetingCountForContact: email =>
+    ipcRenderer.invoke('db:getMeetingCountForContact', email),
+  dbGetMeetingsInRange: (startDate, endDate, filters) =>
+    ipcRenderer.invoke('db:getMeetingsInRange', startDate, endDate, filters),
+  dbGetMeetingsForOrganization: organization =>
+    ipcRenderer.invoke('db:getMeetingsForOrganization', organization),
   // Template system (Phase 4)
   templatesGetAll: () => ipcRenderer.invoke('templates:getAll'),
   templatesGetById: templateId => ipcRenderer.invoke('templates:getById', templateId),
@@ -160,6 +185,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('contacts:companyPageExists', companyName),
   contactsRematchParticipants: meetingId =>
     ipcRenderer.invoke('contacts:rematchParticipants', meetingId),
+  // v1.3.0: Contact write capabilities
+  contactsCreateContact: contactData =>
+    ipcRenderer.invoke('contacts:createContact', contactData),
+  contactsUpdateCustomFields: (resourceName, fields) =>
+    ipcRenderer.invoke('contacts:updateCustomFields', resourceName, fields),
+  contactsGetCustomFields: resourceName =>
+    ipcRenderer.invoke('contacts:getCustomFields', resourceName),
+  contactsUpdateMeetingStats: (resourceName, meetingInfo) =>
+    ipcRenderer.invoke('contacts:updateMeetingStats', resourceName, meetingInfo),
   speakersMatchSpeakers: (transcript, participantEmails, options) =>
     ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),
   speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) =>
