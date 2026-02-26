@@ -688,6 +688,16 @@ async function loadExpandedContent(index, meeting) {
       }
     });
   });
+
+  // Set up click handlers for meeting history items
+  container.querySelectorAll('.history-meeting-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const meetingId = item.dataset.meetingId;
+      if (meetingId && window.showMeetingDetail) {
+        window.showMeetingDetail(meetingId);
+      }
+    });
+  });
 }
 
 /**
@@ -698,6 +708,11 @@ function renderContactDetailsSection(participant) {
 
   if (participant.email) {
     items.push(`<div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">${escapeHtml(participant.email)}</span></div>`);
+  }
+  if (participant.phones && participant.phones.length > 0) {
+    for (const phone of participant.phones) {
+      items.push(`<div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">${escapeHtml(phone)}</span></div>`);
+    }
   }
   if (participant.organization || participant.company) {
     items.push(`<div class="detail-row"><span class="detail-label">Organization</span><span class="detail-value">${escapeHtml(participant.organization || participant.company)}</span></div>`);

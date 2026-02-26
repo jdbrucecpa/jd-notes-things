@@ -5971,20 +5971,28 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   gap: 12px;
 }
 
-.participant-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
+.participant-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   transition: all 0.2s ease;
+  overflow: hidden;
 }
 
-.participant-item:hover {
-  background: var(--card-hover);
+.participant-card:hover {
   border-color: var(--primary-color);
+}
+
+.participant-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  cursor: pointer;
+}
+
+.participant-card-header:hover {
+  background: var(--card-hover);
 }
 
 .participant-avatar {
@@ -6128,25 +6136,187 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 /* Participant actions - always visible */
-.participant-item .participant-actions {
+.participant-card .participant-actions {
   display: flex;
   gap: 4px;
 }
 
-.participant-item .participant-actions .icon-btn {
+.participant-card .participant-actions .icon-btn {
   width: 28px;
   height: 28px;
   padding: 4px;
   opacity: 0.6;
 }
 
-.participant-item .participant-actions .icon-btn:hover {
+.participant-card .participant-actions .icon-btn:hover {
   opacity: 1;
   background: var(--bg-secondary);
 }
 
-.participant-item .participant-actions .icon-btn.remove-btn:hover {
+.participant-card .participant-actions .icon-btn.remove-btn:hover {
   color: var(--color-error);
+}
+
+/* Participant status badge (matched/unmatched) */
+.participant-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.participant-status-matched {
+  background: var(--color-success, #4CAF50);
+  color: #fff;
+}
+
+.participant-status-unmatched {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+/* Unmatched participant CTA */
+.participant-unmatched-cta {
+  padding: 4px 12px 8px 60px; /* left indent aligns with info (avatar 36px + gap 12px + padding 12px) */
+}
+
+/* Expanded card section */
+.participant-card-expanded {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.expanded-section-group {
+  margin-bottom: 16px;
+}
+
+.expanded-section-group:last-child {
+  margin-bottom: 0;
+}
+
+.expanded-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.expanded-section-loading {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* Contact detail rows */
+.detail-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.detail-label {
+  color: var(--text-secondary);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.detail-value {
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+/* Meeting history items */
+.history-meeting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.history-meeting-item:hover {
+  background: var(--bg-primary);
+}
+
+.history-date {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+/* Email thread items */
+.email-thread-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+.email-thread-item:hover {
+  background: var(--bg-primary);
+}
+
+.email-subject {
+  font-size: 13px;
+  color: var(--primary-color);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.email-subject:hover {
+  text-decoration: underline;
+}
+
+.email-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Obsidian vault link checks */
+.obsidian-link-check {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.obsidian-exists {
+  color: var(--color-success, #4CAF50);
+}
+
+/* External links (Google Contacts, Gmail) */
+.external-link {
+  font-size: 13px;
+  color: var(--primary-color);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.external-link:hover {
+  text-decoration: underline;
 }
 
 /* Add participant button - always visible */

@@ -123,9 +123,14 @@ class GoogleAuth {
    */
   _checkScopeUpgrade(token) {
     if (!token.scope) {
-      // Token doesn't have scope info — assume upgrade needed
-      this.scopeUpgradeNeeded = true;
-      console.log('[GoogleAuth] Token missing scope field — scope upgrade needed');
+      // Token without scope field likely predates v1.3 — check if it has a refresh_token
+      // which indicates a real (old) token vs a corrupted one
+      if (token.refresh_token) {
+        this.scopeUpgradeNeeded = true;
+        console.log('[GoogleAuth] Token missing scope field — scope upgrade needed');
+      } else {
+        console.log('[GoogleAuth] Token missing scope field and refresh_token — ignoring');
+      }
       return;
     }
 

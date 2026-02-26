@@ -396,6 +396,8 @@ class GoogleContacts {
 
     // Build the contact resource
     const requestBody = {
+      // Simple first/last split — works for most Western names; mononyms or complex names
+      // (e.g., "Dr. Jean-Pierre de la Croix") may not split correctly
       names: name ? [{ givenName: name.split(' ')[0], familyName: name.split(' ').slice(1).join(' ') || '' }] : [],
       emailAddresses: email ? [{ value: email, type: 'work' }] : [],
     };

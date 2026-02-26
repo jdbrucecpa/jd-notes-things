@@ -14,6 +14,7 @@
  */
 
 const { google } = require('googleapis');
+const log = require('electron-log');
 
 class Gmail {
   /**
@@ -33,17 +34,17 @@ class Gmail {
    */
   initialize() {
     if (!this.googleAuth.isAuthenticated()) {
-      console.log('[Gmail] Not authenticated');
+      log.info('[Gmail] Not authenticated');
       return false;
     }
 
     try {
       const auth = this.googleAuth.getClient();
       this.gmail = google.gmail({ version: 'v1', auth });
-      console.log('[Gmail] Initialized');
+      log.info('[Gmail] Initialized');
       return true;
     } catch (error) {
-      console.error('[Gmail] Initialization error:', error.message);
+      log.error('[Gmail] Initialization error:', error.message);
       return false;
     }
   }
@@ -71,8 +72,8 @@ class Gmail {
 
     await this.googleAuth.refreshTokenIfNeeded();
 
-    const query = `from:${email} OR to:${email}`;
-    console.log(`[Gmail] Searching threads: "${query}" (max: ${maxResults})`);
+    const query = `from:"${email}" OR to:"${email}"`;
+    log.info(`[Gmail] Searching threads: "${query}" (max: ${maxResults})`);
 
     const listResponse = await this.gmail.users.threads.list({
       userId: 'me',
@@ -149,7 +150,7 @@ class Gmail {
         participants: Array.from(participantSet),
       };
     } catch (error) {
-      console.error(`[Gmail] Failed to get thread ${threadId}:`, error.message);
+      log.error(`[Gmail] Failed to get thread ${threadId}:`, error.message);
       return null;
     }
   }

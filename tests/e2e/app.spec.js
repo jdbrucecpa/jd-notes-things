@@ -287,7 +287,61 @@ test('contacts view opens and has search', async () => {
 });
 
 // ===================================================================
-// Test 14: No Critical Errors
+// Test 14: Participant Card Rendering
+// ===================================================================
+test('participant cards render with visible icon buttons (not empty boxes)', async () => {
+  // Click the first non-calendar meeting card to open the detail view
+  const meetingCard = page.locator('.meeting-card:not(.calendar-meeting)').first();
+  if (!(await meetingCard.isVisible().catch(() => false))) {
+    console.log('[E2E] No meeting cards available, skipping participant card test');
+    test.skip();
+    return;
+  }
+
+  await meetingCard.click();
+  await page.waitForTimeout(1500);
+
+  const editorView = page.locator('#editorView');
+  await expect(editorView).toBeVisible({ timeout: 10_000 });
+
+  // Check if there are participant cards
+  const participantCards = page.locator('.participant-card');
+  const cardCount = await participantCards.count();
+  console.log(`[E2E] Participant cards: ${cardCount}`);
+
+  if (cardCount > 0) {
+    // Verify the card header has flexbox layout (not broken empty boxes)
+    const firstHeader = participantCards.first().locator('.participant-card-header');
+    await expect(firstHeader).toBeVisible();
+
+    // Icon buttons (remove/expand) should have proper dimensions and be visible
+    const iconBtns = participantCards.first().locator('.icon-btn');
+    const btnCount = await iconBtns.count();
+    expect(btnCount).toBeGreaterThan(0);
+
+    for (let i = 0; i < btnCount; i++) {
+      const btn = iconBtns.nth(i);
+      const box = await btn.boundingBox();
+      // Buttons should have real dimensions (not 0x0 empty boxes)
+      expect(box.width).toBeGreaterThanOrEqual(20);
+      expect(box.height).toBeGreaterThanOrEqual(20);
+    }
+
+    // Avatar should be styled (round, colored)
+    const avatar = participantCards.first().locator('.participant-avatar');
+    await expect(avatar).toBeVisible();
+  }
+
+  // Navigate back to main view
+  const backBtn = page.locator('#backButton, #homeButton');
+  if (await backBtn.first().isVisible().catch(() => false)) {
+    await backBtn.first().click();
+    await page.waitForTimeout(500);
+  }
+});
+
+// ===================================================================
+// Test 15: No Critical Errors
 // ===================================================================
 test('no critical console errors', async () => {
   const errors = [];

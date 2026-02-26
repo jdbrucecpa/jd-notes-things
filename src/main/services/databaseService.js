@@ -309,31 +309,36 @@ class DatabaseService {
 
   /**
    * Save a meeting (insert or update). Accepts legacy JSON meeting format.
+   * Wrapped in a transaction so the meeting row + all child rows (participants,
+   * transcript, speaker mappings, attendees) are saved atomically.
    * @param {Object} meeting - Meeting object from renderer
    * @param {string} [status] - Override status ('upcoming' or 'past')
    */
   saveMeeting(meeting, status = null) {
-    const params = this._meetingToRow(meeting, status);
+    const doSave = this.db.transaction(() => {
+      const params = this._meetingToRow(meeting, status);
 
-    // Use upsert: try insert, fall back to update
-    const existing = this._stmts.getMeeting.get(meeting.id);
-    if (existing) {
-      this._stmts.updateMeeting.run(params);
-    } else {
-      this._stmts.insertMeeting.run(params);
-    }
+      // Use upsert: try insert, fall back to update
+      const existing = this._stmts.getMeeting.get(meeting.id);
+      if (existing) {
+        this._stmts.updateMeeting.run(params);
+      } else {
+        this._stmts.insertMeeting.run(params);
+      }
 
-    // Save participants
-    this._saveParticipants(meeting.id, meeting.participants || []);
+      // Save participants
+      this._saveParticipants(meeting.id, meeting.participants || []);
 
-    // Save transcript
-    this._saveTranscript(meeting.id, meeting.transcript || []);
+      // Save transcript
+      this._saveTranscript(meeting.id, meeting.transcript || []);
 
-    // Save speaker mappings (from meeting.speakerMapping object)
-    this._saveSpeakerMappings(meeting.id, meeting.speakerMapping || {});
+      // Save speaker mappings (from meeting.speakerMapping object)
+      this._saveSpeakerMappings(meeting.id, meeting.speakerMapping || {});
 
-    // Save calendar attendees
-    this._saveCalendarAttendees(meeting.id, meeting.calendarAttendees || []);
+      // Save calendar attendees
+      this._saveCalendarAttendees(meeting.id, meeting.calendarAttendees || []);
+    });
+    doSave();
   }
 
   /**
@@ -406,7 +411,13 @@ class DatabaseService {
     let sql = 'SELECT * FROM meetings WHERE date BETWEEN ? AND ?';
     const params = [startDate, endDate];
 
+    // Validate filter values to prevent unexpected query behavior
+    const VALID_STATUSES = ['upcoming', 'past', 'archived'];
     if (filters.status) {
+      if (!VALID_STATUSES.includes(filters.status)) {
+        log.warn(`[Database] Invalid status filter: ${filters.status}`);
+        return [];
+      }
       sql += ' AND status = ?';
       params.push(filters.status);
     }
@@ -599,8 +610,8 @@ class DatabaseService {
       try {
         const extra = JSON.parse(row.extra_fields);
         Object.assign(meeting, extra);
-      } catch {
-        // ignore parse error
+      } catch (err) {
+        log.warn(`[Database] Corrupt extra_fields on meeting ${row.id}:`, err.message);
       }
     }
 
@@ -621,8 +632,8 @@ class DatabaseService {
       if (p.extra_fields) {
         try {
           Object.assign(participant, JSON.parse(p.extra_fields));
-        } catch {
-          // ignore
+        } catch (err) {
+          log.warn(`[Database] Corrupt extra_fields on participant in meeting ${row.id}:`, err.message);
         }
       }
       return participant;
@@ -666,8 +677,8 @@ class DatabaseService {
     if (!meeting.speakerMapping && row.speaker_mapping) {
       try {
         meeting.speakerMapping = JSON.parse(row.speaker_mapping);
-      } catch {
-        // ignore
+      } catch (err) {
+        log.warn(`[Database] Corrupt speaker_mapping JSON on meeting ${row.id}:`, err.message);
       }
     }
 

@@ -2286,12 +2286,19 @@ async function initSDK() {
       logger.main.info('[SDK] Re-initialized - should now detect any open meetings');
 
       // The meeting-detected event listener should fire if there are any open meetings
-    } catch (error) {
-      logger.main.error('[SDK] Error during SDK restart:', error);
-    } finally {
+
       // Mark SDK as fully ready and notify renderer
       sdkReady = true;
       logger.main.info('[SDK] Initialization complete - recording enabled');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('sdk-ready');
+      }
+    } catch (error) {
+      logger.main.error('[SDK] Error during SDK restart:', error);
+      // SDK restart failed — still mark ready so the app isn't permanently stuck,
+      // but log prominently so we know recording may not detect open meetings
+      sdkReady = true;
+      logger.main.warn('[SDK] Initialization completed with errors — recording may miss already-open meetings');
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('sdk-ready');
       }
@@ -3095,6 +3102,8 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
         if (contact && contact.resourceName) {
           participantData.googleContactId = contact.resourceName;
           participantData.organization = contact.organization || null;
+          participantData.title = contact.title || null;
+          participantData.phones = contact.phones || [];
         }
 
         if (existingIndex !== -1) {
@@ -3124,6 +3133,8 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
               name: contact.name || speakerInfo.name,
               email: email,
               organization: contact.organization || null,
+              title: contact.title || null,
+              phones: contact.phones || [],
               googleContactId: contact.resourceName || null, // CRM Phase 1
               matchedByName: true,
             };
@@ -3897,7 +3908,7 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
         const contactData = {
           name: participant.name,
           emails: [participant.email],
-          phones: [],
+          phones: participant.phones || [],
           organization: participant.organization || '',
           title: participant.title || '',
           resourceName: participant.googleContactId || '',
@@ -4891,7 +4902,6 @@ ipcMain.handle('db:getMeetingsForOrganization', async (event, organization) => {
 });
 
 // ===================================================================
-// ===================================================================
 // v1.3.0: Gmail IPC Handlers
 // ===================================================================
 
@@ -5150,6 +5160,8 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
           if (contact && contact.emails && contact.emails.length > 0) {
             rebuiltParticipant.email = contact.emails[0];
             rebuiltParticipant.organization = contact.organization || null;
+            rebuiltParticipant.title = contact.title || null;
+            rebuiltParticipant.phones = contact.phones || [];
             rebuiltParticipant.googleContactId = contact.resourceName || null; // CRM Phase 1
             rebuiltParticipant.contactMatched = true;
             console.log(`[Contacts IPC] "${originalName}" -> email: ${contact.emails[0]} (name preserved)${contact.resourceName ? ` [${contact.resourceName}]` : ''}`);
@@ -5198,6 +5210,8 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
           if (contact && contact.emails && contact.emails.length > 0) {
             rebuiltParticipant.email = contact.emails[0];
             rebuiltParticipant.organization = contact.organization || null;
+            rebuiltParticipant.title = contact.title || null;
+            rebuiltParticipant.phones = contact.phones || [];
             rebuiltParticipant.googleContactId = contact.resourceName || null; // CRM Phase 1
             rebuiltParticipant.contactMatched = true;
           }
@@ -6321,20 +6335,8 @@ ipcMain.handle(
       };
     }
 
-    // Load meeting from storage
-    const meetingsPath = require('path').join(app.getPath('userData'), 'meetings.json');
-    let meetings = [];
-
-    if (fs.existsSync(meetingsPath)) {
-      const data = fs.readFileSync(meetingsPath, 'utf8');
-      const parsed = JSON.parse(data);
-      // Meetings file stores { upcomingMeetings: [...], pastMeetings: [...] }
-      const upcomingMeetings = parsed.upcomingMeetings || [];
-      const pastMeetings = parsed.pastMeetings || [];
-      meetings = [...upcomingMeetings, ...pastMeetings];
-    }
-
-    const meeting = meetings.find(m => m.id === meetingId);
+    // Load meeting from database
+    const meeting = databaseService.getMeeting(meetingId);
     if (!meeting) {
       console.error('[Routing IPC] Meeting not found:', meetingId);
       return {
@@ -7154,7 +7156,7 @@ ipcMain.handle(
       },
     });
 
-    // If successful, add meeting to meetings.json
+    // If successful, add meeting to database
     // Note: Auto-labeling of single speakers is now handled inside ImportManager
     // before summary generation (v1.1)
     if (result.success) {
@@ -7199,7 +7201,7 @@ ipcMain.handle(
           },
         });
 
-        // Add all successful meetings to meetings.json
+        // Add all successful meetings to database
         // Note: Auto-labeling of single speakers is now handled inside ImportManager
         // before summary generation (v1.1)
         if (result.meetings.length > 0) {
@@ -7235,7 +7237,7 @@ ipcMain.handle(
         },
       });
 
-      // Add all successful meetings to meetings.json
+      // Add all successful meetings to database
       // Note: Auto-labeling of single speakers is now handled inside ImportManager
       // before summary generation (v1.1)
       if (result.meetings.length > 0) {
@@ -7574,7 +7576,7 @@ ipcMain.handle(
       }
     }
 
-    // Step 7: Save to meetings.json
+    // Step 7: Save to database
     backgroundTaskManager.updateTask(taskId, 90, 'Saving meeting data...');
     event.sender.send('import:progress', { step: 'saving', file: path.basename(filePath) });
     const data = await fileOperationManager.readMeetingsData();
@@ -10346,6 +10348,8 @@ async function processParticipantJoin(evt) {
     let participantEmail = participantData.email || null;
     let contactMatched = false;
     let organization = null;
+    let participantTitle = null;
+    let participantPhones = [];
     let googleContactId = null; // CRM Phase 1: Google Contact resourceName
 
     // SM-1: Log full participant data to see what SDK provides
@@ -10378,6 +10382,8 @@ async function processParticipantJoin(evt) {
         if (contact && contact.emails && contact.emails.length > 0) {
           participantEmail = contact.emails[0];
           organization = contact.organization || null;
+          participantTitle = contact.title || null;
+          participantPhones = contact.phones || [];
           googleContactId = contact.resourceName || null; // CRM Phase 1
           contactMatched = true;
           console.log(
@@ -10420,6 +10426,8 @@ async function processParticipantJoin(evt) {
         joinTime: new Date().toISOString(),
         status: 'active',
         ...(organization && { organization }),
+        ...(participantTitle && { title: participantTitle }),
+        ...(participantPhones.length > 0 && { phones: participantPhones }),
         ...(googleContactId && { googleContactId }), // CRM Phase 1
         ...(contactMatched && { matchedByName: true }),
       };
@@ -11174,78 +11182,79 @@ async function generateAndSaveAutoSummary(meetingId, logPrefix = '[Auto-Summary]
 }
 
 /**
- * Load auto-summary system prompt from template file or use hardcoded fallback
- * Phase 10.3: Auto-Summary Template File
+ * Process an auto-summary template string, resolving {{#if needsTitleSuggestion}} conditionals.
+ * @param {string} templateContent - Raw template with handlebars conditionals
+ * @param {boolean} needsTitleSuggestion - Whether to include title suggestion section
+ * @returns {string} Processed template
+ */
+function processAutoSummaryTemplate(templateContent, needsTitleSuggestion) {
+  if (needsTitleSuggestion) {
+    // Include the title suggestion section, remove the handlebars tags
+    return templateContent.replace(
+      /\{\{#if needsTitleSuggestion\}\}\s*([\s\S]*?)\s*\{\{\/if\}\}/,
+      '$1'
+    );
+  }
+  // Remove the entire title suggestion section including tags
+  return templateContent.replace(
+    /\{\{#if needsTitleSuggestion\}\}\s*[\s\S]*?\s*\{\{\/if\}\}\s*/,
+    ''
+  );
+}
+
+/**
+ * Load auto-summary system prompt from template file.
+ * Searches: user config dir → bundled config dir → minimal fallback.
  * @param {boolean} needsTitleSuggestion - Whether to include title suggestion section
  * @returns {string} System prompt for auto-summary generation
  */
 function loadAutoSummaryPrompt(needsTitleSuggestion) {
+  const TEMPLATE_FILENAME = 'auto-summary-prompt.txt';
+
+  // 1. Try user's editable template in userData/config/templates/
+  const userTemplatePath = path.join(
+    templateManager
+      ? templateManager.templatesPath
+      : path.join(app.getPath('userData'), 'config', 'templates'),
+    TEMPLATE_FILENAME
+  );
+
   try {
-    // Try to load template file from userData/config/templates
-    const templatePath = path.join(
-      templateManager
-        ? templateManager.templatesPath
-        : path.join(app.getPath('userData'), 'config', 'templates'),
-      'auto-summary-prompt.txt'
-    );
-
-    if (fs.existsSync(templatePath)) {
-      const templateContent = fs.readFileSync(templatePath, 'utf8');
-
-      // Process template: handle {{#if needsTitleSuggestion}} conditional
-      let processedTemplate = templateContent;
-
-      if (needsTitleSuggestion) {
-        // Include the title suggestion section, remove the handlebars tags
-        processedTemplate = processedTemplate.replace(
-          /\{\{#if needsTitleSuggestion\}\}\s*([\s\S]*?)\s*\{\{\/if\}\}/,
-          '$1'
-        );
-      } else {
-        // Remove the entire title suggestion section including tags
-        processedTemplate = processedTemplate.replace(
-          /\{\{#if needsTitleSuggestion\}\}\s*[\s\S]*?\s*\{\{\/if\}\}\s*/,
-          ''
-        );
-      }
-
-      console.log('[AutoSummary] Loaded prompt from template file:', templatePath);
-      return processedTemplate;
+    if (fs.existsSync(userTemplatePath)) {
+      const content = fs.readFileSync(userTemplatePath, 'utf8');
+      console.log('[AutoSummary] Loaded prompt from user template:', userTemplatePath);
+      return processAutoSummaryTemplate(content, needsTitleSuggestion);
     }
   } catch (error) {
-    console.warn(
-      '[AutoSummary] Failed to load template file, using hardcoded fallback:',
-      error.message
-    );
+    console.warn('[AutoSummary] Failed to load user template:', error.message);
   }
 
-  // Fallback to hardcoded prompt (original behavior)
-  let systemMessage =
-    'You are an AI assistant that summarizes meeting transcripts. ' +
-    'You MUST format your response using the following structure:\n\n';
+  // 2. Try bundled default template (project root in dev, resources/ in production)
+  const bundledTemplatePath = path.join(
+    app.isPackaged
+      ? path.join(process.resourcesPath, 'config', 'templates')
+      : path.join(__dirname, '..', '..', 'config', 'templates'),
+    TEMPLATE_FILENAME
+  );
 
+  try {
+    if (fs.existsSync(bundledTemplatePath)) {
+      const content = fs.readFileSync(bundledTemplatePath, 'utf8');
+      console.log('[AutoSummary] Loaded prompt from bundled template:', bundledTemplatePath);
+      return processAutoSummaryTemplate(content, needsTitleSuggestion);
+    }
+  } catch (error) {
+    console.warn('[AutoSummary] Failed to load bundled template:', error.message);
+  }
+
+  // 3. Minimal fallback — should never reach here in normal operation
+  console.warn('[AutoSummary] No template file found, using minimal fallback');
+  let fallback = 'You are an AI assistant that summarizes meeting transcripts. Format your response with markdown headings.\n\n';
   if (needsTitleSuggestion) {
-    systemMessage +=
-      '# Suggested Title\n' +
-      '[A concise, descriptive meeting title (5-8 words max) based on the main topic discussed]\n\n';
+    fallback += '# Suggested Title\n[5-8 word specific title]\n\n';
   }
-
-  systemMessage +=
-    '# Participants\n' +
-    '- [List all participants mentioned in the transcript]\n\n' +
-    '# Summary\n' +
-    '- [Key discussion point 1]\n' +
-    '- [Key discussion point 2]\n' +
-    '- [Key decisions made]\n' +
-    '- [Include any important deadlines or dates mentioned]\n\n' +
-    '# Action Items\n' +
-    '- [Action item 1] - [Responsible person if mentioned]\n' +
-    '- [Action item 2] - [Responsible person if mentioned]\n' +
-    '- [Add any other action items discussed]\n\n' +
-    'Stick strictly to this format with these exact section headers. Keep each bullet point concise but informative.';
-
-  console.log('[AutoSummary] Using hardcoded fallback prompt');
-  return systemMessage;
+  fallback += '# Participants\n# What Happened\n# Action Items\n';
+  return fallback;
 }
 
 // Function to generate AI summary from transcript with streaming support

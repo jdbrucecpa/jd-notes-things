@@ -14,6 +14,8 @@ module.exports = {
   externals: {
     '@recallai/desktop-sdk': 'commonjs @recallai/desktop-sdk',
     'better-sqlite3': 'commonjs better-sqlite3',
+    // keytar kept as external to suppress webpack warning from optional migration require
+    keytar: 'commonjs keytar',
     // Optional dependency for unzipper S3 support - not used
     '@aws-sdk/client-s3': 'commonjs @aws-sdk/client-s3',
   },
