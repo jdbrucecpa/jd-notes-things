@@ -185,6 +185,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('contacts:companyPageExists', companyName),
   contactsRematchParticipants: meetingId =>
     ipcRenderer.invoke('contacts:rematchParticipants', meetingId),
+  contactsGetByEmail: email => ipcRenderer.invoke('contacts:getByEmail', email),
   // v1.3.0: Contact write capabilities
   contactsCreateContact: contactData =>
     ipcRenderer.invoke('contacts:createContact', contactData),

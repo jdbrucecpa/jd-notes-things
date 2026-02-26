@@ -662,10 +662,23 @@ async function loadExpandedContent(index, meeting) {
   const participant = meeting.participants[index];
   if (!participant) return;
 
+  // Resolve fresh contact data from Google Contacts cache (if available)
+  let resolvedContact = null;
+  if (participant.email) {
+    try {
+      const result = await window.electronAPI.contactsGetByEmail(participant.email);
+      if (result?.success && result.contact) {
+        resolvedContact = result.contact;
+      }
+    } catch {
+      // Fall back to snapshot fields on participant
+    }
+  }
+
   const sections = [];
 
-  // Contact Details Section
-  sections.push(renderContactDetailsSection(participant));
+  // Contact Details Section (uses resolved contact data with participant fallback)
+  sections.push(renderContactDetailsSection(participant, resolvedContact));
 
   // Meeting History Section (async)
   sections.push(await renderMeetingHistorySection(participant));
@@ -702,26 +715,35 @@ async function loadExpandedContent(index, meeting) {
 
 /**
  * Render contact details section (emails, phones, org, Google Contacts link).
+ * Uses resolved contact data from cache when available, falls back to snapshot fields on participant.
+ * @param {Object} participant - The participant object (snapshot fields)
+ * @param {Object|null} contact - Resolved contact from Google Contacts cache (display-time lookup)
  */
-function renderContactDetailsSection(participant) {
+function renderContactDetailsSection(participant, contact) {
   const items = [];
+  const email = participant.email;
+  const phones = contact?.phones || participant.phones || [];
+  const org = contact?.organization || participant.organization || participant.company || '';
+  const title = contact?.title || participant.title || '';
+  // Backward compat: old data may have googleContactId instead of googleContactResource
+  const resourceName = contact?.resourceName || participant.googleContactResource || participant.googleContactId || '';
 
-  if (participant.email) {
-    items.push(`<div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">${escapeHtml(participant.email)}</span></div>`);
+  if (email) {
+    items.push(`<div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">${escapeHtml(email)}</span></div>`);
   }
-  if (participant.phones && participant.phones.length > 0) {
-    for (const phone of participant.phones) {
+  if (phones.length > 0) {
+    for (const phone of phones) {
       items.push(`<div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">${escapeHtml(phone)}</span></div>`);
     }
   }
-  if (participant.organization || participant.company) {
-    items.push(`<div class="detail-row"><span class="detail-label">Organization</span><span class="detail-value">${escapeHtml(participant.organization || participant.company)}</span></div>`);
+  if (org) {
+    items.push(`<div class="detail-row"><span class="detail-label">Organization</span><span class="detail-value">${escapeHtml(org)}</span></div>`);
   }
-  if (participant.title) {
-    items.push(`<div class="detail-row"><span class="detail-label">Title</span><span class="detail-value">${escapeHtml(participant.title)}</span></div>`);
+  if (title) {
+    items.push(`<div class="detail-row"><span class="detail-label">Title</span><span class="detail-value">${escapeHtml(title)}</span></div>`);
   }
-  if (participant.googleContactResource) {
-    const contactUrl = `https://contacts.google.com/person/${participant.googleContactResource.replace('people/', '')}`;
+  if (resourceName) {
+    const contactUrl = `https://contacts.google.com/person/${resourceName.replace('people/', '')}`;
     items.push(`<div class="detail-row"><a href="#" class="external-link" data-url="${contactUrl}">Open in Google Contacts</a></div>`);
   }
 

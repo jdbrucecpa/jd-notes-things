@@ -153,7 +153,7 @@ class CrmRequestQueue {
       email: contact.email || null,
       organization: contact.organization || null,
       title: contact.title || null,
-      google_resource_name: contact.googleContactId || contact.google_contact_id || null,
+      google_resource_name: contact.googleContactResource || contact.google_contact_id || null,
     };
 
     const options = {};

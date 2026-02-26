@@ -3092,18 +3092,16 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
           p => p.email && p.email.toLowerCase() === speakerInfo.email.toLowerCase()
         );
 
-        // CRM Phase 1: Include googleContactId (resourceName) from Google Contacts
+        // CRM Phase 1: Include googleContactResource (resourceName) from Google Contacts
         const participantData = {
           name: speakerInfo.name || (contact ? contact.name : speakerInfo.email),
           email: speakerInfo.email,
         };
 
-        // Add Google Contact ID if available
+        // Add Google Contact resource and org if available
         if (contact && contact.resourceName) {
-          participantData.googleContactId = contact.resourceName;
+          participantData.googleContactResource = contact.resourceName;
           participantData.organization = contact.organization || null;
-          participantData.title = contact.title || null;
-          participantData.phones = contact.phones || [];
         }
 
         if (existingIndex !== -1) {
@@ -3128,14 +3126,12 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
               p => p.email && p.email.toLowerCase() === email.toLowerCase()
             );
 
-            // CRM Phase 1: Include googleContactId (resourceName) from Google Contacts
+            // CRM Phase 1: Include googleContactResource (resourceName) from Google Contacts
             const participantData = {
               name: contact.name || speakerInfo.name,
               email: email,
               organization: contact.organization || null,
-              title: contact.title || null,
-              phones: contact.phones || [],
-              googleContactId: contact.resourceName || null, // CRM Phase 1
+              googleContactResource: contact.resourceName || null,
               matchedByName: true,
             };
 
@@ -3384,17 +3380,17 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
       meeting.participants = deduplicateParticipants(meeting.participants);
     }
 
-    // CRM Phase 1: Enrich participants with googleContactId from contacts cache
+    // CRM Phase 1: Enrich participants with googleContactResource from contacts cache
     // This is the ROBUST approach - always look up from cache, don't rely on capture at every code path
     if (meeting.participants && meeting.participants.length > 0 && googleContacts && googleContacts.isAuthenticated()) {
       for (const participant of meeting.participants) {
-        // If participant has email but no googleContactId, look it up from cache
-        if (participant.email && !participant.googleContactId) {
+        // If participant has email but no googleContactResource, look it up from cache
+        if (participant.email && !participant.googleContactResource) {
           try {
             const contact = await googleContacts.findContactByEmail(participant.email);
             if (contact && contact.resourceName) {
-              participant.googleContactId = contact.resourceName;
-              console.log(`[ObsidianExport] Enriched "${participant.name}" with googleContactId: ${contact.resourceName}`);
+              participant.googleContactResource = contact.resourceName;
+              console.log(`[ObsidianExport] Enriched "${participant.name}" with googleContactResource: ${contact.resourceName}`);
             }
           } catch (_err) {
             // Silently continue - this is just enrichment
@@ -3541,7 +3537,7 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
           .map(p => ({
             name: p.name.replace(/^\[\[|\]\]$/g, ''),
             email: p.email || null,
-            google_contact_id: p.googleContactId || null,
+            google_contact_id: p.googleContactResource || null,
           }));
 
         // Write meeting request
@@ -3622,9 +3618,9 @@ function generateSummaryMarkdown(meeting, baseFilename, route = null) {
         attendee.email = participant.email;
       }
 
-      // Include Google Contact ID if available
-      if (participant.googleContactId) {
-        attendee.google_contact_id = participant.googleContactId;
+      // Include Google Contact resource if available
+      if (participant.googleContactResource) {
+        attendee.google_contact_id = participant.googleContactResource;
       }
 
       // Dedupe: only add if name not already in attendees
@@ -3655,7 +3651,7 @@ function generateSummaryMarkdown(meeting, baseFilename, route = null) {
           // Also add to structured attendees
           const attendee = { name };
           if (email) attendee.email = email;
-          if (mapping.googleContactId) attendee.google_contact_id = mapping.googleContactId;
+          if (mapping.googleContactResource) attendee.google_contact_id = mapping.googleContactResource;
           if (!attendees.some(a => a.name === name)) {
             attendees.push(attendee);
           }
@@ -3908,10 +3904,10 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
         const contactData = {
           name: participant.name,
           emails: [participant.email],
-          phones: participant.phones || [],
+          phones: [],
           organization: participant.organization || '',
-          title: participant.title || '',
-          resourceName: participant.googleContactId || '',
+          title: '',
+          resourceName: participant.googleContactResource || '',
         };
 
         const result = vaultStructure.createContactPage(contactData, {
@@ -3946,13 +3942,13 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
           continue;
         }
 
-        // CRM Phase 1: Look up googleContactId from cache if not already present
-        let googleContactId = mapping.googleContactId || null;
-        if (!googleContactId && mapping.email && googleContacts && googleContacts.isAuthenticated()) {
+        // CRM Phase 1: Look up googleContactResource from cache if not already present
+        let googleContactResource = mapping.googleContactResource || null;
+        if (!googleContactResource && mapping.email && googleContacts && googleContacts.isAuthenticated()) {
           try {
             const contact = await googleContacts.findContactByEmail(mapping.email);
             if (contact && contact.resourceName) {
-              googleContactId = contact.resourceName;
+              googleContactResource = contact.resourceName;
             }
           } catch (_err) {
             // Silently continue
@@ -3964,7 +3960,7 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
           emails: [mapping.email],
           phones: [],
           organization: mapping.organization || '',
-          resourceName: googleContactId || '',
+          resourceName: googleContactResource || '',
         };
 
         const result = vaultStructure.createContactPage(contactData);
@@ -4937,6 +4933,20 @@ ipcMain.handle('contacts:createContact', async (event, contactData) => {
   }
 });
 
+// Resolve contact from cache by email (display-time lookup for renderer)
+ipcMain.handle('contacts:getByEmail', async (event, email) => {
+  try {
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      return { success: false };
+    }
+    const contact = await googleContacts.findContactByEmail(email);
+    return { success: true, contact: contact || null };
+  } catch (error) {
+    console.error('[Contacts IPC] getByEmail failed:', error.message);
+    return { success: false, error: error.message };
+  }
+});
+
 // Update custom fields on a contact
 ipcMain.handle('contacts:updateCustomFields', async (event, resourceName, fields) => {
   try {
@@ -5118,11 +5128,11 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
             rebuiltParticipants.push({
               name: info.name,
               email: info.email || null,
-              googleContactId: info.googleContactId || null, // CRM Phase 1
+              googleContactResource: info.googleContactResource || null,
               contactMatched: !!info.email,
               fromSpeakerMapping: true,
             });
-            console.log(`[Contacts IPC] From speakerMapping: "${info.name}" (email: ${info.email || 'none'})${info.googleContactId ? ` [${info.googleContactId}]` : ''}`);
+            console.log(`[Contacts IPC] From speakerMapping: "${info.name}" (email: ${info.email || 'none'})${info.googleContactResource ? ` [${info.googleContactResource}]` : ''}`);
           }
         }
       }
@@ -5160,9 +5170,7 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
           if (contact && contact.emails && contact.emails.length > 0) {
             rebuiltParticipant.email = contact.emails[0];
             rebuiltParticipant.organization = contact.organization || null;
-            rebuiltParticipant.title = contact.title || null;
-            rebuiltParticipant.phones = contact.phones || [];
-            rebuiltParticipant.googleContactId = contact.resourceName || null; // CRM Phase 1
+            rebuiltParticipant.googleContactResource = contact.resourceName || null;
             rebuiltParticipant.contactMatched = true;
             console.log(`[Contacts IPC] "${originalName}" -> email: ${contact.emails[0]} (name preserved)${contact.resourceName ? ` [${contact.resourceName}]` : ''}`);
           } else {
@@ -5210,9 +5218,7 @@ ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, as
           if (contact && contact.emails && contact.emails.length > 0) {
             rebuiltParticipant.email = contact.emails[0];
             rebuiltParticipant.organization = contact.organization || null;
-            rebuiltParticipant.title = contact.title || null;
-            rebuiltParticipant.phones = contact.phones || [];
-            rebuiltParticipant.googleContactId = contact.resourceName || null; // CRM Phase 1
+            rebuiltParticipant.googleContactResource = contact.resourceName || null;
             rebuiltParticipant.contactMatched = true;
           }
         } catch (_err) {
@@ -5480,19 +5486,19 @@ ipcMain.handle(
 
       // Find contact info for the participant email
       let participantName = participantEmail;
-      let googleContactId = null; // CRM Phase 1
+      let googleContactResource = null;
       if (googleContacts && googleContacts.isAuthenticated()) {
         const contact = await googleContacts.findContactByEmail(participantEmail);
         if (contact) {
           participantName = contact.name;
-          googleContactId = contact.resourceName || null; // CRM Phase 1
+          googleContactResource = contact.resourceName || null;
         }
       }
 
       meeting.speakerMapping[speakerLabel] = {
         email: participantEmail,
         name: participantName,
-        googleContactId: googleContactId, // CRM Phase 1
+        googleContactResource: googleContactResource,
         confidence: 'manual',
         method: 'user-correction',
       };
@@ -10348,9 +10354,7 @@ async function processParticipantJoin(evt) {
     let participantEmail = participantData.email || null;
     let contactMatched = false;
     let organization = null;
-    let participantTitle = null;
-    let participantPhones = [];
-    let googleContactId = null; // CRM Phase 1: Google Contact resourceName
+    let googleContactResource = null;
 
     // SM-1: Log full participant data to see what SDK provides
     console.log(
@@ -10382,12 +10386,10 @@ async function processParticipantJoin(evt) {
         if (contact && contact.emails && contact.emails.length > 0) {
           participantEmail = contact.emails[0];
           organization = contact.organization || null;
-          participantTitle = contact.title || null;
-          participantPhones = contact.phones || [];
-          googleContactId = contact.resourceName || null; // CRM Phase 1
+          googleContactResource = contact.resourceName || null;
           contactMatched = true;
           console.log(
-            `[ParticipantJoin] Matched "${participantName}" to contact "${contact.name}" (${participantEmail})${googleContactId ? ` [${googleContactId}]` : ''}`
+            `[ParticipantJoin] Matched "${participantName}" to contact "${contact.name}" (${participantEmail})${googleContactResource ? ` [${googleContactResource}]` : ''}`
           );
         }
       } catch (contactError) {
@@ -10426,9 +10428,7 @@ async function processParticipantJoin(evt) {
         joinTime: new Date().toISOString(),
         status: 'active',
         ...(organization && { organization }),
-        ...(participantTitle && { title: participantTitle }),
-        ...(participantPhones.length > 0 && { phones: participantPhones }),
-        ...(googleContactId && { googleContactId }), // CRM Phase 1
+        ...(googleContactResource && { googleContactResource }),
         ...(contactMatched && { matchedByName: true }),
       };
 
