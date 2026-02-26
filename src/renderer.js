@@ -295,6 +295,22 @@ function initializeTitleBar() {
       const importBtn = document.getElementById('importBtn');
       if (importBtn) importBtn.click();
     },
+    menuExportTranscript: async () => {
+      if (!currentEditingMeetingId) {
+        showToast('Select a meeting first', 'warning');
+        return;
+      }
+      try {
+        const result = await window.electronAPI.transcriptExportSingle(currentEditingMeetingId);
+        if (result.success) {
+          showToast(`Exported ${result.entryCount} entries`, 'success');
+        } else if (result.error !== 'Export cancelled') {
+          showToast(result.error || 'Export failed', 'error');
+        }
+      } catch (error) {
+        showToast('Export failed: ' + error.message, 'error');
+      }
+    },
     menuSettings: () => {
       openSettingsTab('general');
     },

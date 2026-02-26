@@ -34,6 +34,7 @@ const ImportManager = require('./main/import/ImportManager');
 const TranscriptParser = require('./main/import/TranscriptParser');
 const PatternConfigLoader = require('./main/import/PatternConfigLoader');
 const { CrmRequestQueue } = require('./main/export/CrmRequestQueue');
+const { formatTranscriptForExport, generateExportFilename } = require('./main/export/transcriptExporter');
 const { createLLMServiceFromCredentials } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
@@ -7951,6 +7952,133 @@ ipcMain.handle('import:selectFolder', async () => {
 
 // ===================================================================
 // End Import IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Transcript Export IPC Handlers
+// ===================================================================
+
+// Export a single meeting's transcript to a user-chosen file
+ipcMain.handle('transcript:exportSingle', async (event, meetingId) => {
+  try {
+    const meeting = databaseService.getMeeting(meetingId);
+    if (!meeting) {
+      return { success: false, error: 'Meeting not found' };
+    }
+    if (!meeting.transcript || meeting.transcript.length === 0) {
+      return { success: false, error: 'Meeting has no transcript' };
+    }
+
+    const content = formatTranscriptForExport(meeting.transcript);
+    if (!content) {
+      return { success: false, error: 'Transcript has no exportable entries' };
+    }
+
+    const defaultFilename = generateExportFilename(meeting);
+    const { dialog } = require('electron');
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export Transcript',
+      defaultPath: defaultFilename,
+      filters: [
+        { name: 'Text Files', extensions: ['txt'] },
+        { name: 'Markdown Files', extensions: ['md'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, error: 'Export cancelled' };
+    }
+
+    const fsPromises = require('fs').promises;
+    await fsPromises.writeFile(result.filePath, content, 'utf8');
+
+    const entryCount = content.split('\n').length;
+    console.log(`[Export] Exported ${entryCount} transcript entries to: ${result.filePath}`);
+    return { success: true, filePath: result.filePath, entryCount };
+  } catch (error) {
+    console.error('[Export] Single export failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Batch export multiple meeting transcripts to a user-chosen directory
+ipcMain.handle('transcript:exportBatch', async (event, meetingIds) => {
+  const exported = [];
+  const skipped = [];
+  const errors = [];
+
+  try {
+    if (!Array.isArray(meetingIds) || meetingIds.length === 0) {
+      return { success: false, error: 'No meeting IDs provided', exported, skipped, errors };
+    }
+
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Export Folder',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+
+    if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+      return { success: false, error: 'Export cancelled', exported, skipped, errors };
+    }
+
+    const outputDir = result.filePaths[0];
+    const fsPromises = require('fs').promises;
+    const usedFilenames = new Set();
+
+    for (const meetingId of meetingIds) {
+      try {
+        const meeting = databaseService.getMeeting(meetingId);
+        if (!meeting) {
+          skipped.push({ meetingId, reason: 'Meeting not found' });
+          continue;
+        }
+        if (!meeting.transcript || meeting.transcript.length === 0) {
+          skipped.push({ meetingId, title: meeting.title, reason: 'No transcript' });
+          continue;
+        }
+
+        const content = formatTranscriptForExport(meeting.transcript);
+        if (!content) {
+          skipped.push({ meetingId, title: meeting.title, reason: 'No exportable entries' });
+          continue;
+        }
+
+        // Generate unique filename, appending counter for collisions
+        const baseName = generateExportFilename(meeting);
+        let filename = baseName;
+        let counter = 2;
+        while (usedFilenames.has(filename)) {
+          const ext = path.extname(baseName);
+          const stem = baseName.slice(0, -ext.length);
+          filename = `${stem}-${counter}${ext}`;
+          counter++;
+        }
+        usedFilenames.add(filename);
+
+        const filePath = path.join(outputDir, filename);
+        await fsPromises.writeFile(filePath, content, 'utf8');
+
+        const entryCount = content.split('\n').length;
+        exported.push({ meetingId, title: meeting.title, filePath, entryCount });
+      } catch (error) {
+        errors.push({ meetingId, error: error.message });
+      }
+    }
+
+    console.log(
+      `[Export] Batch export complete: ${exported.length} exported, ${skipped.length} skipped, ${errors.length} errors`
+    );
+    return { success: true, exported, skipped, errors };
+  } catch (error) {
+    console.error('[Export] Batch export failed:', error);
+    return { success: false, error: error.message, exported, skipped, errors };
+  }
+});
+
+// ===================================================================
+// End Transcript Export IPC Handlers
 // ===================================================================
 
 // ===================================================================

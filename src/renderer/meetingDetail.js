@@ -1182,6 +1182,31 @@ async function populateTranscript(meeting) {
       fixSpeakersBtn.style.display = 'inline-flex';
     }
   }
+
+  // Show Export button when transcript has entries
+  const exportBtn = document.getElementById('exportTranscriptBtn');
+  if (exportBtn) {
+    if (meeting.transcript.length > 0) {
+      exportBtn.style.display = 'inline-flex';
+      // Replace with a fresh clone to avoid stacking listeners
+      const freshBtn = exportBtn.cloneNode(true);
+      exportBtn.parentNode.replaceChild(freshBtn, exportBtn);
+      freshBtn.addEventListener('click', async () => {
+        try {
+          const result = await window.electronAPI.transcriptExportSingle(currentMeetingId);
+          if (result.success) {
+            notifySuccess(`Exported ${result.entryCount} entries`);
+          } else if (result.error !== 'Export cancelled') {
+            notifyError(result.error || 'Export failed');
+          }
+        } catch (error) {
+          notifyError(error, { prefix: 'Export failed:' });
+        }
+      });
+    } else {
+      exportBtn.style.display = 'none';
+    }
+  }
 }
 
 /**

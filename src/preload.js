@@ -221,6 +221,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   speakerMappingExport: () => ipcRenderer.invoke('speakerMapping:export'),
   speakerMappingImport: (data, merge) =>
     ipcRenderer.invoke('speakerMapping:import', { data, merge }),
+  // Export Transcripts
+  transcriptExportSingle: meetingId => ipcRenderer.invoke('transcript:exportSingle', meetingId),
+  transcriptExportBatch: meetingIds => ipcRenderer.invoke('transcript:exportBatch', meetingIds),
   // Import Transcripts (Phase 8)
   importFile: (filePath, options) => ipcRenderer.invoke('import:importFile', { filePath, options }),
   importBatch: (filePaths, options) =>
