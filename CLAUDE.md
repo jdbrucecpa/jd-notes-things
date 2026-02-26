@@ -10,7 +10,7 @@ See [`README.md`](./README.md) for project overview and setup instructions.
 
 ## Technology Stack
 
-- **Desktop Framework:** Electron 39.x + Node.js
+- **Desktop Framework:** Electron 40.x + Node.js
 - **UI:** React 19.x (renderer process)
 - **Build System:** Webpack + Electron Forge
 - **Recording:** Recall.ai Desktop SDK 2.x (local audio capture)
@@ -245,3 +245,4 @@ Check the [SDK Changelog](https://docs.recall.ai/docs/dsdk-changelog) for releas
 - **Feedback-driven:** Phase N+1 incorporates learnings from Phase N
 - **No premature optimization:** Build for clarity first
 - **User-editable configs:** Prefer file-based over hardcoded where possible
+- **Zero lint warnings:** Always fix ESLint errors and warnings. Do not leave warnings unresolved unless there is a documented reason. Run `npm run lint` after making changes and fix any issues before considering work complete.

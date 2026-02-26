@@ -52,7 +52,7 @@ require.cache[require.resolve('electron-log')] = {
     info: (...args) => console.log('[LOG]', ...args),
     warn: (...args) => console.warn('[LOG WARN]', ...args),
     error: (...args) => console.error('[LOG ERROR]', ...args),
-    debug: (...args) => {},
+    debug: (..._args) => {},
   },
 };
 
