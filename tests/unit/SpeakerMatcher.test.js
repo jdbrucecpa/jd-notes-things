@@ -423,8 +423,8 @@ describe('SpeakerMatcher', () => {
       expect(result['Speaker B'].method).toBe('speech-timeline');
     });
 
-    it('requires at least 2 matches for confidence', () => {
-      // Only 1 utterance matches — should NOT be assigned
+    it('accepts unambiguous single-match with low confidence', () => {
+      // Only 1 utterance matches 1 participant — unambiguous, accepted with low confidence
       const transcript = makeTranscript([
         { speaker: 'Speaker A', text: 'Hello', timestamp: 2000, words: [{ end: 4000 }] },
       ]);
@@ -444,7 +444,37 @@ describe('SpeakerMatcher', () => {
         contacts
       );
 
-      // Only 1 match — not enough for confidence
+      // 1 match, unambiguous (only 1 candidate) — accepted with low confidence
+      expect(result['Speaker A']).toBeDefined();
+      expect(result['Speaker A'].name).toBe('Jenn Kenning');
+      expect(result['Speaker A'].confidence).toBe('low');
+      expect(result['Speaker A'].matchCount).toBe(1);
+    });
+
+    it('requires at least 2 matches when ambiguous (multiple candidates)', () => {
+      // 1 utterance overlaps with 2 different participants — ambiguous, needs >= 2
+      const transcript = makeTranscript([
+        { speaker: 'Speaker A', text: 'Hello', timestamp: 2000, words: [{ end: 4000 }] },
+      ]);
+
+      const speechTimeline = makeSpeechTimeline([
+        { name: 'Jenn Kenning', segments: [[0, 5000]] },
+        { name: 'Bob Smith', segments: [[1000, 6000]] },
+      ]);
+
+      const contacts = new Map([
+        ['jenn@example.com', { name: 'Jenn Kenning' }],
+        ['bob@example.com', { name: 'Bob Smith' }],
+      ]);
+
+      const result = matcher.matchUsingTimeline(
+        transcript,
+        speechTimeline,
+        ['jenn@example.com', 'bob@example.com'],
+        contacts
+      );
+
+      // Both candidates have 1 match each — ambiguous, neither accepted
       expect(result['Speaker A']).toBeUndefined();
     });
 

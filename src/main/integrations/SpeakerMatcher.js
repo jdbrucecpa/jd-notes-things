@@ -331,8 +331,12 @@ class SpeakerMatcher {
         }
       }
 
-      if (bestParticipant && bestCount >= 2) {
-        // Require at least 2 matches for confidence
+      // Accept match with 1+ utterance overlap when this speaker only matched one
+      // participant (unambiguous), or 2+ when multiple participants overlapped
+      const isUnambiguous = participantCounts.size === 1;
+      const minRequired = isUnambiguous ? 1 : 2;
+
+      if (bestParticipant && bestCount >= minRequired) {
         // Find the email for this participant if available
         // Pass other participant emails for company disambiguation
         const participantEmail = this.findEmailForParticipant(
@@ -342,17 +346,19 @@ class SpeakerMatcher {
           { otherParticipantEmails: participantEmails }
         );
 
+        const confidence = bestCount >= 5 ? 'high' : bestCount >= 2 ? 'medium' : 'low';
+
         mapping[speakerLabel] = {
           email: participantEmail,
           name: bestParticipant,
-          confidence: bestCount >= 5 ? 'high' : 'medium',
+          confidence,
           method: 'speech-timeline',
           matchCount: bestCount,
         };
 
         assignedParticipants.add(bestParticipant);
         console.log(
-          `[SpeakerMatcher] SM-1: Matched ${speakerLabel} -> ${bestParticipant} (${bestCount} matches, ${mapping[speakerLabel].confidence} confidence)`
+          `[SpeakerMatcher] SM-1: Matched ${speakerLabel} -> ${bestParticipant} (${bestCount} matches, ${confidence} confidence, ${isUnambiguous ? 'unambiguous' : 'multi-candidate'})`
         );
       }
     }

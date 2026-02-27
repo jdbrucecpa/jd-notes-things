@@ -92,33 +92,67 @@ function calculateSpeakerStatsFromTranscript(transcript) {
 }
 
 /**
- * Find speaker stats for a participant by matching names
+ * Find speaker stats for a participant by matching names.
+ * Tries multiple strategies: direct name, originalName, first-name,
+ * and appliedSpeakerMappings reverse lookup (for Fix Speakers + Refresh).
  * @param {Object} participant - The participant object
  * @param {Object} speakerStats - Map of normalized speaker names to stats
+ * @param {Object} [appliedMappings] - meeting.appliedSpeakerMappings for reverse lookup
  * @returns {Object|null} Stats if found, null otherwise
  */
-function findParticipantSpeakerStats(participant, speakerStats) {
-  const participantName = (participant.name || participant.email || '').toLowerCase().trim();
-  if (!participantName) return null;
+function findParticipantSpeakerStats(participant, speakerStats, appliedMappings) {
+  // Try both name and originalName
+  const nameCandidates = new Set();
+  if (participant.name) nameCandidates.add(participant.name.toLowerCase().trim());
+  if (participant.originalName) nameCandidates.add(participant.originalName.toLowerCase().trim());
+  if (participant.email) nameCandidates.add(participant.email.toLowerCase().trim());
 
-  // Direct match
-  if (speakerStats[participantName]) {
-    return speakerStats[participantName];
-  }
-
-  // Try matching first name only
-  const firstName = participantName.split(/\s+/)[0];
-  for (const [speakerName, stats] of Object.entries(speakerStats)) {
-    if (speakerName === firstName || speakerName.startsWith(firstName + ' ')) {
-      return stats;
+  // Direct match on any name candidate
+  for (const candidate of nameCandidates) {
+    if (speakerStats[candidate]) {
+      return speakerStats[candidate];
     }
   }
 
-  // Try matching if speaker name contains participant's first name
-  for (const [speakerName, stats] of Object.entries(speakerStats)) {
-    const speakerFirst = speakerName.split(/\s+/)[0];
-    if (speakerFirst === firstName) {
-      return stats;
+  // First-name matching on all candidates
+  const firstNames = new Set();
+  for (const candidate of nameCandidates) {
+    const first = candidate.split(/\s+/)[0];
+    if (first && first.length > 1) firstNames.add(first);
+  }
+
+  for (const firstName of firstNames) {
+    for (const [speakerName, stats] of Object.entries(speakerStats)) {
+      if (speakerName === firstName || speakerName.startsWith(firstName + ' ')) {
+        return stats;
+      }
+      const speakerFirst = speakerName.split(/\s+/)[0];
+      if (speakerFirst === firstName) {
+        return stats;
+      }
+    }
+  }
+
+  // Reverse lookup via appliedSpeakerMappings: find which contact name was
+  // mapped for this participant's email, then match that contact name to stats
+  if (appliedMappings) {
+    const participantEmail = (participant.email || '').toLowerCase().trim();
+    const participantOriginal = (participant.originalName || '').toLowerCase().trim();
+
+    for (const mapping of Object.values(appliedMappings)) {
+      const mappedEmail = (mapping.contactEmail || '').toLowerCase().trim();
+      const mappedName = (mapping.contactName || '').toLowerCase().trim();
+
+      // Match by email or by original name
+      if (
+        (participantEmail && mappedEmail && participantEmail === mappedEmail) ||
+        (participantOriginal && mappedName && participantOriginal === mappedName)
+      ) {
+        // Found the mapping — look up stats by the mapped contact name
+        if (mappedName && speakerStats[mappedName]) {
+          return speakerStats[mappedName];
+        }
+      }
     }
   }
 
@@ -419,7 +453,7 @@ function populateParticipants(meeting) {
     const name = participant.name || participant.email || 'Unknown';
     const initials = getInitials(name);
     const isLinked = !!(participant.email || participant.contactId);
-    const participantStats = findParticipantSpeakerStats(participant, speakerStats);
+    const participantStats = findParticipantSpeakerStats(participant, speakerStats, meeting.appliedSpeakerMappings);
     const organization = participant.company || participant.organization || '';
 
     // Status indicator

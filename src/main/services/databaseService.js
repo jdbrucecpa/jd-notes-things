@@ -22,13 +22,18 @@ const CURRENT_SCHEMA_VERSION = 1;
 class DatabaseService {
   constructor() {
     this.db = null;
-    this.dbPath = path.join(app.getPath('userData'), 'meetings.db');
+    // NOTE: dbPath is resolved in initialize(), NOT here.
+    // The constructor runs at module-import time (before app.setPath('userData') in dev mode),
+    // so app.getPath('userData') would return the wrong path in development.
+    this.dbPath = null;
   }
 
   /**
    * Initialize the database, create schema if needed, run migrations.
    */
   initialize() {
+    // Resolve dbPath at initialization time (inside app.whenReady), not at import time
+    this.dbPath = path.join(app.getPath('userData'), 'meetings.db');
     log.info(`[Database] Opening database at: ${this.dbPath}`);
     this.db = new Database(this.dbPath);
 

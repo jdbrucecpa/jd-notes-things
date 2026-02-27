@@ -1724,18 +1724,27 @@ app.whenReady().then(async () => {
 
   // Set production Content-Security-Policy via HTTP headers
   // In dev mode, forge.config.js devContentSecurityPolicy handles this (allows unsafe-eval for webpack HMR)
+  // Only apply CSP to local app content — external sites (e.g., Google OAuth) manage their own CSP
   if (app.isPackaged) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-      callback({
-        responseHeaders: {
-          ...details.responseHeaders,
-          'Content-Security-Policy': [
-            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://lh3.googleusercontent.com; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' https:;",
-          ],
-        },
-      });
+      const url = details.url || '';
+      const isLocalContent = url.startsWith('file://') || url.startsWith('http://localhost');
+
+      if (isLocalContent) {
+        callback({
+          responseHeaders: {
+            ...details.responseHeaders,
+            'Content-Security-Policy': [
+              "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://lh3.googleusercontent.com; font-src 'self' data:; worker-src 'self' blob:; child-src 'self' blob:; connect-src 'self' https:;",
+            ],
+          },
+        });
+      } else {
+        // Pass through external responses without modifying their CSP
+        callback({ responseHeaders: details.responseHeaders });
+      }
     });
-    logger.main.info('Production CSP headers configured');
+    logger.main.info('Production CSP headers configured (local content only)');
   }
 
   // Make mainWindow available to server.js for IPC communication

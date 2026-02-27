@@ -9,6 +9,7 @@ import { notifySuccess, notifyError, notifyInfo } from './utils/notificationHelp
 import { escapeHtml } from './security.js';
 
 let currentEditingKey = null;
+let listenersInitialized = false;
 
 /**
  * Initialize the security panel
@@ -24,8 +25,11 @@ export async function initializeSecurityPanel() {
   // Load API keys
   await loadAPIKeys();
 
-  // Set up event listeners
-  setupEventListeners();
+  // Set up event listeners only once to prevent duplicate handlers
+  if (!listenersInitialized) {
+    setupEventListeners();
+    listenersInitialized = true;
+  }
 
   console.log('[SecuritySettings] Security panel initialized');
   console.log('[SecuritySettings] window.editAPIKey defined?', typeof window.editAPIKey);
