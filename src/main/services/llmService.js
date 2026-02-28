@@ -54,8 +54,6 @@ class LLMAdapter {
 const ANTHROPIC_MODEL_MAP = {
   // Budget tier
   'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
-  // Balanced tier
-  'claude-sonnet-4-5': 'claude-sonnet-4-5-20250929',
   // Premium tier
   'claude-sonnet-4-6': 'claude-sonnet-4-6',
 };

@@ -193,8 +193,7 @@ class TemplateParser {
    * Models are organized into pricing tiers:
    * - Budget: Gemini 2.5 Flash Lite
    * - Balanced: Gemini 2.5 Flash, Claude Haiku 4.5
-   * - Premium: Claude Sonnet 4.5
-   * - Ultra-Premium: Claude Sonnet 4.6
+   * - Premium: Claude Sonnet 4.6
    * - Local: Ollama (free, runs on your hardware)
    */
   static MODEL_PRICING = {
@@ -225,22 +224,12 @@ class TemplateParser {
     },
 
     // ═══════════════════════════════════════════════════════════════════
-    // PREMIUM TIER - Higher quality for important summaries
-    // ═══════════════════════════════════════════════════════════════════
-    'claude-sonnet-4-5': {
-      input: 3.0, // $3.00 per 1M tokens
-      output: 15.0, // $15.00 per 1M tokens
-      tier: 'premium',
-      updated: '2026-02-28',
-    },
-
-    // ═══════════════════════════════════════════════════════════════════
-    // ULTRA-PREMIUM TIER - Best quality for critical content
+    // PREMIUM TIER - Best quality for important summaries
     // ═══════════════════════════════════════════════════════════════════
     'claude-sonnet-4-6': {
       input: 3.0, // $3.00 per 1M tokens
       output: 15.0, // $15.00 per 1M tokens
-      tier: 'ultra-premium',
+      tier: 'premium',
       updated: '2026-02-28',
     },
 

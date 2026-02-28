@@ -2030,9 +2030,7 @@ function getModelOptions() {
     { value: 'gemini-2.5-flash', label: '⚖️ Gemini 2.5 Flash — $0.15/$0.60' },
     { value: 'claude-haiku-4-5', label: '⚖️ Claude Haiku 4.5 — $0.80/$4.00' },
     // Premium tier
-    { value: 'claude-sonnet-4-5', label: '⭐ Claude Sonnet 4.5 — $3.00/$15.00' },
-    // Ultra-premium tier
-    { value: 'claude-sonnet-4-6', label: '💎 Claude Sonnet 4.6 — $3.00/$15.00' },
+    { value: 'claude-sonnet-4-6', label: '⭐ Claude Sonnet 4.6 — $3.00/$15.00' },
     // Local
     { value: 'ollama-local', label: '🖥️ Ollama (Local) — Free' },
   ];
@@ -2048,7 +2046,6 @@ function getModelDisplayName(modelValue) {
     'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
     'gemini-2.5-flash': 'Gemini 2.5 Flash',
     'claude-haiku-4-5': 'Claude Haiku 4.5',
-    'claude-sonnet-4-5': 'Claude Sonnet 4.5',
     'claude-sonnet-4-6': 'Claude Sonnet 4.6',
     'ollama-local': 'Ollama (Local)',
   };
