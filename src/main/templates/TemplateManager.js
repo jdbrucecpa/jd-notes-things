@@ -124,10 +124,10 @@ class TemplateManager {
    * Get estimated cost for generating summaries with multiple templates
    * @param {Array<string>} templateIds - Array of template IDs
    * @param {string} transcriptText - Meeting transcript
-   * @param {string} provider - Model provider (e.g., 'azure-gpt-5-mini', 'openai-gpt-4o-mini', 'claude-haiku-4-5')
+   * @param {string} provider - Model provider (e.g., 'gemini-2.5-flash', 'claude-haiku-4-5', 'claude-sonnet-4-6')
    * @returns {Object} Combined cost estimate
    */
-  estimateCost(templateIds, transcriptText, provider = 'openai-gpt-4o-mini') {
+  estimateCost(templateIds, transcriptText, provider = 'gemini-2.5-flash') {
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     let totalCost = 0;

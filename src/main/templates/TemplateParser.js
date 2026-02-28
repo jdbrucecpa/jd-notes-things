@@ -194,7 +194,7 @@ class TemplateParser {
    * - Budget: Gemini 2.5 Flash Lite
    * - Balanced: Gemini 2.5 Flash, Claude Haiku 4.5
    * - Premium: Claude Sonnet 4.5
-   * - Ultra-Premium: Claude Sonnet 4
+   * - Ultra-Premium: Claude Sonnet 4.6
    * - Local: Ollama (free, runs on your hardware)
    */
   static MODEL_PRICING = {
@@ -237,7 +237,7 @@ class TemplateParser {
     // ═══════════════════════════════════════════════════════════════════
     // ULTRA-PREMIUM TIER - Best quality for critical content
     // ═══════════════════════════════════════════════════════════════════
-    'claude-sonnet-4': {
+    'claude-sonnet-4-6': {
       input: 3.0, // $3.00 per 1M tokens
       output: 15.0, // $15.00 per 1M tokens
       tier: 'ultra-premium',
@@ -260,7 +260,7 @@ class TemplateParser {
    * Using rough estimate: 1 token ≈ 4 characters
    * @param {Object} template - Template object
    * @param {string} transcriptText - Meeting transcript
-   * @param {string} provider - Model provider (e.g., 'azure-gpt-5-mini', 'openai-gpt-4o-mini', 'claude-haiku-4-5')
+   * @param {string} provider - Model provider (e.g., 'gemini-2.5-flash', 'claude-haiku-4-5', 'claude-sonnet-4-6')
    * @returns {Object} Token estimates and cost
    */
   static estimateTokens(template, transcriptText, provider = 'gemini-2.5-flash') {

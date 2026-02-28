@@ -55,9 +55,9 @@ const ANTHROPIC_MODEL_MAP = {
   // Budget tier
   'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
   // Balanced tier
-  'claude-sonnet-4-5': 'claude-sonnet-4-5-20250514',
+  'claude-sonnet-4-5': 'claude-sonnet-4-5-20250929',
   // Premium tier
-  'claude-sonnet-4': 'claude-sonnet-4-20250514',
+  'claude-sonnet-4-6': 'claude-sonnet-4-6',
 };
 
 const GEMINI_MODEL_MAP = {

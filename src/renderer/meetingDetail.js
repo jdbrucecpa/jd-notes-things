@@ -2019,34 +2019,23 @@ async function exportToObsidian() {
  */
 function getModelOptions() {
   const settings = loadSettings();
-  const defaultModel = settings.autoSummaryProvider || 'openai-gpt-4o-mini';
+  const defaultModel = settings.autoSummaryProvider || 'gemini-2.5-flash';
 
   // Define all available models grouped by tier
   const models = [
     { value: 'default', label: `Default (${getModelDisplayName(defaultModel)})` },
     // Budget tier
-    { value: 'openai-gpt-5-nano', label: '💰 GPT-5 nano — $0.05/$0.40' },
-    { value: 'openai-gpt-4.1-nano', label: '💰 GPT-4.1 nano — $0.10/$0.40' },
+    { value: 'gemini-2.5-flash-lite', label: '💰 Gemini 2.5 Flash Lite — $0.075/$0.30' },
     // Balanced tier
-    { value: 'openai-gpt-4o-mini', label: '⚖️ GPT-4o mini — $0.15/$0.60' },
-    { value: 'openai-gpt-5-mini', label: '⚖️ GPT-5 mini — $0.25/$2.00' },
-    { value: 'openai-gpt-4.1-mini', label: '⚖️ GPT-4.1 mini — $0.40/$1.60' },
+    { value: 'gemini-2.5-flash', label: '⚖️ Gemini 2.5 Flash — $0.15/$0.60' },
+    { value: 'claude-haiku-4-5', label: '⚖️ Claude Haiku 4.5 — $0.80/$4.00' },
     // Premium tier
-    { value: 'claude-haiku-4-5', label: '⭐ Claude Haiku 4.5 — $1.00/$5.00' },
+    { value: 'claude-sonnet-4-5', label: '⭐ Claude Sonnet 4.5 — $3.00/$15.00' },
     // Ultra-premium tier
-    { value: 'claude-sonnet-4', label: '💎 Claude Sonnet 4 — $3.00/$15.00' },
-    { value: 'claude-sonnet-4-5', label: '💎 Claude Sonnet 4.5 — $3.00/$15.00' },
+    { value: 'claude-sonnet-4-6', label: '💎 Claude Sonnet 4.6 — $3.00/$15.00' },
+    // Local
+    { value: 'ollama-local', label: '🖥️ Ollama (Local) — Free' },
   ];
-
-  // Add Azure models if enabled
-  if (settings.azureEnabled && settings.azureDeployments?.length > 0) {
-    settings.azureDeployments.forEach(deployment => {
-      models.push({
-        value: `azure-${deployment.name}`,
-        label: `☁️ ${deployment.displayName} — $${deployment.inputPrice}/$${deployment.outputPrice}`,
-      });
-    });
-  }
 
   return models;
 }
@@ -2056,14 +2045,12 @@ function getModelOptions() {
  */
 function getModelDisplayName(modelValue) {
   const names = {
-    'openai-gpt-5-nano': 'GPT-5 nano',
-    'openai-gpt-4.1-nano': 'GPT-4.1 nano',
-    'openai-gpt-4o-mini': 'GPT-4o mini',
-    'openai-gpt-5-mini': 'GPT-5 mini',
-    'openai-gpt-4.1-mini': 'GPT-4.1 mini',
+    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
+    'gemini-2.5-flash': 'Gemini 2.5 Flash',
     'claude-haiku-4-5': 'Claude Haiku 4.5',
-    'claude-sonnet-4': 'Claude Sonnet 4',
     'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+    'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+    'ollama-local': 'Ollama (Local)',
   };
   return names[modelValue] || modelValue;
 }
