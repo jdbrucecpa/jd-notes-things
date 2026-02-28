@@ -8574,11 +8574,15 @@ body.dark-theme .pattern-error {
    =================================================================== */
 
 .update-banner {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-  color: white;
+  background: var(--primary-bg);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
   padding: 0;
-  position: relative;
-  z-index: 100;
+  position: fixed;
+  top: 32px; /* Below titlebar */
+  left: 0;
+  right: 0;
+  z-index: 1100; /* Above settings (100), contacts/reports (1000) */
   animation: updateBannerSlideDown 0.3s ease-out;
 }
 
@@ -8620,7 +8624,7 @@ body.dark-theme .pattern-error {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  opacity: 0.9;
+  color: var(--primary-color);
 }
 
 .update-banner-icon svg {
@@ -8659,7 +8663,7 @@ body.dark-theme .pattern-error {
 
 .update-banner-version {
   font-size: 11px;
-  opacity: 0.8;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -8685,15 +8689,15 @@ body.dark-theme .pattern-error {
 }
 
 .update-banner-btn-primary {
-  background: rgba(255, 255, 255, 0.95);
-  color: #4f46e5;
+  background: var(--primary-color);
+  color: white;
   padding: 6px 14px;
 }
 
 .update-banner-btn-primary:hover {
-  background: white;
+  filter: brightness(1.1);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .update-banner-btn-primary:active {
@@ -8701,26 +8705,27 @@ body.dark-theme .pattern-error {
 }
 
 .update-banner-btn-secondary {
-  background: rgba(255, 255, 255, 0.15);
-  color: white;
+  background: transparent;
+  color: var(--text-secondary);
   padding: 6px;
   width: 28px;
   height: 28px;
 }
 
 .update-banner-btn-secondary:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--hover-bg, rgba(0, 0, 0, 0.06));
+  color: var(--text-primary);
 }
 
 .update-banner-progress {
-  height: 3px;
-  background: rgba(255, 255, 255, 0.2);
+  height: 2px;
+  background: var(--border-color);
   overflow: hidden;
 }
 
 .update-banner-progress-bar {
   height: 100%;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--primary-color);
   width: 30%;
   animation: updateProgressIndeterminate 1.5s ease-in-out infinite;
 }
@@ -8739,20 +8744,36 @@ body.dark-theme .pattern-error {
 
 /* State variations */
 .update-banner.state-error {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  background: var(--primary-bg);
+  border-bottom-color: var(--color-error);
+}
+
+.update-banner.state-error .update-banner-icon {
+  color: var(--color-error);
 }
 
 .update-banner.state-ready {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  background: var(--primary-bg);
+  border-bottom-color: var(--status-success);
 }
 
-/* Dark theme adjustments */
-body.dark-theme .update-banner-btn-primary {
-  background: rgba(255, 255, 255, 0.9);
+.update-banner.state-ready .update-banner-icon {
+  color: var(--status-success);
 }
 
-body.dark-theme .update-banner-btn-primary:hover {
-  background: white;
+.update-banner.state-ready .update-banner-btn-primary {
+  background: var(--status-success);
+}
+
+/* Push overlay views down when update banner is visible */
+body.update-banner-visible .settings-full-page,
+body.update-banner-visible .contacts-full-page,
+body.update-banner-visible .reports-full-page {
+  top: 73px; /* 32px titlebar + ~41px banner */
+}
+
+body.update-banner-visible .app-container {
+  margin-top: 41px; /* Reserve space for the fixed banner */
 }
 
 /* ===================================================================

@@ -167,10 +167,12 @@ function initializeUpdateBanner() {
   function showBanner() {
     banner.classList.remove('hiding');
     banner.style.display = 'block';
+    document.body.classList.add('update-banner-visible');
   }
 
   function hideBanner() {
     banner.classList.add('hiding');
+    document.body.classList.remove('update-banner-visible');
     setTimeout(() => {
       banner.style.display = 'none';
       banner.classList.remove('hiding');
