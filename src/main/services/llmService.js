@@ -1,11 +1,11 @@
 /**
  * LLM Service - Unified interface for multiple LLM providers
- * Supports: OpenAI, Anthropic Claude, Azure OpenAI
+ * v1.3.2: Supports Anthropic Claude, Google Gemini, and Ollama (local)
  */
 
-const { OpenAI } = require('openai');
-const { AzureOpenAI } = require('openai');
 const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { OpenAI } = require('openai');
 
 /**
  * Base LLM Adapter Interface
@@ -51,378 +51,49 @@ class LLMAdapter {
  * Model ID mappings - preference string to actual API model ID
  * Format: 'preference-value' => 'api-model-id'
  */
-const OPENAI_MODEL_MAP = {
+const ANTHROPIC_MODEL_MAP = {
   // Budget tier
-  'gpt-5-nano': 'gpt-5-nano',
-  'gpt-4.1-nano': 'gpt-4.1-nano',
+  'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
   // Balanced tier
-  'gpt-4o-mini': 'gpt-4o-mini',
-  'gpt-5-mini': 'gpt-5-mini',
-  'gpt-4.1-mini': 'gpt-4.1-mini',
-  // Legacy
-  'gpt-4o': 'gpt-4o',
+  'claude-sonnet-4-5': 'claude-sonnet-4-5-20250514',
+  // Premium tier
+  'claude-sonnet-4': 'claude-sonnet-4-20250514',
 };
 
-const ANTHROPIC_MODEL_MAP = {
-  // Premium tier
-  'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
-  // Ultra-premium tier
-  'claude-sonnet-4': 'claude-sonnet-4-20250514',
-  'claude-sonnet-4-5': 'claude-sonnet-4-5-20241022',
-  // Legacy
-  'claude-opus-4': 'claude-opus-4-20250514',
+const GEMINI_MODEL_MAP = {
+  // Budget tier
+  'gemini-2.5-flash-lite': 'gemini-2.5-flash-lite-preview-06-17',
+  // Balanced tier
+  'gemini-2.5-flash': 'gemini-2.5-flash-preview-05-20',
 };
 
 /**
  * Extract model ID from preference string
- * e.g., 'openai-gpt-5-nano' => 'gpt-5-nano'
  * e.g., 'claude-haiku-4-5' => 'claude-haiku-4-5-20251001'
+ * e.g., 'gemini-2.5-flash' => 'gemini-2.5-flash-preview-05-20'
+ * e.g., 'ollama-llama3' => 'llama3'
  */
 function extractModelFromPreference(preference) {
   if (!preference) return null;
-
-  if (preference.startsWith('openai-')) {
-    const modelKey = preference.replace('openai-', '');
-    return OPENAI_MODEL_MAP[modelKey] || modelKey;
-  }
 
   if (preference.startsWith('claude-')) {
     return ANTHROPIC_MODEL_MAP[preference] || preference;
   }
 
-  if (preference.startsWith('azure-')) {
-    // Azure uses deployment names, extract the model part
-    return preference.replace('azure-', '');
+  if (preference.startsWith('gemini-')) {
+    return GEMINI_MODEL_MAP[preference] || preference;
+  }
+
+  if (preference.startsWith('ollama-')) {
+    return preference.replace('ollama-', '');
   }
 
   return preference;
 }
 
 /**
- * Check if a model is a reasoning model (GPT-5 series)
- * Reasoning models use max_completion_tokens and don't support temperature
- * @param {string} model - Model identifier
- * @returns {boolean}
- */
-function isReasoningModel(model) {
-  // GPT-5 series are reasoning models
-  // GPT-4.1 and GPT-4o series are NOT reasoning models
-  return model && (model.startsWith('gpt-5') || model.includes('gpt-5'));
-}
-
-/**
- * OpenAI Adapter
- * Supports GPT models including gpt-4o-mini, gpt-4.1-*, gpt-5-* (reasoning models)
- *
- * Note: GPT-5 series are reasoning models that:
- * - Use max_completion_tokens instead of max_tokens
- * - Don't support temperature, top_p, presence_penalty, frequency_penalty
- */
-class OpenAIAdapter extends LLMAdapter {
-  constructor(apiKey, model = 'gpt-4o-mini') {
-    super();
-    this.client = new OpenAI({ apiKey });
-    this.model = model;
-  }
-
-  async generateCompletion(options) {
-    const {
-      systemPrompt,
-      userPrompt,
-      cacheableContext,
-      maxTokens = 1000,
-      temperature = 0.7,
-    } = options;
-
-    const isReasoning = isReasoningModel(this.model);
-
-    // Build messages array - use separate messages for caching
-    const messages = [{ role: 'system', content: systemPrompt }];
-
-    if (cacheableContext) {
-      // Cacheable content (e.g., transcript) goes first
-      messages.push({
-        role: 'user',
-        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
-      });
-      // Dynamic instructions go second (will use cached transcript)
-      messages.push({ role: 'user', content: userPrompt });
-    } else {
-      // Standard single message
-      messages.push({ role: 'user', content: userPrompt });
-    }
-
-    // Build request parameters based on model type
-    const requestParams = {
-      model: this.model,
-      messages: messages,
-    };
-
-    if (isReasoning) {
-      // Reasoning models (GPT-5 series): use max_completion_tokens, no temperature
-      requestParams.max_completion_tokens = maxTokens;
-      console.log(`[OpenAI] Using reasoning model params for ${this.model} (max_completion_tokens: ${maxTokens})`);
-    } else {
-      // Standard models (GPT-4o, GPT-4.1 series): use max_tokens with temperature
-      requestParams.max_tokens = maxTokens;
-      requestParams.temperature = temperature;
-    }
-
-    const completion = await this.client.chat.completions.create(requestParams);
-
-    // Log token usage and cache statistics
-    if (completion.usage) {
-      console.log('[OpenAI] Token Usage:', JSON.stringify(completion.usage, null, 2));
-
-      // Check for cache hits
-      if (completion.usage.prompt_tokens_details) {
-        const cached = completion.usage.prompt_tokens_details.cached_tokens || 0;
-        const total = completion.usage.prompt_tokens || 0;
-        const cacheHitRate = total > 0 ? ((cached / total) * 100).toFixed(1) : 0;
-
-        if (cached > 0) {
-          console.log(
-            `[OpenAI] 🎯 CACHE HIT: ${cached}/${total} tokens cached (${cacheHitRate}% hit rate)`
-          );
-          console.log(
-            `[OpenAI] 💰 Cache savings: ~$${((cached * 0.225) / 1000000).toFixed(4)} (90% discount)`
-          );
-        } else {
-          console.log('[OpenAI] ❌ No cache hit - first call or cache expired');
-        }
-      }
-    }
-
-    return {
-      content: completion.choices[0].message.content,
-      model: completion.model,
-    };
-  }
-
-  async streamCompletion(options) {
-    const {
-      systemPrompt,
-      userPrompt,
-      cacheableContext,
-      maxTokens = 1000,
-      temperature = 0.7,
-      onChunk,
-    } = options;
-
-    const isReasoning = isReasoningModel(this.model);
-
-    // Build messages array - use separate messages for caching
-    const messages = [{ role: 'system', content: systemPrompt }];
-
-    if (cacheableContext) {
-      // Cacheable content (e.g., transcript) goes first
-      messages.push({
-        role: 'user',
-        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
-      });
-      // Dynamic instructions go second (will use cached transcript)
-      messages.push({ role: 'user', content: userPrompt });
-    } else {
-      // Standard single message
-      messages.push({ role: 'user', content: userPrompt });
-    }
-
-    // Build request parameters based on model type
-    const requestParams = {
-      model: this.model,
-      messages: messages,
-      stream: true,
-    };
-
-    if (isReasoning) {
-      // Reasoning models (GPT-5 series): use max_completion_tokens, no temperature
-      requestParams.max_completion_tokens = maxTokens;
-    } else {
-      // Standard models (GPT-4o, GPT-4.1 series): use max_tokens with temperature
-      requestParams.max_tokens = maxTokens;
-      requestParams.temperature = temperature;
-    }
-
-    const stream = await this.client.chat.completions.create(requestParams);
-
-    let fullText = '';
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content || '';
-      if (delta) {
-        fullText += delta;
-        if (onChunk) {
-          onChunk(fullText);
-        }
-      }
-    }
-
-    return fullText;
-  }
-
-  getProviderName() {
-    return 'OpenAI';
-  }
-}
-
-/**
- * Azure OpenAI Adapter
- * Supports GPT models deployed on Azure
- */
-class AzureOpenAIAdapter extends LLMAdapter {
-  constructor(config) {
-    super();
-    this.client = new AzureOpenAI({
-      apiKey: config.apiKey,
-      endpoint: config.endpoint,
-      apiVersion: config.apiVersion || '2025-01-01-preview',
-      deployment: config.deployment,
-    });
-    this.deployment = config.deployment;
-  }
-
-  async generateCompletion(options) {
-    const { systemPrompt, userPrompt, cacheableContext, maxTokens = 1000 } = options;
-    // Note: gpt-5-mini is a reasoning model and does NOT support temperature, top_p,
-    // presence_penalty, frequency_penalty, logprobs, or max_tokens parameters
-
-    console.log('[Azure] generateCompletion called with:');
-    console.log('[Azure] - systemPrompt length:', systemPrompt?.length || 0);
-    console.log('[Azure] - userPrompt length:', userPrompt?.length || 0);
-    console.log('[Azure] - cacheableContext length:', cacheableContext?.length || 0);
-    console.log('[Azure] - maxTokens:', maxTokens);
-    console.log('[Azure] - deployment:', this.deployment);
-
-    // Build messages array - use separate messages for caching
-    const messages = [{ role: 'system', content: systemPrompt }];
-
-    if (cacheableContext) {
-      // Cacheable content (e.g., transcript) goes first
-      messages.push({
-        role: 'user',
-        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
-      });
-      // Dynamic instructions go second (will use cached transcript)
-      messages.push({ role: 'user', content: userPrompt });
-      console.log('[Azure] Using prompt caching structure (2 user messages)');
-    } else {
-      // Standard single message
-      messages.push({ role: 'user', content: userPrompt });
-    }
-
-    const completion = await this.client.chat.completions.create({
-      model: this.deployment,
-      messages: messages,
-      max_completion_tokens: maxTokens, // Reasoning models use max_completion_tokens
-    });
-
-    // Log token usage and cache statistics
-    if (completion.usage) {
-      console.log('[Azure] Token Usage:', JSON.stringify(completion.usage, null, 2));
-
-      // Check for cache hits (OpenAI/Azure return this in usage.prompt_tokens_details)
-      if (completion.usage.prompt_tokens_details) {
-        const cached = completion.usage.prompt_tokens_details.cached_tokens || 0;
-        const total = completion.usage.prompt_tokens || 0;
-        const cacheHitRate = total > 0 ? ((cached / total) * 100).toFixed(1) : 0;
-
-        if (cached > 0) {
-          console.log(
-            `[Azure] 🎯 CACHE HIT: ${cached}/${total} tokens cached (${cacheHitRate}% hit rate)`
-          );
-          console.log(
-            `[Azure] 💰 Cache savings: ~$${((cached * 0.225) / 1000000).toFixed(4)} (90% discount)`
-          );
-        } else {
-          console.log('[Azure] ❌ No cache hit - first call or cache expired');
-        }
-      }
-    }
-
-    const resultContent = completion.choices[0].message.content;
-    const resultModel = completion.model || this.deployment;
-    const finishReason = completion.choices[0].finish_reason;
-
-    console.log('[Azure] Extracted content type:', typeof resultContent);
-    console.log('[Azure] Extracted content length:', resultContent?.length || 0);
-    console.log('[Azure] Finish reason:', finishReason);
-    console.log('[Azure] Is content falsy?', !resultContent);
-
-    // Warn if we hit token limit with empty/truncated content
-    if (finishReason === 'length') {
-      if (!resultContent || resultContent.length === 0) {
-        console.error(
-          '[Azure] ERROR: Hit token limit during reasoning phase - no content generated!'
-        );
-        console.error(
-          '[Azure] This usually means max_completion_tokens is too low for the reasoning model.'
-        );
-        console.error('[Azure] Consider increasing maxTokens parameter.');
-        throw new Error(
-          'Reasoning model exhausted token budget before generating content. Increase maxTokens.'
-        );
-      } else {
-        console.warn(
-          '[Azure] WARNING: Response truncated due to token limit (finish_reason: length)'
-        );
-      }
-    }
-
-    return {
-      content: resultContent,
-      model: resultModel,
-    };
-  }
-
-  async streamCompletion(options) {
-    const { systemPrompt, userPrompt, cacheableContext, maxTokens = 1000, onChunk } = options;
-    // Note: gpt-5-mini is a reasoning model and does NOT support temperature
-
-    // Build messages array - use separate messages for caching
-    const messages = [{ role: 'system', content: systemPrompt }];
-
-    if (cacheableContext) {
-      // Cacheable content (e.g., transcript) goes first
-      messages.push({
-        role: 'user',
-        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
-      });
-      // Dynamic instructions go second (will use cached transcript)
-      messages.push({ role: 'user', content: userPrompt });
-      console.log('[Azure Stream] Using prompt caching structure (2 user messages)');
-    } else {
-      // Standard single message
-      messages.push({ role: 'user', content: userPrompt });
-    }
-
-    const stream = await this.client.chat.completions.create({
-      model: this.deployment,
-      messages: messages,
-      max_completion_tokens: maxTokens, // Reasoning models use max_completion_tokens
-      stream: true,
-    });
-
-    let fullText = '';
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta?.content || '';
-      if (delta) {
-        fullText += delta;
-        if (onChunk) {
-          onChunk(fullText);
-        }
-      }
-    }
-
-    return fullText;
-  }
-
-  getProviderName() {
-    return 'Azure OpenAI';
-  }
-}
-
-/**
  * Anthropic Claude Adapter
- * Supports Claude models (Haiku, Sonnet, Opus)
+ * Supports Claude models (Haiku, Sonnet)
  */
 class AnthropicAdapter extends LLMAdapter {
   constructor(apiKey, model = 'claude-haiku-4-5-20251001') {
@@ -486,17 +157,14 @@ class AnthropicAdapter extends LLMAdapter {
       if (cacheRead > 0) {
         const cacheHitRate = totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : 0;
         console.log(
-          `[Anthropic] 🎯 CACHE HIT: ${cacheRead}/${totalInput} tokens from cache (${cacheHitRate}% hit rate)`
-        );
-        console.log(
-          `[Anthropic] 💰 Cache savings: ~$${((cacheRead * 0.225) / 1000000).toFixed(4)} (90% discount)`
+          `[Anthropic] CACHE HIT: ${cacheRead}/${totalInput} tokens from cache (${cacheHitRate}% hit rate)`
         );
       } else if (cacheCreated > 0) {
         console.log(
-          `[Anthropic] 📝 Cache created: ${cacheCreated} tokens (next calls will hit cache)`
+          `[Anthropic] Cache created: ${cacheCreated} tokens (next calls will hit cache)`
         );
       } else {
-        console.log('[Anthropic] ❌ No cache activity - standard processing');
+        console.log('[Anthropic] No cache activity - standard processing');
       }
     }
 
@@ -521,7 +189,6 @@ class AnthropicAdapter extends LLMAdapter {
 
     if (cacheableContext) {
       // Use Anthropic's explicit prompt caching
-      // Mark the cacheable content (transcript) with cache_control
       systemConfig = [
         {
           type: 'text',
@@ -530,7 +197,7 @@ class AnthropicAdapter extends LLMAdapter {
         {
           type: 'text',
           text: `Here is the meeting transcript:\n\n${cacheableContext}`,
-          cache_control: { type: 'ephemeral' }, // Mark for caching
+          cache_control: { type: 'ephemeral' },
         },
       ];
       messages = [{ role: 'user', content: userPrompt }];
@@ -575,6 +242,204 @@ class AnthropicAdapter extends LLMAdapter {
 }
 
 /**
+ * Google Gemini Adapter
+ * Supports Gemini 2.5 Flash and Flash Lite models
+ */
+class GeminiAdapter extends LLMAdapter {
+  constructor(apiKey, model = 'gemini-2.5-flash-preview-05-20') {
+    super();
+    this.genAI = new GoogleGenerativeAI(apiKey);
+    this.model = model;
+  }
+
+  async generateCompletion(options) {
+    const {
+      systemPrompt,
+      userPrompt,
+      cacheableContext,
+      maxTokens = 1000,
+      temperature = 0.7,
+    } = options;
+
+    const generativeModel = this.genAI.getGenerativeModel({
+      model: this.model,
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+        temperature,
+      },
+    });
+
+    // Build the user prompt with optional cacheable context
+    let fullPrompt = userPrompt;
+    if (cacheableContext) {
+      fullPrompt = `Here is the meeting transcript:\n\n${cacheableContext}\n\n${userPrompt}`;
+    }
+
+    const result = await generativeModel.generateContent(fullPrompt);
+    const response = result.response;
+
+    // Log token usage
+    if (response.usageMetadata) {
+      console.log('[Gemini] Token Usage:', JSON.stringify(response.usageMetadata, null, 2));
+    }
+
+    return {
+      content: response.text(),
+      model: this.model,
+    };
+  }
+
+  async streamCompletion(options) {
+    const {
+      systemPrompt,
+      userPrompt,
+      cacheableContext,
+      maxTokens = 1000,
+      temperature = 0.7,
+      onChunk,
+    } = options;
+
+    const generativeModel = this.genAI.getGenerativeModel({
+      model: this.model,
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+        temperature,
+      },
+    });
+
+    // Build the user prompt with optional cacheable context
+    let fullPrompt = userPrompt;
+    if (cacheableContext) {
+      fullPrompt = `Here is the meeting transcript:\n\n${cacheableContext}\n\n${userPrompt}`;
+    }
+
+    const result = await generativeModel.generateContentStream(fullPrompt);
+
+    let fullText = '';
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      if (chunkText) {
+        fullText += chunkText;
+        if (onChunk) {
+          onChunk(fullText);
+        }
+      }
+    }
+
+    return fullText;
+  }
+
+  getProviderName() {
+    return 'Gemini';
+  }
+}
+
+/**
+ * Ollama Adapter (Local LLM)
+ * Connects to a local Ollama instance via its OpenAI-compatible API.
+ * No API key required — runs entirely on your machine.
+ */
+class OllamaAdapter extends LLMAdapter {
+  constructor(model = 'llama3', baseUrl = 'http://localhost:11434') {
+    super();
+    // Ollama exposes an OpenAI-compatible API, so we reuse the openai client
+    this.client = new OpenAI({
+      apiKey: 'ollama', // Ollama doesn't need a real key
+      baseURL: `${baseUrl}/v1`,
+    });
+    this.model = model;
+  }
+
+  async generateCompletion(options) {
+    const {
+      systemPrompt,
+      userPrompt,
+      cacheableContext,
+      maxTokens = 1000,
+      temperature = 0.7,
+    } = options;
+
+    const messages = [{ role: 'system', content: systemPrompt }];
+
+    if (cacheableContext) {
+      messages.push({
+        role: 'user',
+        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
+      });
+      messages.push({ role: 'user', content: userPrompt });
+    } else {
+      messages.push({ role: 'user', content: userPrompt });
+    }
+
+    const completion = await this.client.chat.completions.create({
+      model: this.model,
+      messages: messages,
+      max_tokens: maxTokens,
+      temperature,
+    });
+
+    if (completion.usage) {
+      console.log('[Ollama] Token Usage:', JSON.stringify(completion.usage, null, 2));
+    }
+
+    return {
+      content: completion.choices[0].message.content,
+      model: completion.model || this.model,
+    };
+  }
+
+  async streamCompletion(options) {
+    const {
+      systemPrompt,
+      userPrompt,
+      cacheableContext,
+      maxTokens = 1000,
+      temperature = 0.7,
+      onChunk,
+    } = options;
+
+    const messages = [{ role: 'system', content: systemPrompt }];
+
+    if (cacheableContext) {
+      messages.push({
+        role: 'user',
+        content: `Here is the meeting transcript:\n\n${cacheableContext}`,
+      });
+      messages.push({ role: 'user', content: userPrompt });
+    } else {
+      messages.push({ role: 'user', content: userPrompt });
+    }
+
+    const stream = await this.client.chat.completions.create({
+      model: this.model,
+      messages: messages,
+      max_tokens: maxTokens,
+      temperature,
+      stream: true,
+    });
+
+    let fullText = '';
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content || '';
+      if (delta) {
+        fullText += delta;
+        if (onChunk) {
+          onChunk(fullText);
+        }
+      }
+    }
+
+    return fullText;
+  }
+
+  getProviderName() {
+    return 'Ollama';
+  }
+}
+
+/**
  * LLM Service Factory
  * Creates the appropriate adapter based on configuration
  */
@@ -582,10 +447,10 @@ class LLMService {
   /**
    * Initialize LLM service with provider config
    * @param {Object} config - Provider configuration
-   * @param {string} config.provider - 'openai' | 'azure' | 'anthropic'
-   * @param {Object} config.openai - OpenAI config { apiKey, model }
-   * @param {Object} config.azure - Azure config { apiKey, endpoint, deployment, apiVersion }
+   * @param {string} config.provider - 'anthropic' | 'gemini' | 'ollama'
    * @param {Object} config.anthropic - Anthropic config { apiKey, model }
+   * @param {Object} config.gemini - Gemini config { apiKey, model }
+   * @param {Object} config.ollama - Ollama config { model, baseUrl }
    */
   constructor(config) {
     this.config = config;
@@ -594,28 +459,6 @@ class LLMService {
 
   _createAdapter() {
     switch (this.config.provider) {
-      case 'openai':
-        if (!this.config.openai?.apiKey) {
-          throw new Error('OpenAI API key is required');
-        }
-        console.log(
-          `[LLM Service] Initializing OpenAI adapter with model: ${this.config.openai.model || 'gpt-4o-mini'}`
-        );
-        return new OpenAIAdapter(this.config.openai.apiKey, this.config.openai.model);
-
-      case 'azure':
-        if (
-          !this.config.azure?.apiKey ||
-          !this.config.azure?.endpoint ||
-          !this.config.azure?.deployment
-        ) {
-          throw new Error('Azure OpenAI requires apiKey, endpoint, and deployment');
-        }
-        console.log(
-          `[LLM Service] Initializing Azure OpenAI adapter with deployment: ${this.config.azure.deployment}`
-        );
-        return new AzureOpenAIAdapter(this.config.azure);
-
       case 'anthropic':
         if (!this.config.anthropic?.apiKey) {
           throw new Error('Anthropic API key is required');
@@ -625,9 +468,27 @@ class LLMService {
         );
         return new AnthropicAdapter(this.config.anthropic.apiKey, this.config.anthropic.model);
 
+      case 'gemini':
+        if (!this.config.gemini?.apiKey) {
+          throw new Error('Google API key (Gemini) is required');
+        }
+        console.log(
+          `[LLM Service] Initializing Gemini adapter with model: ${this.config.gemini.model || 'gemini-2.5-flash-preview-05-20'}`
+        );
+        return new GeminiAdapter(this.config.gemini.apiKey, this.config.gemini.model);
+
+      case 'ollama':
+        console.log(
+          `[LLM Service] Initializing Ollama adapter with model: ${this.config.ollama?.model || 'llama3'}`
+        );
+        return new OllamaAdapter(
+          this.config.ollama?.model || 'llama3',
+          this.config.ollama?.baseUrl || 'http://localhost:11434'
+        );
+
       default:
         throw new Error(
-          `Unknown provider: ${this.config.provider}. Must be 'openai', 'azure', or 'anthropic'`
+          `Unknown provider: ${this.config.provider}. Must be 'anthropic', 'gemini', or 'ollama'`
         );
     }
   }
@@ -674,20 +535,21 @@ class LLMService {
 
   /**
    * Switch to a different provider
-   * @param {string} provider - 'openai' | 'azure' | 'anthropic'
-   * @param {string} [model] - Optional model to use (e.g., 'gpt-5-nano', 'claude-sonnet-4')
+   * @param {string} provider - 'anthropic' | 'gemini' | 'ollama'
+   * @param {string} [model] - Optional model to use
    */
   switchProvider(provider, model) {
     this.config.provider = provider;
 
     // Update model config if provided
     if (model) {
-      if (provider === 'openai' && this.config.openai) {
-        this.config.openai.model = model;
-      } else if (provider === 'anthropic' && this.config.anthropic) {
+      if (provider === 'anthropic' && this.config.anthropic) {
         this.config.anthropic.model = model;
-      } else if (provider === 'azure' && this.config.azure) {
-        this.config.azure.deployment = model;
+      } else if (provider === 'gemini' && this.config.gemini) {
+        this.config.gemini.model = model;
+      } else if (provider === 'ollama') {
+        if (!this.config.ollama) this.config.ollama = {};
+        this.config.ollama.model = model;
       }
     }
 
@@ -699,28 +561,23 @@ class LLMService {
 
   /**
    * Switch to a specific model using preference string
-   * @param {string} preference - Full preference string (e.g., 'openai-gpt-5-nano', 'claude-haiku-4-5', 'azure-my-deployment')
-   * @param {Object} [azureConfig] - Optional Azure config for dynamic deployments
-   * @param {string} [azureConfig.endpoint] - Azure OpenAI endpoint URL
+   * @param {string} preference - Full preference string (e.g., 'claude-haiku-4-5', 'gemini-2.5-flash', 'ollama-llama3')
    */
-  switchToPreference(preference, azureConfig = null) {
+  switchToPreference(preference) {
     const model = extractModelFromPreference(preference);
     let provider;
 
-    if (preference.startsWith('openai-')) {
-      provider = 'openai';
-    } else if (preference.startsWith('claude-')) {
+    if (preference.startsWith('claude-')) {
       provider = 'anthropic';
-    } else if (preference.startsWith('azure-')) {
-      provider = 'azure';
-      // Update Azure config if provided (for dynamic deployments)
-      if (azureConfig && azureConfig.endpoint && this.config.azure) {
-        this.config.azure.endpoint = azureConfig.endpoint;
-        console.log(`[LLM Service] Updated Azure endpoint to: ${azureConfig.endpoint}`);
-      }
+    } else if (preference.startsWith('gemini-')) {
+      provider = 'gemini';
+    } else if (preference.startsWith('ollama-')) {
+      provider = 'ollama';
     } else {
-      console.warn(`[LLM Service] Unknown preference format: ${preference}, defaulting to openai`);
-      provider = 'openai';
+      console.warn(
+        `[LLM Service] Unknown preference format: ${preference}, defaulting to anthropic`
+      );
+      provider = 'anthropic';
     }
 
     this.switchProvider(provider, model);
@@ -730,12 +587,12 @@ class LLMService {
    * Get current model name
    */
   getCurrentModel() {
-    if (this.config.provider === 'openai') {
-      return this.config.openai?.model || 'gpt-4o-mini';
-    } else if (this.config.provider === 'anthropic') {
+    if (this.config.provider === 'anthropic') {
       return this.config.anthropic?.model || 'claude-haiku-4-5-20251001';
-    } else if (this.config.provider === 'azure') {
-      return this.config.azure?.deployment || 'unknown';
+    } else if (this.config.provider === 'gemini') {
+      return this.config.gemini?.model || 'gemini-2.5-flash-preview-05-20';
+    } else if (this.config.provider === 'ollama') {
+      return this.config.ollama?.model || 'llama3';
     }
     return 'unknown';
   }
@@ -746,38 +603,30 @@ class LLMService {
  * @deprecated Use createLLMServiceFromCredentials() instead for production
  */
 function createLLMServiceFromEnv() {
-  // Determine which provider to use based on env vars
-  // Priority (v1.2): OpenAI > Anthropic > Azure (Azure is now emergency backup)
+  // Priority (v1.3.2): Anthropic > Gemini > Ollama
   let provider;
-  if (process.env.OPENAI_API_KEY) {
-    provider = 'openai';
-  } else if (process.env.ANTHROPIC_API_KEY) {
+  if (process.env.ANTHROPIC_API_KEY) {
     provider = 'anthropic';
-  } else if (
-    process.env.AZURE_OPENAI_API_KEY &&
-    process.env.AZURE_OPENAI_ENDPOINT &&
-    process.env.AZURE_OPENAI_DEPLOYMENT
-  ) {
-    provider = 'azure';
+  } else if (process.env.GOOGLE_API_KEY) {
+    provider = 'gemini';
   } else {
-    throw new Error('No LLM API keys found in environment variables');
+    // Default to Ollama (local, no key required)
+    provider = 'ollama';
   }
 
   const config = {
     provider,
-    openai: {
-      apiKey: process.env.OPENAI_API_KEY,
-      model: 'gpt-4o-mini', // Can be overridden
-    },
-    azure: {
-      apiKey: process.env.AZURE_OPENAI_API_KEY,
-      endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-      deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
-      apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview',
-    },
     anthropic: {
       apiKey: process.env.ANTHROPIC_API_KEY,
-      model: 'claude-haiku-4-5-20251001', // Fast and cost-effective
+      model: 'claude-haiku-4-5-20251001',
+    },
+    gemini: {
+      apiKey: process.env.GOOGLE_API_KEY,
+      model: 'gemini-2.5-flash-preview-05-20',
+    },
+    ollama: {
+      model: process.env.OLLAMA_MODEL || 'llama3',
+      baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
     },
   };
 
@@ -790,50 +639,40 @@ function createLLMServiceFromEnv() {
  */
 async function createLLMServiceFromCredentials(keyManagementService) {
   // Try to get API keys from Windows Credential Manager first, fall back to env vars
-  const openaiKey =
-    (await keyManagementService.getKey('OPENAI_API_KEY')) || process.env.OPENAI_API_KEY;
   const anthropicKey =
     (await keyManagementService.getKey('ANTHROPIC_API_KEY')) || process.env.ANTHROPIC_API_KEY;
-  const azureKey =
-    (await keyManagementService.getKey('AZURE_OPENAI_API_KEY')) || process.env.AZURE_OPENAI_API_KEY;
-  const azureEndpoint =
-    (await keyManagementService.getKey('AZURE_OPENAI_ENDPOINT')) ||
-    process.env.AZURE_OPENAI_ENDPOINT;
-  const azureDeployment =
-    (await keyManagementService.getKey('AZURE_OPENAI_DEPLOYMENT')) ||
-    process.env.AZURE_OPENAI_DEPLOYMENT;
+  const geminiKey =
+    (await keyManagementService.getKey('GOOGLE_API_KEY')) || process.env.GOOGLE_API_KEY;
+  const ollamaBaseUrl =
+    (await keyManagementService.getKey('OLLAMA_BASE_URL')) ||
+    process.env.OLLAMA_BASE_URL ||
+    'http://localhost:11434';
+  const ollamaModel =
+    (await keyManagementService.getKey('OLLAMA_MODEL')) || process.env.OLLAMA_MODEL || 'llama3';
 
-  // Determine which provider to use based on available keys
-  // Priority (v1.2): OpenAI > Anthropic > Azure (Azure is now emergency backup)
+  // Priority (v1.3.2): Anthropic > Gemini > Ollama (Ollama always available as fallback)
   let provider;
-  if (openaiKey) {
-    provider = 'openai';
-  } else if (anthropicKey) {
+  if (anthropicKey) {
     provider = 'anthropic';
-  } else if (azureKey && azureEndpoint && azureDeployment) {
-    provider = 'azure';
+  } else if (geminiKey) {
+    provider = 'gemini';
   } else {
-    throw new Error('No LLM API keys found in Windows Credential Manager or environment variables');
+    provider = 'ollama';
   }
 
   const config = {
     provider,
-    openai: {
-      apiKey: openaiKey,
-      model: 'gpt-4o-mini', // Can be overridden
-    },
-    azure: {
-      apiKey: azureKey,
-      endpoint: azureEndpoint,
-      deployment: azureDeployment,
-      apiVersion:
-        (await keyManagementService.getKey('AZURE_OPENAI_API_VERSION')) ||
-        process.env.AZURE_OPENAI_API_VERSION ||
-        '2025-01-01-preview',
-    },
     anthropic: {
       apiKey: anthropicKey,
-      model: 'claude-haiku-4-5-20251001', // Fast and cost-effective
+      model: 'claude-haiku-4-5-20251001',
+    },
+    gemini: {
+      apiKey: geminiKey,
+      model: 'gemini-2.5-flash-preview-05-20',
+    },
+    ollama: {
+      model: ollamaModel,
+      baseUrl: ollamaBaseUrl,
     },
   };
 
@@ -842,43 +681,38 @@ async function createLLMServiceFromCredentials(keyManagementService) {
 
 /**
  * Create LLM service from a provider preference string
- * @param {string} providerPreference - e.g., 'openai-gpt-4o-mini', 'azure-gpt-5-mini', 'claude-haiku-4-5'
+ * @param {string} providerPreference - e.g., 'claude-haiku-4-5', 'gemini-2.5-flash', 'ollama-llama3'
  * @returns {LLMService}
  */
 function createLLMServiceFromPreference(providerPreference) {
   const config = {
-    openai: {
-      apiKey: process.env.OPENAI_API_KEY,
-      model: 'gpt-4o-mini',
-    },
-    azure: {
-      apiKey: process.env.AZURE_OPENAI_API_KEY,
-      endpoint: process.env.AZURE_OPENAI_ENDPOINT,
-      deployment: process.env.AZURE_OPENAI_DEPLOYMENT,
-      apiVersion: process.env.AZURE_OPENAI_API_VERSION || '2025-01-01-preview',
-    },
     anthropic: {
       apiKey: process.env.ANTHROPIC_API_KEY,
       model: 'claude-haiku-4-5-20251001',
     },
+    gemini: {
+      apiKey: process.env.GOOGLE_API_KEY,
+      model: 'gemini-2.5-flash-preview-05-20',
+    },
+    ollama: {
+      model: process.env.OLLAMA_MODEL || 'llama3',
+      baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
+    },
   };
 
   // Parse provider preference
-  if (providerPreference.startsWith('openai')) {
-    config.provider = 'openai';
-    if (!config.openai.apiKey) {
-      throw new Error('OpenAI API key not found in environment variables');
-    }
-  } else if (providerPreference.startsWith('azure')) {
-    config.provider = 'azure';
-    if (!config.azure.apiKey || !config.azure.endpoint || !config.azure.deployment) {
-      throw new Error('Azure OpenAI credentials not found in environment variables');
-    }
-  } else if (providerPreference.startsWith('claude')) {
+  if (providerPreference.startsWith('claude')) {
     config.provider = 'anthropic';
     if (!config.anthropic.apiKey) {
       throw new Error('Anthropic API key not found in environment variables');
     }
+  } else if (providerPreference.startsWith('gemini')) {
+    config.provider = 'gemini';
+    if (!config.gemini.apiKey) {
+      throw new Error('Google API key (Gemini) not found in environment variables');
+    }
+  } else if (providerPreference.startsWith('ollama')) {
+    config.provider = 'ollama';
   } else {
     // Default to whatever is available
     return createLLMServiceFromEnv();
@@ -889,13 +723,13 @@ function createLLMServiceFromPreference(providerPreference) {
 
 module.exports = {
   LLMService,
-  OpenAIAdapter,
-  AzureOpenAIAdapter,
   AnthropicAdapter,
+  GeminiAdapter,
+  OllamaAdapter,
   createLLMServiceFromEnv,
   createLLMServiceFromCredentials,
   createLLMServiceFromPreference,
   extractModelFromPreference,
-  OPENAI_MODEL_MAP,
   ANTHROPIC_MODEL_MAP,
+  GEMINI_MODEL_MAP,
 };

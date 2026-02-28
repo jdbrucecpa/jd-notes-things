@@ -17,14 +17,12 @@ const API_KEY_TYPES = {
   RECALL_WEBHOOK_SECRET: 'Recall.ai Webhook Secret',
   ASSEMBLYAI_API_KEY: 'AssemblyAI API Key',
   DEEPGRAM_API_KEY: 'Deepgram API Key',
-  OPENAI_API_KEY: 'OpenAI API Key',
   ANTHROPIC_API_KEY: 'Anthropic API Key',
   GOOGLE_API_KEY: 'Google API Key (Gemini)',
   GOOGLE_CALENDAR_CLIENT_ID: 'Google Calendar Client ID',
   GOOGLE_CALENDAR_CLIENT_SECRET: 'Google Calendar Client Secret',
-  AZURE_OPENAI_API_KEY: 'Azure OpenAI API Key',
-  AZURE_OPENAI_ENDPOINT: 'Azure OpenAI Endpoint',
-  AZURE_OPENAI_DEPLOYMENT: 'Azure OpenAI Deployment',
+  OLLAMA_BASE_URL: 'Ollama Server URL',
+  OLLAMA_MODEL: 'Ollama Default Model',
   TUNNEL_SUBDOMAIN: 'Localtunnel Subdomain (not recommended)',
 };
 
@@ -276,12 +274,6 @@ class KeyManagementService {
         }
         break;
 
-      case 'OPENAI_API_KEY':
-        if (!value.startsWith('sk-')) {
-          return { valid: false, message: 'OpenAI API keys should start with "sk-"' };
-        }
-        break;
-
       case 'ANTHROPIC_API_KEY':
         if (!value.startsWith('sk-ant-')) {
           return { valid: false, message: 'Anthropic API keys should start with "sk-ant-"' };
@@ -310,9 +302,9 @@ class KeyManagementService {
         }
         break;
 
-      case 'AZURE_OPENAI_ENDPOINT':
-        if (!value.startsWith('https://')) {
-          return { valid: false, message: 'Azure endpoint should be a valid HTTPS URL' };
+      case 'OLLAMA_BASE_URL':
+        if (!value.startsWith('http://') && !value.startsWith('https://')) {
+          return { valid: false, message: 'Ollama URL should be a valid HTTP/HTTPS URL' };
         }
         break;
     }

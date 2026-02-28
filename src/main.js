@@ -219,7 +219,7 @@ global.getAPIKey = getAPIKey;
 global.getAPIKeySync = getAPIKeySync;
 
 // Initialize LLM service with auto-detection of available provider
-// Priority: Azure OpenAI > Anthropic > OpenAI
+// Priority: Anthropic > Gemini > Ollama (local fallback)
 // Initialized in app.whenReady() using Windows Credential Manager
 let llmService = null;
 
@@ -4130,7 +4130,7 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
 async function executeTemplateSectionTask(llmService, task, transcriptText) {
   try {
     // Use prompt caching: separate transcript (static) from instructions (dynamic)
-    // This saves ~90% on input costs for 2nd+ calls (Azure/OpenAI/Anthropic all support this)
+    // This saves ~90% on input costs for 2nd+ calls (Anthropic supports explicit caching)
     // Example savings: 20 sections × 37k tokens = 740k tokens
     //   Without caching: 740k × $0.25/1M = $0.185
     //   With caching: 37k × $0.25/1M + (19 × 37k × $0.025/1M) = $0.027 (~85% savings)
@@ -4140,7 +4140,7 @@ async function executeTemplateSectionTask(llmService, task, transcriptText) {
       userPrompt: task.sectionPrompt,
       cacheableContext: transcriptText, // This will be cached across all section calls
       temperature: 0.7,
-      maxTokens: LLM_SECTION_MAX_TOKENS, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
+      maxTokens: LLM_SECTION_MAX_TOKENS, // Safe limit for all models (Anthropic/Gemini/Ollama)
     });
 
     console.log(
@@ -6154,14 +6154,7 @@ ipcMain.handle(
           const originalModel = llmService.getCurrentModel();
           console.log(`[Template IPC] Switching to custom model: ${model}`);
 
-          // Get Azure config if needed
-          const preferences = await getProviderPreferences();
-          const azureConfig =
-            model.startsWith('azure-') && preferences.azureEndpoint
-              ? { endpoint: preferences.azureEndpoint }
-              : null;
-
-          llmService.switchToPreference(model, azureConfig);
+          llmService.switchToPreference(model);
 
           try {
             summaries = await generateTemplateSummaries(meeting, templateIds);
@@ -8458,7 +8451,7 @@ ipcMain.handle('settings:chooseVaultPath', async () => {
   }
 });
 
-// Get AI provider preferences (Phase 10.3, updated v1.2)
+// Get AI provider preferences (Phase 10.3, updated v1.3.2)
 ipcMain.handle('settings:getProviderPreferences', async event => {
   // Get settings from renderer's localStorage via webContents
   const preferences = await event.sender.executeJavaScript(`
@@ -8466,15 +8459,15 @@ ipcMain.handle('settings:getProviderPreferences', async event => {
       try {
         const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
         return {
-          autoSummaryProvider: settings.autoSummaryProvider || 'openai-gpt-4o-mini',
-          templateSummaryProvider: settings.templateSummaryProvider || 'openai-gpt-4o-mini',
-          patternGenerationProvider: settings.patternGenerationProvider || 'openai-gpt-5-nano'
+          autoSummaryProvider: settings.autoSummaryProvider || 'gemini-2.5-flash',
+          templateSummaryProvider: settings.templateSummaryProvider || 'claude-haiku-4-5',
+          patternGenerationProvider: settings.patternGenerationProvider || 'gemini-2.5-flash-lite'
         };
       } catch (e) {
         return {
-          autoSummaryProvider: 'openai-gpt-4o-mini',
-          templateSummaryProvider: 'openai-gpt-4o-mini',
-          patternGenerationProvider: 'openai-gpt-5-nano'
+          autoSummaryProvider: 'gemini-2.5-flash',
+          templateSummaryProvider: 'claude-haiku-4-5',
+          patternGenerationProvider: 'gemini-2.5-flash-lite'
         };
       }
     })()
@@ -9565,14 +9558,7 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId, options = {}) 
         const originalProvider = llmService.config.provider;
         const originalModel = llmService.getCurrentModel();
 
-        // Get Azure config if needed
-        const preferences = await getProviderPreferences();
-        const azureConfig =
-          model.startsWith('azure-') && preferences.azureEndpoint
-            ? { endpoint: preferences.azureEndpoint }
-            : null;
-
-        llmService.switchToPreference(model, azureConfig);
+        llmService.switchToPreference(model);
 
         try {
           result = await performGeneration();
@@ -11228,17 +11214,17 @@ async function processRecallAITranscript(transcript, meetingId, _windowId) {
 
 /**
  * Map provider preference value to simple provider name
- * @param {string} providerValue - Value from settings (e.g., 'azure-gpt-5-mini', 'claude-haiku-4-5', 'openai-gpt-4o-mini')
- * @returns {string} Provider name for llmService.switchProvider() (e.g., 'azure', 'anthropic', 'openai')
+ * @param {string} providerValue - Value from settings (e.g., 'claude-haiku-4-5', 'gemini-2.5-flash', 'ollama-llama3')
+ * @returns {string} Provider name for llmService.switchProvider() (e.g., 'anthropic', 'gemini', 'ollama')
  */
 function mapProviderValue(providerValue) {
-  if (providerValue.startsWith('azure-')) return 'azure';
   if (providerValue.startsWith('claude-')) return 'anthropic';
-  if (providerValue.startsWith('openai-')) return 'openai';
+  if (providerValue.startsWith('gemini-')) return 'gemini';
+  if (providerValue.startsWith('ollama-')) return 'ollama';
 
-  // Fallback to openai if unknown (v1.2: changed from azure to openai as primary)
-  console.warn(`[LLM] Unknown provider value: ${providerValue}, falling back to openai`);
-  return 'openai';
+  // Fallback to anthropic if unknown (v1.3.2)
+  console.warn(`[LLM] Unknown provider value: ${providerValue}, falling back to anthropic`);
+  return 'anthropic';
 }
 
 /**
@@ -11270,13 +11256,7 @@ async function withProviderSwitch(providerType, callback, logContext = '[LLM]') 
       `${logContext} Switching LLM to ${preferenceValue} (provider: ${desiredProvider})`
     );
 
-    // Pass Azure config if switching to Azure (v1.2: dynamic Azure deployments)
-    const azureConfig =
-      desiredProvider === 'azure' && preferences.azureEndpoint
-        ? { endpoint: preferences.azureEndpoint }
-        : null;
-
-    llmService.switchToPreference(preferenceValue, azureConfig);
+    llmService.switchToPreference(preferenceValue);
   }
 
   try {
@@ -11294,17 +11274,16 @@ async function withProviderSwitch(providerType, callback, logContext = '[LLM]') 
 
 /**
  * Get provider preferences from renderer's localStorage
- * Default models (v1.2): OpenAI models as primary, with GPT-4o mini as balanced default
- * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string, patternGenerationProvider: string, azureEndpoint: string}>}
+ * Default models (v1.3.2): Gemini Flash for budget tasks, Claude Haiku for quality
+ * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string, patternGenerationProvider: string}>}
  */
 async function getProviderPreferences() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     console.warn('[LLM] Main window not available, using default providers');
     return {
-      autoSummaryProvider: 'openai-gpt-4o-mini',
-      templateSummaryProvider: 'openai-gpt-4o-mini',
-      patternGenerationProvider: 'openai-gpt-5-nano',
-      azureEndpoint: '',
+      autoSummaryProvider: 'gemini-2.5-flash',
+      templateSummaryProvider: 'claude-haiku-4-5',
+      patternGenerationProvider: 'gemini-2.5-flash-lite',
     };
   }
 
@@ -11314,17 +11293,15 @@ async function getProviderPreferences() {
         try {
           const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
           return {
-            autoSummaryProvider: settings.autoSummaryProvider || 'openai-gpt-4o-mini',
-            templateSummaryProvider: settings.templateSummaryProvider || 'openai-gpt-4o-mini',
-            patternGenerationProvider: settings.patternGenerationProvider || 'openai-gpt-5-nano',
-            azureEndpoint: settings.azureEndpoint || ''
+            autoSummaryProvider: settings.autoSummaryProvider || 'gemini-2.5-flash',
+            templateSummaryProvider: settings.templateSummaryProvider || 'claude-haiku-4-5',
+            patternGenerationProvider: settings.patternGenerationProvider || 'gemini-2.5-flash-lite'
           };
         } catch (e) {
           return {
-            autoSummaryProvider: 'openai-gpt-4o-mini',
-            templateSummaryProvider: 'openai-gpt-4o-mini',
-            patternGenerationProvider: 'openai-gpt-5-nano',
-            azureEndpoint: ''
+            autoSummaryProvider: 'gemini-2.5-flash',
+            templateSummaryProvider: 'claude-haiku-4-5',
+            patternGenerationProvider: 'gemini-2.5-flash-lite'
           };
         }
       })()
@@ -11333,10 +11310,9 @@ async function getProviderPreferences() {
   } catch (error) {
     console.error('[LLM] Error reading provider preferences:', error);
     return {
-      autoSummaryProvider: 'openai-gpt-4o-mini',
-      templateSummaryProvider: 'openai-gpt-4o-mini',
-      patternGenerationProvider: 'openai-gpt-5-nano',
-      azureEndpoint: '',
+      autoSummaryProvider: 'gemini-2.5-flash',
+      templateSummaryProvider: 'claude-haiku-4-5',
+      patternGenerationProvider: 'gemini-2.5-flash-lite',
     };
   }
 }
@@ -11582,7 +11558,7 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
         cacheableContext: cacheableContent, // This will be cached across all section calls
-        maxTokens: LLM_SECTION_MAX_TOKENS, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
+        maxTokens: LLM_SECTION_MAX_TOKENS, // Safe limit for all models (Anthropic/Gemini/Ollama)
         temperature: 0.7,
       });
 
@@ -11618,7 +11594,7 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
         systemPrompt: systemMessage,
         userPrompt: userPrompt,
         cacheableContext: cacheableContent, // This will be cached across all section calls
-        maxTokens: LLM_SECTION_MAX_TOKENS, // Safe limit for all models (OpenAI max: 16384, Azure/Anthropic higher)
+        maxTokens: LLM_SECTION_MAX_TOKENS, // Safe limit for all models (Anthropic/Gemini/Ollama)
         temperature: 0.7,
         onChunk: cumulativeText => {
           if (progressCallback) {

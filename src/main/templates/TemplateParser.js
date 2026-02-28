@@ -184,65 +184,54 @@ class TemplateParser {
 
   /**
    * Pricing per million tokens
-   * Last updated: December 2025
-   * Sources: https://platform.openai.com/docs/pricing
-   *          https://docs.anthropic.com/en/docs/about-claude/pricing
+   * Last updated: February 2026
+   * Sources: https://docs.anthropic.com/en/docs/about-claude/pricing
+   *          https://ai.google.dev/pricing
    *
    * NOTE: Prices may change. Verify current pricing before major deployments.
    *
    * Models are organized into pricing tiers:
-   * - Budget: GPT-5 nano, GPT-4.1 nano
-   * - Balanced: GPT-4o mini, GPT-4.1 mini, GPT-5 mini
-   * - Premium: Claude Haiku 4.5
-   * - Ultra-premium: Claude Sonnet 4
+   * - Budget: Gemini 2.5 Flash Lite
+   * - Balanced: Gemini 2.5 Flash, Claude Haiku 4.5
+   * - Premium: Claude Sonnet 4.5
+   * - Ultra-Premium: Claude Sonnet 4
+   * - Local: Ollama (free, runs on your hardware)
    */
   static MODEL_PRICING = {
     // ═══════════════════════════════════════════════════════════════════
     // BUDGET TIER - Best for high-volume, cost-sensitive tasks
     // ═══════════════════════════════════════════════════════════════════
-    'openai-gpt-5-nano': {
-      input: 0.05, // $0.05 per 1M tokens
-      output: 0.4, // $0.40 per 1M tokens
+    'gemini-2.5-flash-lite': {
+      input: 0.075, // $0.075 per 1M tokens
+      output: 0.3, // $0.30 per 1M tokens
       tier: 'budget',
-      updated: '2025-12-12',
-    },
-    'openai-gpt-4.1-nano': {
-      input: 0.1, // $0.10 per 1M tokens
-      output: 0.4, // $0.40 per 1M tokens
-      tier: 'budget',
-      updated: '2025-12-12',
+      updated: '2026-02-28',
     },
 
     // ═══════════════════════════════════════════════════════════════════
     // BALANCED TIER - Good balance of quality and cost
     // ═══════════════════════════════════════════════════════════════════
-    'openai-gpt-4o-mini': {
+    'gemini-2.5-flash': {
       input: 0.15, // $0.15 per 1M tokens
       output: 0.6, // $0.60 per 1M tokens
       tier: 'balanced',
-      updated: '2025-12-12',
+      updated: '2026-02-28',
     },
-    'openai-gpt-5-mini': {
-      input: 0.25, // $0.25 per 1M tokens
-      output: 2.0, // $2.00 per 1M tokens
+    'claude-haiku-4-5': {
+      input: 0.8, // $0.80 per 1M tokens
+      output: 4.0, // $4.00 per 1M tokens
       tier: 'balanced',
-      updated: '2025-12-12',
-    },
-    'openai-gpt-4.1-mini': {
-      input: 0.4, // $0.40 per 1M tokens
-      output: 1.6, // $1.60 per 1M tokens
-      tier: 'balanced',
-      updated: '2025-12-12',
+      updated: '2026-02-28',
     },
 
     // ═══════════════════════════════════════════════════════════════════
     // PREMIUM TIER - Higher quality for important summaries
     // ═══════════════════════════════════════════════════════════════════
-    'claude-haiku-4-5': {
-      input: 1.0, // $1.00 per 1M tokens
-      output: 5.0, // $5.00 per 1M tokens
+    'claude-sonnet-4-5': {
+      input: 3.0, // $3.00 per 1M tokens
+      output: 15.0, // $15.00 per 1M tokens
       tier: 'premium',
-      updated: '2025-12-12',
+      updated: '2026-02-28',
     },
 
     // ═══════════════════════════════════════════════════════════════════
@@ -252,42 +241,17 @@ class TemplateParser {
       input: 3.0, // $3.00 per 1M tokens
       output: 15.0, // $15.00 per 1M tokens
       tier: 'ultra-premium',
-      updated: '2025-12-12',
-    },
-    'claude-sonnet-4-5': {
-      input: 3.0, // $3.00 per 1M tokens
-      output: 15.0, // $15.00 per 1M tokens
-      tier: 'ultra-premium',
-      updated: '2025-12-12',
+      updated: '2026-02-28',
     },
 
     // ═══════════════════════════════════════════════════════════════════
-    // AZURE OPENAI (Hidden - Emergency backup only)
-    // These require custom Azure deployments and are not shown in UI
+    // LOCAL TIER - Free, runs on your hardware via Ollama
     // ═══════════════════════════════════════════════════════════════════
-    'azure-gpt-5-mini': {
-      input: 0.25,
-      output: 2.0,
-      tier: 'azure-hidden',
-      updated: '2025-12-12',
-    },
-    'azure-gpt-5': {
-      input: 3.0,
-      output: 12.0,
-      tier: 'azure-hidden',
-      updated: '2025-12-12',
-    },
-    'azure-gpt-4o-mini': {
-      input: 0.15,
-      output: 0.6,
-      tier: 'azure-hidden',
-      updated: '2025-12-12',
-    },
-    'azure-gpt-4o': {
-      input: 2.5,
-      output: 10.0,
-      tier: 'azure-hidden',
-      updated: '2025-12-12',
+    'ollama-local': {
+      input: 0,
+      output: 0,
+      tier: 'local',
+      updated: '2026-02-28',
     },
   };
 
@@ -299,7 +263,7 @@ class TemplateParser {
    * @param {string} provider - Model provider (e.g., 'azure-gpt-5-mini', 'openai-gpt-4o-mini', 'claude-haiku-4-5')
    * @returns {Object} Token estimates and cost
    */
-  static estimateTokens(template, transcriptText, provider = 'openai-gpt-4o-mini') {
+  static estimateTokens(template, transcriptText, provider = 'gemini-2.5-flash') {
     // Estimate input tokens (transcript + all prompts)
     const transcriptTokens = Math.ceil(transcriptText.length / 4);
     const promptsText = template.sections.map(s => s.prompt).join(' ');
@@ -312,8 +276,8 @@ class TemplateParser {
     // Total tokens
     const totalTokens = inputTokens + outputTokens;
 
-    // Get pricing for the selected provider (fallback to gpt-4o-mini)
-    const pricing = this.MODEL_PRICING[provider] || this.MODEL_PRICING['openai-gpt-4o-mini'];
+    // Get pricing for the selected provider (fallback to gemini-2.5-flash)
+    const pricing = this.MODEL_PRICING[provider] || this.MODEL_PRICING['gemini-2.5-flash'];
 
     // Cost estimation using provider-specific pricing
     const inputCost = (inputTokens / 1000000) * pricing.input;

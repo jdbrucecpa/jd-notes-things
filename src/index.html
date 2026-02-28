@@ -1469,20 +1469,20 @@
                 <div class="settings-item-control">
                   <select class="settings-select" id="autoSummaryProviderSelect">
                     <optgroup label="💰 Budget Tier">
-                      <option value="openai-gpt-5-nano">GPT-5 nano — $0.05/$0.40 per MTok</option>
-                      <option value="openai-gpt-4.1-nano">GPT-4.1 nano — $0.10/$0.40 per MTok</option>
+                      <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite — $0.075/$0.30 per MTok</option>
                     </optgroup>
                     <optgroup label="⚖️ Balanced Tier">
-                      <option value="openai-gpt-4o-mini">GPT-4o mini — $0.15/$0.60 per MTok</option>
-                      <option value="openai-gpt-5-mini">GPT-5 mini — $0.25/$2.00 per MTok</option>
-                      <option value="openai-gpt-4.1-mini">GPT-4.1 mini — $0.40/$1.60 per MTok</option>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash — $0.15/$0.60 per MTok</option>
+                      <option value="claude-haiku-4-5">Claude Haiku 4.5 — $0.80/$4.00 per MTok</option>
                     </optgroup>
                     <optgroup label="⭐ Premium Tier">
-                      <option value="claude-haiku-4-5">Claude Haiku 4.5 — $1.00/$5.00 per MTok</option>
+                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per MTok</option>
                     </optgroup>
                     <optgroup label="💎 Ultra-Premium Tier">
                       <option value="claude-sonnet-4">Claude Sonnet 4 — $3.00/$15.00 per MTok</option>
-                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per MTok</option>
+                    </optgroup>
+                    <optgroup label="🖥️ Local (Ollama)">
+                      <option value="ollama-local">Ollama (Local) — Free</option>
                     </optgroup>
                   </select>
                 </div>
@@ -1496,20 +1496,20 @@
                 <div class="settings-item-control">
                   <select class="settings-select" id="templateSummaryProviderSelect">
                     <optgroup label="💰 Budget Tier">
-                      <option value="openai-gpt-5-nano">GPT-5 nano — $0.05/$0.40 per MTok</option>
-                      <option value="openai-gpt-4.1-nano">GPT-4.1 nano — $0.10/$0.40 per MTok</option>
+                      <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite — $0.075/$0.30 per MTok</option>
                     </optgroup>
                     <optgroup label="⚖️ Balanced Tier">
-                      <option value="openai-gpt-4o-mini">GPT-4o mini — $0.15/$0.60 per MTok</option>
-                      <option value="openai-gpt-5-mini">GPT-5 mini — $0.25/$2.00 per MTok</option>
-                      <option value="openai-gpt-4.1-mini">GPT-4.1 mini — $0.40/$1.60 per MTok</option>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash — $0.15/$0.60 per MTok</option>
+                      <option value="claude-haiku-4-5">Claude Haiku 4.5 — $0.80/$4.00 per MTok</option>
                     </optgroup>
                     <optgroup label="⭐ Premium Tier">
-                      <option value="claude-haiku-4-5">Claude Haiku 4.5 — $1.00/$5.00 per MTok</option>
+                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per MTok</option>
                     </optgroup>
                     <optgroup label="💎 Ultra-Premium Tier">
                       <option value="claude-sonnet-4">Claude Sonnet 4 — $3.00/$15.00 per MTok</option>
-                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per MTok</option>
+                    </optgroup>
+                    <optgroup label="🖥️ Local (Ollama)">
+                      <option value="ollama-local">Ollama (Local) — Free</option>
                     </optgroup>
                   </select>
                 </div>
@@ -1523,75 +1523,22 @@
                 <div class="settings-item-control">
                   <select class="settings-select" id="patternGenerationProviderSelect">
                     <optgroup label="💰 Budget Tier (Recommended)">
-                      <option value="openai-gpt-5-nano">GPT-5 nano — $0.05/$0.40 per MTok</option>
-                      <option value="openai-gpt-4.1-nano">GPT-4.1 nano — $0.10/$0.40 per MTok</option>
+                      <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite — $0.075/$0.30 per MTok</option>
                     </optgroup>
                     <optgroup label="⚖️ Balanced Tier">
-                      <option value="openai-gpt-4o-mini">GPT-4o mini — $0.15/$0.60 per MTok</option>
-                      <option value="openai-gpt-5-mini">GPT-5 mini — $0.25/$2.00 per MTok</option>
-                      <option value="openai-gpt-4.1-mini">GPT-4.1 mini — $0.40/$1.60 per MTok</option>
+                      <option value="gemini-2.5-flash">Gemini 2.5 Flash — $0.15/$0.60 per MTok</option>
+                      <option value="claude-haiku-4-5">Claude Haiku 4.5 — $0.80/$4.00 per MTok</option>
                     </optgroup>
                     <optgroup label="⭐ Premium Tier">
-                      <option value="claude-haiku-4-5">Claude Haiku 4.5 — $1.00/$5.00 per MTok</option>
+                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per MTok</option>
                     </optgroup>
                     <optgroup label="💎 Ultra-Premium Tier">
                       <option value="claude-sonnet-4">Claude Sonnet 4 — $3.00/$15.00 per MTok</option>
-                      <option value="claude-sonnet-4-5">Claude Sonnet 4.5 — $3.00/$15.00 per MTok</option>
+                    </optgroup>
+                    <optgroup label="🖥️ Local (Ollama)">
+                      <option value="ollama-local">Ollama (Local) — Free</option>
                     </optgroup>
                   </select>
-                </div>
-              </div>
-            </div>
-
-            <!-- Azure OpenAI Section (Advanced) -->
-            <div class="settings-section" id="azureSettingsSection">
-              <h3 class="settings-section-title">Azure OpenAI (Advanced)</h3>
-              <div class="settings-item-description" style="margin-bottom: 16px;">
-                Enable Azure OpenAI as an alternative provider. Requires your own Azure OpenAI deployment.
-              </div>
-
-              <div class="settings-item">
-                <div class="settings-item-info">
-                  <div class="settings-item-label">Enable Azure OpenAI</div>
-                  <div class="settings-item-description">Show Azure deployments in model selection dropdowns</div>
-                </div>
-                <div class="settings-item-control">
-                  <div class="toggle-switch" id="azureEnabledToggle">
-                    <div class="toggle-switch-thumb"></div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Azure Deployments Management (shown when enabled) -->
-              <div id="azureDeploymentsContainer" style="display: none;">
-                <div class="settings-item" style="flex-direction: column; align-items: stretch;">
-                  <div class="settings-item-info" style="margin-bottom: 12px;">
-                    <div class="settings-item-label">Azure Deployments</div>
-                    <div class="settings-item-description">Configure your Azure OpenAI model deployments. Each deployment will appear in the model selection dropdowns.</div>
-                  </div>
-
-                  <!-- Deployments List -->
-                  <div id="azureDeploymentsList" class="azure-deployments-list">
-                    <div class="azure-deployment-empty" id="azureDeploymentEmpty">
-                      <span style="color: var(--text-secondary);">No deployments configured. Click "Add Deployment" to get started.</span>
-                    </div>
-                  </div>
-
-                  <!-- Add Deployment Button -->
-                  <button class="btn-secondary" id="addAzureDeploymentBtn" style="margin-top: 12px; align-self: flex-start;">
-                    <span style="margin-right: 6px;">+</span> Add Deployment
-                  </button>
-                </div>
-
-                <!-- Azure Endpoint Configuration -->
-                <div class="settings-item" style="margin-top: 16px;">
-                  <div class="settings-item-info">
-                    <div class="settings-item-label">Azure Endpoint</div>
-                    <div class="settings-item-description">Your Azure OpenAI resource endpoint (e.g., https://your-resource.openai.azure.com)</div>
-                  </div>
-                  <div class="settings-item-control" style="flex: 1; max-width: 400px;">
-                    <input type="text" class="settings-input" id="azureEndpointInput" placeholder="https://your-resource.openai.azure.com">
-                  </div>
                 </div>
               </div>
             </div>

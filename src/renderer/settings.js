@@ -16,7 +16,7 @@ import {
 } from './components/PatternTestingPanel.js';
 import { initializeTabs } from './utils/tabHelper.js';
 import { notifySuccess, notifyError, notifyInfo } from './utils/notificationHelper.js';
-import { createModal } from './utils/modalHelper.js';
+
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -24,13 +24,9 @@ const DEFAULT_SETTINGS = {
   autoStartRecording: false,
   debugMode: false,
   vaultPath: '',
-  autoSummaryProvider: 'openai-gpt-4o-mini', // AI model for auto-summaries (Budget-friendly default)
-  templateSummaryProvider: 'openai-gpt-4o-mini', // AI model for template summaries
-  patternGenerationProvider: 'openai-gpt-5-nano', // AI model for pattern generation (cheapest option)
-  // Azure OpenAI settings (v1.2)
-  azureEnabled: false, // Whether to show Azure options in model dropdowns
-  azureEndpoint: '', // Azure OpenAI endpoint URL
-  azureDeployments: [], // Array of { id, name, displayName, tier, inputPrice, outputPrice }
+  autoSummaryProvider: 'gemini-2.5-flash', // AI model for auto-summaries (Budget-friendly default)
+  templateSummaryProvider: 'claude-haiku-4-5', // AI model for template summaries
+  patternGenerationProvider: 'gemini-2.5-flash-lite', // AI model for pattern generation (cheapest option)
   // CRM Integration settings (OCRM)
   crmIntegration: {
     enabled: false, // Master toggle for CRM integration
@@ -408,296 +404,6 @@ export function initializeSettingsUI() {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  // Azure OpenAI Settings (v1.2)
-  // ═══════════════════════════════════════════════════════════════════
-  const azureEnabledToggle = document.getElementById('azureEnabledToggle');
-  const azureDeploymentsContainer = document.getElementById('azureDeploymentsContainer');
-  const azureDeploymentsList = document.getElementById('azureDeploymentsList');
-  const azureDeploymentEmpty = document.getElementById('azureDeploymentEmpty');
-  const addAzureDeploymentBtn = document.getElementById('addAzureDeploymentBtn');
-  const azureEndpointInput = document.getElementById('azureEndpointInput');
-
-  // Initialize Azure UI state
-  function initializeAzureUI() {
-    const settings = loadSettings();
-    if (azureEnabledToggle) {
-      if (settings.azureEnabled) {
-        azureEnabledToggle.classList.add('active');
-      } else {
-        azureEnabledToggle.classList.remove('active');
-      }
-    }
-    if (azureDeploymentsContainer) {
-      azureDeploymentsContainer.style.display = settings.azureEnabled ? 'block' : 'none';
-    }
-    if (azureEndpointInput) {
-      azureEndpointInput.value = settings.azureEndpoint || '';
-    }
-    renderAzureDeployments();
-    updateModelDropdownsWithAzure();
-  }
-
-  // Azure enabled toggle (click + classList pattern to match other toggles)
-  if (azureEnabledToggle) {
-    azureEnabledToggle.addEventListener('click', () => {
-      const enabled = azureEnabledToggle.classList.toggle('active');
-      updateSetting('azureEnabled', enabled);
-      if (azureDeploymentsContainer) {
-        azureDeploymentsContainer.style.display = enabled ? 'block' : 'none';
-      }
-      updateModelDropdownsWithAzure();
-      notifySuccess(enabled ? 'Azure OpenAI enabled' : 'Azure OpenAI disabled');
-    });
-  }
-
-  // Azure endpoint input
-  if (azureEndpointInput) {
-    azureEndpointInput.addEventListener('change', e => {
-      updateSetting('azureEndpoint', e.target.value.trim());
-      notifySuccess('Azure endpoint updated');
-    });
-  }
-
-  // Add deployment button
-  if (addAzureDeploymentBtn) {
-    addAzureDeploymentBtn.addEventListener('click', () => {
-      showAzureDeploymentModal();
-    });
-  }
-
-  // Render Azure deployments list
-  function renderAzureDeployments() {
-    const settings = loadSettings();
-    const deployments = settings.azureDeployments || [];
-
-    if (!azureDeploymentsList) return;
-
-    // Clear existing cards (keep the empty state element)
-    const cards = azureDeploymentsList.querySelectorAll('.azure-deployment-card');
-    cards.forEach(card => card.remove());
-
-    // Show/hide empty state
-    if (azureDeploymentEmpty) {
-      azureDeploymentEmpty.style.display = deployments.length === 0 ? 'block' : 'none';
-    }
-
-    // Render deployment cards
-    deployments.forEach(deployment => {
-      const card = createAzureDeploymentCard(deployment);
-      azureDeploymentsList.appendChild(card);
-    });
-  }
-
-  // Create a deployment card element
-  function createAzureDeploymentCard(deployment) {
-    const card = document.createElement('div');
-    card.className = 'azure-deployment-card';
-    card.dataset.id = deployment.id;
-
-    const tierLabels = {
-      budget: '💰 Budget',
-      balanced: '⚖️ Balanced',
-      premium: '⭐ Premium',
-      'ultra-premium': '💎 Ultra-Premium',
-    };
-
-    card.innerHTML = `
-      <div class="azure-deployment-info">
-        <div class="azure-deployment-name">${escapeHtml(deployment.displayName)}</div>
-        <div class="azure-deployment-details">
-          <span class="azure-deployment-tier ${deployment.tier}">${tierLabels[deployment.tier] || deployment.tier}</span>
-          <span>Deployment: ${escapeHtml(deployment.name)}</span>
-          <span>$${deployment.inputPrice}/$${deployment.outputPrice} per MTok</span>
-        </div>
-      </div>
-      <div class="azure-deployment-actions">
-        <button class="azure-deployment-btn edit" data-id="${deployment.id}">Edit</button>
-        <button class="azure-deployment-btn delete" data-id="${deployment.id}">Delete</button>
-      </div>
-    `;
-
-    // Edit button handler
-    card.querySelector('.azure-deployment-btn.edit').addEventListener('click', () => {
-      showAzureDeploymentModal(deployment);
-    });
-
-    // Delete button handler
-    card.querySelector('.azure-deployment-btn.delete').addEventListener('click', () => {
-      deleteAzureDeployment(deployment.id);
-    });
-
-    return card;
-  }
-
-  // Show add/edit deployment modal using shared modal component
-  function showAzureDeploymentModal(existingDeployment = null) {
-    const isEdit = !!existingDeployment;
-    const title = isEdit ? 'Edit Azure Deployment' : 'Add Azure Deployment';
-
-    const modalBody = `
-      <div class="azure-deployment-form">
-        <div class="azure-deployment-form-row">
-          <label for="azureDeploymentName">Deployment Name *</label>
-          <input type="text" id="azureDeploymentName" placeholder="e.g., gpt-5-mini-deployment" value="${isEdit ? escapeHtml(existingDeployment.name) : ''}">
-          <small class="hint" style="color: var(--text-secondary); font-size: 11px;">The exact name of your Azure OpenAI deployment</small>
-        </div>
-        <div class="azure-deployment-form-row">
-          <label for="azureDeploymentDisplayName">Display Name *</label>
-          <input type="text" id="azureDeploymentDisplayName" placeholder="e.g., GPT-5 Mini (Azure)" value="${isEdit ? escapeHtml(existingDeployment.displayName) : ''}">
-          <small class="hint" style="color: var(--text-secondary); font-size: 11px;">How this model appears in the dropdown menus</small>
-        </div>
-        <div class="azure-deployment-form-row">
-          <label for="azureDeploymentTier">Pricing Tier</label>
-          <select id="azureDeploymentTier">
-            <option value="budget" ${isEdit && existingDeployment.tier === 'budget' ? 'selected' : ''}>💰 Budget</option>
-            <option value="balanced" ${!isEdit || existingDeployment.tier === 'balanced' ? 'selected' : ''}>⚖️ Balanced</option>
-            <option value="premium" ${isEdit && existingDeployment.tier === 'premium' ? 'selected' : ''}>⭐ Premium</option>
-            <option value="ultra-premium" ${isEdit && existingDeployment.tier === 'ultra-premium' ? 'selected' : ''}>💎 Ultra-Premium</option>
-          </select>
-          <small class="hint" style="color: var(--text-secondary); font-size: 11px;">Used for grouping in the model selector</small>
-        </div>
-        <div class="azure-deployment-form-pricing" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div class="azure-deployment-form-row">
-            <label for="azureDeploymentInputPrice">Input Price ($/MTok)</label>
-            <input type="text" id="azureDeploymentInputPrice" placeholder="0.25" value="${isEdit ? existingDeployment.inputPrice : '0.25'}">
-          </div>
-          <div class="azure-deployment-form-row">
-            <label for="azureDeploymentOutputPrice">Output Price ($/MTok)</label>
-            <input type="text" id="azureDeploymentOutputPrice" placeholder="2.00" value="${isEdit ? existingDeployment.outputPrice : '2.00'}">
-          </div>
-        </div>
-      </div>
-    `;
-
-    createModal({
-      title,
-      body: modalBody,
-      confirmText: isEdit ? 'Save Changes' : 'Add Deployment',
-      cancelText: 'Cancel',
-      size: 'medium',
-      onConfirm: async () => {
-        const name = document.getElementById('azureDeploymentName').value.trim();
-        const displayName = document.getElementById('azureDeploymentDisplayName').value.trim();
-        const tier = document.getElementById('azureDeploymentTier').value;
-        const inputPrice = parseFloat(document.getElementById('azureDeploymentInputPrice').value) || 0.25;
-        const outputPrice = parseFloat(document.getElementById('azureDeploymentOutputPrice').value) || 2.0;
-
-        if (!name || !displayName) {
-          notifyError('Deployment name and display name are required');
-          throw new Error('Validation failed'); // Prevents modal from closing
-        }
-
-        const deployment = {
-          id: isEdit ? existingDeployment.id : `azure-${name}-${Date.now()}`,
-          name,
-          displayName,
-          tier,
-          inputPrice,
-          outputPrice,
-        };
-
-        if (isEdit) {
-          updateAzureDeployment(deployment);
-        } else {
-          addAzureDeployment(deployment);
-        }
-      },
-    });
-  }
-
-  // Add a new Azure deployment
-  function addAzureDeployment(deployment) {
-    const settings = loadSettings();
-    const deployments = settings.azureDeployments || [];
-    deployments.push(deployment);
-    updateSetting('azureDeployments', deployments);
-    renderAzureDeployments();
-    updateModelDropdownsWithAzure();
-    notifySuccess(`Added Azure deployment: ${deployment.displayName}`);
-  }
-
-  // Update an existing Azure deployment
-  function updateAzureDeployment(deployment) {
-    const settings = loadSettings();
-    const deployments = settings.azureDeployments || [];
-    const index = deployments.findIndex(d => d.id === deployment.id);
-    if (index !== -1) {
-      deployments[index] = deployment;
-      updateSetting('azureDeployments', deployments);
-      renderAzureDeployments();
-      updateModelDropdownsWithAzure();
-      notifySuccess(`Updated Azure deployment: ${deployment.displayName}`);
-    }
-  }
-
-  // Delete an Azure deployment
-  function deleteAzureDeployment(id) {
-    const settings = loadSettings();
-    const deployments = settings.azureDeployments || [];
-    const deployment = deployments.find(d => d.id === id);
-    if (!deployment) return;
-
-    if (confirm(`Delete deployment "${deployment.displayName}"?`)) {
-      const newDeployments = deployments.filter(d => d.id !== id);
-      updateSetting('azureDeployments', newDeployments);
-      renderAzureDeployments();
-      updateModelDropdownsWithAzure();
-      notifySuccess(`Deleted Azure deployment: ${deployment.displayName}`);
-    }
-  }
-
-  // Update model dropdowns to include/exclude Azure options
-  function updateModelDropdownsWithAzure() {
-    const settings = loadSettings();
-    const azureEnabled = settings.azureEnabled || false;
-    const deployments = settings.azureDeployments || [];
-
-    const dropdowns = [
-      autoSummaryProviderSelect,
-      templateSummaryProviderSelect,
-      patternGenerationProviderSelect,
-    ].filter(Boolean);
-
-    dropdowns.forEach(dropdown => {
-      // Remove existing Azure optgroup
-      const existingAzureGroup = dropdown.querySelector('optgroup[label*="Azure"]');
-      if (existingAzureGroup) {
-        existingAzureGroup.remove();
-      }
-
-      // Add Azure optgroup if enabled and has deployments
-      if (azureEnabled && deployments.length > 0) {
-        const azureGroup = document.createElement('optgroup');
-        azureGroup.label = '☁️ Azure OpenAI';
-
-        // Group deployments by tier
-        const tiers = ['budget', 'balanced', 'premium', 'ultra-premium'];
-        tiers.forEach(tier => {
-          const tierDeployments = deployments.filter(d => d.tier === tier);
-          tierDeployments.forEach(deployment => {
-            const option = document.createElement('option');
-            option.value = `azure-${deployment.name}`;
-            option.textContent = `${deployment.displayName} — $${deployment.inputPrice}/$${deployment.outputPrice} per MTok`;
-            azureGroup.appendChild(option);
-          });
-        });
-
-        dropdown.appendChild(azureGroup);
-      }
-    });
-  }
-
-  // Helper function to escape HTML
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  // Initialize Azure UI on settings load
-  initializeAzureUI();
-
   // Comprehensive Export All Settings (SE-1)
   if (exportAllSettingsBtn) {
     exportAllSettingsBtn.addEventListener('click', async () => {
@@ -902,19 +608,19 @@ export function initializeSettingsUI() {
       }
     }
 
-    // Update AI provider selections (v1.2: defaults changed to OpenAI)
+    // Update AI provider selections (v1.3.2: Anthropic, Gemini, Ollama)
     if (autoSummaryProviderSelect) {
-      autoSummaryProviderSelect.value = currentSettings.autoSummaryProvider || 'openai-gpt-4o-mini';
+      autoSummaryProviderSelect.value = currentSettings.autoSummaryProvider || 'gemini-2.5-flash';
     }
 
     if (templateSummaryProviderSelect) {
       templateSummaryProviderSelect.value =
-        currentSettings.templateSummaryProvider || 'openai-gpt-4o-mini';
+        currentSettings.templateSummaryProvider || 'claude-haiku-4-5';
     }
 
     if (patternGenerationProviderSelect) {
       patternGenerationProviderSelect.value =
-        currentSettings.patternGenerationProvider || 'openai-gpt-5-nano';
+        currentSettings.patternGenerationProvider || 'gemini-2.5-flash-lite';
     }
 
     // Update vault path (this will be populated from main process)

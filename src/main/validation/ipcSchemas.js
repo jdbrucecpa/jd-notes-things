@@ -10,7 +10,7 @@ const { z } = require('zod');
  */
 const meetingIdSchema = z.string().min(1, 'Meeting ID cannot be empty');
 const templateIdSchema = z.string().min(1, 'Template ID cannot be empty');
-const providerSchema = z.enum(['openai', 'anthropic', 'azure']);
+const providerSchema = z.enum(['anthropic', 'gemini', 'ollama']);
 
 /**
  * Transcript entry schema
