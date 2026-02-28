@@ -35,7 +35,10 @@ const TranscriptParser = require('./main/import/TranscriptParser');
 const PatternConfigLoader = require('./main/import/PatternConfigLoader');
 const { CrmRequestQueue } = require('./main/export/CrmRequestQueue');
 const { formatTranscriptForExport, generateExportFilename } = require('./main/export/transcriptExporter');
-const { createLLMServiceFromCredentials } = require('./main/services/llmService');
+const {
+  createLLMServiceFromCredentials,
+  fetchOllamaModels,
+} = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
 const speakerMappingService = require('./main/services/speakerMappingService');
@@ -7087,6 +7090,21 @@ ipcMain.handle(
     }
   })
 );
+
+// List available Ollama models from the local instance
+ipcMain.handle('ollama:listModels', async () => {
+  try {
+    const baseUrl =
+      (await keyManagementService.getKey('OLLAMA_BASE_URL')) ||
+      process.env.OLLAMA_BASE_URL ||
+      'http://localhost:11434';
+    const models = await fetchOllamaModels(baseUrl);
+    return { success: true, models };
+  } catch (error) {
+    console.error('[Ollama] Error listing models:', error);
+    return { success: false, error: error.message, models: [] };
+  }
+});
 
 // ===================================================================
 // End LLM Provider Management

@@ -639,10 +639,75 @@ export function initializeSettingsUI() {
   // Initial load
   loadSettingsIntoUI();
 
+  // Populate Ollama model dropdowns dynamically
+  populateOllamaModelDropdowns();
+
   // Initialize profile save button
   const saveProfileBtn = document.getElementById('saveProfileBtn');
   if (saveProfileBtn) {
     saveProfileBtn.addEventListener('click', saveUserProfile);
+  }
+}
+
+/**
+ * Fetch available Ollama models and populate all dropdown optgroups with class "ollama-model-group".
+ * Falls back to a "No models found" disabled option if Ollama is unreachable.
+ */
+export async function populateOllamaModelDropdowns() {
+  if (!window.electronAPI?.listOllamaModels) return;
+
+  const optgroups = document.querySelectorAll('.ollama-model-group');
+  if (optgroups.length === 0) return;
+
+  // Remember current selections so we can restore them after repopulating
+  const selects = new Map();
+  optgroups.forEach(og => {
+    const select = og.closest('select');
+    if (select) selects.set(select, select.value);
+  });
+
+  try {
+    const result = await window.electronAPI.listOllamaModels();
+    const models = result.success && result.models.length > 0 ? result.models : [];
+
+    optgroups.forEach(og => {
+      // Clear existing options
+      og.innerHTML = '';
+
+      if (models.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.disabled = true;
+        opt.textContent = 'No Ollama models found';
+        og.appendChild(opt);
+      } else {
+        models.forEach(m => {
+          const opt = document.createElement('option');
+          opt.value = `ollama-${m.name}`;
+          const sizeGB = m.size ? ` (${(m.size / 1e9).toFixed(1)}GB)` : '';
+          opt.textContent = `${m.name}${sizeGB} — Free`;
+          og.appendChild(opt);
+        });
+      }
+    });
+
+    // Restore previous selections
+    selects.forEach((prevValue, select) => {
+      if (prevValue && prevValue.startsWith('ollama-')) {
+        // Try to restore the previous selection
+        const option = select.querySelector(`option[value="${CSS.escape(prevValue)}"]`);
+        if (option) {
+          select.value = prevValue;
+        }
+      } else if (prevValue) {
+        select.value = prevValue;
+      }
+    });
+  } catch (error) {
+    console.warn('[Settings] Could not fetch Ollama models:', error);
+    optgroups.forEach(og => {
+      og.innerHTML = '<option value="" disabled>Ollama unavailable</option>';
+    });
   }
 }
 

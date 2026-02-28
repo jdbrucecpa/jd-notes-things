@@ -233,15 +233,7 @@ class TemplateParser {
       updated: '2026-02-28',
     },
 
-    // ═══════════════════════════════════════════════════════════════════
-    // LOCAL TIER - Free, runs on your hardware via Ollama
-    // ═══════════════════════════════════════════════════════════════════
-    'ollama-local': {
-      input: 0,
-      output: 0,
-      tier: 'local',
-      updated: '2026-02-28',
-    },
+    // Ollama models (any ollama-* prefix) are always free — handled dynamically in estimateTokens
   };
 
   /**
@@ -265,8 +257,11 @@ class TemplateParser {
     // Total tokens
     const totalTokens = inputTokens + outputTokens;
 
-    // Get pricing for the selected provider (fallback to gemini-2.5-flash)
-    const pricing = this.MODEL_PRICING[provider] || this.MODEL_PRICING['gemini-2.5-flash'];
+    // Get pricing for the selected provider (Ollama models are always free, fallback to gemini-2.5-flash)
+    const pricing =
+      this.MODEL_PRICING[provider] ||
+      (provider && provider.startsWith('ollama-') ? { input: 0, output: 0 } : null) ||
+      this.MODEL_PRICING['gemini-2.5-flash'];
 
     // Cost estimation using provider-specific pricing
     const inputCost = (inputTokens / 1000000) * pricing.input;

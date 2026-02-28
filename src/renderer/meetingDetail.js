@@ -2017,7 +2017,7 @@ async function exportToObsidian() {
  * Get available model options for the regenerate modal
  * Returns array of { value, label } objects
  */
-function getModelOptions() {
+async function getModelOptions() {
   const settings = loadSettings();
   const defaultModel = settings.autoSummaryProvider || 'gemini-2.5-flash';
 
@@ -2031,9 +2031,25 @@ function getModelOptions() {
     { value: 'claude-haiku-4-5', label: '⚖️ Claude Haiku 4.5 — $0.80/$4.00' },
     // Premium tier
     { value: 'claude-sonnet-4-6', label: '⭐ Claude Sonnet 4.6 — $3.00/$15.00' },
-    // Local
-    { value: 'ollama-local', label: '🖥️ Ollama (Local) — Free' },
   ];
+
+  // Dynamically add available Ollama models
+  if (window.electronAPI?.listOllamaModels) {
+    try {
+      const result = await window.electronAPI.listOllamaModels();
+      if (result.success && result.models.length > 0) {
+        result.models.forEach(m => {
+          const sizeGB = m.size ? ` (${(m.size / 1e9).toFixed(1)}GB)` : '';
+          models.push({
+            value: `ollama-${m.name}`,
+            label: `🖥️ ${m.name}${sizeGB} — Free`,
+          });
+        });
+      }
+    } catch {
+      // Ollama not running — skip local models
+    }
+  }
 
   return models;
 }
@@ -2047,9 +2063,13 @@ function getModelDisplayName(modelValue) {
     'gemini-2.5-flash': 'Gemini 2.5 Flash',
     'claude-haiku-4-5': 'Claude Haiku 4.5',
     'claude-sonnet-4-6': 'Claude Sonnet 4.6',
-    'ollama-local': 'Ollama (Local)',
   };
-  return names[modelValue] || modelValue;
+  if (names[modelValue]) return names[modelValue];
+  // Dynamic Ollama models: 'ollama-llama3:latest' → 'Ollama llama3:latest'
+  if (modelValue && modelValue.startsWith('ollama-')) {
+    return `Ollama ${modelValue.replace('ollama-', '')}`;
+  }
+  return modelValue;
 }
 
 /**
@@ -2063,7 +2083,7 @@ async function regenerateSummary(onUpdate) {
   if (!btn) return;
 
   // Build model options for the dropdown
-  const modelOptions = getModelOptions();
+  const modelOptions = await getModelOptions();
   const modelOptionsHtml = modelOptions
     .map(m => `<option value="${m.value}">${escapeHtml(m.label)}</option>`)
     .join('');

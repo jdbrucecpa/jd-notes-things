@@ -719,6 +719,40 @@ function createLLMServiceFromPreference(providerPreference) {
   return new LLMService(config);
 }
 
+/**
+ * Fetch available models from a local Ollama instance.
+ * Calls GET /api/tags and returns an array of { name, size, modifiedAt }.
+ * @param {string} [baseUrl='http://localhost:11434'] - Ollama server URL
+ * @returns {Promise<Array<{name: string, size: number, modifiedAt: string}>>}
+ */
+async function fetchOllamaModels(baseUrl = 'http://localhost:11434') {
+  const url = `${baseUrl.replace(/\/+$/, '')}/api/tags`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Ollama returned ${response.status}`);
+    }
+    const data = await response.json();
+    return (data.models || []).map(m => ({
+      name: m.name,
+      size: m.size || 0,
+      modifiedAt: m.modified_at || '',
+    }));
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      console.warn('[Ollama] Model list request timed out (5s)');
+    } else {
+      console.warn('[Ollama] Could not fetch models:', error.message);
+    }
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 module.exports = {
   LLMService,
   AnthropicAdapter,
@@ -728,6 +762,7 @@ module.exports = {
   createLLMServiceFromCredentials,
   createLLMServiceFromPreference,
   extractModelFromPreference,
+  fetchOllamaModels,
   ANTHROPIC_MODEL_MAP,
   GEMINI_MODEL_MAP,
 };
