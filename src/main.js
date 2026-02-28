@@ -1,3 +1,13 @@
+// Prevent EPIPE crashes when stdout/stderr pipe breaks (e.g., parent terminal closes)
+process.stdout?.on('error', (err) => {
+  if (err.code === 'EPIPE') return;
+  throw err;
+});
+process.stderr?.on('error', (err) => {
+  if (err.code === 'EPIPE') return;
+  throw err;
+});
+
 const {
   app,
   BrowserWindow,

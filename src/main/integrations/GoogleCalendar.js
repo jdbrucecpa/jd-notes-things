@@ -1,4 +1,5 @@
 const { google } = require('googleapis');
+const log = require('electron-log');
 
 /**
  * GoogleCalendar Integration
@@ -31,17 +32,17 @@ class GoogleCalendar {
    */
   initialize() {
     if (!this.googleAuth.isAuthenticated()) {
-      console.log('[GoogleCalendar] Not authenticated - user needs to sign in');
+      log.info('[GoogleCalendar] Not authenticated - user needs to sign in');
       return false;
     }
 
     try {
       const auth = this.googleAuth.getClient();
       this.calendar = google.calendar({ version: 'v3', auth });
-      console.log('[GoogleCalendar] Initialized with existing token');
+      log.info('[GoogleCalendar] Initialized with existing token');
       return true;
     } catch (error) {
-      console.error('[GoogleCalendar] Initialization error:', error.message);
+      log.error('[GoogleCalendar] Initialization error:', error.message);
       return false;
     }
   }
@@ -60,15 +61,13 @@ class GoogleCalendar {
    * @returns {Array} Array of formatted meeting objects
    */
   async getUpcomingMeetings(hoursAhead = 24) {
-    console.log(`[GoogleCalendar] getUpcomingMeetings called (hoursAhead: ${hoursAhead})`);
-    console.log(`[GoogleCalendar] this.calendar exists: ${!!this.calendar}`);
-    console.log(`[GoogleCalendar] googleAuth.isAuthenticated: ${this.googleAuth.isAuthenticated()}`);
+    log.debug(`[GoogleCalendar] getUpcomingMeetings called (hoursAhead: ${hoursAhead})`);
 
     if (!this.isAuthenticated()) {
-      console.log('[GoogleCalendar] Not authenticated, trying to initialize...');
+      log.info('[GoogleCalendar] Not authenticated, trying to initialize...');
       // Try to initialize if not already done
       if (!this.initialize()) {
-        console.log('[GoogleCalendar] Initialize failed!');
+        log.warn('[GoogleCalendar] Initialize failed!');
         throw new Error('Not authenticated. Call authenticate() first.');
       }
     }
@@ -86,7 +85,7 @@ class GoogleCalendar {
 
     const now = new Date();
     const timeMax = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
-    console.log(`[GoogleCalendar] Fetching events from ${now.toISOString()} to ${timeMax.toISOString()}`);
+    log.debug(`[GoogleCalendar] Fetching events from ${now.toISOString()} to ${timeMax.toISOString()}`);
 
     try {
       const response = await this.calendar.events.list({
@@ -99,27 +98,17 @@ class GoogleCalendar {
       });
 
       const events = response.data.items || [];
-      console.log(`[GoogleCalendar] API returned ${events.length} raw events`);
-
-      // Log each event and why it's filtered
-      events.forEach((event, i) => {
-        const hasDateTime = event.start && event.start.dateTime;
-        const hasAttendees = event.attendees && event.attendees.length > 0;
-        const platform = this._detectPlatform(event);
-        const _hasMeetingLink = platform !== 'unknown';
-        console.log(`[GoogleCalendar] Event ${i}: "${event.summary}" - dateTime:${hasDateTime}, attendees:${hasAttendees}, platform:${platform}`);
-      });
 
       // Filter and format events
       const filtered = events.filter(event => this._isMeeting(event));
-      console.log(`[GoogleCalendar] After filtering: ${filtered.length} meetings`);
+      log.debug(`[GoogleCalendar] ${events.length} raw events, ${filtered.length} after filtering`);
       return filtered.map(event => this._formatMeeting(event));
     } catch (error) {
-      console.error('[GoogleCalendar] Error fetching events:', error);
+      log.error('[GoogleCalendar] Error fetching events:', error.message);
 
       // Handle token refresh
       if (error.code === 401) {
-        console.log('[GoogleCalendar] Token expired, attempting refresh...');
+        log.info('[GoogleCalendar] Token expired, attempting refresh...');
         // Token refresh is handled automatically by oauth2Client
         throw new Error('Authentication expired. Please re-authenticate.');
       }
@@ -360,7 +349,7 @@ class GoogleCalendar {
       },
     });
 
-    console.log(`[GoogleCalendar] Updated extendedProperties for event ${eventId}:`, Object.keys(properties));
+    log.info(`[GoogleCalendar] Updated extendedProperties for event ${eventId}:`, Object.keys(properties));
     return response.data;
   }
 
@@ -400,7 +389,7 @@ class GoogleCalendar {
       pageToken = response.data.nextPageToken;
     } while (pageToken);
 
-    console.log(`[GoogleCalendar] getEventsInRange: ${allEvents.length} events from ${timeMin} to ${timeMax}`);
+    log.info(`[GoogleCalendar] getEventsInRange: ${allEvents.length} events from ${timeMin} to ${timeMax}`);
     return allEvents.map(e => this._formatMeeting(e));
   }
 
@@ -428,7 +417,7 @@ class GoogleCalendar {
       }
       return null;
     } catch (error) {
-      console.error(`[GoogleCalendar] Error searching for recording ${recordingId}:`, error.message);
+      log.error(`[GoogleCalendar] Error searching for recording ${recordingId}:`, error.message);
       return null;
     }
   }
@@ -450,11 +439,11 @@ class GoogleCalendar {
             message:
               'Your Google authentication has expired. Please sign in again to continue using Calendar and Contacts features.',
           });
-          console.log('[GoogleCalendar] Sent auth:expired notification to renderer');
+          log.info('[GoogleCalendar] Sent auth:expired notification to renderer');
         }
       }
     } catch (error) {
-      console.error('[GoogleCalendar] Failed to send auth expiration notification:', error.message);
+      log.error('[GoogleCalendar] Failed to send auth expiration notification:', error.message);
     }
   }
 }
