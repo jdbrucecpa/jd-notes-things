@@ -1298,6 +1298,12 @@
               </svg>
               <span>Logs & Diagnostics</span>
             </div>
+            <div id="backupSettingsTab" class="settings-tab" data-tab="backup">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" fill="currentColor"/>
+              </svg>
+              <span>Backup & Restore</span>
+            </div>
             <div id="advancedSettingsTab" class="settings-tab" data-tab="advanced">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" fill="currentColor"/>
@@ -2149,6 +2155,122 @@
                 </div>
               </div>
             </div>
+
+            <!-- MCP Server (v1.4) -->
+            <div class="settings-section">
+              <h3 class="settings-section-title">Claude Desktop (MCP)</h3>
+              <p class="settings-section-description">
+                Connect JD Notes Things to Claude Desktop for AI-powered meeting analysis.
+                The MCP server provides read-only access to your meetings, contacts, and transcripts.
+              </p>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Connection Config</div>
+                  <div class="settings-item-description">Copy this JSON into your Claude Desktop configuration file.</div>
+                </div>
+                <div class="settings-item-control">
+                  <button class="btn btn-secondary" id="mcpLoadConfigBtn">Load Config</button>
+                </div>
+              </div>
+              <pre id="mcpConfigSnippet" style="display: none; background: var(--bg-secondary); padding: 12px; border-radius: 6px; font-size: 12px; overflow-x: auto; margin-top: 8px; border: 1px solid var(--border-color);"></pre>
+              <button class="btn btn-outline btn-sm" id="mcpCopyConfigBtn" style="display: none; margin-top: 8px;">Copy to Clipboard</button>
+            </div>
+          </div>
+
+          <div class="settings-panel" id="backupPanel" style="display: none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Backup</h3>
+              <p class="settings-section-description">Create backups of your database, configuration, and audio recordings.</p>
+
+              <div id="backupManifest" style="margin-bottom: 16px;">
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Database</div>
+                    <div class="settings-item-description" id="backupDbInfo">Loading...</div>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Configuration Files</div>
+                    <div class="settings-item-description" id="backupConfigInfo">Loading...</div>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Audio Recordings</div>
+                    <div class="settings-item-description" id="backupAudioInfo">Loading...</div>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Total Backup Size</div>
+                    <div class="settings-item-description" id="backupTotalInfo">Loading...</div>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Last Backup</div>
+                    <div class="settings-item-description" id="backupLastInfo">Never</div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="display: flex; gap: 12px; margin-top: 16px;">
+                <button class="btn btn-primary" id="backupFullBtn">Full Backup</button>
+                <button class="btn btn-secondary" id="backupIncrementalBtn">Incremental Backup</button>
+              </div>
+              <div id="backupStatus" style="margin-top: 8px; font-size: 13px; color: var(--text-secondary);"></div>
+            </div>
+
+            <div class="settings-section">
+              <h3 class="settings-section-title">Restore</h3>
+              <p class="settings-section-description">Restore your data from a previous backup. This will replace your current database and configuration.</p>
+
+              <div style="display: flex; gap: 12px; align-items: center;">
+                <button class="btn btn-outline" id="backupRestoreBtn">Select Backup File...</button>
+                <span id="backupRestoreStatus" style="font-size: 13px; color: var(--text-secondary);"></span>
+              </div>
+
+              <div id="backupRestoreOptions" style="display: none; margin-top: 16px;">
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Restore Database</div>
+                    <div class="settings-item-description">Replace current meetings database</div>
+                  </div>
+                  <div class="settings-item-control">
+                    <div class="toggle-switch active" id="restoreDatabaseToggle">
+                      <div class="toggle-switch-thumb"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Restore Configuration</div>
+                    <div class="settings-item-description">Replace routing, templates, and vocabulary config</div>
+                  </div>
+                  <div class="settings-item-control">
+                    <div class="toggle-switch active" id="restoreConfigToggle">
+                      <div class="toggle-switch-thumb"></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="settings-item">
+                  <div class="settings-item-info">
+                    <div class="settings-item-label">Restore Audio Files</div>
+                    <div class="settings-item-description">Restore audio recordings to original locations</div>
+                  </div>
+                  <div class="settings-item-control">
+                    <div class="toggle-switch" id="restoreAudioToggle">
+                      <div class="toggle-switch-thumb"></div>
+                    </div>
+                  </div>
+                </div>
+                <div style="margin-top: 12px;">
+                  <button class="btn btn-primary" id="backupRestoreConfirmBtn">Restore Backup</button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="settings-panel" id="aboutPanel" style="display: none;">
@@ -2267,6 +2389,16 @@
         </div>
     </div>
 
+    <!-- v1.4: Client Setup View -->
+    <div id="clientSetupView" class="settings-full-page" style="display: none;">
+      <div class="modal-header">
+        <h2>Client Setup</h2>
+        <button class="modal-close" id="closeClientSetup">&times;</button>
+      </div>
+      <div id="clientSetupContent" style="flex: 1; overflow-y: auto;">
+      </div>
+    </div>
+
     <!-- v1.3: Reports View -->
     <div id="reportsView" class="reports-full-page" style="display: none;">
       <div class="modal-header">
@@ -2309,6 +2441,13 @@
             </svg>
             Recordings Without Calendar Events
             <span class="reports-tab-count" id="noCalendarCount">-</span>
+          </button>
+          <button class="reports-tab" data-report="coverage">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2z" fill="currentColor"/>
+            </svg>
+            Calendar Coverage
+            <span class="reports-tab-count" id="coverageCount">-</span>
           </button>
         </div>
 

@@ -17,7 +17,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:db": "npx electron tests/test-database.js",
-    "test:e2e": "npx playwright test tests/e2e/app.spec.js"
+    "test:e2e": "npx playwright test tests/e2e/app.spec.js",
+    "test:e2e:recording": "npx playwright test tests/e2e/recording-pipeline.spec.js",
+    "start:mock": "cross-env MOCK_SDK=1 E2E_TEST=1 electron-forge start",
+    "start:mock:fast": "cross-env MOCK_SDK=1 MOCK_SPEED=10 E2E_TEST=1 electron-forge start"
   },
   "keywords": [],
   "author": {
@@ -69,6 +72,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/generative-ai": "^0.24.1",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@recallai/desktop-sdk": "^2.0.6",
     "@timfish/forge-externals-plugin": "^0.2.1",
     "@types/dompurify": "^3.0.5",

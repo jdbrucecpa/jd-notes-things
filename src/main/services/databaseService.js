@@ -17,7 +17,7 @@ const fs = require('fs');
 const { app } = require('electron');
 const log = require('electron-log');
 
-const CURRENT_SCHEMA_VERSION = 1;
+const CURRENT_SCHEMA_VERSION = 2;
 
 class DatabaseService {
   constructor() {
@@ -97,6 +97,7 @@ class DatabaseService {
         speaker_mapping TEXT,
         summaries TEXT,
         extra_fields TEXT,
+        routed_clients TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
@@ -162,6 +163,44 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_participants_meeting ON participants(meeting_id);
       CREATE INDEX IF NOT EXISTS idx_transcript_meeting ON transcript_entries(meeting_id);
       CREATE INDEX IF NOT EXISTS idx_calendar_attendees_email ON calendar_attendees(email);
+
+      -- v2 tables: clients, client_contacts, backup_log
+      CREATE TABLE IF NOT EXISTS clients (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'client',
+        vault_path TEXT,
+        domains TEXT,
+        status TEXT DEFAULT 'active',
+        google_source TEXT,
+        notes TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS client_contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+        email TEXT NOT NULL,
+        name TEXT,
+        google_contact_resource TEXT,
+        is_primary INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        UNIQUE(client_id, email)
+      );
+
+      CREATE TABLE IF NOT EXISTS backup_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        backup_path TEXT NOT NULL,
+        backup_type TEXT NOT NULL,
+        files_included INTEGER,
+        total_size INTEGER,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_client_contacts_email ON client_contacts(email);
+      CREATE INDEX IF NOT EXISTS idx_client_contacts_client ON client_contacts(client_id);
+      CREATE INDEX IF NOT EXISTS idx_clients_type ON clients(type);
     `);
   }
 
@@ -170,8 +209,61 @@ class DatabaseService {
    */
   _runMigrations(oldVersion) {
     log.info(`[Database] Running migrations from v${oldVersion} to v${CURRENT_SCHEMA_VERSION}`);
-    // Future migrations go here:
-    // if (oldVersion < 2) { ... }
+
+    if (oldVersion < 2) {
+      log.info('[Database] Running v1 → v2 migration: clients, client_contacts, backup_log tables');
+      const migrate = this.db.transaction(() => {
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS clients (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          type TEXT NOT NULL DEFAULT 'client',
+          vault_path TEXT,
+          domains TEXT,
+          status TEXT DEFAULT 'active',
+          google_source TEXT,
+          notes TEXT,
+          created_at TEXT DEFAULT (datetime('now')),
+          updated_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS client_contacts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+          email TEXT NOT NULL,
+          name TEXT,
+          google_contact_resource TEXT,
+          is_primary INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT (datetime('now')),
+          UNIQUE(client_id, email)
+        );
+
+        CREATE TABLE IF NOT EXISTS backup_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          backup_path TEXT NOT NULL,
+          backup_type TEXT NOT NULL,
+          files_included INTEGER,
+          total_size INTEGER,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_client_contacts_email ON client_contacts(email);
+        CREATE INDEX IF NOT EXISTS idx_client_contacts_client ON client_contacts(client_id);
+        CREATE INDEX IF NOT EXISTS idx_clients_type ON clients(type);
+      `);
+
+      // Add routed_clients column to meetings (safe: ALTER TABLE ADD COLUMN is a no-op if column exists in SQLite)
+      try {
+        this.db.exec('ALTER TABLE meetings ADD COLUMN routed_clients TEXT');
+      } catch (e) {
+        // Column already exists (e.g., from a partial migration)
+        if (!e.message.includes('duplicate column')) throw e;
+      }
+      }); // end transaction
+      migrate();
+
+      log.info('[Database] v1 → v2 migration complete');
+    }
   }
 
   /**
@@ -190,7 +282,7 @@ class DatabaseService {
           recording_complete, recording_end_time, upload_token, sdk_upload_id,
           recall_recording_id, recording_status, subtitle, has_demo,
           participant_emails, speaker_mapping, summaries, extra_fields,
-          created_at, updated_at
+          routed_clients, created_at, updated_at
         ) VALUES (
           @id, @type, @status, @title, @date, @start_time, @end_time, @duration,
           @platform, @meeting_link, @content, @summary, @recording_id, @video_file,
@@ -199,7 +291,7 @@ class DatabaseService {
           @recording_complete, @recording_end_time, @upload_token, @sdk_upload_id,
           @recall_recording_id, @recording_status, @subtitle, @has_demo,
           @participant_emails, @speaker_mapping, @summaries, @extra_fields,
-          @created_at, @updated_at
+          @routed_clients, @created_at, @updated_at
         )
       `),
       updateMeeting: this.db.prepare(`
@@ -219,6 +311,7 @@ class DatabaseService {
           subtitle = @subtitle, has_demo = @has_demo,
           participant_emails = @participant_emails, speaker_mapping = @speaker_mapping,
           summaries = @summaries, extra_fields = @extra_fields,
+          routed_clients = @routed_clients,
           updated_at = datetime('now')
         WHERE id = @id
       `),
@@ -608,6 +701,7 @@ class DatabaseService {
       link: row.meeting_link || undefined,
       participantEmails: row.participant_emails ? JSON.parse(row.participant_emails) : undefined,
       summaries: row.summaries ? JSON.parse(row.summaries) : undefined,
+      routedClients: row.routed_clients ? JSON.parse(row.routed_clients) : undefined,
     };
 
     // Merge any extra fields that didn't map to columns
@@ -729,7 +823,7 @@ class DatabaseService {
       'uploadToken', 'sdkUploadId', 'recallRecordingId', 'recordingStatus',
       'subtitle', 'hasDemo', 'participantEmails', 'speakerMapping',
       'summaries', 'participants', 'transcript', 'calendarAttendees',
-      'transcriptProvider', // alias
+      'transcriptProvider', 'routedClients', // alias
     ]);
 
     // Build extra_fields from any unrecognized keys
@@ -774,6 +868,7 @@ class DatabaseService {
       speaker_mapping: meeting.speakerMapping ? JSON.stringify(meeting.speakerMapping) : null,
       summaries: meeting.summaries ? JSON.stringify(meeting.summaries) : null,
       extra_fields: Object.keys(extra).length > 0 ? JSON.stringify(extra) : null,
+      routed_clients: meeting.routedClients ? JSON.stringify(meeting.routedClients) : null,
       created_at: meeting.createdAt || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -883,6 +978,193 @@ class DatabaseService {
         is_organizer: a.isOrganizer || a.organizer ? 1 : 0,
       });
     }
+  }
+
+  // ======================================================================
+  // Backup operations
+  // ======================================================================
+
+  /**
+   * Copy the database to a destination path with WAL checkpoint for consistency.
+   * @param {string} destPath - Destination file path
+   */
+  copyDatabase(destPath) {
+    // Checkpoint WAL to ensure all data is in the main DB file
+    this.db.pragma('wal_checkpoint(TRUNCATE)');
+    fs.copyFileSync(this.dbPath, destPath);
+    log.info(`[Database] Database copied to: ${destPath}`);
+  }
+
+  /**
+   * Log a backup operation.
+   * @param {{ backupPath: string, backupType: string, filesIncluded: number, totalSize: number }} entry
+   */
+  logBackup(entry) {
+    this.db.prepare(`
+      INSERT INTO backup_log (backup_path, backup_type, files_included, total_size)
+      VALUES (?, ?, ?, ?)
+    `).run(entry.backupPath, entry.backupType, entry.filesIncluded, entry.totalSize);
+  }
+
+  /**
+   * Get the most recent backup log entry.
+   * @returns {Object|null}
+   */
+  getLastBackup() {
+    return this.db.prepare(
+      'SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 1'
+    ).get() || null;
+  }
+
+  /**
+   * Get all backup log entries.
+   * @returns {Array}
+   */
+  getBackupHistory() {
+    return this.db.prepare(
+      'SELECT * FROM backup_log ORDER BY created_at DESC'
+    ).all();
+  }
+
+  // ======================================================================
+  // Client operations (v1.4)
+  // ======================================================================
+
+  /**
+   * Get all clients.
+   * @returns {Array}
+   */
+  getAllClients() {
+    return this.db.prepare('SELECT * FROM clients ORDER BY name').all().map(row => ({
+      ...row,
+      domains: row.domains ? JSON.parse(row.domains) : [],
+    }));
+  }
+
+  /**
+   * Get a single client by ID.
+   * @param {string} id
+   * @returns {Object|null}
+   */
+  getClient(id) {
+    const row = this.db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
+    if (!row) return null;
+    return { ...row, domains: row.domains ? JSON.parse(row.domains) : [] };
+  }
+
+  /**
+   * Create or update a client.
+   * @param {Object} client
+   */
+  saveClient(client) {
+    const existing = this.db.prepare('SELECT id FROM clients WHERE id = ?').get(client.id);
+    if (existing) {
+      this.db.prepare(`
+        UPDATE clients SET
+          name = ?, type = ?, vault_path = ?, domains = ?, status = ?,
+          google_source = ?, notes = ?, updated_at = datetime('now')
+        WHERE id = ?
+      `).run(
+        client.name, client.type || 'client', client.vaultPath || client.vault_path || null,
+        JSON.stringify(client.domains || []), client.status || 'active',
+        client.googleSource || client.google_source || null,
+        client.notes || null, client.id
+      );
+    } else {
+      this.db.prepare(`
+        INSERT INTO clients (id, name, type, vault_path, domains, status, google_source, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        client.id, client.name, client.type || 'client',
+        client.vaultPath || client.vault_path || null,
+        JSON.stringify(client.domains || []), client.status || 'active',
+        client.googleSource || client.google_source || null,
+        client.notes || null
+      );
+    }
+  }
+
+  /**
+   * Delete a client by ID.
+   * @param {string} id
+   * @returns {boolean}
+   */
+  deleteClient(id) {
+    const result = this.db.prepare('DELETE FROM clients WHERE id = ?').run(id);
+    return result.changes > 0;
+  }
+
+  /**
+   * Get contacts for a client.
+   * @param {string} clientId
+   * @returns {Array}
+   */
+  getClientContacts(clientId) {
+    return this.db.prepare(
+      'SELECT * FROM client_contacts WHERE client_id = ? ORDER BY is_primary DESC, name'
+    ).all(clientId);
+  }
+
+  /**
+   * Add a contact to a client.
+   * @param {string} clientId
+   * @param {{ email: string, name?: string, googleContactResource?: string, isPrimary?: boolean }} contact
+   */
+  addClientContact(clientId, contact) {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO client_contacts (client_id, email, name, google_contact_resource, is_primary)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+      clientId, contact.email, contact.name || null,
+      contact.googleContactResource || null, contact.isPrimary ? 1 : 0
+    );
+  }
+
+  /**
+   * Remove a contact from a client.
+   * @param {string} clientId
+   * @param {string} email
+   * @returns {boolean}
+   */
+  removeClientContact(clientId, email) {
+    const result = this.db.prepare(
+      'DELETE FROM client_contacts WHERE client_id = ? AND email = ?'
+    ).run(clientId, email);
+    return result.changes > 0;
+  }
+
+  /**
+   * Find a client by email (exact match in client_contacts or domain match in clients.domains).
+   * @param {string} email
+   * @returns {Object|null}
+   */
+  matchEmailToClient(email) {
+    // 1. Exact email match in client_contacts
+    const contactMatch = this.db.prepare(`
+      SELECT c.* FROM clients c
+      JOIN client_contacts cc ON cc.client_id = c.id
+      WHERE cc.email = ? AND c.status = 'active'
+      LIMIT 1
+    `).get(email);
+    if (contactMatch) {
+      return { ...contactMatch, domains: contactMatch.domains ? JSON.parse(contactMatch.domains) : [], matchType: 'email' };
+    }
+
+    // 2. Domain match
+    const domain = email.split('@')[1];
+    if (domain) {
+      const allClients = this.db.prepare(
+        "SELECT * FROM clients WHERE status = 'active' AND domains IS NOT NULL"
+      ).all();
+      for (const client of allClients) {
+        const domains = JSON.parse(client.domains || '[]');
+        if (domains.includes(domain)) {
+          return { ...client, domains, matchType: 'domain' };
+        }
+      }
+    }
+
+    return null;
   }
 
   /**

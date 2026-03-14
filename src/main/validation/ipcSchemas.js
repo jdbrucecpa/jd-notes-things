@@ -317,6 +317,84 @@ const meetingAutoStartSchema = z.object({
 const transcriptionProviderSchema = z.enum(['assemblyai', 'deepgram', 'recallai']).optional();
 
 // ===================================================
+// Backup Schemas (v1.4)
+// ===================================================
+
+const backupCreateSchema = z.object({
+  outputDir: z.string().min(1, 'Output directory cannot be empty'),
+});
+
+const backupIncrementalSchema = z.object({
+  outputDir: z.string().min(1, 'Output directory cannot be empty'),
+  sinceDate: z.string().optional(),
+});
+
+const backupRestoreSchema = z.object({
+  backupPath: z.string().min(1, 'Backup path cannot be empty'),
+  options: z.object({
+    restoreDatabase: z.boolean().optional(),
+    restoreConfig: z.boolean().optional(),
+    restoreAudio: z.boolean().optional(),
+  }).optional(),
+});
+
+const backupValidateSchema = z.object({
+  backupPath: z.string().min(1, 'Backup path cannot be empty'),
+});
+
+// ===================================================
+// Client Schemas (v1.4)
+// ===================================================
+
+const clientSchema = z.object({
+  id: z.string().min(1, 'Client ID cannot be empty'),
+  name: z.string().min(1, 'Client name cannot be empty'),
+  type: z.enum(['client', 'industry']).optional(),
+  vaultPath: z.string().optional(),
+  domains: z.array(z.string()).optional(),
+  status: z.enum(['active', 'inactive', 'pending_setup']).optional(),
+  googleSource: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const clientContactSchema = z.object({
+  clientId: z.string().min(1, 'Client ID cannot be empty'),
+  email: z.string().min(1, 'Email cannot be empty'),
+  name: z.string().optional(),
+  googleContactResource: z.string().optional(),
+  isPrimary: z.boolean().optional(),
+});
+
+// ===================================================
+// Calendar Coverage Schemas (v1.4)
+// ===================================================
+
+const calendarCoverageSchema = z.object({
+  startDate: z.string().min(1, 'Start date cannot be empty'),
+  endDate: z.string().min(1, 'End date cannot be empty'),
+});
+
+const meetingPlaceholderSchema = z.object({
+  title: z.string().min(1, 'Title cannot be empty'),
+  date: z.string().min(1, 'Date cannot be empty'),
+  calendarEventId: z.string().optional(),
+  participants: z.array(z.object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+  })).optional(),
+});
+
+// ===================================================
+// Transcription Re-run Schema (v1.4)
+// ===================================================
+
+const transcriptionRerunSchema = z.object({
+  meetingId: meetingIdSchema,
+  provider: z.string().optional(),
+  audioPath: z.string().optional(),
+});
+
+// ===================================================
 // Widget Schemas (actively used)
 // ===================================================
 
@@ -451,6 +529,19 @@ module.exports = {
   meetingAutoStartSchema,
   // Transcription provider schema
   transcriptionProviderSchema,
+  // Backup schemas
+  backupCreateSchema,
+  backupIncrementalSchema,
+  backupRestoreSchema,
+  backupValidateSchema,
+  // Client schemas
+  clientSchema,
+  clientContactSchema,
+  // Calendar coverage schemas
+  calendarCoverageSchema,
+  meetingPlaceholderSchema,
+  // Transcription re-run schema
+  transcriptionRerunSchema,
   // Helpers
   validateIpcInput,
   withValidation,

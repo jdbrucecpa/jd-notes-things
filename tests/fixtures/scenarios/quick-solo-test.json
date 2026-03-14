@@ -1,0 +1,49 @@
+{
+  "name": "quick-solo-test",
+  "description": "Minimal scenario for fast CI - single participant, short duration",
+  "meeting": {
+    "platform": "zoom",
+    "title": "Quick Test Meeting"
+  },
+  "timeline": [
+    {
+      "event": "meeting-detected",
+      "delayMs": 200,
+      "data": {
+        "platform": "zoom",
+        "title": "Quick Test Meeting"
+      }
+    },
+    {
+      "event": "participant-join",
+      "delayMs": 500,
+      "data": {
+        "id": "participant-001",
+        "name": "Test User",
+        "is_host": true,
+        "platform": "zoom",
+        "email": null
+      }
+    },
+    {
+      "event": "speech-on",
+      "delayMs": 1000,
+      "data": {
+        "participantId": "participant-001",
+        "name": "Test User",
+        "timestamp": { "relative": 0.5 }
+      }
+    },
+    {
+      "event": "speech-off",
+      "delayMs": 5000,
+      "data": {
+        "participantId": "participant-001",
+        "name": "Test User",
+        "timestamp": { "relative": 4.5 }
+      }
+    }
+  ],
+  "audioFixture": "tests/fixtures/audio/test-meeting-two-speakers.mp3",
+  "autoStopAfterMs": 8000
+}

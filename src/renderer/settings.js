@@ -208,12 +208,16 @@ export function initializeSettingsUI() {
       { buttonId: 'shortcutsSettingsTab', contentId: 'shortcutsPanel' },
       { buttonId: 'streamDeckSettingsTab', contentId: 'streamdeckPanel' },
       { buttonId: 'logsSettingsTab', contentId: 'logsPanel' },
+      { buttonId: 'backupSettingsTab', contentId: 'backupPanel' },
       { buttonId: 'advancedSettingsTab', contentId: 'advancedPanel' },
       { buttonId: 'aboutSettingsTab', contentId: 'aboutPanel' },
     ],
     buttonId => {
       // Trigger panel-specific actions based on which tab was activated
-      if (buttonId === 'profileSettingsTab') {
+      if (buttonId === 'backupSettingsTab') {
+        console.log('[Settings] Backup tab clicked, loading manifest');
+        loadBackupManifest();
+      } else if (buttonId === 'profileSettingsTab') {
         console.log('[Settings] Profile tab clicked, loading profile');
         loadUserProfile();
       } else if (buttonId === 'templatesSettingsTab' && window.loadTemplates) {
@@ -1312,4 +1316,191 @@ export function getCrmSettings() {
 // Initialize CRM settings when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
   initializeCrmSettings();
+  initializeBackupUI();
+  initializeMcpUI();
 });
+
+// ===================================================
+// Backup & Restore UI (v1.4)
+// ===================================================
+
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+}
+
+async function loadBackupManifest() {
+  if (!window.electronAPI?.backupGetManifest) return;
+  try {
+    const result = await window.electronAPI.backupGetManifest();
+    if (!result.success) return;
+    const m = result.manifest;
+
+    const dbInfo = document.getElementById('backupDbInfo');
+    const configInfo = document.getElementById('backupConfigInfo');
+    const audioInfo = document.getElementById('backupAudioInfo');
+    const totalInfo = document.getElementById('backupTotalInfo');
+    const lastInfo = document.getElementById('backupLastInfo');
+
+    if (dbInfo) dbInfo.textContent = `${m.database.files} file (${formatBytes(m.database.size)})`;
+    if (configInfo) configInfo.textContent = `${m.config.files} files (${formatBytes(m.config.size)})`;
+    if (audioInfo) audioInfo.textContent = `${m.audio.files} files (${formatBytes(m.audio.size)})`;
+    if (totalInfo) totalInfo.textContent = `${m.total.files} files (${formatBytes(m.total.size)})`;
+    if (lastInfo) {
+      lastInfo.textContent = m.lastBackup
+        ? `${new Date(m.lastBackup.created_at).toLocaleString()} (${m.lastBackup.backup_type}, ${formatBytes(m.lastBackup.total_size)})`
+        : 'Never';
+    }
+  } catch (error) {
+    console.error('[Settings] Failed to load backup manifest:', error);
+  }
+}
+
+function initializeBackupUI() {
+  const fullBtn = document.getElementById('backupFullBtn');
+  const incrementalBtn = document.getElementById('backupIncrementalBtn');
+  const restoreBtn = document.getElementById('backupRestoreBtn');
+  const restoreConfirmBtn = document.getElementById('backupRestoreConfirmBtn');
+  const backupStatus = document.getElementById('backupStatus');
+  const restoreStatus = document.getElementById('backupRestoreStatus');
+  const restoreOptions = document.getElementById('backupRestoreOptions');
+
+  if (fullBtn) {
+    fullBtn.addEventListener('click', async () => {
+      const dirResult = await window.electronAPI.backupSelectOutputDir();
+      if (!dirResult.success) return;
+
+      fullBtn.disabled = true;
+      if (backupStatus) backupStatus.textContent = 'Creating full backup...';
+
+      const result = await window.electronAPI.backupCreateFull(dirResult.path);
+      fullBtn.disabled = false;
+
+      if (result.success) {
+        if (backupStatus) backupStatus.textContent = `Backup complete: ${result.filesIncluded} files (${formatBytes(result.totalSize)})`;
+        notifySuccess('Full backup created successfully');
+        loadBackupManifest();
+      } else {
+        if (backupStatus) backupStatus.textContent = `Backup failed: ${result.error}`;
+        notifyError(result.error || 'Backup failed');
+      }
+    });
+  }
+
+  if (incrementalBtn) {
+    incrementalBtn.addEventListener('click', async () => {
+      const dirResult = await window.electronAPI.backupSelectOutputDir();
+      if (!dirResult.success) return;
+
+      incrementalBtn.disabled = true;
+      if (backupStatus) backupStatus.textContent = 'Creating incremental backup...';
+
+      const result = await window.electronAPI.backupCreateIncremental(dirResult.path);
+      incrementalBtn.disabled = false;
+
+      if (result.success) {
+        const msg = result.filesIncluded === 0
+          ? 'No changes since last backup'
+          : `Incremental backup: ${result.filesIncluded} files (${formatBytes(result.totalSize)})`;
+        if (backupStatus) backupStatus.textContent = msg;
+        notifySuccess(msg);
+        loadBackupManifest();
+      } else {
+        if (backupStatus) backupStatus.textContent = `Backup failed: ${result.error}`;
+        notifyError(result.error || 'Backup failed');
+      }
+    });
+  }
+
+  let selectedBackupPath = null;
+
+  if (restoreBtn) {
+    restoreBtn.addEventListener('click', async () => {
+      const fileResult = await window.electronAPI.backupSelectRestoreFile();
+      if (!fileResult.success) return;
+
+      if (restoreStatus) restoreStatus.textContent = 'Validating...';
+      const validation = await window.electronAPI.backupValidate(fileResult.path);
+
+      if (validation.valid) {
+        selectedBackupPath = fileResult.path;
+        if (restoreStatus) restoreStatus.textContent = `Valid backup: ${validation.fileCount} files`;
+        if (restoreOptions) restoreOptions.style.display = 'block';
+      } else {
+        if (restoreStatus) restoreStatus.textContent = `Invalid backup: ${validation.error}`;
+        notifyError(validation.error || 'Invalid backup file');
+      }
+    });
+  }
+
+  // Restore toggle switches
+  const toggleIds = ['restoreDatabaseToggle', 'restoreConfigToggle', 'restoreAudioToggle'];
+  for (const id of toggleIds) {
+    const toggle = document.getElementById(id);
+    if (toggle) {
+      toggle.addEventListener('click', () => toggle.classList.toggle('active'));
+    }
+  }
+
+  if (restoreConfirmBtn) {
+    restoreConfirmBtn.addEventListener('click', async () => {
+      if (!selectedBackupPath) return;
+
+      const options = {
+        restoreDatabase: document.getElementById('restoreDatabaseToggle')?.classList.contains('active'),
+        restoreConfig: document.getElementById('restoreConfigToggle')?.classList.contains('active'),
+        restoreAudio: document.getElementById('restoreAudioToggle')?.classList.contains('active'),
+      };
+
+      restoreConfirmBtn.disabled = true;
+      if (restoreStatus) restoreStatus.textContent = 'Restoring...';
+
+      const result = await window.electronAPI.backupRestore(selectedBackupPath, options);
+      restoreConfirmBtn.disabled = false;
+
+      if (result.success) {
+        notifySuccess('Backup restored successfully. Please restart the application.');
+        if (restoreStatus) restoreStatus.textContent = 'Restore complete. Restart recommended.';
+        if (restoreOptions) restoreOptions.style.display = 'none';
+      } else {
+        notifyError(result.error || 'Restore failed');
+        if (restoreStatus) restoreStatus.textContent = `Restore failed: ${result.error}`;
+      }
+    });
+  }
+}
+
+// ===================================================
+// MCP Server UI (v1.4)
+// ===================================================
+
+function initializeMcpUI() {
+  const loadBtn = document.getElementById('mcpLoadConfigBtn');
+  const copyBtn = document.getElementById('mcpCopyConfigBtn');
+  const snippet = document.getElementById('mcpConfigSnippet');
+
+  if (loadBtn) {
+    loadBtn.addEventListener('click', async () => {
+      if (!window.electronAPI?.mcpGetConfig) return;
+      const result = await window.electronAPI.mcpGetConfig();
+      if (result.success && snippet) {
+        snippet.textContent = result.configSnippet;
+        snippet.style.display = 'block';
+        if (copyBtn) copyBtn.style.display = 'inline-block';
+      }
+    });
+  }
+
+  if (copyBtn) {
+    copyBtn.addEventListener('click', () => {
+      if (snippet) {
+        navigator.clipboard.writeText(snippet.textContent).then(() => {
+          copyBtn.textContent = 'Copied!';
+          setTimeout(() => { copyBtn.textContent = 'Copy to Clipboard'; }, 2000);
+        });
+      }
+    });
+  }
+}

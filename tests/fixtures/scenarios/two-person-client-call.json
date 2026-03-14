@@ -1,0 +1,97 @@
+{
+  "name": "two-person-client-call",
+  "description": "A typical two-person client sync meeting with alternating speakers",
+  "meeting": {
+    "platform": "zoom",
+    "title": "Weekly Sync - Acme Corp",
+    "windowId": "mock-window-{{uuid}}"
+  },
+  "timeline": [
+    {
+      "event": "meeting-detected",
+      "delayMs": 500,
+      "data": {
+        "platform": "zoom",
+        "title": "Weekly Sync - Acme Corp"
+      }
+    },
+    {
+      "event": "participant-join",
+      "delayMs": 2000,
+      "data": {
+        "id": "participant-001",
+        "name": "John Doe",
+        "is_host": true,
+        "platform": "zoom",
+        "email": null
+      }
+    },
+    {
+      "event": "participant-join",
+      "delayMs": 3500,
+      "data": {
+        "id": "participant-002",
+        "name": "Jane Smith",
+        "is_host": false,
+        "platform": "zoom",
+        "email": null
+      }
+    },
+    {
+      "event": "speech-on",
+      "delayMs": 4000,
+      "data": {
+        "participantId": "participant-001",
+        "name": "John Doe",
+        "timestamp": { "relative": 2.0 }
+      }
+    },
+    {
+      "event": "speech-off",
+      "delayMs": 12000,
+      "data": {
+        "participantId": "participant-001",
+        "name": "John Doe",
+        "timestamp": { "relative": 10.0 }
+      }
+    },
+    {
+      "event": "speech-on",
+      "delayMs": 12500,
+      "data": {
+        "participantId": "participant-002",
+        "name": "Jane Smith",
+        "timestamp": { "relative": 10.5 }
+      }
+    },
+    {
+      "event": "speech-off",
+      "delayMs": 22000,
+      "data": {
+        "participantId": "participant-002",
+        "name": "Jane Smith",
+        "timestamp": { "relative": 20.0 }
+      }
+    },
+    {
+      "event": "speech-on",
+      "delayMs": 23000,
+      "data": {
+        "participantId": "participant-001",
+        "name": "John Doe",
+        "timestamp": { "relative": 21.0 }
+      }
+    },
+    {
+      "event": "speech-off",
+      "delayMs": 35000,
+      "data": {
+        "participantId": "participant-001",
+        "name": "John Doe",
+        "timestamp": { "relative": 33.0 }
+      }
+    }
+  ],
+  "audioFixture": "tests/fixtures/audio/test-meeting-two-speakers.mp3",
+  "autoStopAfterMs": 40000
+}

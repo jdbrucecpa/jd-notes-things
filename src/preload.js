@@ -307,4 +307,57 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('background:task-failed', (_, data) => callback(data)),
   onBackgroundTasksList: callback =>
     ipcRenderer.on('background:tasks-list', (_, tasks) => callback(tasks)),
+
+  // MCP Server Config (v1.4)
+  mcpGetConfig: () => ipcRenderer.invoke('mcp:getConfig'),
+
+  // Client Setup (v1.4)
+  clientsDiscover: () => ipcRenderer.invoke('clients:discover'),
+  clientsGetAll: () => ipcRenderer.invoke('clients:getAll'),
+  clientsGet: clientId => ipcRenderer.invoke('clients:get', clientId),
+  clientsCreate: clientData => ipcRenderer.invoke('clients:create', clientData),
+  clientsUpdate: clientData => ipcRenderer.invoke('clients:update', clientData),
+  clientsDelete: clientId => ipcRenderer.invoke('clients:delete', clientId),
+  clientsCheck: () => ipcRenderer.invoke('clients:check'),
+  clientsMigrateFromYaml: () => ipcRenderer.invoke('clients:migrateFromYaml'),
+  clientsSync: () => ipcRenderer.invoke('clients:sync'),
+
+  // Enhanced Contacts (v1.4)
+  contactsGetFullDetail: resourceName =>
+    ipcRenderer.invoke('contacts:getFullDetail', resourceName),
+  contactsUpdateContact: (resourceName, updates) =>
+    ipcRenderer.invoke('contacts:updateContact', { resourceName, updates }),
+  contactsGetCalendarEventsForContact: email =>
+    ipcRenderer.invoke('contacts:getCalendarEventsForContact', email),
+  contactsGetCompanyContacts: organization =>
+    ipcRenderer.invoke('contacts:getCompanyContacts', organization),
+  contactsGetCompanyMeetings: organization =>
+    ipcRenderer.invoke('contacts:getCompanyMeetings', organization),
+
+  // Calendar Coverage Report (v1.4)
+  calendarCoverageReport: (startDate, endDate) =>
+    ipcRenderer.invoke('calendar:coverageReport', { startDate, endDate }),
+  meetingCreatePlaceholder: (title, date, calendarEventId, participants) =>
+    ipcRenderer.invoke('meeting:createPlaceholder', { title, date, calendarEventId, participants }),
+
+  // Re-run Transcription (v1.4)
+  transcriptionRerun: (meetingId, provider, audioPath) =>
+    ipcRenderer.invoke('transcription:rerun', { meetingId, provider, audioPath }),
+
+  // Backup & Restore (v1.4)
+  backupGetManifest: () => ipcRenderer.invoke('backup:getManifest'),
+  backupCreateFull: outputDir => ipcRenderer.invoke('backup:createFull', { outputDir }),
+  backupCreateIncremental: (outputDir, sinceDate) =>
+    ipcRenderer.invoke('backup:createIncremental', { outputDir, sinceDate }),
+  backupRestore: (backupPath, options) =>
+    ipcRenderer.invoke('backup:restore', { backupPath, options }),
+  backupValidate: backupPath => ipcRenderer.invoke('backup:validate', { backupPath }),
+  backupSelectOutputDir: () => ipcRenderer.invoke('backup:selectOutputDir'),
+  backupSelectRestoreFile: () => ipcRenderer.invoke('backup:selectRestoreFile'),
+
+  // Mock SDK test control (only functional in MOCK_SDK mode, safe no-ops otherwise)
+  mockGetState: () => ipcRenderer.invoke('mock:getState'),
+  mockTriggerMeetingClosed: () => ipcRenderer.invoke('mock:triggerMeetingClosed'),
+  mockInjectParticipant: data => ipcRenderer.invoke('mock:injectParticipant', data),
+  mockSwitchScenario: name => ipcRenderer.invoke('mock:switchScenario', name),
 });

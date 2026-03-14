@@ -104,5 +104,8 @@ config-backup/
 playwright-report/
 test-results/
 
+# Test audio fixtures (real meeting recordings, large files)
+tests/fixtures/audio/*.mp3
+
 # Test files and Git Bash artifacts
 nul

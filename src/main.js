@@ -28,6 +28,7 @@ if (process.env.E2E_TEST) {
 }
 const path = require('node:path');
 const fs = require('fs');
+const crypto = require('crypto');
 const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
 const sdkLogger = require('./sdk-logger');
@@ -55,6 +56,8 @@ const speakerMappingService = require('./main/services/speakerMappingService');
 const vocabularyService = require('./main/services/vocabularyService');
 const backgroundTaskManager = require('./main/services/backgroundTaskManager');
 const databaseService = require('./main/services/databaseService');
+const backupService = require('./main/services/backupService');
+const clientService = require('./main/services/clientService');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
@@ -172,6 +175,18 @@ const {
   meetingAutoStartSchema,
   // Transcription provider schema
   transcriptionProviderSchema,
+  // v1.4: Backup schemas
+  backupCreateSchema,
+  backupIncrementalSchema,
+  backupRestoreSchema,
+  backupValidateSchema,
+  // v1.4: Client schemas
+  clientSchema,
+  // v1.4: Calendar coverage schemas
+  calendarCoverageSchema,
+  meetingPlaceholderSchema,
+  // v1.4: Transcription re-run schema
+  transcriptionRerunSchema,
 } = require('./main/validation/ipcSchemas');
 require('dotenv').config();
 
@@ -1595,9 +1610,20 @@ app.whenReady().then(async () => {
     routingEngine.setSettingsProvider(() => appSettings);
     console.log('[ObsidianExport] Routing engine initialized successfully');
 
+    // v1.4: Connect client service to routing engine
+    if (googleContacts) {
+      clientService.setGoogleContacts(googleContacts);
+    }
+    routingEngine.setClientService(clientService);
+    console.log('[ClientService] Client service connected to routing engine');
+
     // Initialize vault structure
     vaultStructure.initializeVault();
     console.log('[ObsidianExport] Vault structure initialized at:', vaultPath);
+
+    // Initialize backup service with vault path
+    backupService.initialize(vaultPath);
+    console.log('[Backup] Backup service initialized');
 
     // Initialize import manager (Phase 8)
     importManager = new ImportManager({
@@ -2183,6 +2209,17 @@ async function deleteAllRecallRecordings() {
 
 // Create a desktop SDK upload token directly (no separate server needed)
 async function createDesktopSdkUpload() {
+  // Mock mode: return fake tokens so we don't hit the Recall.ai API
+  if (process.env.MOCK_SDK) {
+    const mockId = `mock-upload-${crypto.randomUUID().substring(0, 8)}`;
+    console.log(`[MockSDK] createDesktopSdkUpload → mock tokens (${mockId})`);
+    return {
+      upload_token: `mock-token-${crypto.randomUUID()}`,
+      id: mockId,
+      recording_id: `mock-recording-${crypto.randomUUID().substring(0, 8)}`,
+    };
+  }
+
   try {
     const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
 
@@ -3515,6 +3552,11 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
       });
       routes = routingDecision.routes;
       console.log(`[ObsidianExport] Found ${routes.length} routing destination(s)`);
+
+      // v1.4: Track which clients this meeting was routed to
+      if (routingDecision.routedClientIds) {
+        meeting.routedClients = routingDecision.routedClientIds;
+      }
     }
 
     const createdPaths = [];
@@ -7269,13 +7311,9 @@ ipcMain.handle(
       },
     });
 
-    // If successful, add meeting to database
-    // Note: Auto-labeling of single speakers is now handled inside ImportManager
-    // before summary generation (v1.1)
+    // If successful, save meeting to database
     if (result.success) {
-      const data = await fileOperationManager.readMeetingsData();
-      data.pastMeetings.unshift(result.meeting);
-      await fileOperationManager.writeData(data);
+      databaseService.saveMeeting(result.meeting, 'past');
     }
 
     return result;
@@ -7314,15 +7352,9 @@ ipcMain.handle(
           },
         });
 
-        // Add all successful meetings to database
-        // Note: Auto-labeling of single speakers is now handled inside ImportManager
-        // before summary generation (v1.1)
-        if (result.meetings.length > 0) {
-          const data = await fileOperationManager.readMeetingsData();
-          result.meetings.forEach(meeting => {
-            data.pastMeetings.unshift(meeting);
-          });
-          await fileOperationManager.writeData(data);
+        // Save all successful meetings to database
+        for (const meeting of result.meetings) {
+          databaseService.saveMeeting(meeting, 'past');
         }
 
         return result;
@@ -7979,6 +8011,114 @@ ipcMain.handle('import:selectFolder', async () => {
 
   return transcriptFiles;
 });
+
+// ===================================================================
+// Re-run Transcription IPC Handler (v1.4)
+// ===================================================================
+
+ipcMain.handle(
+  'transcription:rerun',
+  withValidation(transcriptionRerunSchema, async (event, { meetingId, provider, audioPath }) => {
+    const meeting = databaseService.getMeeting(meetingId);
+    if (!meeting) {
+      return { success: false, error: 'Meeting not found' };
+    }
+
+    // Determine audio file path
+    let filePath = audioPath || meeting.videoFile;
+
+    // If no audio file path or file doesn't exist, prompt user
+    if (!filePath || !fs.existsSync(filePath)) {
+      const { dialog } = require('electron');
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Select Audio File for Re-transcription',
+        filters: [
+          { name: 'Audio Files', extensions: ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'flac', 'aac'] },
+        ],
+        properties: ['openFile'],
+      });
+
+      if (result.canceled || !result.filePaths.length) {
+        return { success: false, error: 'No audio file selected' };
+      }
+      filePath = result.filePaths[0];
+    }
+
+    const taskId = backgroundTaskManager.addTask({
+      type: 'transcription-rerun',
+      description: `Re-running transcription: ${meeting.title}`,
+      meetingId,
+    });
+
+    try {
+      // Read provider preference from renderer's localStorage via webContents
+      let storedProvider = null;
+      if (!provider && !meeting.transcriptionProvider && mainWindow && !mainWindow.isDestroyed()) {
+        try {
+          storedProvider = await mainWindow.webContents.executeJavaScript(
+            "localStorage.getItem('transcription-provider')"
+          );
+        } catch { /* ignore if renderer not ready */ }
+      }
+      const transcriptionProvider = provider ||
+        meeting.transcriptionProvider ||
+        storedProvider ||
+        'assemblyai';
+
+      backgroundTaskManager.updateTask(taskId, 10, 'Starting transcription...');
+      event.sender.send('import:progress', {
+        step: 'transcribing',
+        file: path.basename(filePath),
+        provider: transcriptionProvider,
+      });
+
+      const transcript = await transcriptionService.transcribe(
+        transcriptionProvider,
+        filePath,
+        {}
+      );
+
+      backgroundTaskManager.updateTask(taskId, 60, 'Updating meeting...');
+
+      // Update the meeting with new transcript
+      meeting.transcript = transcript.utterances || [];
+      meeting.transcriptionProvider = transcriptionProvider;
+      meeting.transcriptConfidence = transcript.confidence || null;
+      meeting.videoFile = filePath;
+
+      // Re-generate summary if the meeting had one
+      if (meeting.summary) {
+        backgroundTaskManager.updateTask(taskId, 80, 'Regenerating summary...');
+        try {
+          const summaryResult = await generateMeetingSummary(meeting);
+          if (summaryResult) {
+            meeting.summary = summaryResult;
+          }
+        } catch (summaryError) {
+          console.warn('[Transcription Rerun] Summary regeneration failed:', summaryError.message);
+        }
+      }
+
+      // Save updated meeting
+      databaseService.saveMeeting(meeting, 'past');
+
+      backgroundTaskManager.completeTask(taskId, {
+        utterances: meeting.transcript.length,
+        provider: transcriptionProvider,
+      });
+
+      return {
+        success: true,
+        transcript: meeting.transcript,
+        provider: transcriptionProvider,
+      };
+    } catch (error) {
+      backgroundTaskManager.failTask(taskId, error.message);
+      console.error('[Transcription Rerun] Failed:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
 
 // ===================================================================
 // End Import IPC Handlers
@@ -9032,6 +9172,385 @@ ipcMain.handle('background:cancelTask', (_event, taskId) => {
 });
 
 // ===================================================================
+// Backup & Restore IPC Handlers (v1.4)
+// ===================================================================
+
+ipcMain.handle(
+  'backup:getManifest',
+  createIpcHandler(async () => {
+    return { manifest: backupService.getBackupManifest() };
+  })
+);
+
+ipcMain.handle(
+  'backup:createFull',
+  withValidation(backupCreateSchema, async (_event, { outputDir }) => {
+    return await backupService.createFullBackup(outputDir);
+  })
+);
+
+ipcMain.handle(
+  'backup:createIncremental',
+  withValidation(backupIncrementalSchema, async (_event, { outputDir, sinceDate }) => {
+    return await backupService.createIncrementalBackup(outputDir, sinceDate);
+  })
+);
+
+ipcMain.handle(
+  'backup:restore',
+  withValidation(backupRestoreSchema, async (_event, { backupPath, options }) => {
+    return await backupService.restoreFromBackup(backupPath, options);
+  })
+);
+
+ipcMain.handle(
+  'backup:validate',
+  withValidation(backupValidateSchema, async (_event, { backupPath }) => {
+    const result = await backupService.validateBackup(backupPath);
+    return { success: true, ...result };
+  })
+);
+
+ipcMain.handle('backup:selectOutputDir', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Backup Destination',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths.length) {
+    return { success: false, canceled: true };
+  }
+  return { success: true, path: result.filePaths[0] };
+});
+
+ipcMain.handle('backup:selectRestoreFile', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Backup File',
+    filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths.length) {
+    return { success: false, canceled: true };
+  }
+  return { success: true, path: result.filePaths[0] };
+});
+
+// ===================================================================
+// End Backup & Restore IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Calendar Coverage Report IPC Handlers (v1.4)
+// ===================================================================
+
+ipcMain.handle(
+  'calendar:coverageReport',
+  withValidation(calendarCoverageSchema, async (_event, { startDate, endDate }) => {
+    if (!googleCalendar) {
+      return { success: false, error: 'Google Calendar not connected' };
+    }
+
+    try {
+      // Fetch calendar events in range
+      const events = await googleCalendar.getEventsInRange(startDate, endDate);
+
+      const covered = [];
+      const uncovered = [];
+
+      for (const event of events) {
+        // Check if we have a matching meeting in the database
+        let meeting = null;
+
+        // Try by calendar_event_id first
+        if (event.id) {
+          meeting = databaseService.getMeetingByCalendarEvent(event.id);
+        }
+
+        // Fall back to fuzzy title+date match
+        if (!meeting && event.summary && event.start) {
+          const eventDate = event.start.dateTime
+            ? event.start.dateTime.split('T')[0]
+            : event.start.date;
+          const meetings = databaseService.getMeetingsInRange(eventDate, eventDate);
+          meeting = meetings.find(m =>
+            m.title && event.summary &&
+            m.title.toLowerCase().includes(event.summary.toLowerCase().substring(0, 20))
+          );
+        }
+
+        const eventInfo = {
+          calendarEventId: event.id,
+          title: event.summary || 'No title',
+          date: event.start?.dateTime || event.start?.date,
+          endDate: event.end?.dateTime || event.end?.date,
+          attendees: (event.attendees || []).map(a => ({
+            email: a.email,
+            name: a.displayName,
+            responseStatus: a.responseStatus,
+          })),
+          meetingLink: event.hangoutLink || null,
+          htmlLink: event.htmlLink || null,
+        };
+
+        if (meeting) {
+          covered.push({ ...eventInfo, meetingId: meeting.id, meetingTitle: meeting.title });
+        } else {
+          uncovered.push(eventInfo);
+        }
+      }
+
+      const coveragePercent = events.length > 0
+        ? Math.round((covered.length / events.length) * 100)
+        : 100;
+
+      return {
+        success: true,
+        covered,
+        uncovered,
+        total: events.length,
+        coveragePercent,
+      };
+    } catch (error) {
+      console.error('[Calendar Coverage] Report failed:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
+
+ipcMain.handle(
+  'meeting:createPlaceholder',
+  withValidation(meetingPlaceholderSchema, async (_event, { title, date, calendarEventId, participants }) => {
+    try {
+      const crypto = require('crypto');
+      const meetingId = 'placeholder-' + crypto.randomUUID();
+      const meeting = {
+        id: meetingId,
+        type: 'document',
+        title,
+        date,
+        status: 'past',
+        calendarEventId: calendarEventId || null,
+        participants: (participants || []).map(p => ({
+          name: p.name || p.email || 'Unknown',
+          originalName: p.name || p.email || 'Unknown',
+          email: p.email || null,
+        })),
+      };
+
+      databaseService.saveMeeting(meeting, 'past');
+
+      return { success: true, meetingId, meeting };
+    } catch (error) {
+      console.error('[Meeting] Create placeholder failed:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
+
+// ===================================================================
+// End Calendar Coverage Report IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Enhanced Contacts IPC Handlers (v1.4)
+// ===================================================================
+
+ipcMain.handle(
+  'contacts:getFullDetail',
+  createIpcHandler(async (_event, resourceName) => {
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      return { success: false, error: 'Google Contacts not authenticated' };
+    }
+    const contact = await googleContacts.getFullContactDetail(resourceName);
+    return { contact };
+  })
+);
+
+ipcMain.handle(
+  'contacts:updateContact',
+  createIpcHandler(async (_event, { resourceName, updates }) => {
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      return { success: false, error: 'Google Contacts not authenticated' };
+    }
+    const contact = await googleContacts.updateContact(resourceName, updates);
+    return { contact };
+  })
+);
+
+ipcMain.handle(
+  'contacts:getCalendarEventsForContact',
+  createIpcHandler(async (_event, email) => {
+    if (!googleCalendar) {
+      return { success: false, error: 'Google Calendar not connected' };
+    }
+    // Search last 365 days of calendar for events with this attendee
+    const endDate = new Date().toISOString();
+    const startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+    const events = await googleCalendar.getEventsInRange(
+      startDate.split('T')[0],
+      endDate.split('T')[0]
+    );
+    // Filter to events where this email is an attendee
+    const filtered = events.filter(e =>
+      e.attendees?.some(a => a.email?.toLowerCase() === email.toLowerCase())
+    );
+    return { events: filtered };
+  })
+);
+
+ipcMain.handle(
+  'contacts:getCompanyContacts',
+  createIpcHandler(async (_event, organization) => {
+    if (!googleContacts || !googleContacts.isAuthenticated()) {
+      return { success: false, error: 'Google Contacts not authenticated' };
+    }
+    const allContacts = await googleContacts.fetchAllContacts();
+    const companyContacts = allContacts.filter(c =>
+      c.organization && c.organization.toLowerCase() === organization.toLowerCase()
+    );
+    return { contacts: companyContacts };
+  })
+);
+
+ipcMain.handle(
+  'contacts:getCompanyMeetings',
+  createIpcHandler(async (_event, organization) => {
+    const meetings = databaseService.getMeetingsForOrganization(organization);
+    return { meetings };
+  })
+);
+
+// ===================================================================
+// End Enhanced Contacts IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// Client Setup IPC Handlers (v1.4)
+// ===================================================================
+
+ipcMain.handle(
+  'clients:discover',
+  createIpcHandler(async () => {
+    if (googleContacts) clientService.setGoogleContacts(googleContacts);
+    const companies = await clientService.discoverClientsFromContacts();
+    return { companies };
+  })
+);
+
+ipcMain.handle(
+  'clients:getAll',
+  createIpcHandler(async () => {
+    const clients = clientService.getAllClients();
+    return { clients };
+  })
+);
+
+ipcMain.handle(
+  'clients:get',
+  createIpcHandler(async (_event, clientId) => {
+    const client = clientService.getClient(clientId);
+    if (!client) return { success: false, error: 'Client not found' };
+    const contacts = clientService.getClientContacts(clientId);
+    return { client, contacts };
+  })
+);
+
+ipcMain.handle(
+  'clients:create',
+  withValidation(clientSchema, async (_event, clientData) => {
+    const client = clientService.createClient(clientData);
+    return { success: true, client };
+  })
+);
+
+ipcMain.handle(
+  'clients:update',
+  withValidation(clientSchema, async (_event, clientData) => {
+    const client = clientService.updateClient(clientData.id, clientData);
+    return { success: true, client };
+  })
+);
+
+ipcMain.handle(
+  'clients:delete',
+  createIpcHandler(async (_event, clientId) => {
+    const result = clientService.deleteClient(clientId);
+    return { deleted: result };
+  })
+);
+
+ipcMain.handle(
+  'clients:check',
+  createIpcHandler(async () => {
+    const report = clientService.checkClientSetup();
+    return { report };
+  })
+);
+
+ipcMain.handle(
+  'clients:migrateFromYaml',
+  createIpcHandler(async () => {
+    const routingPath = path.join(app.getPath('userData'), 'config', 'routing.yaml');
+    if (!fs.existsSync(routingPath)) {
+      return { success: false, error: 'routing.yaml not found' };
+    }
+    const yaml = require('js-yaml');
+    const content = fs.readFileSync(routingPath, 'utf8');
+    const config = yaml.load(content);
+    const result = clientService.migrateFromRoutingYaml(config);
+    return { ...result };
+  })
+);
+
+ipcMain.handle(
+  'clients:sync',
+  createIpcHandler(async () => {
+    if (googleContacts) clientService.setGoogleContacts(googleContacts);
+    const result = await clientService.syncWithGoogleContacts();
+    return { ...result };
+  })
+);
+
+// ===================================================================
+// End Client Setup IPC Handlers
+// ===================================================================
+
+// ===================================================================
+// MCP Server Config IPC Handler (v1.4)
+// ===================================================================
+
+ipcMain.handle(
+  'mcp:getConfig',
+  createIpcHandler(async () => {
+    const dbPath = databaseService.dbPath;
+    const mcpServerPath = path.join(__dirname, '..', 'src', 'mcp-server.js');
+    // In production, the path is different
+    const prodMcpPath = path.join(process.resourcesPath || __dirname, 'src', 'mcp-server.js');
+    const actualPath = fs.existsSync(mcpServerPath) ? mcpServerPath : prodMcpPath;
+
+    const configSnippet = JSON.stringify({
+      mcpServers: {
+        'jd-notes': {
+          command: 'node',
+          args: [actualPath, '--db-path', dbPath],
+        },
+      },
+    }, null, 2);
+
+    return {
+      dbPath,
+      mcpServerPath: actualPath,
+      configSnippet,
+    };
+  })
+);
+
+// ===================================================================
+// End MCP Server Config IPC Handler
+// ===================================================================
+
+// ===================================================================
 // Recording Widget IPC Handlers (v1.2)
 // ===================================================================
 
@@ -9848,6 +10367,42 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
     return { success: false, error: error.message };
   }
 });
+
+// ===== MOCK SDK TEST CONTROL (dev only) =====
+// These IPC handlers are only registered when MOCK_SDK is active.
+// They expose the MockRecallSdk control API so E2E tests can trigger
+// events on demand (e.g., inject participants, close meetings).
+if (process.env.MOCK_SDK) {
+  ipcMain.handle('mock:getState', async () => {
+    return RecallAiSdk.getMockState ? RecallAiSdk.getMockState() : null;
+  });
+
+  ipcMain.handle('mock:triggerMeetingClosed', async () => {
+    if (RecallAiSdk.triggerMeetingClosed) {
+      RecallAiSdk.triggerMeetingClosed();
+      return { success: true };
+    }
+    return { success: false, error: 'Not in mock mode' };
+  });
+
+  ipcMain.handle('mock:injectParticipant', async (event, participantData) => {
+    if (RecallAiSdk.injectParticipant) {
+      RecallAiSdk.injectParticipant(null, participantData);
+      return { success: true };
+    }
+    return { success: false, error: 'Not in mock mode' };
+  });
+
+  ipcMain.handle('mock:switchScenario', async (event, scenarioName) => {
+    if (RecallAiSdk.switchScenario) {
+      RecallAiSdk.switchScenario(scenarioName);
+      return { success: true };
+    }
+    return { success: false, error: 'Not in mock mode' };
+  });
+
+  console.log('[MockSDK] Test control IPC handlers registered');
+}
 
 // ===== WEBHOOK EVENT HANDLERS =====
 

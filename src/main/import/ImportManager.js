@@ -11,6 +11,7 @@
 const TranscriptParser = require('./TranscriptParser');
 const MetadataExtractor = require('./MetadataExtractor');
 const path = require('path');
+const crypto = require('crypto');
 
 class ImportManager {
   constructor({
@@ -196,7 +197,7 @@ class ImportManager {
    * Create a meeting object from parsed data and metadata
    */
   async createMeeting(parsedData, metadata) {
-    const meetingId = 'imported-' + Date.now();
+    const meetingId = 'imported-' + crypto.randomUUID();
 
     // Convert parsed transcript to meeting format
     const transcript = this.parser.toMeetingTranscript(parsedData);

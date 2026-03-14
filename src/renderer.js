@@ -18,6 +18,8 @@ import {
 } from './renderer/meetingDetail.js';
 import { initAppSettingsUI } from './renderer/appSettings.js';
 import { initContactsPage, openContactsView } from './renderer/contacts.js';
+import { openCompanyDetail } from './renderer/companyDetail.js';
+import { openClientSetup, closeClientSetup } from './renderer/clientSetup.js';
 import { initQuickSearch } from './renderer/quickSearch.js';
 import {
   notifySuccess,
@@ -2076,7 +2078,7 @@ function initializeReportsView() {
 }
 
 // Cached report data
-const reportData = { noRecording: [], noCalendar: [] };
+const reportData = { noRecording: [], noCalendar: [], coverage: null };
 
 async function runReport() {
   const dateFrom = document.getElementById('reportDateFrom')?.value;
@@ -2090,20 +2092,32 @@ async function runReport() {
   }
 
   try {
-    // Fetch both report types in parallel
-    const [noRecResult, noCalResult] = await Promise.all([
+    // Fetch all report types in parallel
+    const promises = [
       window.electronAPI.calendarReportMeetingsWithoutRecordings(dateFrom, dateTo),
       window.electronAPI.calendarReportRecordingsWithoutCalendar(dateFrom, dateTo),
-    ]);
+    ];
+
+    // Only fetch coverage if calendar is connected
+    if (window.electronAPI.calendarCoverageReport) {
+      promises.push(window.electronAPI.calendarCoverageReport(dateFrom, dateTo));
+    }
+
+    const [noRecResult, noCalResult, coverageResult] = await Promise.all(promises);
 
     reportData.noRecording = noRecResult.success ? noRecResult.meetings : [];
     reportData.noCalendar = noCalResult.success ? noCalResult.meetings : [];
+    reportData.coverage = coverageResult?.success ? coverageResult : null;
 
     // Update tab counts
     const noRecCount = document.getElementById('noRecordingCount');
     const noCalCount = document.getElementById('noCalendarCount');
+    const coverageCount = document.getElementById('coverageCount');
     if (noRecCount) noRecCount.textContent = reportData.noRecording.length;
     if (noCalCount) noCalCount.textContent = reportData.noCalendar.length;
+    if (coverageCount && reportData.coverage) {
+      coverageCount.textContent = `${reportData.coverage.coveragePercent}%`;
+    }
 
     renderReportResults();
   } catch (error) {
@@ -2117,6 +2131,12 @@ async function runReport() {
 function renderReportResults() {
   const resultsEl = document.getElementById('reportsResults');
   if (!resultsEl) return;
+
+  // Handle coverage report separately
+  if (activeReportType === 'coverage') {
+    renderCoverageResults(resultsEl);
+    return;
+  }
 
   const meetings = activeReportType === 'no-recording'
     ? reportData.noRecording
@@ -2192,6 +2212,130 @@ function renderReportResults() {
       e.stopPropagation();
       const meetingId = btn.dataset.meetingId;
       await showCalendarLinkingDialog(meetingId);
+    });
+  });
+}
+
+function renderCoverageResults(resultsEl) {
+  const data = reportData.coverage;
+  if (!data) {
+    resultsEl.innerHTML = `
+      <div class="reports-empty-state">
+        <p>Calendar coverage report requires Google Calendar connection.</p>
+      </div>`;
+    return;
+  }
+
+  // Coverage summary bar
+  const pct = data.coveragePercent;
+  const barColor = pct >= 80 ? 'var(--status-success, #34c759)' : pct >= 50 ? 'var(--color-warning, #ff9500)' : 'var(--color-error, #ff3b30)';
+
+  let html = `
+    <div style="margin-bottom: 20px; padding: 16px; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border-color);">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+        <span style="font-weight: 600;">Coverage: ${pct}%</span>
+        <span style="color: var(--text-secondary);">${data.covered.length} of ${data.total} meetings have notes</span>
+      </div>
+      <div style="height: 8px; background: var(--bg-secondary, #e0e0e0); border-radius: 4px; overflow: hidden;">
+        <div style="height: 100%; width: ${pct}%; background: ${barColor}; border-radius: 4px; transition: width 0.3s;"></div>
+      </div>
+    </div>`;
+
+  // Uncovered meetings (actionable)
+  if (data.uncovered.length > 0) {
+    html += `<h4 style="margin: 16px 0 8px; font-size: 14px; color: var(--text-secondary);">Meetings Without Notes (${data.uncovered.length})</h4>`;
+    html += data.uncovered.map((event, idx) => {
+      const date = event.date ? new Date(event.date).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric'
+      }) : '';
+      const time = event.date ? new Date(event.date).toLocaleTimeString('en-US', {
+        hour: 'numeric', minute: '2-digit'
+      }) : '';
+      const attendeeCount = event.attendees?.length || 0;
+
+      return `
+        <div class="report-card" data-coverage-idx="${idx}">
+          <div class="report-card-info">
+            <div class="report-card-title">${escapeHtml(event.title)}</div>
+            <div class="report-card-meta">
+              <span>${date}${time ? ' at ' + time : ''}</span>
+              ${attendeeCount ? `<span>${attendeeCount} attendees</span>` : ''}
+            </div>
+          </div>
+          <div class="report-card-actions">
+            <button class="btn btn-outline btn-sm coverage-placeholder-btn" data-coverage-idx="${idx}">Create Placeholder</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  // Covered meetings
+  if (data.covered.length > 0) {
+    html += `<h4 style="margin: 16px 0 8px; font-size: 14px; color: var(--text-secondary);">Meetings With Notes (${data.covered.length})</h4>`;
+    html += data.covered.map(event => {
+      const date = event.date ? new Date(event.date).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric'
+      }) : '';
+
+      return `
+        <div class="report-card" data-meeting-id="${event.meetingId}" style="opacity: 0.7;">
+          <div class="report-card-info">
+            <div class="report-card-title">${escapeHtml(event.meetingTitle || event.title)}</div>
+            <div class="report-card-meta"><span>${date}</span></div>
+          </div>
+          <div class="report-card-actions">
+            <button class="btn btn-outline btn-sm report-open-btn" data-meeting-id="${event.meetingId}">Open</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  resultsEl.innerHTML = html;
+
+  // Bind create placeholder handlers
+  resultsEl.querySelectorAll('.coverage-placeholder-btn').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.coverageIdx, 10);
+      const event = data.uncovered[idx];
+      if (!event) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Creating...';
+
+      const result = await window.electronAPI.meetingCreatePlaceholder(
+        event.title,
+        event.date,
+        event.calendarEventId,
+        event.attendees
+      );
+
+      if (result.success) {
+        btn.textContent = 'Created';
+        showToast('Placeholder meeting created', 'success');
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Create Placeholder';
+        showToast(result.error || 'Failed to create placeholder', 'error');
+      }
+    });
+  });
+
+  // Bind open buttons for covered meetings
+  resultsEl.querySelectorAll('.report-open-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      closeReportsView();
+      showEditorView(btn.dataset.meetingId);
+    });
+  });
+
+  resultsEl.querySelectorAll('.report-card[data-meeting-id]').forEach(card => {
+    card.addEventListener('click', () => {
+      if (card.dataset.meetingId) {
+        closeReportsView();
+        showEditorView(card.dataset.meetingId);
+      }
     });
   });
 }
@@ -4018,7 +4162,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Expose functions for cross-module navigation
   window.openContactsView = openContactsView;
+  window.openCompanyDetail = openCompanyDetail;
+  window.openClientSetup = openClientSetup;
   window.showMeetingDetail = showEditorView;
+  window.showEditorView = showEditorView;
+
+  // Wire up client setup close button
+  const closeClientSetupBtn = document.getElementById('closeClientSetup');
+  if (closeClientSetupBtn) {
+    closeClientSetupBtn.addEventListener('click', closeClientSetup);
+  }
 
   // Initialize Quick Search (CS-2)
   initQuickSearch();

@@ -551,6 +551,110 @@ class GoogleContacts {
       await this.updateContactCustomFields(resourceName, fields);
     }
   }
+
+  /**
+   * v1.4: Get full contact detail with extended person fields.
+   * @param {string} resourceName - e.g., 'people/c123'
+   * @returns {Promise<Object>} Full contact object
+   */
+  async getFullContactDetail(resourceName) {
+    if (!this.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
+    }
+    await this.googleAuth.refreshTokenIfNeeded();
+
+    const response = await this.people.people.get({
+      resourceName,
+      personFields: 'names,emailAddresses,phoneNumbers,organizations,photos,biographies,urls,addresses,birthdays,userDefined',
+    });
+
+    const contact = this.processContact(response.data);
+    // Attach raw data for editing
+    contact._raw = response.data;
+    contact.biographies = response.data.biographies || [];
+    contact.urls = response.data.urls || [];
+    contact.addresses = response.data.addresses || [];
+    contact.birthdays = response.data.birthdays || [];
+    contact.userDefined = response.data.userDefined || [];
+    contact.etag = response.data.etag;
+
+    return contact;
+  }
+
+  /**
+   * v1.4: Update core contact fields (name, organization, title, emails, phones).
+   * @param {string} resourceName
+   * @param {Object} updates - { name, organization, title, emails, phones }
+   * @returns {Promise<Object>} Updated contact
+   */
+  async updateContact(resourceName, updates) {
+    if (!this.isAuthenticated()) {
+      throw new Error('Google Contacts not authenticated');
+    }
+    await this.googleAuth.refreshTokenIfNeeded();
+
+    // Get current contact for etag
+    const current = await this.people.people.get({
+      resourceName,
+      personFields: 'names,emailAddresses,phoneNumbers,organizations',
+    });
+
+    const requestBody = { etag: current.data.etag };
+    const updateFields = [];
+
+    if (updates.name !== undefined) {
+      const parts = (updates.name || '').split(' ');
+      requestBody.names = [{
+        givenName: parts[0] || '',
+        familyName: parts.slice(1).join(' ') || '',
+      }];
+      updateFields.push('names');
+    }
+
+    if (updates.organization !== undefined || updates.title !== undefined) {
+      const currentOrg = current.data.organizations?.[0] || {};
+      requestBody.organizations = [{
+        name: updates.organization !== undefined ? updates.organization : currentOrg.name,
+        title: updates.title !== undefined ? updates.title : currentOrg.title,
+      }];
+      updateFields.push('organizations');
+    }
+
+    if (updates.emails !== undefined) {
+      requestBody.emailAddresses = updates.emails.map(e =>
+        typeof e === 'string' ? { value: e, type: 'work' } : e
+      );
+      updateFields.push('emailAddresses');
+    }
+
+    if (updates.phones !== undefined) {
+      requestBody.phoneNumbers = updates.phones.map(p =>
+        typeof p === 'string' ? { value: p, type: 'work' } : p
+      );
+      updateFields.push('phoneNumbers');
+    }
+
+    if (updateFields.length === 0) {
+      return current.data;
+    }
+
+    const response = await this.people.people.updateContact({
+      resourceName,
+      updatePersonFields: updateFields.join(','),
+      requestBody,
+    });
+
+    // Update cache
+    const updated = this.processContact(response.data);
+    if (updated?.emails) {
+      for (const email of updated.emails) {
+        this.contactsCache.set(email.toLowerCase(), updated);
+      }
+    }
+
+    console.log(`[GoogleContacts] Updated contact ${resourceName}: ${updateFields.join(', ')}`);
+    return updated;
+  }
 }
 
 module.exports = GoogleContacts;

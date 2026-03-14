@@ -406,19 +406,25 @@ async function renderContactDetail(contact) {
     </div>
   `;
 
+  // v1.4: Organization is clickable to open company detail
+  const orgHtml = contact.organization
+    ? `<div class="contact-detail-org">
+        <a href="#" class="company-link" data-org="${escapeHtml(contact.organization)}" style="color: var(--primary-color); text-decoration: none;">${escapeHtml(contact.organization)}</a>${contact.title ? ` - ${escapeHtml(contact.title)}` : ''}
+      </div>`
+    : '';
+
   detailContent.innerHTML = `
-    <div class="contact-detail-header">
-      <div class="contact-detail-avatar">
-        ${contact.photoUrl ? `<img src="${contact.photoUrl}" alt="${contact.name}" />` : initials}
+    <div class="contact-detail-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div class="contact-detail-avatar">
+          ${contact.photoUrl ? `<img src="${contact.photoUrl}" alt="${contact.name}" />` : initials}
+        </div>
+        <div>
+          <div class="contact-detail-name">${escapeHtml(contact.name)}</div>
+          ${orgHtml}
+        </div>
       </div>
-      <div>
-        <div class="contact-detail-name">${escapeHtml(contact.name)}</div>
-        ${
-          contact.organization
-            ? `<div class="contact-detail-org">${escapeHtml(contact.organization)}${contact.title ? ` - ${escapeHtml(contact.title)}` : ''}</div>`
-            : ''
-        }
-      </div>
+      ${contact.resourceName ? '<button class="btn btn-outline btn-sm" id="editContactBtn">Edit</button>' : ''}
     </div>
 
     <div class="contact-detail-section">
@@ -450,6 +456,23 @@ async function renderContactDetail(contact) {
     createCompanyBtn.addEventListener('click', () => createCompanyObsidianPage(contact));
   }
 
+  // v1.4: Edit contact button
+  const editBtn = document.getElementById('editContactBtn');
+  if (editBtn) {
+    editBtn.addEventListener('click', () => openContactEditForm(contact));
+  }
+
+  // v1.4: Company link click → open company detail
+  detailContent.querySelectorAll('.company-link').forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault();
+      const org = link.dataset.org;
+      if (org && typeof window.openCompanyDetail === 'function') {
+        window.openCompanyDetail(org);
+      }
+    });
+  });
+
   // Load meetings for this contact
   if (primaryEmail) {
     await loadContactMeetings(primaryEmail);
@@ -459,6 +482,95 @@ async function renderContactDetail(contact) {
       meetingsList.innerHTML = '<div class="contact-detail-item">No email to search meetings</div>';
     }
   }
+}
+
+/**
+ * v1.4: Open inline edit form for a contact
+ */
+function openContactEditForm(contact) {
+  const detailContent = document.getElementById('contactDetailContent');
+  if (!detailContent) return;
+
+  const emailsValue = (contact.emails || []).join(', ');
+  const phonesValue = (contact.phones || []).join(', ');
+
+  detailContent.innerHTML = `
+    <div style="padding: 24px;">
+      <h3 style="margin: 0 0 16px; font-size: 18px;">Edit Contact</h3>
+      <div style="display: grid; gap: 12px;">
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">Name</label>
+          <input type="text" class="settings-input" id="editContactName" value="${escapeHtml(contact.name || '')}" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">Organization</label>
+          <input type="text" class="settings-input" id="editContactOrg" value="${escapeHtml(contact.organization || '')}" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">Title</label>
+          <input type="text" class="settings-input" id="editContactTitle" value="${escapeHtml(contact.title || '')}" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">Emails (comma-separated)</label>
+          <input type="text" class="settings-input" id="editContactEmails" value="${escapeHtml(emailsValue)}" style="width: 100%;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px;">Phones (comma-separated)</label>
+          <input type="text" class="settings-input" id="editContactPhones" value="${escapeHtml(phonesValue)}" style="width: 100%;">
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; margin-top: 16px;">
+        <button class="btn btn-primary" id="saveContactEditBtn">Save</button>
+        <button class="btn btn-secondary" id="cancelContactEditBtn">Cancel</button>
+      </div>
+      <div id="editContactStatus" style="margin-top: 8px; font-size: 13px;"></div>
+    </div>
+  `;
+
+  document.getElementById('cancelContactEditBtn')?.addEventListener('click', () => {
+    renderContactDetail(contact);
+  });
+
+  document.getElementById('saveContactEditBtn')?.addEventListener('click', async () => {
+    const saveBtn = document.getElementById('saveContactEditBtn');
+    const status = document.getElementById('editContactStatus');
+    saveBtn.disabled = true;
+    if (status) status.textContent = 'Saving...';
+
+    try {
+      const updates = {
+        name: document.getElementById('editContactName')?.value?.trim(),
+        organization: document.getElementById('editContactOrg')?.value?.trim(),
+        title: document.getElementById('editContactTitle')?.value?.trim(),
+        emails: document.getElementById('editContactEmails')?.value
+          ?.split(',').map(e => e.trim()).filter(Boolean),
+        phones: document.getElementById('editContactPhones')?.value
+          ?.split(',').map(p => p.trim()).filter(Boolean),
+      };
+
+      const result = await window.electronAPI.contactsUpdateContact(
+        contact.resourceName,
+        updates
+      );
+
+      if (result.success) {
+        // Refresh the contact detail with updated data
+        const updatedContact = { ...contact, ...updates };
+        if (result.contact) Object.assign(updatedContact, result.contact);
+        selectedContact = updatedContact;
+        renderContactDetail(updatedContact);
+        if (typeof window.showToast === 'function') window.showToast('Contact updated', 'success');
+      } else {
+        if (status) status.textContent = `Error: ${result.error}`;
+        if (status) status.style.color = 'var(--color-error)';
+        saveBtn.disabled = false;
+      }
+    } catch (error) {
+      if (status) status.textContent = `Error: ${error.message}`;
+      if (status) status.style.color = 'var(--color-error)';
+      saveBtn.disabled = false;
+    }
+  });
 }
 
 /**

@@ -23,6 +23,8 @@ class RoutingEngine {
     this.emailMatcher = new EmailMatcher(this.configLoader);
     // settingsProvider is a function that returns { crmIntegration: { enabled, pathStructure, ... } }
     this._settingsProvider = settingsProvider;
+    // v1.4: Optional client service for DB-driven routing
+    this._clientService = null;
   }
 
   /**
@@ -31,6 +33,15 @@ class RoutingEngine {
    */
   setSettingsProvider(provider) {
     this._settingsProvider = provider;
+  }
+
+  /**
+   * v1.4: Set the client service for DB-driven routing.
+   * When set and clients exist, routing checks the DB before routing.yaml.
+   * @param {Object} clientService
+   */
+  setClientService(clientService) {
+    this._clientService = clientService;
   }
 
   /**
@@ -69,6 +80,13 @@ class RoutingEngine {
   route(meetingData) {
     const { participantEmails, meetingTitle, meetingDate } = meetingData;
 
+    // v1.4: Try DB-driven routing first if client service is available and has clients
+    if (this._clientService && this._clientService.hasClients()) {
+      const dbRoutes = this._routeViaClientService(participantEmails, meetingTitle, meetingDate);
+      if (dbRoutes) return dbRoutes;
+    }
+
+    // Fall back to routing.yaml
     // Match participant emails to organizations
     const matchResults = this.emailMatcher.matchMultiple(participantEmails);
     const orgCount = this.emailMatcher.getOrganizationCount(matchResults);
@@ -392,6 +410,66 @@ class RoutingEngine {
    */
   getConfig() {
     return this.configLoader.getConfig();
+  }
+
+  /**
+   * v1.4: Route via the client service (DB-driven).
+   * @private
+   */
+  _routeViaClientService(participantEmails, meetingTitle, meetingDate) {
+    if (!participantEmails || participantEmails.length === 0) return null;
+
+    const matchedClients = new Map();
+
+    for (const email of participantEmails) {
+      const client = this._clientService.matchEmailToClient(email);
+      if (client && !matchedClients.has(client.id)) {
+        matchedClients.set(client.id, client);
+      }
+    }
+
+    if (matchedClients.size === 0) return null;
+
+    const date = meetingDate ? new Date(meetingDate) : new Date();
+    const dateStr = this._formatDate(date);
+    const titleSlug = this._slugify(meetingTitle || 'untitled-meeting');
+    const folderName = `${dateStr}-${titleSlug}`;
+
+    const useOcrm = this.isOcrmEnabled();
+    const routes = [];
+    for (const client of matchedClients.values()) {
+      const clientPath = client.vault_path || client.vaultPath;
+      if (clientPath) {
+        // Match _buildRoute path structure: add /meetings/ subdirectory unless
+        // the vault_path already ends with /meetings (from client setup wizard)
+        const needsMeetingsDir = !clientPath.replace(/[\\/]$/, '').endsWith('meetings');
+        const basePath = needsMeetingsDir ? path.join(clientPath, 'meetings') : clientPath;
+        routes.push({
+          type: client.type || 'client',
+          slug: client.id,
+          basePath,
+          fullPath: path.join(basePath, folderName),
+          folderName,
+          dateStr,
+          titleSlug,
+          organizationName: client.name,
+          isOcrm: useOcrm,
+          source: 'client_service',
+        });
+      }
+    }
+
+    if (routes.length === 0) return null;
+
+    return {
+      routes,
+      matchResults: { clients: {}, industry: {}, internal: [], unfiled: [] },
+      orgCount: matchedClients.size,
+      multiOrg: matchedClients.size > 1,
+      settings: { duplicate_multi_org: 'all' },
+      routedClientIds: Array.from(matchedClients.keys()),
+      source: 'client_service',
+    };
   }
 }
 

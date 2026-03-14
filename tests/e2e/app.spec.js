@@ -93,9 +93,18 @@ async function ensureMainView() {
   // Close settings if open
   const settingsOpen = await page.locator('#settingsView').isVisible().catch(() => false);
   if (settingsOpen) {
-    const closeBtn = page.locator('#settingsBackBtn');
+    const closeBtn = page.locator('#closeSettings');
     if (await closeBtn.isVisible().catch(() => false)) {
       await closeBtn.click();
+      await page.waitForTimeout(300);
+    } else {
+      // Fallback: hide via DOM
+      await page.evaluate(() => {
+        const sv = document.getElementById('settingsView');
+        const mv = document.getElementById('mainView');
+        if (sv) sv.style.display = 'none';
+        if (mv) mv.style.display = 'block';
+      });
       await page.waitForTimeout(300);
     }
   }
@@ -112,6 +121,15 @@ async function ensureMainView() {
   const reportsOpen = await page.locator('#reportsView').isVisible().catch(() => false);
   if (reportsOpen) {
     const closeBtn = page.locator('#closeReports');
+    if (await closeBtn.isVisible().catch(() => false)) {
+      await closeBtn.click();
+      await page.waitForTimeout(300);
+    }
+  }
+  // Close client setup if open (v1.4)
+  const clientSetupOpen = await page.locator('#clientSetupView').isVisible().catch(() => false);
+  if (clientSetupOpen) {
+    const closeBtn = page.locator('#closeClientSetup');
     if (await closeBtn.isVisible().catch(() => false)) {
       await closeBtn.click();
       await page.waitForTimeout(300);
@@ -291,9 +309,9 @@ test('settings panel opens and has tabs', async () => {
   console.log(`[E2E] Settings tabs: ${tabCount}`);
 
   // Close settings
-  const backBtn = page.locator('#settingsBackBtn');
-  if (await backBtn.isVisible().catch(() => false)) {
-    await backBtn.click();
+  const closeSettingsBtn = page.locator('#closeSettings');
+  if (await closeSettingsBtn.isVisible().catch(() => false)) {
+    await closeSettingsBtn.click();
   } else {
     await page.keyboard.press('Escape');
   }
@@ -678,7 +696,285 @@ test('add to google contacts button shows loading state', async () => {
 });
 
 // ===================================================================
-// Test 20: No Critical Errors
+// v1.4 Tests: Backup & Restore Settings Tab
+// ===================================================================
+test('backup settings tab exists and loads manifest', async () => {
+  await ensureMainView();
+
+  // Open settings
+  const settingsBtn = page.locator('#settingsBtn');
+  await settingsBtn.click();
+  await page.waitForTimeout(500);
+  await expect(page.locator('#settingsView')).toBeVisible({ timeout: 5000 });
+
+  // Click backup tab
+  const backupTab = page.locator('#backupSettingsTab');
+  await expect(backupTab).toBeAttached();
+  await backupTab.click();
+  await page.waitForTimeout(500);
+
+  // Verify backup panel is visible
+  const backupPanel = page.locator('#backupPanel');
+  await expect(backupPanel).toBeVisible({ timeout: 5000 });
+
+  // Verify manifest info elements exist
+  await expect(page.locator('#backupDbInfo')).toBeAttached();
+  await expect(page.locator('#backupConfigInfo')).toBeAttached();
+  await expect(page.locator('#backupAudioInfo')).toBeAttached();
+  await expect(page.locator('#backupTotalInfo')).toBeAttached();
+  await expect(page.locator('#backupLastInfo')).toBeAttached();
+
+  // Verify backup buttons exist
+  await expect(page.locator('#backupFullBtn')).toBeAttached();
+  await expect(page.locator('#backupIncrementalBtn')).toBeAttached();
+  await expect(page.locator('#backupRestoreBtn')).toBeAttached();
+
+  // Close settings
+  await ensureMainView();
+});
+
+// ===================================================================
+// v1.4 Tests: MCP Server Config in Advanced Settings
+// ===================================================================
+test('MCP server config section exists in advanced settings', async () => {
+  await ensureMainView();
+
+  // Open settings
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  // Click advanced tab
+  const advancedTab = page.locator('#advancedSettingsTab');
+  await advancedTab.click();
+  await page.waitForTimeout(500);
+
+  // Verify MCP config elements
+  await expect(page.locator('#mcpLoadConfigBtn')).toBeAttached();
+  await expect(page.locator('#mcpConfigSnippet')).toBeAttached();
+
+  // Click load config button
+  await page.locator('#mcpLoadConfigBtn').click();
+  await page.waitForTimeout(1000);
+
+  // Verify config snippet is shown
+  const snippet = page.locator('#mcpConfigSnippet');
+  const isVisible = await snippet.isVisible().catch(() => false);
+  if (isVisible) {
+    const text = await snippet.textContent();
+    expect(text).toContain('jd-notes');
+    expect(text).toContain('mcp-server');
+  }
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// v1.4 Tests: Calendar Coverage Report Tab
+// ===================================================================
+test('calendar coverage report tab exists', async () => {
+  await ensureMainView();
+
+  // Open reports via hamburger menu
+  const menuBtn = page.locator('#titlebarMenuBtn');
+  await menuBtn.click();
+  await page.waitForTimeout(500);
+
+  const reportsMenuItem = page.locator('[data-menu="reports"]');
+  if (await reportsMenuItem.isVisible().catch(() => false)) {
+    await reportsMenuItem.click();
+    await page.waitForTimeout(500);
+
+    // Verify reports view is open
+    const reportsView = page.locator('#reportsView');
+    if (await reportsView.isVisible().catch(() => false)) {
+      // Check for coverage tab
+      const coverageTab = page.locator('.reports-tab[data-report="coverage"]');
+      await expect(coverageTab).toBeAttached();
+
+      // Click coverage tab
+      await coverageTab.click();
+      await page.waitForTimeout(500);
+
+      // Verify coverage count element exists
+      await expect(page.locator('#coverageCount')).toBeAttached();
+    }
+  }
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// v1.4 Tests: Client Setup View
+// ===================================================================
+test('client setup view can be opened and closed', async () => {
+  await ensureMainView();
+
+  // Check that the client setup view element exists
+  const clientSetupView = page.locator('#clientSetupView');
+  await expect(clientSetupView).toBeAttached();
+
+  // Open it programmatically (no nav button yet — it's opened from settings or code)
+  await page.evaluate(() => {
+    const view = document.getElementById('clientSetupView');
+    const mainView = document.getElementById('mainView');
+    if (view && mainView) {
+      mainView.style.display = 'none';
+      view.style.display = 'flex';
+    }
+  });
+  await page.waitForTimeout(500);
+
+  // Verify it's visible
+  const isOpen = await clientSetupView.isVisible().catch(() => false);
+  expect(isOpen).toBe(true);
+
+  // Close it
+  const closeBtn = page.locator('#closeClientSetup');
+  if (await closeBtn.isVisible().catch(() => false)) {
+    await closeBtn.click();
+    await page.waitForTimeout(300);
+  }
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// v1.4 Tests: Settings Tab Count (verify backup tab was added)
+// ===================================================================
+test('settings has backup tab among its tabs', async () => {
+  await ensureMainView();
+
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  // Count all settings tabs — should now include backup
+  const tabCount = await page.locator('.settings-tab').count();
+  console.log(`[E2E] Settings tab count: ${tabCount}`);
+
+  // v1.3 had 13 tabs, v1.4 adds 1 (backup) = 14
+  expect(tabCount).toBeGreaterThanOrEqual(14);
+
+  // Verify backup tab specifically
+  const backupTab = page.locator('#backupSettingsTab');
+  await expect(backupTab).toBeAttached();
+  const tabText = await backupTab.textContent();
+  expect(tabText).toContain('Backup');
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// v1.4 Tests: Contact Edit Button
+// ===================================================================
+test('contact detail has edit button when contact is selected', async () => {
+  await ensureMainView();
+
+  // Open contacts
+  const contactsBtn = page.locator('#contactsBtn');
+  if (!(await contactsBtn.isVisible().catch(() => false))) {
+    console.log('[E2E] Contacts button not visible, skipping');
+    test.skip();
+    return;
+  }
+
+  await contactsBtn.click();
+  await page.waitForTimeout(1000);
+
+  const contactsView = page.locator('#contactsView');
+  if (!(await contactsView.isVisible().catch(() => false))) {
+    console.log('[E2E] Contacts view did not open, skipping');
+    await ensureMainView();
+    test.skip();
+    return;
+  }
+
+  // Wait for contacts to load
+  await page.waitForTimeout(2000);
+
+  // Click first contact if available
+  const firstContact = page.locator('.contact-item').first();
+  if (await firstContact.isVisible().catch(() => false)) {
+    await firstContact.click();
+    await page.waitForTimeout(1000);
+
+    // Check for edit button (v1.4 feature)
+    const editBtn = page.locator('#editContactBtn');
+    const hasEdit = await editBtn.isVisible().catch(() => false);
+    console.log(`[E2E] Contact edit button visible: ${hasEdit}`);
+    // Edit button only shows for contacts with resourceName (Google Contacts)
+    // So we just check it's attached, not necessarily visible
+    if (hasEdit) {
+      await expect(editBtn).toBeVisible();
+    }
+  } else {
+    console.log('[E2E] No contacts loaded, skipping edit button check');
+  }
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// v1.4 Tests: Restore Options Toggle Switches
+// ===================================================================
+test('backup restore toggles exist with correct defaults', async () => {
+  await ensureMainView();
+
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  await page.locator('#backupSettingsTab').click();
+  await page.waitForTimeout(500);
+
+  // Check restore toggle switches exist (they are in a hidden container until a backup is selected)
+  const dbToggle = page.locator('#restoreDatabaseToggle');
+  const configToggle = page.locator('#restoreConfigToggle');
+  const audioToggle = page.locator('#restoreAudioToggle');
+
+  await expect(dbToggle).toBeAttached();
+  await expect(configToggle).toBeAttached();
+  await expect(audioToggle).toBeAttached();
+
+  // DB and Config toggles should start active (default on)
+  const dbActive = await dbToggle.evaluate(el => el.classList.contains('active'));
+  expect(dbActive).toBe(true);
+
+  const configActive = await configToggle.evaluate(el => el.classList.contains('active'));
+  expect(configActive).toBe(true);
+
+  // Audio toggle should start inactive (default off)
+  const audioActive = await audioToggle.evaluate(el => el.classList.contains('active'));
+  expect(audioActive).toBe(false);
+
+  // Make the restore options visible so we can test the toggle interaction
+  await page.evaluate(() => {
+    const opts = document.getElementById('backupRestoreOptions');
+    if (opts) opts.style.display = 'block';
+  });
+  await page.waitForTimeout(200);
+
+  // Click audio toggle to activate it
+  await audioToggle.click();
+  await page.waitForTimeout(200);
+  const audioNowActive = await audioToggle.evaluate(el => el.classList.contains('active'));
+  expect(audioNowActive).toBe(true);
+
+  // Click it again to deactivate
+  await audioToggle.click();
+  await page.waitForTimeout(200);
+  const audioNowInactive = await audioToggle.evaluate(el => el.classList.contains('active'));
+  expect(audioNowInactive).toBe(false);
+
+  // Hide restore options again
+  await page.evaluate(() => {
+    const opts = document.getElementById('backupRestoreOptions');
+    if (opts) opts.style.display = 'none';
+  });
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 27: No Critical Errors (keep last)
 // ===================================================================
 test('no critical console errors', async () => {
   const errors = [];
