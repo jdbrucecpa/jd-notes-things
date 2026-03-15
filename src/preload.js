@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRecordingStateChange: callback =>
     ipcRenderer.on('recording-state-change', (_, data) => callback(data)),
   onRecordingEnded: callback => ipcRenderer.on('recording-ended', (_, data) => callback(data)),
+  onMeetingUpdated: callback => ipcRenderer.on('meeting-updated', (_, meetingId) => callback(meetingId)),
   // v1.2: Recording Widget IPC
   onWidgetCreateAndRecord: callback =>
     ipcRenderer.on('widget:create-and-record', (_, data) => callback(data)),
@@ -312,15 +313,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   mcpGetConfig: () => ipcRenderer.invoke('mcp:getConfig'),
 
   // Client Setup (v1.4)
-  clientsDiscover: () => ipcRenderer.invoke('clients:discover'),
-  clientsGetAll: () => ipcRenderer.invoke('clients:getAll'),
-  clientsGet: clientId => ipcRenderer.invoke('clients:get', clientId),
-  clientsCreate: clientData => ipcRenderer.invoke('clients:create', clientData),
-  clientsUpdate: clientData => ipcRenderer.invoke('clients:update', clientData),
-  clientsDelete: clientId => ipcRenderer.invoke('clients:delete', clientId),
-  clientsCheck: () => ipcRenderer.invoke('clients:check'),
-  clientsMigrateFromYaml: () => ipcRenderer.invoke('clients:migrateFromYaml'),
-  clientsSync: () => ipcRenderer.invoke('clients:sync'),
+  // Company management (v1.4)
+  companiesGetAll: () => ipcRenderer.invoke('companies:getAll'),
+  companiesUpdate: data => ipcRenderer.invoke('companies:update', data),
+  companiesRemove: name => ipcRenderer.invoke('companies:remove', name),
+  companiesSyncContacts: name => ipcRenderer.invoke('companies:syncContacts', name),
+  companiesSelectFolder: () => ipcRenderer.invoke('companies:selectFolder'),
 
   // Enhanced Contacts (v1.4)
   contactsGetFullDetail: resourceName =>
@@ -341,6 +339,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('meeting:createPlaceholder', { title, date, calendarEventId, participants }),
 
   // Re-run Transcription (v1.4)
+  transcriptionSelectAudioFile: () => ipcRenderer.invoke('transcription:selectAudioFile'),
   transcriptionRerun: (meetingId, provider, audioPath) =>
     ipcRenderer.invoke('transcription:rerun', { meetingId, provider, audioPath }),
 

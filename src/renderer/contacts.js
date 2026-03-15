@@ -9,6 +9,11 @@ let selectedContact = null;
 let searchTimeout = null;
 let navigationContext = null; // Track where we navigated from
 
+// Companies mode state
+let contactsMode = 'contacts'; // 'contacts' | 'companies'
+let allCompanies = [];
+let companiesFilter = 'all';
+
 /**
  * Initialize the contacts page
  */
@@ -49,6 +54,38 @@ function setupEventListeners() {
   if (refreshBtn) {
     refreshBtn.addEventListener('click', () => loadContacts(true));
   }
+
+  // Companies/Contacts toggle
+  const contactsModeBtn = document.getElementById('contactsModeBtn');
+  const companiesModeBtn = document.getElementById('companiesModeBtn');
+  if (contactsModeBtn) contactsModeBtn.addEventListener('click', () => switchContactsMode('contacts'));
+  if (companiesModeBtn) companiesModeBtn.addEventListener('click', () => switchContactsMode('companies'));
+
+  // Filter chips for companies
+  document.querySelectorAll('.companies-filters .filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.companies-filters .filter-chip').forEach(c => {
+        c.style.background = 'var(--bg-secondary)';
+        c.style.color = 'var(--text-primary)';
+        c.style.borderColor = 'var(--text-secondary)';
+      });
+      chip.style.background = 'var(--primary-color)';
+      chip.style.color = 'white';
+      companiesFilter = chip.dataset.filter;
+      renderCompaniesList();
+    });
+  });
+
+  // Listen for company-detail-back to restore companies mode
+  document.addEventListener('company-detail-back', () => {
+    // If we were in companies mode, just clear the detail
+    if (contactsMode === 'companies') {
+      const detailContent = document.getElementById('contactDetailContent');
+      const detailEmpty = document.querySelector('.contact-detail-empty');
+      if (detailContent) detailContent.style.display = 'none';
+      if (detailEmpty) detailEmpty.style.display = 'flex';
+    }
+  });
 }
 
 /**
@@ -169,8 +206,128 @@ function handleSearchInput(event) {
   }
 
   searchTimeout = setTimeout(() => {
-    filterContacts(query);
+    if (contactsMode === 'companies') {
+      renderCompaniesList();
+    } else {
+      filterContacts(query);
+    }
   }, 200);
+}
+
+// ===================================================================
+// Companies Mode (v1.4)
+// ===================================================================
+
+function switchContactsMode(mode) {
+  contactsMode = mode;
+  const contactsModeBtn = document.getElementById('contactsModeBtn');
+  const companiesModeBtn = document.getElementById('companiesModeBtn');
+  const contactsList = document.getElementById('contactsList');
+  const contactsHeader = document.querySelector('.contacts-list-header');
+  const companiesContainer = document.getElementById('companiesListContainer');
+
+  if (contactsModeBtn) {
+    contactsModeBtn.style.background = mode === 'contacts' ? 'var(--primary-color)' : 'var(--bg-secondary)';
+    contactsModeBtn.style.color = mode === 'contacts' ? 'white' : 'var(--text-primary)';
+  }
+  if (companiesModeBtn) {
+    companiesModeBtn.style.background = mode === 'companies' ? 'var(--primary-color)' : 'var(--bg-secondary)';
+    companiesModeBtn.style.color = mode === 'companies' ? 'white' : 'var(--text-primary)';
+  }
+
+  if (mode === 'contacts') {
+    if (contactsList) contactsList.style.display = '';
+    if (contactsHeader) contactsHeader.style.display = '';
+    if (companiesContainer) companiesContainer.style.display = 'none';
+  } else {
+    if (contactsList) contactsList.style.display = 'none';
+    if (contactsHeader) contactsHeader.style.display = 'none';
+    if (companiesContainer) companiesContainer.style.display = 'flex';
+    loadCompaniesList();
+  }
+}
+
+async function loadCompaniesList() {
+  const container = document.getElementById('companiesList');
+  if (!container) return;
+
+  container.textContent = '';
+  const loadingDiv = document.createElement('div');
+  loadingDiv.style.cssText = 'padding: 12px; color: var(--text-secondary);';
+  loadingDiv.textContent = 'Loading companies...';
+  container.appendChild(loadingDiv);
+
+  try {
+    const result = await window.electronAPI.companiesGetAll();
+    allCompanies = result.success ? result.companies : [];
+    renderCompaniesList();
+  } catch (_error) {
+    container.textContent = '';
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'padding: 12px; color: var(--color-error);';
+    errDiv.textContent = 'Failed to load companies';
+    container.appendChild(errDiv);
+  }
+}
+
+function renderCompaniesList() {
+  const container = document.getElementById('companiesList');
+  if (!container) return;
+
+  let filtered = allCompanies;
+  if (companiesFilter === 'has-folder') filtered = allCompanies.filter(c => c.vaultPath);
+  else if (companiesFilter === 'no-folder') filtered = allCompanies.filter(c => !c.vaultPath);
+  else if (companiesFilter === 'client') filtered = allCompanies.filter(c => c.category === 'Client');
+
+  const searchInput = document.getElementById('contactSearchInput');
+  const search = searchInput?.value?.toLowerCase() || '';
+  if (search) filtered = filtered.filter(c => c.name.toLowerCase().includes(search));
+
+  container.textContent = '';
+
+  for (const c of filtered) {
+    const item = document.createElement('div');
+    item.className = 'contact-item company-item';
+    item.dataset.company = c.name;
+    item.style.cssText = 'padding: 10px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px;';
+
+    const avatar = document.createElement('div');
+    avatar.style.cssText = 'width: 32px; height: 32px; border-radius: 6px; background: var(--primary-color); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex-shrink: 0;';
+    avatar.textContent = (c.name[0] || '?').toUpperCase();
+    item.appendChild(avatar);
+
+    const info = document.createElement('div');
+    info.style.cssText = 'flex: 1; min-width: 0;';
+
+    const nameRow = document.createElement('div');
+    nameRow.style.cssText = 'font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 6px;';
+    const nameText = document.createElement('span');
+    nameText.textContent = c.name;
+    nameRow.appendChild(nameText);
+
+    if (c.category === 'Client') {
+      const badge = document.createElement('span');
+      badge.style.cssText = 'font-size: 11px; padding: 1px 6px; border-radius: 10px; background: var(--primary-color); color: white;';
+      badge.textContent = 'Client';
+      nameRow.appendChild(badge);
+    }
+    info.appendChild(nameRow);
+
+    const detailRow = document.createElement('div');
+    detailRow.style.cssText = 'font-size: 12px; color: var(--text-secondary);';
+    detailRow.textContent = `${c.contactCount} contact${c.contactCount !== 1 ? 's' : ''}${c.vaultPath ? ' \u00b7 \ud83d\udcc1' : ''}`;
+    info.appendChild(detailRow);
+
+    item.appendChild(info);
+
+    item.addEventListener('click', () => {
+      if (typeof window.openCompanyDetail === 'function') {
+        window.openCompanyDetail(c.name);
+      }
+    });
+
+    container.appendChild(item);
+  }
 }
 
 /**

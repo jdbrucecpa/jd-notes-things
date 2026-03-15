@@ -1162,6 +1162,51 @@ async function populateTranscript(meeting) {
     fixSpeakersBtn.style.display = 'none';
   }
 
+  // Set up Re-run Transcription button (before early return — this is most useful when there's no transcript)
+  const rerunBtn = document.getElementById('rerunTranscriptionBtn');
+  if (rerunBtn) {
+    rerunBtn.style.display = 'inline-flex';
+    rerunBtn.onclick = async () => {
+      console.log('[RerunTranscription] Button clicked, showing provider picker');
+      const provider = await showRerunProviderPicker();
+      if (!provider) return;
+
+      console.log(`[RerunTranscription] Selected provider: ${provider}, meeting: ${currentMeetingId}`);
+      rerunBtn.disabled = true;
+      rerunBtn.textContent = 'Re-running...';
+
+      try {
+        // Always show file picker — suggest the original file's folder if known
+        const fileResult = await window.electronAPI.transcriptionSelectAudioFile();
+        if (!fileResult.success) {
+          rerunBtn.disabled = false;
+          rerunBtn.textContent = 'Re-run Transcription';
+          return;
+        }
+
+        const result = await window.electronAPI.transcriptionRerun(
+          currentMeetingId, provider, fileResult.filePath
+        );
+        console.log('[RerunTranscription] Result:', result);
+        if (result.success) {
+          notifySuccess(`Transcription complete — ${result.transcript?.length || 0} entries`);
+          // Refresh the meeting detail to show the new transcript
+          if (typeof window.showEditorView === 'function') {
+            window.showEditorView(currentMeetingId);
+          }
+        } else {
+          notifyError(result.error || 'Re-run failed');
+        }
+      } catch (error) {
+        console.error('[RerunTranscription] Error:', error);
+        notifyError(error, { prefix: 'Re-run failed:' });
+      } finally {
+        rerunBtn.disabled = false;
+        rerunBtn.textContent = 'Re-run Transcription';
+      }
+    };
+  }
+
   if (!meeting.transcript || meeting.transcript.length === 0) {
     transcriptContent.innerHTML = `
       <div class="placeholder-content">
@@ -1241,6 +1286,69 @@ async function populateTranscript(meeting) {
       exportBtn.style.display = 'none';
     }
   }
+
+}
+
+/**
+ * Show a simple provider picker for re-running transcription.
+ * @returns {Promise<string|null>} Selected provider or null if cancelled
+ */
+function showRerunProviderPicker() {
+  return new Promise(resolve => {
+    // Create a simple overlay dialog
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+
+    const dialog = document.createElement('div');
+    dialog.style.cssText = 'background: var(--card-bg, #1e1e1e); border-radius: 12px; padding: 24px; min-width: 300px; border: 1px solid var(--border-color);';
+
+    const title = document.createElement('h3');
+    title.style.cssText = 'margin: 0 0 16px; font-size: 16px;';
+    title.textContent = 'Re-run Transcription';
+    dialog.appendChild(title);
+
+    const desc = document.createElement('p');
+    desc.style.cssText = 'color: var(--text-secondary); font-size: 13px; margin: 0 0 16px;';
+    desc.textContent = 'Select a transcription provider. If the original audio file is not found, you will be prompted to select one.';
+    dialog.appendChild(desc);
+
+    const providers = [
+      { id: 'assemblyai', name: 'AssemblyAI', price: '$0.37/hr' },
+      { id: 'deepgram', name: 'Deepgram', price: '$0.43/hr' },
+    ];
+
+    for (const p of providers) {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-outline';
+      btn.style.cssText = 'display: block; width: 100%; margin-bottom: 8px; padding: 10px; text-align: left;';
+      btn.textContent = `${p.name} (${p.price})`;
+      btn.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+        resolve(p.id);
+      });
+      dialog.appendChild(btn);
+    }
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary';
+    cancelBtn.style.cssText = 'display: block; width: 100%; margin-top: 8px;';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.addEventListener('click', () => {
+      document.body.removeChild(overlay);
+      resolve(null);
+    });
+    dialog.appendChild(cancelBtn);
+
+    overlay.appendChild(dialog);
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) {
+        document.body.removeChild(overlay);
+        resolve(null);
+      }
+    });
+
+    document.body.appendChild(overlay);
+  });
 }
 
 /**

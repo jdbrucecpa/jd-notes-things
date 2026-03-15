@@ -10,7 +10,6 @@ import './index.css';
 import { sanitizeHtml, escapeHtml } from './renderer/security.js';
 import { initializeSettingsUI, openSettingsTab } from './renderer/settings.js';
 import { initializeTemplateEditor } from './renderer/templates.js';
-import { initializeRoutingEditor } from './renderer/routing.js';
 import {
   initializeMeetingDetail,
   clearMeetingDetail,
@@ -19,7 +18,6 @@ import {
 import { initAppSettingsUI } from './renderer/appSettings.js';
 import { initContactsPage, openContactsView } from './renderer/contacts.js';
 import { openCompanyDetail } from './renderer/companyDetail.js';
-import { openClientSetup, closeClientSetup } from './renderer/clientSetup.js';
 import { initQuickSearch } from './renderer/quickSearch.js';
 import {
   notifySuccess,
@@ -4151,9 +4149,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize Template Editor (Phase 10.3)
   initializeTemplateEditor();
 
-  // Initialize Routing Editor (Phase 10.4)
-  initializeRoutingEditor();
-
   // Initialize App Settings UI (Phase 10.7)
   await initAppSettingsUI();
 
@@ -4163,15 +4158,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Expose functions for cross-module navigation
   window.openContactsView = openContactsView;
   window.openCompanyDetail = openCompanyDetail;
-  window.openClientSetup = openClientSetup;
   window.showMeetingDetail = showEditorView;
   window.showEditorView = showEditorView;
-
-  // Wire up client setup close button
-  const closeClientSetupBtn = document.getElementById('closeClientSetup');
-  if (closeClientSetupBtn) {
-    closeClientSetupBtn.addEventListener('click', closeClientSetup);
-  }
 
   // Initialize Quick Search (CS-2)
   initQuickSearch();
@@ -4561,6 +4549,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Reload meetings data to update UI (this will show the updated title)
+    loadMeetingsDataFromFile();
+  });
+
+  // Listen for meeting-updated events (e.g., after re-run transcription)
+  window.electronAPI.onMeetingUpdated(meetingId => {
+    console.log(`[MeetingUpdated] Meeting ${meetingId} was updated, refreshing...`);
+    // If we're currently viewing this meeting, refresh it
+    if (window.currentEditingMeetingId === meetingId && typeof window.showEditorView === 'function') {
+      window.showEditorView(meetingId);
+    }
+    // Also reload the meetings list
     loadMeetingsDataFromFile();
   });
 

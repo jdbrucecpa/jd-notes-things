@@ -390,8 +390,8 @@ const meetingPlaceholderSchema = z.object({
 
 const transcriptionRerunSchema = z.object({
   meetingId: meetingIdSchema,
-  provider: z.string().optional(),
-  audioPath: z.string().optional(),
+  provider: z.string().nullable().optional(),
+  audioPath: z.string().nullable().optional(),
 });
 
 // ===================================================

@@ -1,11 +1,10 @@
 /**
  * Company Detail View (v1.4)
  *
- * Displays company information, contacts in the company, and meeting history.
- * Accessible by clicking an organization name in the contact detail view.
+ * Displays company information, configuration (category + vault path),
+ * contacts in the company, and meeting history.
+ * Accessible from the Companies toggle on the Contacts page.
  */
-
-import { escapeHtml } from './security.js';
 
 let _currentCompany = null;
 
@@ -16,38 +15,47 @@ let _currentCompany = null;
 export async function openCompanyDetail(organization) {
   _currentCompany = organization;
   const detailContent = document.getElementById('contactDetailContent');
+  const detailEmpty = document.querySelector('.contact-detail-empty');
   if (!detailContent) return;
 
-  detailContent.innerHTML = `
-    <div class="company-detail-loading" style="padding: 24px; text-align: center; color: var(--text-secondary);">
-      Loading company details...
-    </div>`;
+  // Show detail, hide empty state
+  detailContent.style.display = 'block';
+  if (detailEmpty) detailEmpty.style.display = 'none';
+
+  detailContent.textContent = '';
+  const loadingDiv = document.createElement('div');
+  loadingDiv.style.cssText = 'padding: 24px; text-align: center; color: var(--text-secondary);';
+  loadingDiv.textContent = 'Loading company details...';
+  detailContent.appendChild(loadingDiv);
 
   try {
-    // Fetch company contacts and meetings in parallel
-    const [contactsResult, meetingsResult] = await Promise.all([
+    const [contactsResult, meetingsResult, companiesResult] = await Promise.all([
       window.electronAPI.contactsGetCompanyContacts(organization),
       window.electronAPI.contactsGetCompanyMeetings(organization),
+      window.electronAPI.companiesGetAll(),
     ]);
 
     const contacts = contactsResult.success ? contactsResult.contacts : [];
     const meetings = meetingsResult.success ? meetingsResult.meetings : [];
+    const companies = companiesResult.success ? companiesResult.companies : [];
+    const dbData = companies.find(c => c.name.toLowerCase() === organization.toLowerCase());
 
-    renderCompanyDetail(organization, contacts, meetings);
+    renderCompanyDetail(organization, contacts, meetings, dbData);
   } catch (error) {
     console.error('[CompanyDetail] Failed to load:', error);
-    detailContent.innerHTML = `
-      <div class="company-detail-error" style="padding: 24px; color: var(--color-error);">
-        Failed to load company details: ${escapeHtml(error.message)}
-      </div>`;
+    detailContent.textContent = '';
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'padding: 24px; color: var(--color-error);';
+    errDiv.textContent = `Failed to load company details: ${error.message}`;
+    detailContent.appendChild(errDiv);
   }
 }
 
-function renderCompanyDetail(organization, contacts, meetings) {
+function renderCompanyDetail(organization, contacts, meetings, dbData) {
   const detailContent = document.getElementById('contactDetailContent');
   if (!detailContent) return;
 
-  // Extract domains from contact emails
+  // Extract domains from contact emails (read-only display)
   const domains = new Set();
   for (const contact of contacts) {
     if (contact.emails) {
@@ -58,112 +66,249 @@ function renderCompanyDetail(organization, contacts, meetings) {
     }
   }
 
-  let html = `
-    <div class="company-detail" style="padding: 24px;">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
-        <div>
-          <h2 style="margin: 0 0 4px; font-size: 20px;">${escapeHtml(organization)}</h2>
-          <div style="color: var(--text-secondary); font-size: 13px;">
-            ${contacts.length} contact${contacts.length !== 1 ? 's' : ''}
-            &middot; ${meetings.length} meeting${meetings.length !== 1 ? 's' : ''}
-            ${domains.size > 0 ? `&middot; ${Array.from(domains).map(d => escapeHtml(d)).join(', ')}` : ''}
-          </div>
-        </div>
-        <button class="btn btn-outline btn-sm" id="companyBackBtn" style="flex-shrink: 0;">
-          &larr; Back to Contact
-        </button>
-      </div>`;
+  // Build using DOM methods to avoid XSS
+  detailContent.textContent = '';
 
-  // Contacts section
-  html += `
-      <div style="margin-bottom: 24px;">
-        <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);">
-          Contacts (${contacts.length})
-        </h3>
-        <div style="display: grid; gap: 8px;">`;
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'padding: 24px;';
+
+  // ── Header ──
+  const header = document.createElement('div');
+  header.style.cssText = 'display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;';
+
+  const headerLeft = document.createElement('div');
+  const h2 = document.createElement('h2');
+  h2.style.cssText = 'margin: 0 0 4px; font-size: 20px;';
+  h2.textContent = organization;
+  headerLeft.appendChild(h2);
+
+  const subtitle = document.createElement('div');
+  subtitle.style.cssText = 'color: var(--text-secondary); font-size: 13px;';
+  subtitle.textContent = `${contacts.length} contact${contacts.length !== 1 ? 's' : ''} \u00b7 ${meetings.length} meeting${meetings.length !== 1 ? 's' : ''}`;
+  if (domains.size > 0) {
+    subtitle.textContent += ` \u00b7 ${Array.from(domains).join(', ')}`;
+  }
+  headerLeft.appendChild(subtitle);
+  header.appendChild(headerLeft);
+
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn btn-outline btn-sm';
+  backBtn.style.cssText = 'flex-shrink: 0;';
+  backBtn.textContent = '\u2190 Back';
+  backBtn.addEventListener('click', () => {
+    document.dispatchEvent(new CustomEvent('company-detail-back'));
+  });
+  header.appendChild(backBtn);
+  wrapper.appendChild(header);
+
+  // ── Configuration Section ──
+  const configSection = document.createElement('div');
+  configSection.style.cssText = 'margin-bottom: 24px; padding: 16px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px;';
+
+  const configTitle = document.createElement('h3');
+  configTitle.style.cssText = 'font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);';
+  configTitle.textContent = 'Configuration';
+  configSection.appendChild(configTitle);
+
+  const configGrid = document.createElement('div');
+  configGrid.style.cssText = 'display: grid; gap: 12px;';
+
+  // Category row
+  const catRow = document.createElement('div');
+  catRow.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+  const catLabel = document.createElement('label');
+  catLabel.style.cssText = 'width: 100px; font-size: 13px; font-weight: 500;';
+  catLabel.textContent = 'Category:';
+  catRow.appendChild(catLabel);
+
+  const catSelect = document.createElement('select');
+  catSelect.id = 'companyCategory';
+  catSelect.className = 'settings-select';
+  catSelect.style.cssText = 'flex: 1; padding: 6px 10px;';
+  const optNone = document.createElement('option');
+  optNone.value = '';
+  optNone.textContent = '\u2014';
+  optNone.selected = !dbData?.category;
+  const optClient = document.createElement('option');
+  optClient.value = 'Client';
+  optClient.textContent = 'Client';
+  optClient.selected = dbData?.category === 'Client';
+  const optOther = document.createElement('option');
+  optOther.value = 'Other';
+  optOther.textContent = 'Other';
+  optOther.selected = dbData?.category === 'Other';
+  catSelect.appendChild(optNone);
+  catSelect.appendChild(optClient);
+  catSelect.appendChild(optOther);
+  catRow.appendChild(catSelect);
+  configGrid.appendChild(catRow);
+
+  // Folder path row
+  const pathRow = document.createElement('div');
+  pathRow.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+  const pathLabel = document.createElement('label');
+  pathLabel.style.cssText = 'width: 100px; font-size: 13px; font-weight: 500;';
+  pathLabel.textContent = 'Folder:';
+  pathRow.appendChild(pathLabel);
+
+  const pathInput = document.createElement('input');
+  pathInput.type = 'text';
+  pathInput.id = 'companyVaultPath';
+  pathInput.className = 'settings-input';
+  pathInput.style.cssText = 'flex: 1; padding: 6px 10px;';
+  pathInput.value = dbData?.vaultPath || '';
+  pathInput.placeholder = 'Click Browse to select a folder...';
+  pathInput.readOnly = true;
+  pathRow.appendChild(pathInput);
+
+  const browseBtn = document.createElement('button');
+  browseBtn.className = 'btn btn-secondary btn-sm';
+  browseBtn.textContent = 'Browse';
+  browseBtn.style.cssText = 'flex-shrink: 0;';
+  browseBtn.addEventListener('click', async () => {
+    const result = await window.electronAPI.companiesSelectFolder();
+    if (result.success && result.folderPath) {
+      pathInput.value = result.folderPath;
+    }
+  });
+  pathRow.appendChild(browseBtn);
+  configGrid.appendChild(pathRow);
+
+  // Buttons row
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display: flex; gap: 8px;';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-primary btn-sm';
+  saveBtn.id = 'saveCompanyConfig';
+  saveBtn.textContent = 'Save';
+  saveBtn.addEventListener('click', async () => {
+    const category = catSelect.value || null;
+    const vaultPath = pathInput.value || null;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    await window.electronAPI.companiesUpdate({ name: organization, vaultPath, category });
+
+    saveBtn.textContent = 'Saved!';
+    setTimeout(() => { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }, 1500);
+  });
+  btnRow.appendChild(saveBtn);
+
+  const syncBtn = document.createElement('button');
+  syncBtn.className = 'btn btn-secondary btn-sm';
+  syncBtn.textContent = 'Sync Contacts';
+  syncBtn.addEventListener('click', async () => {
+    syncBtn.disabled = true;
+    syncBtn.textContent = 'Syncing...';
+    const result = await window.electronAPI.companiesSyncContacts(organization);
+    syncBtn.textContent = result.success ? `Synced (${result.added} new)` : 'Sync Failed';
+    setTimeout(() => { syncBtn.textContent = 'Sync Contacts'; syncBtn.disabled = false; }, 2000);
+  });
+  btnRow.appendChild(syncBtn);
+  configGrid.appendChild(btnRow);
+
+  configSection.appendChild(configGrid);
+  wrapper.appendChild(configSection);
+
+  // ── Contacts Section ──
+  const contactsSection = document.createElement('div');
+  contactsSection.style.cssText = 'margin-bottom: 24px;';
+
+  const contactsTitle = document.createElement('h3');
+  contactsTitle.style.cssText = 'font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);';
+  contactsTitle.textContent = `Contacts (${contacts.length})`;
+  contactsSection.appendChild(contactsTitle);
+
+  const contactsGrid = document.createElement('div');
+  contactsGrid.style.cssText = 'display: grid; gap: 8px;';
 
   for (const contact of contacts) {
     const email = contact.emails?.[0] || '';
     const title = contact.title || '';
-    html += `
-          <div class="company-contact-card" data-email="${escapeHtml(email)}"
-               style="padding: 12px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px;">
-            <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--primary-color); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; flex-shrink: 0;">
-              ${escapeHtml((contact.name || '?')[0].toUpperCase())}
-            </div>
-            <div style="min-width: 0;">
-              <div style="font-weight: 500; font-size: 14px;">${escapeHtml(contact.name || 'Unknown')}</div>
-              <div style="font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                ${title ? escapeHtml(title) + ' &middot; ' : ''}${escapeHtml(email)}
-              </div>
-            </div>
-          </div>`;
-  }
 
-  html += `</div></div>`;
+    const card = document.createElement('div');
+    card.className = 'company-contact-card';
+    card.style.cssText = 'padding: 12px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px;';
 
-  // Meetings section
-  html += `
-      <div>
-        <h3 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);">
-          Meeting History (${meetings.length})
-        </h3>`;
+    const avatar = document.createElement('div');
+    avatar.style.cssText = 'width: 36px; height: 36px; border-radius: 50%; background: var(--primary-color); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; flex-shrink: 0;';
+    avatar.textContent = (contact.name || '?')[0].toUpperCase();
+    card.appendChild(avatar);
 
-  if (meetings.length === 0) {
-    html += `<p style="color: var(--text-secondary); font-size: 13px;">No meetings found with this company.</p>`;
-  } else {
-    html += `<div style="display: grid; gap: 8px;">`;
-    // Show most recent 50 meetings
-    for (const meeting of meetings.slice(0, 50)) {
-      const date = meeting.date ? new Date(meeting.date).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric',
-      }) : 'Unknown';
-      html += `
-            <div class="company-meeting-card" data-meeting-id="${escapeHtml(meeting.id)}"
-                 style="padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;">
-              <div style="font-weight: 500; font-size: 14px;">${escapeHtml(meeting.title || 'Untitled')}</div>
-              <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">${date}</div>
-            </div>`;
-    }
-    html += `</div>`;
-  }
+    const info = document.createElement('div');
+    info.style.cssText = 'min-width: 0;';
+    const nameDiv = document.createElement('div');
+    nameDiv.style.cssText = 'font-weight: 500; font-size: 14px;';
+    nameDiv.textContent = contact.name || 'Unknown';
+    info.appendChild(nameDiv);
 
-  html += `</div></div>`;
+    const detailDiv = document.createElement('div');
+    detailDiv.style.cssText = 'font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+    detailDiv.textContent = title ? `${title} \u00b7 ${email}` : email;
+    info.appendChild(detailDiv);
+    card.appendChild(info);
 
-  detailContent.innerHTML = html;
-
-  // Bind handlers
-  const backBtn = document.getElementById('companyBackBtn');
-  if (backBtn) {
-    backBtn.addEventListener('click', () => {
-      // Go back to the contact that was showing before
-      // Emit a custom event that contacts.js can listen to
-      document.dispatchEvent(new CustomEvent('company-detail-back'));
-    });
-  }
-
-  // Click on contact card to navigate to that contact
-  detailContent.querySelectorAll('.company-contact-card').forEach(card => {
     card.addEventListener('click', () => {
-      const email = card.dataset.email;
       if (email && window.openContactsView) {
         window.openContactsView(email);
       }
     });
-  });
 
-  // Click on meeting card to open the meeting
-  detailContent.querySelectorAll('.company-meeting-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const meetingId = card.dataset.meetingId;
-      if (meetingId) {
-        // Close contacts view and open meeting
+    contactsGrid.appendChild(card);
+  }
+  contactsSection.appendChild(contactsGrid);
+  wrapper.appendChild(contactsSection);
+
+  // ── Meetings Section ──
+  const meetingsSection = document.createElement('div');
+
+  const meetingsTitle = document.createElement('h3');
+  meetingsTitle.style.cssText = 'font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);';
+  meetingsTitle.textContent = `Meeting History (${meetings.length})`;
+  meetingsSection.appendChild(meetingsTitle);
+
+  if (meetings.length === 0) {
+    const noMeetings = document.createElement('p');
+    noMeetings.style.cssText = 'color: var(--text-secondary); font-size: 13px;';
+    noMeetings.textContent = 'No meetings found with this company.';
+    meetingsSection.appendChild(noMeetings);
+  } else {
+    const meetingsGrid = document.createElement('div');
+    meetingsGrid.style.cssText = 'display: grid; gap: 8px;';
+
+    for (const meeting of meetings.slice(0, 50)) {
+      const date = meeting.date ? new Date(meeting.date).toLocaleDateString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric',
+      }) : 'Unknown';
+
+      const card = document.createElement('div');
+      card.className = 'company-meeting-card';
+      card.style.cssText = 'padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;';
+
+      const titleDiv = document.createElement('div');
+      titleDiv.style.cssText = 'font-weight: 500; font-size: 14px;';
+      titleDiv.textContent = meeting.title || 'Untitled';
+      card.appendChild(titleDiv);
+
+      const dateDiv = document.createElement('div');
+      dateDiv.style.cssText = 'font-size: 12px; color: var(--text-secondary); margin-top: 2px;';
+      dateDiv.textContent = date;
+      card.appendChild(dateDiv);
+
+      card.addEventListener('click', () => {
         const contactsView = document.getElementById('contactsView');
         const mainView = document.getElementById('mainView');
         if (contactsView) contactsView.style.display = 'none';
         if (mainView) mainView.style.display = 'block';
-        if (window.showEditorView) window.showEditorView(meetingId);
-      }
-    });
-  });
+        if (window.showEditorView) window.showEditorView(meeting.id);
+      });
+
+      meetingsGrid.appendChild(card);
+    }
+    meetingsSection.appendChild(meetingsGrid);
+  }
+  wrapper.appendChild(meetingsSection);
+
+  detailContent.appendChild(wrapper);
 }

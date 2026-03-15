@@ -180,8 +180,6 @@ const {
   backupIncrementalSchema,
   backupRestoreSchema,
   backupValidateSchema,
-  // v1.4: Client schemas
-  clientSchema,
   // v1.4: Calendar coverage schemas
   calendarCoverageSchema,
   meetingPlaceholderSchema,
@@ -1595,19 +1593,11 @@ app.whenReady().then(async () => {
   // OCRM: Set settings provider for VaultStructure to access CRM integration settings
   vaultStructure.setSettingsProvider(() => appSettings);
 
-  // Always use userData/config for routing config (both dev and prod)
-  // Dev uses jd-notes-things-dev, prod uses jd-notes-things
-  const configPath = path.join(app.getPath('userData'), 'config', 'routing.yaml');
-
   // Initialize default config files on first launch (copies missing files, never overwrites)
   await initializeDefaultConfigFiles();
 
-  console.log('[ObsidianExport] Using routing config:', configPath);
-
   try {
-    routingEngine = new RoutingEngine(configPath);
-    // OCRM: Set settings provider for RoutingEngine to access CRM integration settings
-    routingEngine.setSettingsProvider(() => appSettings);
+    routingEngine = new RoutingEngine(() => appSettings);
     console.log('[ObsidianExport] Routing engine initialized successfully');
 
     // v1.4: Connect client service to routing engine
@@ -2652,7 +2642,8 @@ async function initSDK() {
               if (participantEmails.length > 0 && routingEngine) {
                 const routingDecision = routingEngine.route({
                   participantEmails,
-                  meetingTitle: 'Vocabulary Lookup', // Title not used for vocabulary
+                  participants: [],
+                  meetingTitle: 'Vocabulary Lookup',
                   meetingDate: new Date(),
                 });
                 // Get client slug from first route if it's a client type
@@ -3547,6 +3538,7 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
       // Use routing engine
       const routingDecision = routingEngine.route({
         participantEmails,
+        participants: meeting.participants || [],
         meetingTitle: meeting.title || 'Untitled Meeting',
         meetingDate: meeting.date ? new Date(meeting.date) : new Date(),
       });
@@ -3576,9 +3568,14 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
         : 'meeting';
       let baseFilename = `${dateStr}-${titleSlug}`;
 
-      // Create meeting folder path
-      const meetingFolder = vaultStructure.getAbsolutePath(route.fullPath);
-      vaultStructure.ensureDirectory(meetingFolder);
+      // Create meeting folder path — use absolute path directly if route provides one,
+      // otherwise resolve relative to vault root (for unfiled meetings)
+      const meetingFolder = path.isAbsolute(route.fullPath)
+        ? route.fullPath
+        : vaultStructure.getAbsolutePath(route.fullPath);
+      if (!fs.existsSync(meetingFolder)) {
+        fs.mkdirSync(meetingFolder, { recursive: true });
+      }
 
       // Check for existing files and find unique filename
       let summaryPath = path.join(meetingFolder, `${baseFilename}.md`);
@@ -6530,6 +6527,7 @@ ipcMain.handle(
     // Create meeting data for routing
     const routingData = {
       participantEmails,
+      participants: meeting.participants || [],
       meetingTitle: meeting.title,
       meetingDate: new Date(meeting.date),
     };
@@ -6537,20 +6535,11 @@ ipcMain.handle(
     // Get routing decision
     const decision = routingEngine.route(routingData);
 
-    // Get config to look up organization names
-    const routingConfig = routingEngine.getConfig();
-
-    // Helper to get organization name from config
+    // Helper to get organization name from route
     const getOrgName = route => {
-      if (route.type === 'client' && route.slug && routingConfig.clients?.[route.slug]) {
-        return routingConfig.clients[route.slug].name || route.slug;
-      }
-      if (route.type === 'industry' && route.slug && routingConfig.industry?.[route.slug]) {
-        return routingConfig.industry[route.slug].name || route.slug;
-      }
-      if (route.type === 'internal') {
-        return 'Internal';
-      }
+      if (route.organizationName) return route.organizationName;
+      if (route.slug) return route.slug;
+      if (route.type === 'internal') return 'Internal';
       return null;
     };
 
@@ -8016,6 +8005,22 @@ ipcMain.handle('import:selectFolder', async () => {
 // Re-run Transcription IPC Handler (v1.4)
 // ===================================================================
 
+ipcMain.handle('transcription:selectAudioFile', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select Audio File for Transcription',
+    defaultPath: RECORDING_PATH,
+    filters: [
+      { name: 'Audio Files', extensions: ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'flac', 'aac'] },
+    ],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths.length) {
+    return { success: false, canceled: true };
+  }
+  return { success: true, filePath: result.filePaths[0] };
+});
+
 ipcMain.handle(
   'transcription:rerun',
   withValidation(transcriptionRerunSchema, async (event, { meetingId, provider, audioPath }) => {
@@ -8078,13 +8083,41 @@ ipcMain.handle(
         {}
       );
 
-      backgroundTaskManager.updateTask(taskId, 60, 'Updating meeting...');
+      backgroundTaskManager.updateTask(taskId, 50, 'Updating meeting...');
 
       // Update the meeting with new transcript
-      meeting.transcript = transcript.utterances || [];
+      meeting.transcript = transcript.entries || [];
       meeting.transcriptionProvider = transcriptionProvider;
       meeting.transcriptConfidence = transcript.confidence || null;
       meeting.videoFile = filePath;
+
+      // Speaker matching: try to map speakers to contacts
+      if (speakerMatcher && meeting.transcript.length > 0) {
+        backgroundTaskManager.updateTask(taskId, 60, 'Matching speakers...');
+        try {
+          const participantEmails = meeting.participantEmails || [];
+          const speakerMapping = await speakerMatcher.matchSpeakers(
+            meeting.transcript,
+            participantEmails,
+            {
+              includeOrganizer: true,
+              useWordCount: true,
+              participantData: meeting.participants || [],
+            }
+          );
+
+          // Apply mapping to transcript
+          meeting.transcript = speakerMatcher.applyMappingToTranscript(
+            meeting.transcript,
+            speakerMapping
+          );
+          meeting.speakerMapping = speakerMapping;
+
+          console.log('[Transcription Rerun] Speaker matching applied');
+        } catch (matchError) {
+          console.warn('[Transcription Rerun] Speaker matching failed:', matchError.message);
+        }
+      }
 
       // Re-generate summary if the meeting had one
       if (meeting.summary) {
@@ -8106,6 +8139,11 @@ ipcMain.handle(
         utterances: meeting.transcript.length,
         provider: transcriptionProvider,
       });
+
+      // Notify renderer to refresh the meeting
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('meeting-updated', meetingId);
+      }
 
       return {
         success: true,
@@ -9281,16 +9319,15 @@ ipcMain.handle(
 
         const eventInfo = {
           calendarEventId: event.id,
-          title: event.summary || 'No title',
-          date: event.start?.dateTime || event.start?.date,
-          endDate: event.end?.dateTime || event.end?.date,
-          attendees: (event.attendees || []).map(a => ({
+          title: event.title || event.summary || 'No title',
+          date: event.startTime || event.start?.dateTime || event.start?.date,
+          endDate: event.endTime || event.end?.dateTime || event.end?.date,
+          attendees: (event.participants || event.attendees || []).map(a => ({
             email: a.email,
-            name: a.displayName,
-            responseStatus: a.responseStatus,
+            name: a.name || a.displayName,
           })),
-          meetingLink: event.hangoutLink || null,
-          htmlLink: event.htmlLink || null,
+          meetingLink: event.meetingLink || event.hangoutLink || null,
+          platform: event.platform || null,
         };
 
         if (meeting) {
@@ -9426,94 +9463,94 @@ ipcMain.handle(
 // ===================================================================
 
 // ===================================================================
-// Client Setup IPC Handlers (v1.4)
+// Company Management IPC Handlers (v1.4 — replaces client wizard)
 // ===================================================================
 
-ipcMain.handle(
-  'clients:discover',
-  createIpcHandler(async () => {
+ipcMain.handle('companies:getAll', async () => {
+  try {
     if (googleContacts) clientService.setGoogleContacts(googleContacts);
-    const companies = await clientService.discoverClientsFromContacts();
-    return { companies };
-  })
-);
+    const companies = await clientService.getCompaniesFromContacts();
+    return { success: true, companies };
+  } catch (error) {
+    logger.main.error('[Companies] getAll failed:', error);
+    return { success: false, error: error.message };
+  }
+});
 
-ipcMain.handle(
-  'clients:getAll',
-  createIpcHandler(async () => {
-    const clients = clientService.getAllClients();
-    return { clients };
-  })
-);
+ipcMain.handle('companies:update', async (_event, { name, vaultPath, category }) => {
+  try {
+    let client = clientService.getAllClients()
+      .find(c => c.name.toLowerCase() === name.toLowerCase());
 
-ipcMain.handle(
-  'clients:get',
-  createIpcHandler(async (_event, clientId) => {
-    const client = clientService.getClient(clientId);
-    if (!client) return { success: false, error: 'Client not found' };
-    const contacts = clientService.getClientContacts(clientId);
-    return { client, contacts };
-  })
-);
-
-ipcMain.handle(
-  'clients:create',
-  withValidation(clientSchema, async (_event, clientData) => {
-    const client = clientService.createClient(clientData);
-    return { success: true, client };
-  })
-);
-
-ipcMain.handle(
-  'clients:update',
-  withValidation(clientSchema, async (_event, clientData) => {
-    const client = clientService.updateClient(clientData.id, clientData);
-    return { success: true, client };
-  })
-);
-
-ipcMain.handle(
-  'clients:delete',
-  createIpcHandler(async (_event, clientId) => {
-    const result = clientService.deleteClient(clientId);
-    return { deleted: result };
-  })
-);
-
-ipcMain.handle(
-  'clients:check',
-  createIpcHandler(async () => {
-    const report = clientService.checkClientSetup();
-    return { report };
-  })
-);
-
-ipcMain.handle(
-  'clients:migrateFromYaml',
-  createIpcHandler(async () => {
-    const routingPath = path.join(app.getPath('userData'), 'config', 'routing.yaml');
-    if (!fs.existsSync(routingPath)) {
-      return { success: false, error: 'routing.yaml not found' };
+    if (client) {
+      clientService.updateClient(client.id, {
+        vault_path: vaultPath,
+        category: category || client.category,
+      });
+    } else {
+      client = clientService.createClient({
+        name,
+        vaultPath,
+        category: category || 'Other',
+      });
     }
-    const yaml = require('js-yaml');
-    const content = fs.readFileSync(routingPath, 'utf8');
-    const config = yaml.load(content);
-    const result = clientService.migrateFromRoutingYaml(config);
-    return { ...result };
-  })
-);
 
-ipcMain.handle(
-  'clients:sync',
-  createIpcHandler(async () => {
+    // Auto-sync contacts when vault path is first set
+    if (vaultPath && googleContacts) {
+      try {
+        clientService.setGoogleContacts(googleContacts);
+        await clientService.syncCompanyContacts(name);
+      } catch (syncErr) {
+        logger.main.warn('[Companies] Contact sync failed:', syncErr.message);
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    logger.main.error('[Companies] update failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('companies:remove', async (_event, name) => {
+  try {
+    const client = clientService.getAllClients()
+      .find(c => c.name.toLowerCase() === name.toLowerCase());
+    if (client) {
+      clientService.updateClient(client.id, { vault_path: null, category: null });
+    }
+    return { success: true };
+  } catch (error) {
+    logger.main.error('[Companies] remove failed:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('companies:selectFolder', async () => {
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Select folder for meeting notes',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  if (result.canceled || !result.filePaths || result.filePaths.length === 0) {
+    return { success: false, canceled: true };
+  }
+  return { success: true, folderPath: result.filePaths[0] };
+});
+
+ipcMain.handle('companies:syncContacts', async (_event, companyName) => {
+  try {
     if (googleContacts) clientService.setGoogleContacts(googleContacts);
-    const result = await clientService.syncWithGoogleContacts();
-    return { ...result };
-  })
-);
+    const result = await clientService.syncCompanyContacts(companyName);
+    return { success: true, ...result };
+  } catch (error) {
+    logger.main.error('[Companies] syncContacts failed:', error);
+    return { success: false, error: error.message };
+  }
+});
 
 // ===================================================================
-// End Client Setup IPC Handlers
+// End Company Management IPC Handlers
 // ===================================================================
 
 // ===================================================================

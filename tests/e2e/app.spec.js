@@ -115,21 +115,21 @@ async function ensureMainView() {
     if (await closeBtn.isVisible().catch(() => false)) {
       await closeBtn.click();
       await page.waitForTimeout(300);
+    } else {
+      // Fallback: hide via DOM
+      await page.evaluate(() => {
+        const cv = document.getElementById('contactsView');
+        const mv = document.getElementById('mainView');
+        if (cv) cv.style.display = 'none';
+        if (mv) mv.style.display = 'block';
+      });
+      await page.waitForTimeout(300);
     }
   }
   // Close reports if open
   const reportsOpen = await page.locator('#reportsView').isVisible().catch(() => false);
   if (reportsOpen) {
     const closeBtn = page.locator('#closeReports');
-    if (await closeBtn.isVisible().catch(() => false)) {
-      await closeBtn.click();
-      await page.waitForTimeout(300);
-    }
-  }
-  // Close client setup if open (v1.4)
-  const clientSetupOpen = await page.locator('#clientSetupView').isVisible().catch(() => false);
-  if (clientSetupOpen) {
-    const closeBtn = page.locator('#closeClientSetup');
     if (await closeBtn.isVisible().catch(() => false)) {
       await closeBtn.click();
       await page.waitForTimeout(300);
@@ -806,34 +806,59 @@ test('calendar coverage report tab exists', async () => {
 // ===================================================================
 // v1.4 Tests: Client Setup View
 // ===================================================================
-test('client setup view can be opened and closed', async () => {
+test('settings has Clients tab (replaced Routing)', async () => {
   await ensureMainView();
 
-  // Check that the client setup view element exists
-  const clientSetupView = page.locator('#clientSetupView');
-  await expect(clientSetupView).toBeAttached();
-
-  // Open it programmatically (no nav button yet — it's opened from settings or code)
-  await page.evaluate(() => {
-    const view = document.getElementById('clientSetupView');
-    const mainView = document.getElementById('mainView');
-    if (view && mainView) {
-      mainView.style.display = 'none';
-      view.style.display = 'flex';
-    }
-  });
+  await page.locator('#settingsBtn').click();
   await page.waitForTimeout(500);
 
-  // Verify it's visible
-  const isOpen = await clientSetupView.isVisible().catch(() => false);
-  expect(isOpen).toBe(true);
+  // Verify Clients tab exists in sidebar
+  const clientsTab = page.locator('#clientsSettingsTab');
+  await expect(clientsTab).toBeAttached();
 
-  // Close it
-  const closeBtn = page.locator('#closeClientSetup');
-  if (await closeBtn.isVisible().catch(() => false)) {
-    await closeBtn.click();
-    await page.waitForTimeout(300);
-  }
+  // Click it
+  await clientsTab.click();
+  await page.waitForTimeout(500);
+
+  // Verify clients panel renders with the table
+  const clientsPanel = page.locator('#clientsPanel');
+  const isVisible = await clientsPanel.isVisible().catch(() => false);
+  console.log(`[E2E] Clients panel visible: ${isVisible}`);
+  expect(isVisible).toBe(true);
+
+  // Verify Add Company button exists
+  const addBtn = page.locator('#addClientBtn');
+  await expect(addBtn).toBeVisible();
+
+  await ensureMainView();
+});
+
+test('contacts view has Companies/Contacts toggle', async () => {
+  await ensureMainView();
+
+  const contactsBtn = page.locator('#contactsBtn');
+  await contactsBtn.click({ timeout: 5000 });
+  await page.waitForTimeout(1000);
+
+  // Verify toggle buttons exist
+  const contactsModeBtn = page.locator('#contactsModeBtn');
+  const companiesModeBtn = page.locator('#companiesModeBtn');
+  await expect(contactsModeBtn).toBeVisible();
+  await expect(companiesModeBtn).toBeVisible();
+
+  // Click Companies mode
+  await companiesModeBtn.click();
+  await page.waitForTimeout(1000);
+
+  // Verify companies list container is visible
+  const companiesContainer = page.locator('#companiesListContainer');
+  const isVisible = await companiesContainer.isVisible().catch(() => false);
+  console.log(`[E2E] Companies list container visible: ${isVisible}`);
+  expect(isVisible).toBe(true);
+
+  // Switch back to contacts mode
+  await contactsModeBtn.click();
+  await page.waitForTimeout(300);
 
   await ensureMainView();
 });
@@ -851,8 +876,8 @@ test('settings has backup tab among its tabs', async () => {
   const tabCount = await page.locator('.settings-tab').count();
   console.log(`[E2E] Settings tab count: ${tabCount}`);
 
-  // v1.3 had 13 tabs, v1.4 adds 1 (backup) = 14
-  expect(tabCount).toBeGreaterThanOrEqual(14);
+  // v1.4: 15 tabs (added Clients, Reports, Backup to v1.3's 12)
+  expect(tabCount).toBeGreaterThanOrEqual(15);
 
   // Verify backup tab specifically
   const backupTab = page.locator('#backupSettingsTab');

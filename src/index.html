@@ -568,6 +568,12 @@
                     </svg>
                     Export
                   </button>
+                  <button class="btn btn-outline btn-sm" id="rerunTranscriptionBtn" title="Re-run transcription with a different provider">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
+                    </svg>
+                    Re-run Transcription
+                  </button>
                 </div>
                 <div class="transcript-content" id="meetingDetailTranscript">
                   <p class="placeholder-text">No transcript available</p>
@@ -1249,11 +1255,11 @@
               </svg>
               <span>Security</span>
             </div>
-            <div id="routingSettingsTab" class="settings-tab" data-tab="routing">
+            <div id="clientsSettingsTab" class="settings-tab" data-tab="clients">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2zm0 11.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
+                <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z" fill="currentColor"/>
               </svg>
-              <span>Routing</span>
+              <span>Clients</span>
             </div>
             <div id="templatesSettingsTab" class="settings-tab" data-tab="templates">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1297,6 +1303,12 @@
                 <path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z" fill="currentColor"/>
               </svg>
               <span>Logs & Diagnostics</span>
+            </div>
+            <div id="reportsSettingsTab" class="settings-tab" data-tab="reports">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" fill="currentColor"/>
+              </svg>
+              <span>Reports</span>
             </div>
             <div id="backupSettingsTab" class="settings-tab" data-tab="backup">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1592,95 +1604,38 @@
 
           </div>
 
-          <div class="settings-panel" id="routingPanel" style="display: none;">
+          <div class="settings-panel" id="clientsPanel" style="display: none;">
             <div class="settings-section">
-              <h3 class="settings-section-title">Routing Configuration</h3>
-              <p style="color: var(--text-secondary); margin-bottom: 20px;">
-                Configure where meeting notes are saved based on participant email addresses. Define clients, industry contacts, and internal team routing rules.
+              <h3 class="settings-section-title">Client Management</h3>
+              <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                Companies with vault paths will have their meeting notes automatically saved to the configured folder.
               </p>
+              <div id="clientsSummary" style="color: var(--text-secondary); margin-bottom: 16px; font-size: 14px;">Loading...</div>
 
-              <div class="routing-editor-container">
-                <!-- Organization List Sidebar -->
-                <div class="routing-list-sidebar">
-                  <div class="routing-list-header">
-                    <h4>Organizations</h4>
-                  </div>
+              <div style="margin-bottom: 16px;">
+                <button class="btn btn-primary btn-sm" id="addClientBtn">+ Add Company</button>
+              </div>
 
-                  <div class="routing-list-scroll" id="routingOrganizationList">
-                    <p style="text-align: center; color: var(--text-secondary); padding: 20px;">Loading...</p>
-                  </div>
+              <div id="clientsTableContainer" style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                  <thead>
+                    <tr style="text-align: left; border-bottom: 2px solid var(--border-color);">
+                      <th style="padding: 8px 12px;">Company</th>
+                      <th style="padding: 8px 12px; width: 100px;">Category</th>
+                      <th style="padding: 8px 12px;">Vault Path</th>
+                      <th style="padding: 8px 12px; width: 70px;">Contacts</th>
+                      <th style="padding: 8px 12px; width: 50px;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="clientsTableBody"></tbody>
+                </table>
+              </div>
 
-                  <div class="routing-list-actions">
-                    <button id="newOrganizationBtn" title="Add new organization">+ Add Org</button>
-                    <button id="deleteOrganizationBtn" disabled title="Delete selected organization">Delete</button>
-                  </div>
-                </div>
-
-                <!-- Editor/Test Main Area -->
-                <div class="routing-editor-main">
-                  <div class="routing-editor-toolbar">
-                    <input type="text" id="routingFileNameInput" value="routing.yaml" readonly />
-                    <div class="routing-toolbar-actions">
-                      <button id="refreshRoutingBtn" class="btn-secondary" title="Reload configuration from disk">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" fill="currentColor"/>
-                        </svg>
-                        Refresh
-                      </button>
-                      <button id="undoRoutingBtn" class="btn-secondary" title="Restore from backup">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z" fill="currentColor"/>
-                        </svg>
-                        Undo
-                      </button>
-                      <button id="validateRoutingBtn" class="btn-secondary">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/>
-                        </svg>
-                        Validate
-                      </button>
-                      <button id="saveRoutingBtn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" fill="currentColor"/>
-                        </svg>
-                        Save
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="routing-editor-tabs">
-                    <div class="routing-editor-tab active" id="routingEditorTabBtn">Editor</div>
-                    <div class="routing-editor-tab" id="routingTestTabBtn">Test Routing</div>
-                  </div>
-
-                  <div class="routing-editor-content">
-                    <div id="routingEditorTabContent" style="display: block; width: 100%; height: 100%;">
-                      <div id="routingMonacoContainer"></div>
-                    </div>
-
-                    <div id="routingTestTabContent" style="display: none; padding: 20px;">
-                      <h4 style="margin-bottom: 16px;">Test Routing Preview</h4>
-                      <p style="color: var(--text-secondary); margin-bottom: 16px;">Enter participant email addresses to see where the meeting would be saved.</p>
-
-                      <div class="routing-test-input-group">
-                        <label for="routingTestEmailInput">Participant Emails (comma-separated)</label>
-                        <input type="text" id="routingTestEmailInput" placeholder="e.g., john@example.com, jane@company.com" />
-                      </div>
-
-                      <button id="runRoutingTestBtn" class="btn btn-secondary" style="margin-top: 12px;">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M8 5v14l11-7z" fill="currentColor"/>
-                        </svg>
-                        Run Test
-                      </button>
-
-                      <div id="routingTestResults" style="margin-top: 24px; display: none;">
-                        <h5 style="margin-bottom: 12px;">Routing Result:</h5>
-                        <div id="routingTestOutput" class="routing-test-output"></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div id="addClientPicker" style="display: none; margin-top: 16px; padding: 16px; border: 1px solid var(--border-color); border-radius: 8px;">
+                <label style="font-weight: 500; display: block; margin-bottom: 8px;">Select a company:</label>
+                <input type="text" id="addClientSearch" class="settings-input" placeholder="Search companies..." style="margin-bottom: 8px;">
+                <div id="addClientResults" style="max-height: 200px; overflow-y: auto;"></div>
+                <button class="btn btn-secondary btn-sm" id="cancelAddClient" style="margin-top: 8px;">Cancel</button>
               </div>
             </div>
           </div>
@@ -2178,6 +2133,38 @@
             </div>
           </div>
 
+          <div class="settings-panel" id="reportsPanel" style="display: none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Reports</h3>
+
+              <!-- Date Range Picker -->
+              <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
+                <label style="font-size: 13px; font-weight: 500;">From</label>
+                <input type="date" id="settingsReportDateFrom" class="settings-input" style="width: auto;" />
+                <label style="font-size: 13px; font-weight: 500;">To</label>
+                <input type="date" id="settingsReportDateTo" class="settings-input" style="width: auto;" />
+                <div style="display: flex; gap: 6px;">
+                  <button class="btn btn-outline btn-sm settings-report-range" data-days="7">7 days</button>
+                  <button class="btn btn-outline btn-sm settings-report-range" data-days="30">30 days</button>
+                  <button class="btn btn-outline btn-sm settings-report-range" data-days="90">90 days</button>
+                </div>
+                <button class="btn btn-primary btn-sm" id="settingsRunReportBtn">Run Report</button>
+              </div>
+
+              <!-- Report Type Tabs -->
+              <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                <button class="btn btn-outline btn-sm settings-report-type active" data-type="no-recording">Meetings Without Recordings</button>
+                <button class="btn btn-outline btn-sm settings-report-type" data-type="no-calendar">Recordings Without Calendar</button>
+                <button class="btn btn-outline btn-sm settings-report-type" data-type="coverage">Calendar Coverage</button>
+              </div>
+
+              <!-- Results -->
+              <div id="settingsReportsResults" style="min-height: 200px;">
+                <p style="color: var(--text-secondary); text-align: center; padding: 40px;">Select a date range and click "Run Report"</p>
+              </div>
+            </div>
+          </div>
+
           <div class="settings-panel" id="backupPanel" style="display: none;">
             <div class="settings-section">
               <h3 class="settings-section-title">Backup</h3>
@@ -2360,16 +2347,33 @@
           </div>
 
           <div class="contacts-main">
-            <!-- Contact List -->
-            <div class="contacts-list-panel">
-              <div class="contacts-list-header">
+            <!-- Contact/Company List -->
+            <div class="contacts-list-panel" style="display: flex; flex-direction: column; overflow: hidden;">
+              <!-- Companies/Contacts Toggle (always visible) -->
+              <div class="contacts-mode-toggle" style="display: flex; margin: 8px 12px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); flex-shrink: 0;">
+                <button class="mode-toggle-btn active" id="contactsModeBtn" style="flex: 1; padding: 6px; font-size: 13px; border: none; cursor: pointer; background: var(--primary-color); color: white;">Contacts</button>
+                <button class="mode-toggle-btn" id="companiesModeBtn" style="flex: 1; padding: 6px; font-size: 13px; border: none; cursor: pointer; background: var(--bg-secondary); color: var(--text-primary);">Companies</button>
+              </div>
+
+              <div class="contacts-list-header" style="flex-shrink: 0;">
                 <span id="contactsCount">0 contacts</span>
               </div>
-              <div id="contactsList" class="contacts-list">
+              <div id="contactsList" class="contacts-list" style="overflow-y: auto; flex: 1; min-height: 0;">
                 <!-- Contact items will be rendered here -->
                 <div class="contacts-loading">
                   <span>Loading contacts...</span>
                 </div>
+              </div>
+
+              <!-- Companies list (hidden by default) -->
+              <div id="companiesListContainer" style="display: none; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;">
+                <div class="companies-filters" style="display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 12px 8px; flex-shrink: 0;">
+                  <button class="filter-chip active" data-filter="all" style="padding: 3px 10px; font-size: 12px; border-radius: 12px; border: 1px solid var(--border-color); background: var(--primary-color); color: white; cursor: pointer;">All</button>
+                  <button class="filter-chip" data-filter="has-folder" style="padding: 3px 10px; font-size: 12px; border-radius: 12px; border: 1px solid var(--text-secondary); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer;">Has Folder</button>
+                  <button class="filter-chip" data-filter="no-folder" style="padding: 3px 10px; font-size: 12px; border-radius: 12px; border: 1px solid var(--text-secondary); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer;">No Folder</button>
+                  <button class="filter-chip" data-filter="client" style="padding: 3px 10px; font-size: 12px; border-radius: 12px; border: 1px solid var(--text-secondary); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer;">Client</button>
+                </div>
+                <div id="companiesList" class="contacts-list" style="overflow-y: auto; flex: 1; min-height: 0;"></div>
               </div>
             </div>
 
@@ -2387,16 +2391,6 @@
             </div>
           </div>
         </div>
-    </div>
-
-    <!-- v1.4: Client Setup View -->
-    <div id="clientSetupView" class="settings-full-page" style="display: none;">
-      <div class="modal-header">
-        <h2>Client Setup</h2>
-        <button class="modal-close" id="closeClientSetup">&times;</button>
-      </div>
-      <div id="clientSetupContent" style="flex: 1; overflow-y: auto;">
-      </div>
     </div>
 
     <!-- v1.3: Reports View -->

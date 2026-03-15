@@ -17,7 +17,7 @@ const fs = require('fs');
 const { app } = require('electron');
 const log = require('electron-log');
 
-const CURRENT_SCHEMA_VERSION = 2;
+const CURRENT_SCHEMA_VERSION = 3;
 
 class DatabaseService {
   constructor() {
@@ -174,6 +174,7 @@ class DatabaseService {
         status TEXT DEFAULT 'active',
         google_source TEXT,
         notes TEXT,
+        category TEXT DEFAULT 'Other',
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
@@ -263,6 +264,24 @@ class DatabaseService {
       migrate();
 
       log.info('[Database] v1 → v2 migration complete');
+    }
+
+    if (oldVersion < 3) {
+      log.info('[Database] Running v2 → v3 migration: Add category column to clients');
+      try {
+        this.db.pragma('journal_mode = WAL');
+        this.db.prepare("SELECT category FROM clients LIMIT 1").get();
+      } catch (_e) {
+        this.db.prepare("ALTER TABLE clients ADD COLUMN category TEXT DEFAULT 'Other'").run();
+      }
+      this.db.prepare(`
+        UPDATE clients SET category = CASE
+          WHEN type = 'client' THEN 'Client'
+          ELSE 'Other'
+        END
+        WHERE category IS NULL OR category = 'Other'
+      `).run();
+      log.info('[Database] v2 → v3 migration complete');
     }
   }
 
@@ -1062,24 +1081,24 @@ class DatabaseService {
       this.db.prepare(`
         UPDATE clients SET
           name = ?, type = ?, vault_path = ?, domains = ?, status = ?,
-          google_source = ?, notes = ?, updated_at = datetime('now')
+          google_source = ?, notes = ?, category = ?, updated_at = datetime('now')
         WHERE id = ?
       `).run(
         client.name, client.type || 'client', client.vaultPath || client.vault_path || null,
         JSON.stringify(client.domains || []), client.status || 'active',
         client.googleSource || client.google_source || null,
-        client.notes || null, client.id
+        client.notes || null, client.category || 'Other', client.id
       );
     } else {
       this.db.prepare(`
-        INSERT INTO clients (id, name, type, vault_path, domains, status, google_source, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO clients (id, name, type, vault_path, domains, status, google_source, notes, category)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         client.id, client.name, client.type || 'client',
         client.vaultPath || client.vault_path || null,
         JSON.stringify(client.domains || []), client.status || 'active',
         client.googleSource || client.google_source || null,
-        client.notes || null
+        client.notes || null, client.category || 'Other'
       );
     }
   }
@@ -1165,6 +1184,23 @@ class DatabaseService {
     }
 
     return null;
+  }
+
+  /**
+   * Find a company by organization name (case-insensitive).
+   * @param {string} orgName - Organization name from Google Contacts
+   * @returns {Object|null}
+   */
+  matchOrganizationToCompany(orgName) {
+    if (!orgName) return null;
+    const row = this.db.prepare(
+      'SELECT * FROM clients WHERE LOWER(name) = LOWER(?) AND status = ?'
+    ).get(orgName, 'active');
+    if (!row) return null;
+    return {
+      ...row,
+      domains: row.domains ? JSON.parse(row.domains) : [],
+    };
   }
 
   /**

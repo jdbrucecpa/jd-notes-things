@@ -8,7 +8,6 @@
 
 import { initializeSecurityPanel } from './securitySettings.js';
 import { updateEditorTheme } from './templates.js';
-import { updateRoutingEditorTheme } from './routing.js';
 import { escapeHtml } from './security.js';
 import {
   initialize as initializePatternTestingPanel,
@@ -200,7 +199,7 @@ export function initializeSettingsUI() {
       { buttonId: 'profileSettingsTab', contentId: 'profilePanel' },
       { buttonId: 'generalSettingsTab', contentId: 'generalPanel' },
       { buttonId: 'securitySettingsTab', contentId: 'securityPanel' },
-      { buttonId: 'routingSettingsTab', contentId: 'routingPanel' },
+      { buttonId: 'clientsSettingsTab', contentId: 'clientsPanel' },
       { buttonId: 'templatesSettingsTab', contentId: 'templatesPanel' },
       { buttonId: 'vocabularySettingsTab', contentId: 'vocabularyPanel' },
       { buttonId: 'patternsSettingsTab', contentId: 'patternsPanel' },
@@ -208,13 +207,17 @@ export function initializeSettingsUI() {
       { buttonId: 'shortcutsSettingsTab', contentId: 'shortcutsPanel' },
       { buttonId: 'streamDeckSettingsTab', contentId: 'streamdeckPanel' },
       { buttonId: 'logsSettingsTab', contentId: 'logsPanel' },
+      { buttonId: 'reportsSettingsTab', contentId: 'reportsPanel' },
       { buttonId: 'backupSettingsTab', contentId: 'backupPanel' },
       { buttonId: 'advancedSettingsTab', contentId: 'advancedPanel' },
       { buttonId: 'aboutSettingsTab', contentId: 'aboutPanel' },
     ],
     buttonId => {
       // Trigger panel-specific actions based on which tab was activated
-      if (buttonId === 'backupSettingsTab') {
+      if (buttonId === 'reportsSettingsTab') {
+        console.log('[Settings] Reports tab clicked');
+        initSettingsReports();
+      } else if (buttonId === 'backupSettingsTab') {
         console.log('[Settings] Backup tab clicked, loading manifest');
         loadBackupManifest();
       } else if (buttonId === 'profileSettingsTab') {
@@ -223,9 +226,9 @@ export function initializeSettingsUI() {
       } else if (buttonId === 'templatesSettingsTab' && window.loadTemplates) {
         console.log('[Settings] Templates tab clicked, calling loadTemplates()');
         window.loadTemplates();
-      } else if (buttonId === 'routingSettingsTab' && window.loadRouting) {
-        console.log('[Settings] Routing tab clicked, calling loadRouting()');
-        window.loadRouting();
+      } else if (buttonId === 'clientsSettingsTab') {
+        console.log('[Settings] Clients tab clicked, loading clients');
+        renderClientsTab();
       } else if (buttonId === 'patternsSettingsTab') {
         console.log('[Settings] Patterns tab clicked, initializing pattern editor');
         initializePatternTestingPanel('pattern-editor').catch(err => {
@@ -255,7 +258,6 @@ export function initializeSettingsUI() {
 
       // Update Monaco editor themes
       updateEditorTheme(isActive);
-      updateRoutingEditorTheme(isActive);
       updatePatternEditorTheme(isActive);
     });
   }
@@ -1502,5 +1504,372 @@ function initializeMcpUI() {
         });
       }
     });
+  }
+}
+
+// ===================================================================
+// Clients Tab (v1.4 - replaces Routing)
+// ===================================================================
+
+async function renderClientsTab() {
+  const summary = document.getElementById('clientsSummary');
+  const tbody = document.getElementById('clientsTableBody');
+  if (!tbody) return;
+
+  try {
+    const result = await window.electronAPI.companiesGetAll();
+    const companies = result.success ? result.companies : [];
+    const configured = companies.filter(c => c.vaultPath);
+    const clientCount = configured.filter(c => c.category === 'Client').length;
+    const otherCount = configured.length - clientCount;
+
+    if (summary) {
+      summary.textContent =
+        `${configured.length} companies configured \u2014 ` +
+        `${clientCount} Client${clientCount !== 1 ? 's' : ''}, ` +
+        `${otherCount} Other`;
+    }
+
+    tbody.textContent = '';
+    for (const company of configured) {
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = '1px solid var(--border-color)';
+
+      const tdName = document.createElement('td');
+      tdName.style.cssText = 'padding: 8px 12px; font-weight: 500;';
+      tdName.textContent = company.name;
+      tr.appendChild(tdName);
+
+      const tdCategory = document.createElement('td');
+      tdCategory.style.cssText = 'padding: 8px 12px;';
+      const catSelect = document.createElement('select');
+      catSelect.className = 'settings-select client-category-select';
+      catSelect.dataset.name = company.name;
+      catSelect.style.cssText = 'padding: 4px 8px; font-size: 13px;';
+      const optClient = document.createElement('option');
+      optClient.value = 'Client';
+      optClient.textContent = 'Client';
+      optClient.selected = company.category === 'Client';
+      const optOther = document.createElement('option');
+      optOther.value = 'Other';
+      optOther.textContent = 'Other';
+      optOther.selected = company.category !== 'Client';
+      catSelect.appendChild(optClient);
+      catSelect.appendChild(optOther);
+      tdCategory.appendChild(catSelect);
+      tr.appendChild(tdCategory);
+
+      const tdPath = document.createElement('td');
+      tdPath.style.cssText = 'padding: 8px 12px;';
+      const pathWrapper = document.createElement('div');
+      pathWrapper.style.cssText = 'display: flex; gap: 4px; align-items: center;';
+      const pathInput = document.createElement('input');
+      pathInput.type = 'text';
+      pathInput.className = 'settings-input client-path-input';
+      pathInput.dataset.name = company.name;
+      pathInput.value = company.vaultPath || '';
+      pathInput.placeholder = 'No folder selected';
+      pathInput.readOnly = true;
+      pathInput.style.cssText = 'padding: 4px 8px; font-size: 13px; flex: 1; cursor: default;';
+      pathWrapper.appendChild(pathInput);
+      const browseBtn = document.createElement('button');
+      browseBtn.className = 'btn btn-secondary btn-sm client-browse-btn';
+      browseBtn.dataset.name = company.name;
+      browseBtn.textContent = 'Browse';
+      browseBtn.style.cssText = 'flex-shrink: 0; padding: 4px 8px; font-size: 12px;';
+      pathWrapper.appendChild(browseBtn);
+      tdPath.appendChild(pathWrapper);
+      tr.appendChild(tdPath);
+
+      const tdContacts = document.createElement('td');
+      tdContacts.style.cssText = 'padding: 8px 12px; color: var(--text-secondary); font-size: 13px;';
+      tdContacts.textContent = company.contactCount || 0;
+      tr.appendChild(tdContacts);
+
+      const tdAction = document.createElement('td');
+      tdAction.style.cssText = 'padding: 8px 12px;';
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'btn-icon client-remove-btn';
+      removeBtn.dataset.name = company.name;
+      removeBtn.title = 'Remove';
+      removeBtn.style.cssText = 'background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 16px;';
+      removeBtn.textContent = '\u00d7';
+      tdAction.appendChild(removeBtn);
+      tr.appendChild(tdAction);
+
+      tbody.appendChild(tr);
+    }
+
+    bindClientsTableHandlers();
+  } catch (error) {
+    if (summary) summary.textContent = 'Failed to load companies';
+    console.error('[Settings] Clients tab error:', error);
+  }
+}
+
+function bindClientsTableHandlers() {
+  // Category change — save immediately
+  document.querySelectorAll('.client-category-select').forEach(select => {
+    select.addEventListener('change', async () => {
+      const name = select.dataset.name;
+      const pathInput = select.closest('tr').querySelector('.client-path-input');
+      await window.electronAPI.companiesUpdate({
+        name, vaultPath: pathInput?.value || null, category: select.value,
+      });
+    });
+  });
+
+  // Browse buttons — open folder picker, then save
+  document.querySelectorAll('.client-browse-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const name = btn.dataset.name;
+      const result = await window.electronAPI.companiesSelectFolder();
+      if (result.success && result.folderPath) {
+        const pathInput = btn.closest('tr').querySelector('.client-path-input');
+        if (pathInput) pathInput.value = result.folderPath;
+        const catSelect = btn.closest('tr').querySelector('.client-category-select');
+        await window.electronAPI.companiesUpdate({
+          name, vaultPath: result.folderPath, category: catSelect?.value || 'Other',
+        });
+      }
+    });
+  });
+
+  // Remove button
+  document.querySelectorAll('.client-remove-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await window.electronAPI.companiesRemove(btn.dataset.name);
+      renderClientsTab();
+    });
+  });
+
+  const addBtn = document.getElementById('addClientBtn');
+  if (addBtn) {
+    const newBtn = addBtn.cloneNode(true);
+    addBtn.parentNode.replaceChild(newBtn, addBtn);
+    newBtn.addEventListener('click', showAddClientPicker);
+  }
+
+  const cancelBtn = document.getElementById('cancelAddClient');
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => {
+      document.getElementById('addClientPicker').style.display = 'none';
+    });
+  }
+}
+
+async function showAddClientPicker() {
+  const picker = document.getElementById('addClientPicker');
+  const resultsContainer = document.getElementById('addClientResults');
+  const searchInput = document.getElementById('addClientSearch');
+  if (!picker || !resultsContainer || !searchInput) return;
+
+  picker.style.display = 'block';
+  searchInput.value = '';
+  searchInput.focus();
+
+  const result = await window.electronAPI.companiesGetAll();
+  const unconfigured = (result.success ? result.companies : []).filter(c => !c.vaultPath);
+
+  const renderResults = (filter) => {
+    const filtered = filter
+      ? unconfigured.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()))
+      : unconfigured;
+
+    resultsContainer.textContent = '';
+    for (const c of filtered.slice(0, 30)) {
+      const opt = document.createElement('div');
+      opt.className = 'add-client-option';
+      opt.dataset.name = c.name;
+      opt.style.cssText = 'padding: 8px 12px; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = c.name;
+      opt.appendChild(nameSpan);
+
+      const countSpan = document.createElement('span');
+      countSpan.style.cssText = 'color: var(--text-secondary); font-size: 12px;';
+      countSpan.textContent = `${c.contactCount || 0} contacts`;
+      opt.appendChild(countSpan);
+
+      opt.addEventListener('click', async () => {
+        await window.electronAPI.companiesUpdate({
+          name: c.name, vaultPath: '', category: 'Client',
+        });
+        picker.style.display = 'none';
+        renderClientsTab();
+      });
+      opt.addEventListener('mouseenter', () => { opt.style.background = 'var(--bg-secondary)'; });
+      opt.addEventListener('mouseleave', () => { opt.style.background = ''; });
+
+      resultsContainer.appendChild(opt);
+    }
+  };
+
+  renderResults('');
+  const newSearch = searchInput.cloneNode(true);
+  searchInput.parentNode.replaceChild(newSearch, searchInput);
+  newSearch.addEventListener('input', () => renderResults(newSearch.value));
+  newSearch.focus();
+}
+
+// ===================================================================
+// Reports Tab (v1.4)
+// ===================================================================
+
+let settingsReportType = 'no-recording';
+const settingsReportData = { noRecording: [], noCalendar: [], coverage: null };
+let settingsReportsInitialized = false;
+
+function initSettingsReports() {
+  if (settingsReportsInitialized) return;
+  settingsReportsInitialized = true;
+
+  // Default date range: last 30 days
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const fromInput = document.getElementById('settingsReportDateFrom');
+  const toInput = document.getElementById('settingsReportDateTo');
+  if (fromInput) fromInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+  if (toInput) toInput.value = now.toISOString().split('T')[0];
+
+  // Range preset buttons
+  document.querySelectorAll('.settings-report-range').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const days = parseInt(btn.dataset.days, 10);
+      const to = new Date();
+      const from = new Date();
+      from.setDate(from.getDate() - days);
+      if (fromInput) fromInput.value = from.toISOString().split('T')[0];
+      if (toInput) toInput.value = to.toISOString().split('T')[0];
+    });
+  });
+
+  // Report type tabs
+  document.querySelectorAll('.settings-report-type').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.settings-report-type').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      settingsReportType = btn.dataset.type;
+      renderSettingsReport();
+    });
+  });
+
+  // Run button
+  const runBtn = document.getElementById('settingsRunReportBtn');
+  if (runBtn) {
+    runBtn.addEventListener('click', runSettingsReport);
+  }
+
+  // Run initial report
+  runSettingsReport();
+}
+
+async function runSettingsReport() {
+  const dateFrom = document.getElementById('settingsReportDateFrom')?.value;
+  const dateTo = document.getElementById('settingsReportDateTo')?.value;
+  if (!dateFrom || !dateTo) return;
+
+  const resultsEl = document.getElementById('settingsReportsResults');
+  if (resultsEl) {
+    resultsEl.textContent = '';
+    const loading = document.createElement('p');
+    loading.style.cssText = 'color: var(--text-secondary); text-align: center; padding: 40px;';
+    loading.textContent = 'Loading report data...';
+    resultsEl.appendChild(loading);
+  }
+
+  try {
+    const promises = [
+      window.electronAPI.calendarReportMeetingsWithoutRecordings(dateFrom, dateTo),
+      window.electronAPI.calendarReportRecordingsWithoutCalendar(dateFrom, dateTo),
+    ];
+    if (window.electronAPI.calendarCoverageReport) {
+      promises.push(window.electronAPI.calendarCoverageReport(dateFrom, dateTo));
+    }
+
+    const [noRecResult, noCalResult, coverageResult] = await Promise.all(promises);
+    settingsReportData.noRecording = noRecResult.success ? noRecResult.meetings : [];
+    settingsReportData.noCalendar = noCalResult.success ? noCalResult.meetings : [];
+    settingsReportData.coverage = coverageResult?.success ? coverageResult : null;
+
+    renderSettingsReport();
+  } catch (error) {
+    console.error('[Settings Reports] Error:', error);
+    if (resultsEl) {
+      resultsEl.textContent = '';
+      const errP = document.createElement('p');
+      errP.style.cssText = 'color: var(--color-error); padding: 20px;';
+      errP.textContent = `Error: ${error.message}`;
+      resultsEl.appendChild(errP);
+    }
+  }
+}
+
+function renderSettingsReport() {
+  const resultsEl = document.getElementById('settingsReportsResults');
+  if (!resultsEl) return;
+
+  resultsEl.textContent = '';
+  let meetings = [];
+  let emptyMsg = '';
+
+  if (settingsReportType === 'no-recording') {
+    meetings = settingsReportData.noRecording;
+    emptyMsg = 'All calendar meetings have recordings!';
+  } else if (settingsReportType === 'no-calendar') {
+    meetings = settingsReportData.noCalendar;
+    emptyMsg = 'All recordings have matching calendar events!';
+  } else if (settingsReportType === 'coverage') {
+    const cov = settingsReportData.coverage;
+    if (cov) {
+      const summary = document.createElement('div');
+      summary.style.cssText = 'padding: 16px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 16px;';
+
+      const pct = document.createElement('div');
+      pct.style.cssText = 'font-size: 24px; font-weight: 600; margin-bottom: 4px;';
+      pct.textContent = `${cov.coveragePercent}% Coverage`;
+      summary.appendChild(pct);
+
+      const detail = document.createElement('div');
+      detail.style.cssText = 'color: var(--text-secondary); font-size: 13px;';
+      detail.textContent = `${cov.covered?.length || 0} recorded / ${cov.total || 0} total calendar meetings`;
+      summary.appendChild(detail);
+
+      resultsEl.appendChild(summary);
+    }
+    meetings = settingsReportData.coverage?.uncovered || [];
+    emptyMsg = 'Full calendar coverage!';
+  }
+
+  if (meetings.length === 0) {
+    const empty = document.createElement('p');
+    empty.style.cssText = 'color: var(--text-secondary); text-align: center; padding: 20px;';
+    empty.textContent = emptyMsg;
+    resultsEl.appendChild(empty);
+    return;
+  }
+
+  for (const m of meetings) {
+    const row = document.createElement('div');
+    row.style.cssText = 'padding: 10px 12px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;';
+
+    const info = document.createElement('div');
+    const title = document.createElement('div');
+    title.style.cssText = 'font-weight: 500; font-size: 14px;';
+    title.textContent = m.title || 'Untitled';
+    info.appendChild(title);
+
+    const date = document.createElement('div');
+    date.style.cssText = 'font-size: 12px; color: var(--text-secondary);';
+    date.textContent = m.date ? new Date(m.date).toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+    }) : '';
+    info.appendChild(date);
+    row.appendChild(info);
+
+    resultsEl.appendChild(row);
   }
 }
