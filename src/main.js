@@ -3572,12 +3572,18 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
       // otherwise resolve relative to vault root (for unfiled meetings)
       let meetingFolder;
       if (path.isAbsolute(route.fullPath)) {
-        // Validate absolute paths are under user home directory (not system dirs)
+        // Validate absolute paths don't target dangerous system directories
         const resolved = path.resolve(route.fullPath);
-        const homeDir = require('os').homedir();
-        if (!resolved.startsWith(homeDir)) {
-          console.error(`[ObsidianExport] Refusing to write outside user home: ${resolved}`);
-          throw new Error(`Path outside user home directory: ${resolved}`);
+        const normalizedUpper = resolved.toUpperCase();
+        const blockedPrefixes = [
+          'C:\\WINDOWS',
+          'C:\\PROGRAM FILES',
+          'C:\\PROGRAM FILES (X86)',
+          'C:\\PROGRAMDATA',
+        ];
+        if (blockedPrefixes.some((prefix) => normalizedUpper.startsWith(prefix))) {
+          console.error(`[ObsidianExport] Refusing to write to system directory: ${resolved}`);
+          throw new Error(`Cannot export to system directory: ${resolved}`);
         }
         meetingFolder = resolved;
       } else {
