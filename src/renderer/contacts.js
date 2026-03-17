@@ -177,7 +177,7 @@ async function loadContacts(forceRefresh = false) {
       if (contactsList) {
         contactsList.innerHTML = `
           <div class="contacts-loading">
-            <span style="color: var(--color-error);">Failed to load contacts: ${result.error}</span>
+            <span style="color: var(--color-error);">Failed to load contacts: ${escapeHtml(result.error)}</span>
           </div>
         `;
       }
@@ -187,7 +187,7 @@ async function loadContacts(forceRefresh = false) {
     if (contactsList) {
       contactsList.innerHTML = `
         <div class="contacts-loading">
-          <span style="color: var(--color-error);">Error: ${error.message}</span>
+          <span style="color: var(--color-error);">Error: ${escapeHtml(error.message)}</span>
         </div>
       `;
     }

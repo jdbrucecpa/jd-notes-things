@@ -169,12 +169,8 @@ class RoutingEngine {
   }
 
   /**
-   * Get all configured destinations for UI pickers.
-   * @returns {Object} destinations grouped by type
-   */
-  /**
    * Stub: getConfig() no longer reads yaml. Returns minimal compat structure.
-   * Will be removed once all callers are updated.
+   * @deprecated Use getDestinations() or route.organizationName instead.
    */
   getConfig() {
     return { clients: {}, industry: {}, internal: { vault_path: 'internal' }, settings: { unfiled_path: '_unfiled', duplicate_multi_org: 'all' } };

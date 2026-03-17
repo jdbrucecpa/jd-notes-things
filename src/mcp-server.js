@@ -18,8 +18,8 @@
  * }
  */
 
-const { McpServer } = require('@modelcontextprotocol/sdk/server');
-const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server');
+const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const Database = require('better-sqlite3');
 const { z } = require('zod');
 
@@ -314,7 +314,7 @@ server.registerTool(
       for (const c of clientRows) {
         let domains = '';
         try { domains = c.domains ? JSON.parse(c.domains).join(', ') : ''; } catch { /* ignore */ }
-        text += `- **${c.name}** (${c.type}, ${c.status})${domains ? ` — ${domains}` : ''}\n`;
+        text += `- **${c.name}** (${c.category || c.type}, ${c.status})${domains ? ` — ${domains}` : ''}\n`;
       }
     }
 

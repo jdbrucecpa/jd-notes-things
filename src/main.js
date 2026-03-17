@@ -3570,9 +3570,19 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
 
       // Create meeting folder path — use absolute path directly if route provides one,
       // otherwise resolve relative to vault root (for unfiled meetings)
-      const meetingFolder = path.isAbsolute(route.fullPath)
-        ? route.fullPath
-        : vaultStructure.getAbsolutePath(route.fullPath);
+      let meetingFolder;
+      if (path.isAbsolute(route.fullPath)) {
+        // Validate absolute paths are under user home directory (not system dirs)
+        const resolved = path.resolve(route.fullPath);
+        const homeDir = require('os').homedir();
+        if (!resolved.startsWith(homeDir)) {
+          console.error(`[ObsidianExport] Refusing to write outside user home: ${resolved}`);
+          throw new Error(`Path outside user home directory: ${resolved}`);
+        }
+        meetingFolder = resolved;
+      } else {
+        meetingFolder = vaultStructure.getAbsolutePath(route.fullPath);
+      }
       if (!fs.existsSync(meetingFolder)) {
         fs.mkdirSync(meetingFolder, { recursive: true });
       }
@@ -3772,21 +3782,12 @@ function generateSummaryMarkdown(meeting, baseFilename, route = null) {
   if (meeting.platform) tags.push(meeting.platform.toLowerCase());
 
   // CRM Phase 1: Determine company info from route
-  // Look up organization name from routing config (not from route object which only has slug)
   let companyName = null;
   let companySlug = null;
 
-  if (route && (route.type === 'client' || route.type === 'industry') && routingEngine) {
-    const config = routingEngine.getConfig();
-    if (config) {
-      if (route.type === 'client' && config.clients && config.clients[route.slug]) {
-        companyName = config.clients[route.slug].name || route.slug;
-        companySlug = route.slug;
-      } else if (route.type === 'industry' && config.industry && config.industry[route.slug]) {
-        companyName = config.industry[route.slug].name || route.slug;
-        companySlug = route.slug;
-      }
-    }
+  if (route && (route.type === 'client' || route.type === 'industry')) {
+    companyName = route.organizationName || route.slug || null;
+    companySlug = route.slug || null;
   }
 
   // Determine meeting type (internal vs external)
@@ -4083,19 +4084,8 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
     for (const route of routes) {
       if (route.type !== 'client' && route.type !== 'industry') continue;
 
-      // Get organization name from routing config
-      const config = routingEngine ? routingEngine.getConfig() : null;
-      if (!config) continue;
-
-      let orgConfig, orgName;
-      if (route.type === 'client' && config.clients && config.clients[route.slug]) {
-        orgConfig = config.clients[route.slug];
-        orgName = orgConfig.name || route.slug;
-      } else if (route.type === 'industry' && config.industry && config.industry[route.slug]) {
-        orgConfig = config.industry[route.slug];
-        orgName = orgConfig.name || route.slug;
-      }
-
+      // Get organization name from route (populated by DB-driven routing engine)
+      const orgName = route.organizationName || route.slug;
       if (!orgName) continue;
 
       // Skip if company page already exists
@@ -4104,23 +4094,16 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
         continue;
       }
 
-      // Create company page
-      // Find contacts associated with this organization by checking email domains
-      const orgDomains = orgConfig?.domains || [];
+      // Find contacts associated with this organization from participants
       const associatedContacts = [];
 
       if (meeting.participants && meeting.participants.length > 0) {
         for (const participant of meeting.participants) {
           if (!participant.name) continue;
 
-          // Check if participant's email matches any org domain
-          const email = participant.email || '';
-          const emailDomain = email.split('@')[1]?.toLowerCase() || '';
-
-          const matchesDomain = orgDomains.some(d => emailDomain === d.toLowerCase());
           const matchesOrg = participant.organization?.toLowerCase() === orgName.toLowerCase();
 
-          if (matchesDomain || matchesOrg) {
+          if (matchesOrg) {
             associatedContacts.push(participant.name);
           }
         }
@@ -4131,19 +4114,23 @@ async function autoCreateContactAndCompanyPages(meeting, routes) {
         for (const [_speakerId, mapping] of Object.entries(meeting.speakerMapping)) {
           if (!mapping.name || associatedContacts.includes(mapping.name)) continue;
 
-          const email = mapping.email || '';
-          const emailDomain = email.split('@')[1]?.toLowerCase() || '';
-
-          const matchesDomain = orgDomains.some(d => emailDomain === d.toLowerCase());
-          if (matchesDomain) {
+          const matchesOrg = mapping.organization?.toLowerCase() === orgName.toLowerCase();
+          if (matchesOrg) {
             associatedContacts.push(mapping.name);
           }
         }
       }
 
+      // Look up domains from DB client record if available
+      const clientRecord = route.slug ? databaseService.getClient(route.slug) : null;
+      let domains = [];
+      if (clientRecord?.domains) {
+        try { domains = JSON.parse(clientRecord.domains); } catch { /* ignore */ }
+      }
+
       const companyData = {
         name: orgName,
-        domain: orgConfig?.domains?.[0] || '',
+        domain: domains[0] || '',
         industry: route.type === 'industry' ? orgName : '',
         routingFolder: route.fullPath,
         contacts: associatedContacts,
@@ -6440,7 +6427,7 @@ ipcMain.handle(
           : 'No match found - routed to unfiled',
       matchedOrganizations: decision.routes.map(r => r.slug || r.type).filter(Boolean),
       matchedEmails: emails.filter(email => {
-        return routingEngine.emailMatcher.match(email) !== null;
+        return databaseService.matchEmailToClient(email) !== null;
       }),
     };
   })
@@ -6597,56 +6584,30 @@ ipcMain.handle('routing:getAllDestinations', async () => {
       return { destinations: [] };
     }
 
-    const config = routingEngine.getConfig();
-    const destinations = [];
-
-    // Add clients
-    if (config.clients) {
-      Object.entries(config.clients).forEach(([slug, data]) => {
-        destinations.push({
-          type: 'client',
-          slug,
-          name: data.name || slug,
-          path: data.vault_path || `clients/${slug}`,
-        });
-      });
-    }
-
-    // Add industry
-    if (config.industry) {
-      Object.entries(config.industry).forEach(([slug, data]) => {
-        destinations.push({
-          type: 'industry',
-          slug,
-          name: data.name || slug,
-          path: data.vault_path || `industry/${slug}`,
-        });
-      });
-    }
+    // Get DB-driven client destinations
+    const { destinations } = routingEngine.getDestinations();
 
     // Add internal
-    if (config.internal) {
-      destinations.push({
-        type: 'internal',
-        slug: 'internal',
-        name: 'Internal',
-        path: config.internal.vault_path || 'internal/meetings',
-      });
-    }
+    destinations.push({
+      type: 'internal',
+      slug: 'internal',
+      name: 'Internal',
+      path: 'internal/meetings',
+    });
 
     // Add unfiled
     destinations.push({
       type: 'unfiled',
       slug: 'unfiled',
       name: 'Unfiled',
-      path: config.settings?.unfiled_path || '_unfiled',
+      path: '_unfiled',
     });
 
-    // Sort: clients first, then industry, then internal, then unfiled
-    const typeOrder = { client: 0, industry: 1, internal: 2, unfiled: 3 };
+    // Sort: clients first, then other, then internal, then unfiled
+    const typeOrder = { client: 0, other: 1, internal: 2, unfiled: 3 };
     destinations.sort((a, b) => {
-      if (typeOrder[a.type] !== typeOrder[b.type]) {
-        return typeOrder[a.type] - typeOrder[b.type];
+      if ((typeOrder[a.type] ?? 1) !== (typeOrder[b.type] ?? 1)) {
+        return (typeOrder[a.type] ?? 1) - (typeOrder[b.type] ?? 1);
       }
       return a.name.localeCompare(b.name);
     });
@@ -9370,7 +9331,7 @@ ipcMain.handle(
         calendarEventId: calendarEventId || null,
         participants: (participants || []).map(p => ({
           name: p.name || p.email || 'Unknown',
-          originalName: p.name || p.email || 'Unknown',
+          originalName: p.name || 'Unknown',
           email: p.email || null,
         })),
       };

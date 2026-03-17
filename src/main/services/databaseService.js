@@ -253,12 +253,12 @@ class DatabaseService {
         CREATE INDEX IF NOT EXISTS idx_clients_type ON clients(type);
       `);
 
-      // Add routed_clients column to meetings (safe: ALTER TABLE ADD COLUMN is a no-op if column exists in SQLite)
+      // Add routed_clients column to meetings (safe: skip if column already exists)
       try {
         this.db.exec('ALTER TABLE meetings ADD COLUMN routed_clients TEXT');
       } catch (e) {
-        // Column already exists (e.g., from a partial migration)
-        if (!e.message.includes('duplicate column')) throw e;
+        // SQLite error: "table meetings already has a column named routed_clients"
+        if (!e.message.includes('already has a column')) throw e;
       }
       }); // end transaction
       migrate();
@@ -269,7 +269,6 @@ class DatabaseService {
     if (oldVersion < 3) {
       log.info('[Database] Running v2 → v3 migration: Add category column to clients');
       try {
-        this.db.pragma('journal_mode = WAL');
         this.db.prepare("SELECT category FROM clients LIMIT 1").get();
       } catch (_e) {
         this.db.prepare("ALTER TABLE clients ADD COLUMN category TEXT DEFAULT 'Other'").run();
@@ -279,7 +278,7 @@ class DatabaseService {
           WHEN type = 'client' THEN 'Client'
           ELSE 'Other'
         END
-        WHERE category IS NULL OR category = 'Other'
+        WHERE category IS NULL
       `).run();
       log.info('[Database] v2 → v3 migration complete');
     }

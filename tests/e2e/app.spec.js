@@ -999,7 +999,346 @@ test('backup restore toggles exist with correct defaults', async () => {
 });
 
 // ===================================================================
-// Test 27: No Critical Errors (keep last)
+// Test 27: routing:getAllDestinations returns companies from DB
+// ===================================================================
+test('routing:getAllDestinations returns companies and sentinel entries', async () => {
+  await ensureMainView();
+
+  const result = await page.evaluate(() => {
+    return window.electronAPI.routingGetAllDestinations();
+  });
+
+  console.log('[E2E] getAllDestinations result:', JSON.stringify(result).substring(0, 300));
+
+  // Must have a destinations array
+  expect(result).toBeTruthy();
+  expect(Array.isArray(result.destinations)).toBe(true);
+
+  // Must include internal and unfiled sentinel entries
+  const types = result.destinations.map(d => d.type);
+  expect(types).toContain('internal');
+  expect(types).toContain('unfiled');
+
+  // Each destination must have required fields
+  for (const dest of result.destinations) {
+    expect(dest.name).toBeTruthy();
+    expect(dest.type).toBeTruthy();
+  }
+
+  // If there are companies in the DB, they should appear as client/other type
+  const companies = result.destinations.filter(d => d.type === 'client' || d.type === 'other');
+  console.log(`[E2E] Companies in destinations: ${companies.length}`);
+
+  // Internal should be sorted after client/other, unfiled last
+  const internalIdx = result.destinations.findIndex(d => d.type === 'internal');
+  const unfiledIdx = result.destinations.findIndex(d => d.type === 'unfiled');
+  expect(internalIdx).toBeLessThan(unfiledIdx);
+});
+
+// ===================================================================
+// Test 28: Re-run Transcription button exists in meeting detail
+// ===================================================================
+test('re-run transcription button is present in meeting detail', async () => {
+  const navigated = await navigateToFirstMeeting();
+  if (!navigated) {
+    console.log('[E2E] No past meetings to test re-run button — skipping');
+    return;
+  }
+
+  // Look for the re-run button in the editor toolbar/action area
+  const rerunBtn = page.locator('#rerunTranscriptionBtn');
+  const rerunVisible = await rerunBtn.isVisible().catch(() => false);
+
+  // Also check for a button with matching text content
+  const rerunByText = page.locator('button:has-text("Re-run"), button[title*="Re-run"]');
+  const rerunByTextVisible = await rerunByText.first().isVisible().catch(() => false);
+
+  console.log(`[E2E] Re-run button by ID: ${rerunVisible}, by text: ${rerunByTextVisible}`);
+  expect(rerunVisible || rerunByTextVisible).toBe(true);
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 29: originalName is never an email in placeholder meetings
+// ===================================================================
+test('placeholder meeting originalName is never an email address', async () => {
+  await ensureMainView();
+
+  const result = await page.evaluate(() => {
+    return window.electronAPI.loadMeetingsData();
+  });
+
+  // loadMeetingsData returns { success, data: { upcomingMeetings, pastMeetings } }
+  const data = result?.data || {};
+  const meetings = [
+    ...(Array.isArray(data.pastMeetings) ? data.pastMeetings : []),
+    ...(Array.isArray(data.upcomingMeetings) ? data.upcomingMeetings : []),
+    ...(Array.isArray(data) ? data : []),
+  ];
+
+  const placeholders = meetings.filter(m => m.id && m.id.startsWith('placeholder-'));
+  console.log(`[E2E] Placeholder meetings found: ${placeholders.length} (total meetings: ${meetings.length})`);
+
+  const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+  for (const meeting of placeholders) {
+    const participants = Array.isArray(meeting.participants)
+      ? meeting.participants
+      : (typeof meeting.participants === 'string'
+          ? JSON.parse(meeting.participants || '[]')
+          : []);
+
+    for (const p of participants) {
+      if (p.originalName && emailRegex.test(p.originalName)) {
+        console.error(`[E2E] BUG: originalName is an email: "${p.originalName}" in meeting ${meeting.id}`);
+      }
+      expect(emailRegex.test(p.originalName || '')).toBe(false);
+    }
+  }
+});
+
+// ===================================================================
+// Test 30: Companies management — Add Company picker opens
+// ===================================================================
+test('add company picker opens when clicking Add Client button', async () => {
+  await ensureMainView();
+
+  // Open settings
+  const settingsBtn = page.locator('#settingsBtn');
+  await settingsBtn.click();
+  await page.waitForTimeout(500);
+
+  // Click Clients tab
+  const clientsTab = page.locator('.settings-tab[data-tab="clients"]');
+  if (!(await clientsTab.isVisible().catch(() => false))) {
+    console.log('[E2E] Clients tab not found — skipping');
+    await ensureMainView();
+    return;
+  }
+  await clientsTab.click();
+  await page.waitForTimeout(500);
+
+  // Click Add Client button
+  const addBtn = page.locator('#addClientBtn');
+  const addBtnVisible = await addBtn.isVisible().catch(() => false);
+  console.log(`[E2E] Add Client button visible: ${addBtnVisible}`);
+  expect(addBtnVisible).toBe(true);
+
+  await addBtn.click();
+  await page.waitForTimeout(500);
+
+  // Check that the picker/dialog opened
+  const picker = page.locator('#addClientPicker, #addClientModal, .add-client-picker');
+  const pickerVisible = await picker.first().isVisible().catch(() => false);
+  console.log(`[E2E] Add Client picker visible: ${pickerVisible}`);
+  expect(pickerVisible).toBe(true);
+
+  // Dismiss picker
+  await page.evaluate(() => {
+    const picker = document.getElementById('addClientPicker') ||
+                   document.getElementById('addClientModal') ||
+                   document.querySelector('.add-client-picker');
+    if (picker) picker.style.display = 'none';
+  });
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 31: Backup manifest populates with real data
+// ===================================================================
+test('backup manifest shows database info after tab load', async () => {
+  await ensureMainView();
+
+  // Open settings
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  // Click Backup tab
+  const backupTab = page.locator('.settings-tab[data-tab="backup"]');
+  if (!(await backupTab.isVisible().catch(() => false))) {
+    console.log('[E2E] Backup tab not found — skipping');
+    await ensureMainView();
+    return;
+  }
+  await backupTab.click();
+  await page.waitForTimeout(1500); // Wait for manifest IPC call
+
+  // Check manifest info populated
+  const dbInfo = await page.locator('#backupDbInfo').textContent().catch(() => '');
+  const lastInfo = await page.locator('#backupLastInfo').textContent().catch(() => '');
+  console.log(`[E2E] Backup DB info: "${dbInfo}", Last backup: "${lastInfo}"`);
+
+  // DB info should have content (at minimum "1 file" or similar)
+  expect(dbInfo.length).toBeGreaterThan(0);
+  // Last backup should show something (even "Never")
+  expect(lastInfo.length).toBeGreaterThan(0);
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 32: Calendar coverage report renders or shows fallback message
+// ===================================================================
+test('calendar coverage IPC returns valid response', async () => {
+  await ensureMainView();
+
+  // Test the coverage IPC directly — more reliable than UI interaction
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  const endDate = now.toISOString().split('T')[0];
+
+  const result = await page.evaluate(async ({ start, end }) => {
+    try {
+      return await window.electronAPI.calendarCoverageReport(start, end);
+    } catch (e) {
+      return { error: e.message };
+    }
+  }, { start: startDate, end: endDate });
+
+  console.log(`[E2E] Coverage report result: success=${result?.success}, error=${result?.error || 'none'}`);
+
+  // The IPC should return without crashing — either success with data or an error (if calendar not connected)
+  expect(result).toBeTruthy();
+  if (result.success) {
+    // Coverage data is flat on the result: { success, coveragePercent, covered, uncovered, total }
+    expect(typeof result.coveragePercent).toBe('number');
+    expect(Array.isArray(result.covered)).toBe(true);
+    expect(Array.isArray(result.uncovered)).toBe(true);
+    console.log(`[E2E] Coverage: ${result.coveragePercent}% (${result.covered.length} covered, ${result.uncovered.length} uncovered)`);
+  }
+  // If not success, that's OK — just means calendar isn't connected
+});
+
+// ===================================================================
+// Test 33: MCP config copy button appears after load
+// ===================================================================
+test('MCP config copy button appears and works after loading config', async () => {
+  await ensureMainView();
+
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  // Navigate to the tab containing MCP config (Advanced/Security)
+  const advancedTab = page.locator('.settings-tab[data-tab="advanced"], .settings-tab[data-tab="security"]');
+  if (!(await advancedTab.first().isVisible().catch(() => false))) {
+    console.log('[E2E] Advanced/Security tab not found — skipping');
+    await ensureMainView();
+    return;
+  }
+  await advancedTab.first().click();
+  await page.waitForTimeout(500);
+
+  // Click the Load Config button
+  const loadBtn = page.locator('#mcpLoadConfigBtn');
+  if (!(await loadBtn.isVisible().catch(() => false))) {
+    console.log('[E2E] MCP Load Config button not found — skipping');
+    await ensureMainView();
+    return;
+  }
+  await loadBtn.click();
+  await page.waitForTimeout(1000);
+
+  // The copy button should now be visible
+  const copyBtn = page.locator('#mcpCopyConfigBtn');
+  const copyVisible = await copyBtn.isVisible().catch(() => false);
+  console.log(`[E2E] MCP Copy Config button visible after load: ${copyVisible}`);
+  expect(copyVisible).toBe(true);
+
+  // Click copy and verify text changes
+  await copyBtn.click();
+  await page.waitForTimeout(500);
+  const copyText = await copyBtn.textContent().catch(() => '');
+  console.log(`[E2E] Copy button text after click: "${copyText}"`);
+  expect(copyText.toLowerCase()).toContain('copied');
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 34: Company detail opens when clicking a company
+// ===================================================================
+test('company detail opens when clicking a company in contacts view', async () => {
+  await ensureMainView();
+
+  // Open contacts view via direct DOM manipulation (more reliable)
+  const contactsOpened = await page.evaluate(() => {
+    const cv = document.getElementById('contactsView');
+    const mv = document.getElementById('mainView');
+    const sv = document.getElementById('settingsView');
+    const rv = document.getElementById('reportsView');
+    if (sv) sv.style.display = 'none';
+    if (rv) rv.style.display = 'none';
+    if (mv) mv.style.display = 'none';
+    if (cv) { cv.style.display = 'flex'; return true; }
+    return false;
+  });
+
+  if (!contactsOpened) {
+    console.log('[E2E] Contacts view not found — skipping');
+    return;
+  }
+  await page.waitForTimeout(1000);
+
+  // Switch to Companies mode
+  const companiesToggle = page.locator('#companiesToggle, .toggle-btn:has-text("Companies")');
+  if (!(await companiesToggle.first().isVisible().catch(() => false))) {
+    console.log('[E2E] Companies toggle not found — skipping');
+    await ensureMainView();
+    return;
+  }
+  await companiesToggle.first().click();
+  await page.waitForTimeout(1000);
+
+  // Find a company item and click it
+  const companyItem = page.locator('.company-item, .contacts-list-item').first();
+  if (!(await companyItem.isVisible().catch(() => false))) {
+    console.log('[E2E] No companies found in list — skipping detail test');
+    await ensureMainView();
+    return;
+  }
+
+  const companyName = await companyItem.textContent().catch(() => '');
+  console.log(`[E2E] Clicking company: "${companyName.trim().substring(0, 40)}"`);
+  await companyItem.click();
+  await page.waitForTimeout(1000);
+
+  // Check that detail panel is visible
+  const detailPanel = page.locator('#contactDetail, .contact-detail, .company-detail');
+  const detailVisible = await detailPanel.first().isVisible().catch(() => false);
+  console.log(`[E2E] Company detail panel visible: ${detailVisible}`);
+  expect(detailVisible).toBe(true);
+
+  await ensureMainView();
+});
+
+// ===================================================================
+// Test 35: companies:getAll IPC returns valid data
+// ===================================================================
+test('companies:getAll returns companies with required fields', async () => {
+  await ensureMainView();
+
+  const result = await page.evaluate(() => {
+    return window.electronAPI.companiesGetAll();
+  });
+
+  // companiesGetAll returns { success, companies: [...] }
+  console.log(`[E2E] companiesGetAll success: ${result?.success}, companies count: ${result?.companies?.length ?? 'N/A'}`);
+
+  expect(result).toBeTruthy();
+  expect(result.success).toBe(true);
+
+  const companies = result.companies || [];
+  expect(Array.isArray(companies)).toBe(true);
+
+  // If companies exist, verify they have required fields
+  for (const company of companies) {
+    expect(company.name).toBeTruthy();
+  }
+});
+
+// ===================================================================
+// Test 36: No Critical Errors (keep last)
 // ===================================================================
 test('no critical console errors', async () => {
   const errors = [];
