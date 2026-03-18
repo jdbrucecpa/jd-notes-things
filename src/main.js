@@ -10131,6 +10131,23 @@ ipcMain.handle(
   'startManualRecording',
   async (event, meetingId, transcriptionProvider = 'assemblyai', action = 'new') => {
     try {
+      // Wait for SDK to be ready (it restarts on startup to detect already-open meetings)
+      if (!sdkReady) {
+        console.log('[Recording] SDK not ready yet, waiting up to 10s...');
+        const waitStart = Date.now();
+        while (!sdkReady && Date.now() - waitStart < 10000) {
+          await new Promise(resolve => setTimeout(resolve, 250));
+        }
+        if (!sdkReady) {
+          console.error('[Recording] SDK not ready after 10s timeout');
+          return {
+            success: false,
+            error: 'Recording SDK is still initializing. Please try again in a moment.',
+          };
+        }
+        console.log(`[Recording] SDK became ready after ${Date.now() - waitStart}ms`);
+      }
+
       // Validate meetingId
       const validatedId = MeetingIdSchema.parse(meetingId);
       console.log(`Starting manual desktop recording for meeting: ${validatedId}`);
