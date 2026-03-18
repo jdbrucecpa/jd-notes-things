@@ -2444,18 +2444,13 @@ async function initSDK() {
       recordingToStop = windowId;
       console.log(`Meeting ended - found recording with matching windowId: ${windowId}`);
     } else {
-      // No direct match - windowId may have changed during recording
-      // Check if there's ANY active recording (there should only be one at a time)
-      const allRecordings = activeRecordings.getAll();
-      const recordingIds = Object.keys(allRecordings);
-
-      if (recordingIds.length > 0) {
-        recordingToStop = recordingIds[0];
-        console.log(
-          `Meeting ended - windowId mismatch! Event: ${windowId}, Active: ${recordingToStop}`
-        );
-        console.log(`Using active recording windowId to stop: ${recordingToStop}`);
-      }
+      // No direct match - do NOT stop an unrelated recording.
+      // The old fallback would grab ANY active recording and stop it, causing
+      // recordings to be killed when unrelated meeting windows closed.
+      console.log(
+        `Meeting closed for windowId ${windowId} but no matching active recording found. ` +
+          `Ignoring (active recordings: ${Object.keys(activeRecordings.getAll()).join(', ') || 'none'})`
+      );
     }
 
     if (recordingToStop) {
@@ -2495,13 +2490,7 @@ async function initSDK() {
       delete global.activeMeetingIds[windowId];
     }
 
-    // Also clean up any other windowIds in activeMeetingIds (in case of mismatch)
-    if (global.activeMeetingIds) {
-      Object.keys(global.activeMeetingIds).forEach(id => {
-        console.log(`Also cleaning up meeting tracking for: ${id}`);
-        delete global.activeMeetingIds[id];
-      });
-    }
+    // Only clean up the specific windowId that closed — don't nuke unrelated recordings
 
     detectedMeeting = null;
 
@@ -10300,6 +10289,12 @@ ipcMain.handle(
           };
         } catch (startRecordingError) {
           console.error('✗ RecallAI SDK startRecording failed:', startRecordingError);
+          // Clean up the activeRecordings entry we added before attempting startRecording,
+          // otherwise this orphaned entry can be killed by a later meeting-closed event
+          activeRecordings.removeRecording(key);
+          if (global.activeMeetingIds) {
+            delete global.activeMeetingIds[key];
+          }
           return {
             success: false,
             error: `Failed to start recording: ${startRecordingError.message || startRecordingError}`,
