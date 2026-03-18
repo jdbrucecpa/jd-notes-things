@@ -124,8 +124,13 @@ GET /models
 - PyAnnote audio 3.1 (diarization pipeline)
 - PyAnnote embedding (speaker voice fingerprints)
 - pystray (Windows system tray)
-- PyInstaller (bundle into standalone .exe)
 - CUDA for GPU acceleration
+
+### Packaging
+
+For v2.0 (personal use), the AI service runs from a Python virtual environment with a batch file launcher (similar to ComfyUI). This avoids the significant complexity of PyInstaller bundling with CUDA/PyTorch dependencies. A future version could use PyInstaller or conda-pack for a more polished installer if distribution to others is needed.
+
+Setup: `pip install -r requirements.txt` in a venv, then `run-jd-audio-service.bat` creates the system tray icon and starts the FastAPI server.
 
 ### Design Principles
 
@@ -151,35 +156,61 @@ Both Recall and Local implement the same contract:
 class RecordingProvider extends EventEmitter {
   async initialize(config)
   async startRecording(options)       // → recordingId
-  async stopRecording(recordingId)    // → audioFilePath
+  async stopRecording(recordingId)    // → audioFilePath (resolved after file finalized)
   async shutdown()
+  getState()                          // → { recording: bool, meetingDetected: bool, activeRecordings: Map }
 }
 
-// Events:
+// Events (all providers):
 'meeting-detected'   { windowId, platform, title }
 'meeting-closed'     { windowId }
 'recording-started'  { recordingId, windowId }
 'recording-ended'    { recordingId, audioFilePath }
-'participant-joined' { windowId, participant }       // RecallProvider only
-'speech-activity'    { windowId, participantId, speaking, timestamp }  // RecallProvider only
 'error'              { type, message }
+
+// Events (RecallProvider only — LocalProvider does not emit these):
+'participant-joined' { windowId, participant }
+'speech-activity'    { windowId, participantId, speaking, timestamp }
 ```
+
+### Orchestration Boundary
+
+The **RecordingProvider** owns: meeting detection, audio capture, recording lifecycle, and provider-specific state (SDK handles, FFmpeg processes, etc.).
+
+The **orchestrator** (new `RecordingManager` class extracted from main.js) owns: active recording tracking (`activeRecordings` map), meeting-to-note association, widget/tray UI updates, calendar integration, and deciding when to auto-start recording. The orchestrator listens to provider events and coordinates the rest of the app.
+
+This separation means the orchestrator code is shared between RecallProvider and LocalProvider — only the recording mechanics differ.
 
 ### RecallProvider
 
-Extracts the existing ~800 lines of Recall.ai SDK event handlers from `main.js` into a dedicated class. Same behavior as today, just behind the interface. Emits all events including `participant-joined` and `speech-activity`.
+Extracts the existing Recall.ai SDK event handlers from `main.js` into a dedicated class. Wraps `RecallAiSdk.init()`, `startRecording()`, `stopRecording()`, and all `addEventListener()` calls. Recall-specific concerns like `prepareDesktopAudioRecording()`, upload tokens, and the SDK restart workaround stay inside this class. Same behavior as today, just behind the interface. Emits all events including `participant-joined` and `speech-activity`.
 
 ### LocalProvider
 
-- **Meeting detection:** Window title monitoring via PowerShell (poll every 2 seconds)
-  - Zoom: detect `Zoom Meeting` / `Zoom Webinar` window titles
-  - Teams: detect Microsoft Teams call window state
-  - Patterns borrowed from OpenWhispr's detection approach
-- **Audio capture:** FFmpeg subprocess capturing system audio loopback
-  - Writes MP3 to `%APPDATA%/jd-notes-things/recordings/`
-  - Same output path pattern as Recall SDK
-- **Meeting close:** Window monitoring detects meeting window disappearing
-- **Participants:** NOT available in real-time — no `participant-joined` or `speech-activity` events emitted. Participants resolved post-meeting from calendar + voice profiles.
+**Meeting Detection** — Window title monitoring via PowerShell (poll every 2 seconds):
+- **Zoom:** Detect windows matching `Zoom Meeting` or `Zoom Webinar` in title (substring match). Zoom desktop client changes window title from "Zoom Workplace" to include meeting name when in a call.
+- **Teams:** Detect Microsoft Teams windows in call state. Teams 2.0 (new Teams) shows titles like `"Meeting with Tim | Microsoft Teams"` or contact name for 1:1 calls. Match on `" | Microsoft Teams"` suffix combined with process name `ms-teams.exe`.
+- **Google Meet:** Not supported in v2.0 local recording. Google Meet runs in browser tabs, making reliable window-title detection impractical (active tab title changes, multiple tabs). Users who need Google Meet should use RecallProvider. This is acceptable given <10% usage and declining.
+- Meeting close detected when monitored window title reverts or window disappears.
+- Patterns borrowed from OpenWhispr's detection approach.
+
+**Audio Capture** — WASAPI loopback via FFmpeg:
+- Windows 10+ WASAPI loopback allows capturing system audio output without third-party drivers.
+- FFmpeg invocation: `ffmpeg -f dshow -i audio="<loopback-device>" -codec:a libmp3lame -q:a 2 output.mp3`
+- The loopback device is enumerated at startup via `ffmpeg -list_devices true -f dshow -i dummy`.
+- If no loopback device is available, fall back to virtual audio cable (document in setup guide).
+- Writes MP3 to `%APPDATA%/jd-notes-things/recordings/local-{timestamp}.mp3`
+- FFmpeg spawned as child process; recording stops by sending `q` to stdin (graceful shutdown, ensures file is flushed and finalized).
+
+**Recording Lifecycle:**
+1. Meeting detected → FFmpeg subprocess spawned, begins writing MP3
+2. User stops recording OR meeting window closes → `q` sent to FFmpeg stdin
+3. FFmpeg exits (flush + finalize MP3) — Electron waits for exit event
+4. Electron verifies file exists and size > 0
+5. Electron calls AI service `POST /process` with absolute file path
+6. Recording file retained in recordings directory (user can configure cleanup)
+
+**Participants:** NOT available in real-time — no `participant-joined` or `speech-activity` events emitted. Participants resolved post-meeting from calendar + voice profiles.
 
 ### Capability Comparison
 
@@ -194,7 +225,7 @@ Extracts the existing ~800 lines of Recall.ai SDK event handlers from `main.js` 
 
 ### Provider Selection
 
-Setting in UI: `Recording Provider: [Recall.ai SDK | Local]`. Stored in settings, read at app startup. Switching requires app restart.
+Setting in UI: `Recording Provider: [Recall.ai SDK | Local]`. Stored in settings, read at app startup. **Switching recording provider requires app restart** (provider initializes once with OS-level resources). Transcription and LLM providers can be hot-swapped at any time without restart (same as today).
 
 ---
 
@@ -238,7 +269,7 @@ v2.0 ships with Parakeet TDT 0.6B V2 only. The API abstraction allows adding Whi
 
 ## Component 4: Voice Profile System
 
-### Database Schema (new tables)
+### Database Schema (new tables — schema version 4)
 
 ```sql
 CREATE TABLE voice_profiles (
@@ -246,7 +277,7 @@ CREATE TABLE voice_profiles (
   google_contact_id  TEXT,           -- links to Google Contact resource
   contact_name    TEXT NOT NULL,      -- display name
   contact_email   TEXT,               -- primary email
-  embedding       BLOB NOT NULL,      -- averaged voice embedding vector (float32 array)
+  embedding       BLOB NOT NULL,      -- averaged embedding vector (see Embedding Format below)
   sample_count    INTEGER DEFAULT 1,  -- number of meetings contributing to profile
   total_duration  REAL DEFAULT 0,     -- total seconds of speech used to build profile
   confidence      REAL DEFAULT 0.5,   -- profile quality score (more samples = higher)
@@ -257,12 +288,26 @@ CREATE TABLE voice_profiles (
 CREATE TABLE voice_samples (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
   profile_id      INTEGER NOT NULL REFERENCES voice_profiles(id) ON DELETE CASCADE,
-  meeting_id      INTEGER REFERENCES meetings(id),
+  meeting_id      TEXT REFERENCES meetings(id),  -- TEXT to match meetings table PK type
   embedding       BLOB NOT NULL,      -- per-meeting embedding for this speaker
   duration        REAL DEFAULT 0,     -- seconds of speech in this meeting
   created_at      TEXT NOT NULL
 );
 ```
+
+Added as schema version 4 migration in `databaseService.js` (current is version 3).
+
+### Embedding Format
+
+- **Model:** `pyannote/wespeaker-voxceleb-resnet34-LM` (or whichever model `pyannote/embedding` resolves to at implementation time — pin in AI service config)
+- **Dimension:** 256-d float vector (verify against chosen model at implementation)
+- **Serialization:** Little-endian Float32Array buffer stored as BLOB. Read/write in Node.js via `Buffer.from(float32Array.buffer)` and `new Float32Array(buffer.buffer)`.
+- **Distance metric:** Cosine distance (0 = identical, 2 = opposite). Thresholds:
+  - `< 0.25` — high confidence match (auto-apply)
+  - `0.25 - 0.45` — medium confidence (suggest to user)
+  - `> 0.45` — no match
+- **Profile averaging:** When adding a new sample, recompute profile embedding as weighted average of all samples by duration. Longer speech segments contribute more to the profile.
+- Thresholds are initial estimates — calibrate during testing and store as configurable constants.
 
 ### Why Separate voice_samples
 
@@ -408,16 +453,71 @@ Rename existing `OllamaAdapter` → `LocalLLMAdapter`. Make it endpoint-agnostic
 - All API key management (Windows Credential Manager)
 - Obsidian vault structure, routing, templates, calendar, contacts
 
+### Refactored (server.js split)
+- `server.js` currently hosts BOTH the webhook server AND Stream Deck WebSocket support. Split into:
+  - **Removed:** Webhook routes, localtunnel tunnel, Svix signature verification, Recall.ai upload endpoints
+  - **Kept:** Stream Deck WebSocket handling — moved to new `src/main/services/streamDeckService.js`. Express kept solely as WebSocket upgrade host for Stream Deck (or replaced with bare `ws` module if Express is no longer needed).
+
 ### Removed (dead code / unused)
-- Webhook server (`server.js`) — Express on port 13373, localtunnel, Svix signature verification. Only consumer was Recall.ai async transcription which is already broken.
+- Webhook routes and handlers from `server.js`
+- localtunnel integration
+- Svix signature verification
 - Recall.ai transcription provider (`recallai` entry in transcription providers map) — `uploadRecording()` has been broken, never used in practice.
 - Upload token creation flow (`createDesktopSdkUpload()` and associated Recall.ai API calls)
 - `RECALL_WEBHOOK_SECRET` credential — no longer needed without webhook server
-- Dependencies: `express`, `localtunnel`, `svix` (if no other consumers)
+- Dependencies: `localtunnel`, `svix` (Express may be kept for Stream Deck or replaced with `ws`)
 
 ### Future Removal (NOT in v2.0)
 - Recall.ai SDK dependency (after local recording is validated)
 - `RECALLAI_API_KEY`, `RECALLAI_API_URL` credentials
+
+---
+
+## Failure Modes & Error Handling
+
+### AI Service Unavailable
+- Before calling `/process`, Electron pings `GET /health`. If unreachable, show user-facing error: "JD Audio Service is not running. Start it from the system tray, or switch to cloud transcription in Settings."
+- Recording files are ALWAYS preserved regardless of transcription outcome. The user can retry transcription later or switch providers.
+
+### AI Service Crashes Mid-Processing
+- HTTP request to `/process` will timeout or return error.
+- Electron retries once. If still failing, saves the recording with status `transcription_failed` and notifies the user.
+- User can retry from the meeting list (existing "Re-transcribe" functionality).
+
+### GPU Unavailable (VRAM exhausted, driver crash)
+- AI service catches CUDA errors and returns HTTP 503 with descriptive error.
+- Electron shows: "GPU unavailable — close other GPU applications and retry, or switch to cloud transcription."
+- AI service does NOT attempt CPU fallback automatically (too slow to be useful for meetings). User must resolve GPU issue or switch providers.
+
+### Fallback Strategy
+- If local transcription fails for any reason, the recording file still exists. User can switch transcription provider to AssemblyAI in settings and re-transcribe from the meeting page. No data is ever lost.
+- The mix-and-match architecture means a failure in one layer doesn't cascade — a local recording can be sent to cloud transcription if needed.
+
+### Timeouts
+- `/process` endpoint: timeout set to `duration_seconds * 0.5 + 60` seconds. A 60-minute meeting should process in ~30-45 seconds on a 5090, but allow generous margin.
+- `/embed-speakers`: 30 second timeout (lightweight operation).
+- `/identify-speakers`: 5 second timeout (pure math, no GPU).
+
+## Processing Time Estimates
+
+| Meeting Duration | Transcription (Parakeet) | Diarization (PyAnnote) | Total (warm) | Total (cold start) |
+|-----------------|-------------------------|----------------------|-------------|-------------------|
+| 15 min | ~3-5s | ~2-3s | ~8s | ~20s |
+| 30 min | ~5-8s | ~3-5s | ~15s | ~27s |
+| 60 min | ~10-15s | ~5-8s | ~30s | ~42s |
+| 90 min | ~15-20s | ~8-12s | ~40s | ~52s |
+
+Estimates based on 5090 GPU. 4070 laptop: multiply by ~1.5-2x.
+Cold start adds ~12s for model loading (one-time per session).
+All estimates significantly faster than current AssemblyAI cloud round-trip (30-90s depending on duration + upload time).
+
+## Upgrade Path: v1.4 → v2.0
+
+- Existing meetings, participants, transcripts, and speaker mappings are untouched.
+- New `voice_profiles` and `voice_samples` tables added (schema version 4 migration).
+- Recall-specific fields in meetings table (`upload_token`, `sdk_upload_id`, `recall_recording_id`) are left in place — they're just unused for new local recordings.
+- Voice profiles start empty — the system begins learning voices from the first meeting after upgrade. No retroactive processing of old recordings (audio files may have been deleted).
+- All existing settings preserved. New provider settings default to current cloud providers (no behavior change on upgrade).
 
 ---
 
