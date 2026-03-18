@@ -1,7 +1,7 @@
 {
   "name": "jd-notes-things",
   "productName": "jd-notes-things",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "description": "JD Notes Things - AI Meeting Notetaker",
   "main": ".webpack/main",
   "scripts": {
@@ -73,7 +73,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@recallai/desktop-sdk": "^2.0.6",
+    "@recallai/desktop-sdk": "^2.0.8",
     "@timfish/forge-externals-plugin": "^0.2.1",
     "@types/dompurify": "^3.0.5",
     "archiver": "^7.0.1",
