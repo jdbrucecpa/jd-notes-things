@@ -10,12 +10,16 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-18-v2-local-first-design.md` — Component 1
 
+**Repo:** `C:\Users\brigh\Documents\code\jd-audio-service` (separate repo from main Electron app)
+
+**Note:** All file paths below are relative to the `jd-audio-service` repo root, not the main `jd-notes-things` repo.
+
 ---
 
 ## File Structure
 
 ```
-services/jd-audio-service/
+jd-audio-service/
 ├── pyproject.toml                    # Project metadata + dependencies
 ├── requirements.txt                  # Pinned dependencies for venv install
 ├── run-jd-audio-service.bat          # Windows launcher (activates venv, starts service)
@@ -70,8 +74,8 @@ services/jd-audio-service/
 - [ ] **Step 1: Create directory structure**
 
 ```bash
-cd /c/Users/brigh/Documents/code/jd-notes-things
-mkdir -p services/jd-audio-service/{src/{models,pipeline,api,tray},tests,fixtures}
+cd /c/Users/brigh/Documents/code/jd-audio-service
+mkdir -p {src/{models,pipeline,api,tray},tests,fixtures}
 ```
 
 - [ ] **Step 2: Create .gitignore**
@@ -194,7 +198,7 @@ VERSION = "0.1.0"
 - [ ] **Step 7: Verify pytest discovers tests**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest --collect-only 2>&1 | head -5
 ```
 Expected: `no tests ran` (empty collection, no errors)
@@ -202,7 +206,7 @@ Expected: `no tests ran` (empty collection, no errors)
 - [ ] **Step 8: Commit**
 
 ```bash
-git add -f services/jd-audio-service/
+git add .
 git commit -m "feat(audio-service): scaffold project structure and config"
 ```
 
@@ -300,7 +304,7 @@ class TestHealthResponse:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_schemas.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError: No module named 'api.schemas'`
@@ -435,7 +439,7 @@ class UnloadResponse(BaseModel):
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_schemas.py -v
 ```
 Expected: all tests PASS
@@ -443,7 +447,7 @@ Expected: all tests PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -f services/jd-audio-service/src/api/schemas.py services/jd-audio-service/tests/test_schemas.py
+git add src/api/schemas.py tests/test_schemas.py
 git commit -m "feat(audio-service): add Pydantic request/response schemas with tests"
 ```
 
@@ -542,7 +546,7 @@ class TestModelManager:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_manager.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError: No module named 'models.manager'`
@@ -629,7 +633,7 @@ class ModelManager:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_manager.py -v
 ```
 Expected: all tests PASS
@@ -637,7 +641,7 @@ Expected: all tests PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -f services/jd-audio-service/src/models/manager.py services/jd-audio-service/tests/test_manager.py
+git add src/models/manager.py tests/test_manager.py
 git commit -m "feat(audio-service): add ModelManager with lazy load and auto-unload"
 ```
 
@@ -776,7 +780,7 @@ class TestMerger:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_merger.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`
@@ -860,7 +864,7 @@ def merge_transcript_with_diarization(
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_merger.py -v
 ```
 Expected: all tests PASS
@@ -868,7 +872,7 @@ Expected: all tests PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -f services/jd-audio-service/src/pipeline/merger.py services/jd-audio-service/tests/test_merger.py
+git add src/pipeline/merger.py tests/test_merger.py
 git commit -m "feat(audio-service): add transcript-diarization merger with tests"
 ```
 
@@ -969,7 +973,7 @@ class TestIdentifySpeakers:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_identify.py -v
 ```
 Expected: FAIL — `ModuleNotFoundError`
@@ -1046,7 +1050,7 @@ def identify_speakers(
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_identify.py -v
 ```
 Expected: all tests PASS
@@ -1054,7 +1058,7 @@ Expected: all tests PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -f services/jd-audio-service/src/pipeline/identifier.py services/jd-audio-service/tests/test_identify.py
+git add src/pipeline/identifier.py tests/test_identify.py
 git commit -m "feat(audio-service): add speaker identification with cosine distance matching"
 ```
 
@@ -1279,7 +1283,7 @@ class Embedder:
 - [ ] **Step 4: Commit (no unit tests for model wrappers — they are thin wrappers over ML libraries tested via integration tests in Task 10)**
 
 ```bash
-git add -f services/jd-audio-service/src/models/transcriber.py services/jd-audio-service/src/models/diarizer.py services/jd-audio-service/src/models/embedder.py
+git add src/models/transcriber.py src/models/diarizer.py src/models/embedder.py
 git commit -m "feat(audio-service): add model wrappers for Parakeet, PyAnnote diarization, and PyAnnote embedding"
 ```
 
@@ -1383,7 +1387,7 @@ class TestProcessor:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_processor.py -v
 ```
 Expected: FAIL
@@ -1455,7 +1459,7 @@ class Processor:
 - [ ] **Step 4: Run tests to verify they pass**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_processor.py -v
 ```
 Expected: all tests PASS
@@ -1463,7 +1467,7 @@ Expected: all tests PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -f services/jd-audio-service/src/pipeline/processor.py services/jd-audio-service/tests/test_processor.py
+git add src/pipeline/processor.py tests/test_processor.py
 git commit -m "feat(audio-service): add pipeline processor orchestrating transcription + diarization + merge"
 ```
 
@@ -1618,7 +1622,7 @@ class TestIdentifySpeakersEndpoint:
 - [ ] **Step 2: Run tests to verify they fail**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_routes.py -v
 ```
 Expected: FAIL
@@ -1851,7 +1855,7 @@ def create_app(
 - [ ] **Step 5: Run tests to verify they pass**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_routes.py -v
 ```
 Expected: all tests PASS
@@ -1859,7 +1863,7 @@ Expected: all tests PASS
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -f services/jd-audio-service/src/api/routes.py services/jd-audio-service/src/server.py services/jd-audio-service/tests/test_routes.py
+git add src/api/routes.py src/server.py tests/test_routes.py
 git commit -m "feat(audio-service): add FastAPI routes and server with all endpoints"
 ```
 
@@ -2060,7 +2064,7 @@ pause
 - [ ] **Step 4: Test headless mode starts and responds to /health**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 # In one terminal:
 python src/main.py --no-tray &
 sleep 3
@@ -2073,7 +2077,7 @@ curl http://localhost:8374/health
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -f services/jd-audio-service/src/main.py services/jd-audio-service/src/tray/app.py services/jd-audio-service/run-jd-audio-service.bat services/jd-audio-service/setup-jd-audio-service.bat
+git add src/main.py src/tray/app.py run-jd-audio-service.bat setup-jd-audio-service.bat
 git commit -m "feat(audio-service): add system tray app, entry point, and launcher scripts"
 ```
 
@@ -2199,7 +2203,7 @@ class TestFullPipeline:
 - [ ] **Step 3: Run integration tests (requires GPU)**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/test_integration.py -v -m gpu
 ```
 Expected: all tests PASS (on a machine with GPU and models downloaded)
@@ -2207,7 +2211,7 @@ Expected: all tests PASS (on a machine with GPU and models downloaded)
 - [ ] **Step 4: Commit**
 
 ```bash
-git add -f services/jd-audio-service/tests/test_integration.py
+git add tests/test_integration.py
 git commit -m "feat(audio-service): add GPU integration tests for full pipeline"
 ```
 
@@ -2218,7 +2222,7 @@ git commit -m "feat(audio-service): add GPU integration tests for full pipeline"
 - [ ] **Step 1: Run all non-GPU tests**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python -m pytest tests/ -v -m "not gpu"
 ```
 Expected: all tests PASS
@@ -2226,7 +2230,7 @@ Expected: all tests PASS
 - [ ] **Step 2: Verify headless server starts and all endpoints respond**
 
 ```bash
-cd services/jd-audio-service
+cd /c/Users/brigh/Documents/code/jd-audio-service
 python src/main.py --no-tray &
 sleep 3
 curl http://localhost:8374/health
@@ -2237,6 +2241,6 @@ curl http://localhost:8374/models
 - [ ] **Step 3: Commit final state**
 
 ```bash
-git add -f services/jd-audio-service/
+git add .
 git commit -m "feat(audio-service): complete Plan A — JD Audio Service ready for integration"
 ```
