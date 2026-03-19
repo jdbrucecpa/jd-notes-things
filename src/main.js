@@ -68,16 +68,12 @@ const { createIpcHandler } = require('./main/utils/ipcHelpers');
 const yaml = require('js-yaml');
 // const encryptionService = require('./main/services/encryptionService'); // Not needed - Obsidian requires plain text
 const expressApp = require('./server');
-
-// Wire up keyManagementService to server.js for API key retrieval in packaged builds
-expressApp.setKeyManagementService(keyManagementService);
 const tunnelManager = require('./main/services/tunnelManager');
 const log = require('electron-log');
 const {
   SERVER_PORT,
   SERVER_HOST,
   WS_STREAMDECK_ENDPOINT,
-  WEBHOOK_RECALL_PATH,
   // Timeouts
   IPC_RESPONSE_TIMEOUT_MS,
   RECALL_API_TIMEOUT_MS,
@@ -251,7 +247,7 @@ let llmService = null;
 
 // Pattern Generation Service removed (Phase 10.8.3 removed)
 
-// Express server instance (for webhook endpoint)
+// Express server instance (for Stream Deck WebSocket support)
 let expressServer = null;
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -1668,24 +1664,10 @@ app.whenReady().then(async () => {
   // Start meeting monitor for auto-recording (only after all services initialized)
   startMeetingMonitor();
 
-  // Start Express server for webhook endpoint
+  // Start Express server for Stream Deck WebSocket support
   // Security: explicitly bind to localhost only (not 0.0.0.0)
-  expressServer = expressApp.listen(SERVER_PORT, SERVER_HOST, async () => {
-    console.log(`[Webhook Server] Listening on http://${SERVER_HOST}:${SERVER_PORT}`);
-    console.log(`[Webhook Server] Endpoint: http://localhost:${SERVER_PORT}${WEBHOOK_RECALL_PATH}`);
-
-    // Tunnel disabled - webhooks not currently used
-    // To re-enable, uncomment the tunnelManager.start() call below
-    console.log('[Webhook Server] Tunnel disabled - webhooks not in use');
-    /*
-    try {
-      const webhookUrl = await tunnelManager.start(SERVER_PORT);
-      global.webhookUrl = `${webhookUrl}${WEBHOOK_RECALL_PATH}`;
-      console.log(`Public Webhook URL: ${global.webhookUrl}`);
-    } catch (error) {
-      console.log('Tunnel not available:', error.message);
-    }
-    */
+  expressServer = expressApp.listen(SERVER_PORT, SERVER_HOST, () => {
+    console.log(`[Server] Listening on http://${SERVER_HOST}:${SERVER_PORT}`);
   });
 
   // v1.2: Configure Stream Deck WebSocket integration
