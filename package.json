@@ -19,6 +19,7 @@
     "test:db": "npx electron tests/test-database.js",
     "test:e2e": "npx playwright test tests/e2e/app.spec.js",
     "test:e2e:recording": "npx playwright test tests/e2e/recording-pipeline.spec.js",
+    "test:e2e:providers": "npx playwright test tests/e2e/recording-providers.spec.js",
     "start:mock": "cross-env MOCK_SDK=1 E2E_TEST=1 electron-forge start",
     "start:mock:fast": "cross-env MOCK_SDK=1 MOCK_SPEED=10 E2E_TEST=1 electron-forge start"
   },
