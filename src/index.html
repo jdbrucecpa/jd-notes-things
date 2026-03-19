@@ -1549,6 +1549,27 @@
               </div>
             </div>
 
+            <!-- Recording Provider Section (v2.0) -->
+            <div class="settings-section">
+              <h3 class="settings-section-title">Recording Provider</h3>
+              <div class="settings-item-description" style="margin-bottom: 16px;">
+                Choose how meeting audio is captured. Changing this requires an app restart.
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Recording Method</div>
+                  <div class="settings-item-description">How meeting audio is captured for transcription</div>
+                </div>
+                <div class="settings-item-control">
+                  <select class="settings-select" id="recordingProviderSelect">
+                    <option value="recall">Recall.ai SDK (cloud recording)</option>
+                    <option value="local">Local (FFmpeg + Window Monitoring)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
             <!-- Transcription Provider Section -->
             <div class="settings-section">
               <h3 class="settings-section-title">Transcription Provider</h3>

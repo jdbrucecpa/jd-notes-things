@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS = {
   autoSummaryProvider: 'gemini-2.5-flash', // AI model for auto-summaries (Budget-friendly default)
   templateSummaryProvider: 'claude-haiku-4-5', // AI model for template summaries
   patternGenerationProvider: 'gemini-2.5-flash-lite', // AI model for pattern generation (cheapest option)
+  recordingProvider: 'recall', // v2.0: 'recall' (Recall.ai SDK) or 'local' (FFmpeg + Window Monitoring)
   // CRM Integration settings (OCRM)
   crmIntegration: {
     enabled: false, // Master toggle for CRM integration
@@ -151,6 +152,7 @@ export function initializeSettingsUI() {
   const patternGenerationProviderSelect = document.getElementById(
     'patternGenerationProviderSelect'
   );
+  const recordingProviderSelect = document.getElementById('recordingProviderSelect');
   const exportAllSettingsBtn = document.getElementById('exportAllSettingsBtn');
   const importAllSettingsBtn = document.getElementById('importAllSettingsBtn');
   const exportStatus = document.getElementById('exportStatus');
@@ -410,6 +412,19 @@ export function initializeSettingsUI() {
     });
   }
 
+  // Recording Provider selection (v2.0)
+  if (recordingProviderSelect) {
+    recordingProviderSelect.addEventListener('change', e => {
+      const newProvider = e.target.value;
+      updateSetting('recordingProvider', newProvider);
+      // Sync to main process so the setting is persisted in app-settings.json
+      if (window.electronAPI?.appUpdateSettings) {
+        window.electronAPI.appUpdateSettings({ recordingProvider: newProvider });
+      }
+      notifyInfo('Recording provider changed. Restart the app to apply.');
+    });
+  }
+
   // Comprehensive Export All Settings (SE-1)
   if (exportAllSettingsBtn) {
     exportAllSettingsBtn.addEventListener('click', async () => {
@@ -627,6 +642,27 @@ export function initializeSettingsUI() {
     if (patternGenerationProviderSelect) {
       patternGenerationProviderSelect.value =
         currentSettings.patternGenerationProvider || 'gemini-2.5-flash-lite';
+    }
+
+    // v2.0: Recording provider (also read from main process appSettings for accuracy)
+    if (recordingProviderSelect) {
+      // Try main process first (source of truth at startup), fall back to localStorage
+      if (window.electronAPI?.appGetSettings) {
+        window.electronAPI
+          .appGetSettings()
+          .then(result => {
+            if (result.success && result.data?.recordingProvider) {
+              recordingProviderSelect.value = result.data.recordingProvider;
+            } else {
+              recordingProviderSelect.value = currentSettings.recordingProvider || 'recall';
+            }
+          })
+          .catch(() => {
+            recordingProviderSelect.value = currentSettings.recordingProvider || 'recall';
+          });
+      } else {
+        recordingProviderSelect.value = currentSettings.recordingProvider || 'recall';
+      }
     }
 
     // Update vault path (this will be populated from main process)

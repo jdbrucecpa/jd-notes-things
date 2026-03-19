@@ -59,7 +59,7 @@ const databaseService = require('./main/services/databaseService');
 const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
-const { RecordingManager, RecallProvider } = require('./main/recording');
+const { RecordingManager, RecallProvider, LocalProvider } = require('./main/recording');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
@@ -401,9 +401,11 @@ let currentRecordingMeetingId = null; // Track current meeting ID for widget (v1
 let currentViewedMeetingId = null; // Track which meeting is currently open in the app (v1.2 fix)
 let currentViewedMeetingInfo = null; // Full meeting info for the currently viewed meeting (v1.2 fix)
 
-// v2.0: Recording abstraction layer (initialized in initSDK)
-const recallProvider = new RecallProvider(RecallAiSdk);
-const recordingManager = new RecordingManager(recallProvider);
+// v2.0: Recording abstraction layer (initialized in initRecording)
+// Provider and manager are created after appSettings loads so we know which provider to use.
+let recallProvider = null;
+let recordingProvider = null; // The active provider (RecallProvider or LocalProvider)
+let recordingManager = null;
 
 // Meeting monitor state
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
@@ -434,6 +436,7 @@ let appSettings = {
   },
   windowBounds: null, // Will store {x, y, width, height, displayId}
   transcriptionProvider: 'assemblyai', // v1.2: Default transcription provider
+  recordingProvider: 'recall', // v2.0: 'recall' (Recall.ai SDK) or 'local' (FFmpeg + Window Monitoring)
   streamDeck: {
     enabled: false, // v1.2: Enable Stream Deck WebSocket integration
   },
@@ -2203,53 +2206,85 @@ async function createDesktopSdkUpload() {
   }
 }
 
-// Initialize the Recall.ai SDK
+// Initialize recording provider and SDK
 async function initSDK() {
-  console.log('Initializing Recall.ai SDK');
+  const providerSetting = appSettings.recordingProvider || 'recall';
+  logger.main.info(`[Recording] Initializing with provider: ${providerSetting}`);
 
-  // Retrieve API URL from Windows Credential Manager (with .env fallback)
-  const { apiUrl: RECALLAI_API_URL } = await getRecallCredentials();
+  // Create provider and manager based on setting
+  if (providerSetting === 'local') {
+    recordingProvider = new LocalProvider();
+    recordingManager = new RecordingManager(recordingProvider);
+    logger.main.info('[Recording] Using LocalProvider (FFmpeg + Window Monitoring)');
 
-  console.log('[SDK] Using Recall.ai API URL:', RECALLAI_API_URL);
-
-  // Log the SDK initialization
-  sdkLogger.logApiCall('init', {
-    apiUrl: RECALLAI_API_URL,
-    acquirePermissionsOnStartup: ['accessibility', 'screen-capture', 'microphone'],
-    restartOnError: true,
-    config: {
-      recording_path: RECORDING_PATH,
-    },
-  });
-
-  const sdkConfig = {
-    apiUrl: RECALLAI_API_URL,
-    acquirePermissionsOnStartup: ['accessibility', 'screen-capture', 'microphone'],
-    restartOnError: true,
-    config: {
-      recording_path: RECORDING_PATH,
-    },
-  };
-
-  // Listen for SDK ready event (fires after restart-for-detection workaround)
-  recallProvider.once('sdk-ready', () => {
-    sdkReady = true;
-    logger.main.info('[SDK] Initialization complete - recording enabled');
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('sdk-ready');
+    // Initialize local provider
+    try {
+      await recordingManager.initialize({
+        recordingPath: RECORDING_PATH,
+      });
+      sdkReady = true;
+      logger.main.info('[Recording] LocalProvider initialization complete');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('sdk-ready');
+      }
+    } catch (error) {
+      logger.main.error('[Recording] LocalProvider initialization error:', error);
+      sdkReady = true;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('sdk-ready');
+      }
     }
-  });
+  } else {
+    // Recall.ai SDK provider (default)
+    recallProvider = new RecallProvider(RecallAiSdk);
+    recordingProvider = recallProvider;
+    recordingManager = new RecordingManager(recallProvider);
+    logger.main.info('[Recording] Using RecallProvider (Recall.ai SDK)');
 
-  // Initialize via RecordingManager (handles SDK init + restart workaround internally)
-  try {
-    await recordingManager.initialize({ sdkConfig });
-  } catch (error) {
-    logger.main.error('[SDK] Error during SDK initialization:', error);
-    // Still mark ready so the app isn't permanently stuck
-    sdkReady = true;
-    logger.main.warn('[SDK] Initialization completed with errors — recording may miss already-open meetings');
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('sdk-ready');
+    // Retrieve API URL from Windows Credential Manager (with .env fallback)
+    const { apiUrl: RECALLAI_API_URL } = await getRecallCredentials();
+
+    console.log('[SDK] Using Recall.ai API URL:', RECALLAI_API_URL);
+
+    // Log the SDK initialization
+    sdkLogger.logApiCall('init', {
+      apiUrl: RECALLAI_API_URL,
+      acquirePermissionsOnStartup: ['accessibility', 'screen-capture', 'microphone'],
+      restartOnError: true,
+      config: {
+        recording_path: RECORDING_PATH,
+      },
+    });
+
+    const sdkConfig = {
+      apiUrl: RECALLAI_API_URL,
+      acquirePermissionsOnStartup: ['accessibility', 'screen-capture', 'microphone'],
+      restartOnError: true,
+      config: {
+        recording_path: RECORDING_PATH,
+      },
+    };
+
+    // Listen for SDK ready event (fires after restart-for-detection workaround)
+    recallProvider.once('sdk-ready', () => {
+      sdkReady = true;
+      logger.main.info('[SDK] Initialization complete - recording enabled');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('sdk-ready');
+      }
+    });
+
+    // Initialize via RecordingManager (handles SDK init + restart workaround internally)
+    try {
+      await recordingManager.initialize({ sdkConfig });
+    } catch (error) {
+      logger.main.error('[SDK] Error during SDK initialization:', error);
+      // Still mark ready so the app isn't permanently stuck
+      sdkReady = true;
+      logger.main.warn('[SDK] Initialization completed with errors — recording may miss already-open meetings');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('sdk-ready');
+      }
     }
   }
 
@@ -2356,8 +2391,8 @@ async function initSDK() {
       console.log(`Stopping recording for window: ${recordingToStop}`);
 
       try {
-        // Stop the recording via provider (SDK)
-        recallProvider.stopRecording(recordingToStop);
+        // Stop the recording via active provider
+        recordingProvider.stopRecording(recordingToStop);
         recordingManager.updateState(recordingToStop, 'stopping');
         console.log(`✓ Stop recording command sent successfully`);
 
@@ -2942,32 +2977,35 @@ async function initSDK() {
   // Note: No longer processing real-time transcripts - we use async transcription after recording
   // TODO(v2.0): Convert to recordingManager events once participant/speech handlers
   // are updated to accept the normalized data shape instead of raw SDK events.
-  RecallAiSdk.addEventListener('realtime-event', async evt => {
-    // Only log non-video frame events to prevent flooding the logger
-    if (evt.event !== 'video_separate_png.data') {
-      console.log('Received realtime event:', evt.event);
+  // Only register Recall SDK-specific realtime event listener when using Recall provider
+  if (providerSetting !== 'local') {
+    RecallAiSdk.addEventListener('realtime-event', async evt => {
+      // Only log non-video frame events to prevent flooding the logger
+      if (evt.event !== 'video_separate_png.data') {
+        console.log('Received realtime event:', evt.event);
 
-      // Log the SDK realtime-event event
-      sdkLogger.logEvent('realtime-event', {
-        eventType: evt.event,
-        windowId: evt.window?.id,
-      });
-    }
+        // Log the SDK realtime-event event
+        sdkLogger.logEvent('realtime-event', {
+          eventType: evt.event,
+          windowId: evt.window?.id,
+        });
+      }
 
-    // Handle participant join events (needed for speaker matching later)
-    if (evt.event === 'participant_events.join' && evt.data && evt.data.data) {
-      await processParticipantJoin(evt);
-    } else if (evt.event === 'participant_events.speech_on' && evt.data && evt.data.data) {
-      // SM-1: Track when participants start speaking
-      processSpeechOn(evt);
-    } else if (evt.event === 'participant_events.speech_off' && evt.data && evt.data.data) {
-      // SM-1: Track when participants stop speaking
-      processSpeechOff(evt);
-    } else if (evt.event === 'video_separate_png.data' && evt.data && evt.data.data) {
-      await processVideoFrame(evt);
-    }
-    // Real-time transcript events removed - using async transcription instead
-  });
+      // Handle participant join events (needed for speaker matching later)
+      if (evt.event === 'participant_events.join' && evt.data && evt.data.data) {
+        await processParticipantJoin(evt);
+      } else if (evt.event === 'participant_events.speech_on' && evt.data && evt.data.data) {
+        // SM-1: Track when participants start speaking
+        processSpeechOn(evt);
+      } else if (evt.event === 'participant_events.speech_off' && evt.data && evt.data.data) {
+        // SM-1: Track when participants stop speaking
+        processSpeechOff(evt);
+      } else if (evt.event === 'video_separate_png.data' && evt.data && evt.data.data) {
+        await processVideoFrame(evt);
+      }
+      // Real-time transcript events removed - using async transcription instead
+    });
+  }
 
   // Handle errors (via RecordingManager abstraction)
   recordingManager.on('error', (data) => {
@@ -8638,6 +8676,11 @@ ipcMain.handle(
     }
     if (updates.autoStartRecording !== undefined) {
       appSettings.autoStartRecording = updates.autoStartRecording;
+    }
+    // v2.0: Recording provider (requires restart to take effect)
+    if (updates.recordingProvider !== undefined) {
+      appSettings.recordingProvider = updates.recordingProvider;
+      logger.ipc.info(`[IPC] Recording provider set to: ${updates.recordingProvider} (restart required)`);
     }
 
     // Save to disk
