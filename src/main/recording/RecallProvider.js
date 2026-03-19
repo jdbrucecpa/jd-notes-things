@@ -25,14 +25,19 @@ class RecallProvider extends RecordingProvider {
   }
 
   async initialize(config) {
-    const { accessToken, userId, realtimeEndpoints } = config;
-
-    const sdkConfig = {
-      access_token: accessToken,
-      user_id: userId,
-    };
-    if (realtimeEndpoints) {
-      sdkConfig.realtime_endpoints = realtimeEndpoints;
+    // Accept either a raw sdkConfig object or named fields
+    let sdkConfig;
+    if (config.sdkConfig) {
+      sdkConfig = config.sdkConfig;
+    } else {
+      const { accessToken, userId, realtimeEndpoints } = config;
+      sdkConfig = {
+        access_token: accessToken,
+        user_id: userId,
+      };
+      if (realtimeEndpoints) {
+        sdkConfig.realtime_endpoints = realtimeEndpoints;
+      }
     }
 
     this.sdk.init(sdkConfig);

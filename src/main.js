@@ -59,6 +59,7 @@ const databaseService = require('./main/services/databaseService');
 const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
+const { RecordingManager, RecallProvider } = require('./main/recording');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
@@ -84,8 +85,6 @@ const {
   // Delays & Intervals
   WINDOW_BOUNDS_DEBOUNCE_MS,
   RECALL_RATE_LIMIT_DELAY_MS,
-  SDK_SHUTDOWN_GRACE_MS,
-  SDK_INIT_DELAY_MS,
   FILE_WRITE_GRACE_MS,
   TRANSCRIPT_POLL_INTERVAL_MS,
   UPCOMING_MEETINGS_CHECK_MS,
@@ -401,6 +400,10 @@ let currentRecordingMeetingTitle = null; // Track current meeting title for widg
 let currentRecordingMeetingId = null; // Track current meeting ID for widget (v1.2 fix)
 let currentViewedMeetingId = null; // Track which meeting is currently open in the app (v1.2 fix)
 let currentViewedMeetingInfo = null; // Full meeting info for the currently viewed meeting (v1.2 fix)
+
+// v2.0: Recording abstraction layer (initialized in initSDK)
+const recallProvider = new RecallProvider(RecallAiSdk);
+const recordingManager = new RecordingManager(recallProvider);
 
 // Meeting monitor state
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
@@ -1937,62 +1940,7 @@ const meetingsFilePath = path.join(app.getPath('userData'), 'meetings.json');
 // Path for RecallAI SDK recordings
 const RECORDING_PATH = path.join(app.getPath('userData'), 'recordings');
 
-// Global state to track active recordings
-const activeRecordings = {
-  // Map of recordingId -> {noteId, platform, state}
-  recordings: {},
-
-  // Register a new recording
-  addRecording: function (recordingId, noteId, platform = 'unknown') {
-    this.recordings[recordingId] = {
-      noteId,
-      platform,
-      state: 'recording',
-      startTime: new Date(),
-    };
-    console.log(`Recording registered in global state: ${recordingId} for note ${noteId}`);
-  },
-
-  // Update a recording's state
-  updateState: function (recordingId, state) {
-    if (this.recordings[recordingId]) {
-      this.recordings[recordingId].state = state;
-      console.log(`Recording ${recordingId} state updated to: ${state}`);
-      return true;
-    }
-    return false;
-  },
-
-  // Remove a recording
-  removeRecording: function (recordingId) {
-    if (this.recordings[recordingId]) {
-      delete this.recordings[recordingId];
-      console.log(`Recording ${recordingId} removed from global state`);
-      return true;
-    }
-    return false;
-  },
-
-  // Get active recording for a note
-  getForNote: function (noteId) {
-    for (const [recordingId, info] of Object.entries(this.recordings)) {
-      if (info.noteId === noteId) {
-        return { recordingId, ...info };
-      }
-    }
-    return null;
-  },
-
-  // Get all active recordings
-  getAll: function () {
-    return { ...this.recordings };
-  },
-
-  // Check if a recording exists for a given windowId/recordingId
-  hasActiveRecording: function (recordingId) {
-    return !!this.recordings[recordingId];
-  },
-};
+// v2.0: Active recordings tracking is now handled by recordingManager (see RecordingManager.js)
 
 // v1.3.0: Database-backed compatibility shim replacing the old JSON fileOperationManager.
 // Maintains the same API surface (readMeetingsData, writeData, scheduleOperation) so that
@@ -2283,73 +2231,42 @@ async function initSDK() {
     },
   };
 
-  RecallAiSdk.init(sdkConfig);
-
-  // Workaround for detecting already-open meetings
-  // The SDK is event-driven and only fires meeting-detected when a window opens
-  // For meetings already open before the SDK initialized, we need to trigger a re-scan
-  // We do this by shutting down and re-initializing the SDK
-  setTimeout(async () => {
-    try {
-      logger.main.info('[SDK] Attempting to detect already-open meetings via SDK restart...');
-
-      // Temporarily suppress console errors from the SDK during shutdown
-      // The SDK logs "Failed to send log to Desktop SDK" when shutting down, which is harmless
-      const originalConsoleError = console.error;
-      console.error = (...args) => {
-        const message = args.join(' ');
-        if (!message.includes('Failed to send log to Desktop SDK')) {
-          originalConsoleError.apply(console, args);
-        }
-      };
-
-      // Shutdown the SDK
-      await RecallAiSdk.shutdown();
-      logger.main.info('[SDK] Shutdown complete');
-
-      // Wait a moment for SDK process to fully terminate
-      await new Promise(resolve => setTimeout(resolve, SDK_SHUTDOWN_GRACE_MS));
-
-      // Restore console.error
-      console.error = originalConsoleError;
-
-      // Re-initialize the SDK with same config
-      RecallAiSdk.init(sdkConfig);
-      logger.main.info('[SDK] Re-initialized - should now detect any open meetings');
-
-      // The meeting-detected event listener should fire if there are any open meetings
-
-      // Mark SDK as fully ready and notify renderer
-      sdkReady = true;
-      logger.main.info('[SDK] Initialization complete - recording enabled');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('sdk-ready');
-      }
-    } catch (error) {
-      logger.main.error('[SDK] Error during SDK restart:', error);
-      // SDK restart failed — still mark ready so the app isn't permanently stuck,
-      // but log prominently so we know recording may not detect open meetings
-      sdkReady = true;
-      logger.main.warn('[SDK] Initialization completed with errors — recording may miss already-open meetings');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('sdk-ready');
-      }
+  // Listen for SDK ready event (fires after restart-for-detection workaround)
+  recallProvider.once('sdk-ready', () => {
+    sdkReady = true;
+    logger.main.info('[SDK] Initialization complete - recording enabled');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('sdk-ready');
     }
-  }, SDK_INIT_DELAY_MS); // Wait 3 seconds after initial SDK init
+  });
 
-  // SDK event listeners are now registered below
+  // Initialize via RecordingManager (handles SDK init + restart workaround internally)
+  try {
+    await recordingManager.initialize({ sdkConfig });
+  } catch (error) {
+    logger.main.error('[SDK] Error during SDK initialization:', error);
+    // Still mark ready so the app isn't permanently stuck
+    sdkReady = true;
+    logger.main.warn('[SDK] Initialization completed with errors — recording may miss already-open meetings');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('sdk-ready');
+    }
+  }
 
-  // Listen for meeting detected events
-  RecallAiSdk.addEventListener('meeting-detected', evt => {
-    console.log('Meeting detected:', evt);
+  // Event listeners registered below
+
+  // Listen for meeting detected events (via RecordingManager abstraction)
+  recordingManager.on('meeting-detected', (data) => {
+    console.log('Meeting detected:', data);
 
     // Log the meeting detected event
     sdkLogger.logEvent('meeting-detected', {
-      platform: evt.window.platform,
-      windowId: evt.window.id,
+      platform: data.platform,
+      windowId: data.windowId,
     });
 
-    detectedMeeting = evt;
+    // Keep global detectedMeeting in raw SDK event format for backward compatibility
+    detectedMeeting = data.raw;
 
     // Map platform codes to readable names
     const platformNames = {
@@ -2360,13 +2277,13 @@ async function initSDK() {
     };
 
     // Get a user-friendly platform name, or use the raw platform name if not in our map
-    const platformName = platformNames[evt.window.platform] || evt.window.platform;
+    const platformName = platformNames[data.platform] || data.platform;
 
     // Send the meeting detected status to the renderer process with toast notification
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('meeting-detection-status', {
         detected: true,
-        platform: evt.window.platform, // Include platform for UI icon updates
+        platform: data.platform, // Include platform for UI icon updates
       });
       // Send toast notification to renderer
       mainWindow.webContents.send('show-toast', {
@@ -2391,9 +2308,9 @@ async function initSDK() {
 
         // Create a meeting-like object for the widget with platform info
         const detectedMeetingInfo = {
-          id: `detected-${evt.window.id}`,
+          id: `detected-${data.windowId}`,
           title: `${platformName} Meeting`,
-          platform: evt.window.platform,
+          platform: data.platform,
           startTime: new Date().toISOString(),
           isDetectedMeeting: true, // Flag to distinguish from calendar meetings
         };
@@ -2405,23 +2322,23 @@ async function initSDK() {
     }
   });
 
-  // Listen for meeting closed events
-  RecallAiSdk.addEventListener('meeting-closed', evt => {
-    console.log('Meeting closed:', evt);
+  // Listen for meeting closed events (via RecordingManager abstraction)
+  recordingManager.on('meeting-closed', (data) => {
+    console.log('Meeting closed:', data);
 
     // Log the SDK meeting-closed event
     sdkLogger.logEvent('meeting-closed', {
-      windowId: evt.window.id,
+      windowId: data.windowId,
     });
 
-    const windowId = evt.window?.id;
+    const windowId = data.windowId;
 
     // Automatically stop recording when meeting ends
     // NOTE: WindowId might have changed during recording, so check both the event windowId
     // AND all active recordings to ensure we catch everything
     let recordingToStop = null;
 
-    if (windowId && activeRecordings.hasActiveRecording(windowId)) {
+    if (windowId && recordingManager.hasActiveRecording(windowId)) {
       // Direct match - use the event's windowId
       recordingToStop = windowId;
       console.log(`Meeting ended - found recording with matching windowId: ${windowId}`);
@@ -2431,7 +2348,7 @@ async function initSDK() {
       // recordings to be killed when unrelated meeting windows closed.
       console.log(
         `Meeting closed for windowId ${windowId} but no matching active recording found. ` +
-          `Ignoring (active recordings: ${Object.keys(activeRecordings.getAll()).join(', ') || 'none'})`
+          `Ignoring (active recordings: ${Object.keys(recordingManager.getActiveRecordings()).join(', ') || 'none'})`
       );
     }
 
@@ -2439,9 +2356,9 @@ async function initSDK() {
       console.log(`Stopping recording for window: ${recordingToStop}`);
 
       try {
-        // Stop the recording
-        RecallAiSdk.stopRecording({ windowId: recordingToStop });
-        activeRecordings.updateState(recordingToStop, 'stopping');
+        // Stop the recording via provider (SDK)
+        recallProvider.stopRecording(recordingToStop);
+        recordingManager.updateState(recordingToStop, 'stopping');
         console.log(`✓ Stop recording command sent successfully`);
 
         // Notify renderer
@@ -2460,7 +2377,7 @@ async function initSDK() {
         );
 
         // Still update our internal state
-        activeRecordings.updateState(recordingToStop, 'stopping');
+        recordingManager.updateState(recordingToStop, 'stopping');
       }
     } else {
       console.log(`No active recording found to stop (windowId: ${windowId})`);
@@ -2485,16 +2402,16 @@ async function initSDK() {
     }
   });
 
-  // Listen for recording ended events
-  RecallAiSdk.addEventListener('recording-ended', async evt => {
-    console.log('Recording ended:', evt);
+  // Listen for recording ended events (via RecordingManager abstraction)
+  recordingManager.on('recording-ended', async (data) => {
+    console.log('Recording ended:', data);
+
+    const windowId = data.recordingId;
 
     // Log the SDK recording-ended event
     sdkLogger.logEvent('recording-ended', {
-      windowId: evt.window.id,
+      windowId: windowId,
     });
-
-    const windowId = evt.window.id;
 
     try {
       // Update the note with recording information (marks as complete)
@@ -2539,7 +2456,7 @@ async function initSDK() {
       }
 
       // Clean up active recording state immediately
-      activeRecordings.removeRecording(windowId);
+      recordingManager.removeRecording(windowId);
       console.log(`[Recording] Cleaned up active recording: ${windowId}`);
 
       // Update recording state and tray menu (Phase 10.7)
@@ -2585,7 +2502,7 @@ async function initSDK() {
           if (transcriptionProvider === 'recallai') {
             // Recall.ai: Upload via SDK for async webhook-based transcription
             console.log('[Upload] Calling uploadRecording() with ONLY windowId (per docs)...');
-            const result = await RecallAiSdk.uploadRecording({
+            const result = await recallProvider.sdk.uploadRecording({
               windowId: windowId,
             });
             console.log('[Upload] uploadRecording() completed with result:', result);
@@ -2939,10 +2856,10 @@ async function initSDK() {
   // Track last logged progress to avoid spam
   const lastLoggedProgress = new Map();
 
-  // Track upload progress
-  RecallAiSdk.addEventListener('upload-progress', async evt => {
-    const { progress, window } = evt;
-    const windowId = window?.id;
+  // Track upload progress (via RecordingManager abstraction)
+  recordingManager.on('upload-progress', (data) => {
+    const { progress, raw } = data;
+    const windowId = raw?.window?.id;
 
     // Only log when progress changes (not on every event)
     const lastProgress = lastLoggedProgress.get(windowId);
@@ -2970,18 +2887,15 @@ async function initSDK() {
     }
   });
 
-  RecallAiSdk.addEventListener('permissions-granted', async _evt => {
+  recordingManager.on('permissions-granted', () => {
     logger.main.info('[SDK] Permissions granted');
   });
 
-  // Track SDK state changes
-  RecallAiSdk.addEventListener('sdk-state-change', async evt => {
-    const {
-      sdk: {
-        state: { code },
-      },
-      window,
-    } = evt;
+  // Track SDK state changes (via RecordingManager abstraction)
+  recordingManager.on('sdk-state-change', (data) => {
+    const { raw } = data;
+    const code = raw?.sdk?.state?.code || data.state;
+    const window = raw?.window;
     console.log('Recording state changed:', code, 'for window:', window?.id);
 
     // Log the SDK sdk-state-change event
@@ -3003,14 +2917,14 @@ async function initSDK() {
         console.log('Recording in progress...');
         if (noteId) {
           // If recording started, add it to our active recordings
-          activeRecordings.addRecording(window.id, noteId, window.platform || 'unknown');
+          recordingManager.addRecording(window.id, noteId, window.platform || 'unknown');
         }
       } else if (code === 'paused') {
         console.log('Recording paused');
-        activeRecordings.updateState(window.id, 'paused');
+        recordingManager.updateState(window.id, 'paused');
       } else if (code === 'idle') {
         console.log('Recording stopped');
-        activeRecordings.removeRecording(window.id);
+        recordingManager.removeRecording(window.id);
       }
 
       // Notify renderer process about recording state change
@@ -3026,6 +2940,8 @@ async function initSDK() {
 
   // Listen for real-time events (participant joins and video frames)
   // Note: No longer processing real-time transcripts - we use async transcription after recording
+  // TODO(v2.0): Convert to recordingManager events once participant/speech handlers
+  // are updated to accept the normalized data shape instead of raw SDK events.
   RecallAiSdk.addEventListener('realtime-event', async evt => {
     // Only log non-video frame events to prevent flooding the logger
     if (evt.event !== 'video_separate_png.data') {
@@ -3053,10 +2969,10 @@ async function initSDK() {
     // Real-time transcript events removed - using async transcription instead
   });
 
-  // Handle errors
-  RecallAiSdk.addEventListener('error', async evt => {
-    console.error('RecallAI SDK Error:', evt);
-    const { type, message } = evt;
+  // Handle errors (via RecordingManager abstraction)
+  recordingManager.on('error', (data) => {
+    console.error('RecallAI SDK Error:', data);
+    const { type, message } = data;
 
     // Log the SDK error event
     sdkLogger.logEvent('error', {
@@ -9881,7 +9797,7 @@ ipcMain.handle(
     try {
       // If noteId is provided, get recording for that specific note
       if (noteId) {
-        const recordingInfo = activeRecordings.getForNote(noteId);
+        const recordingInfo = recordingManager.getForNote(noteId);
         return {
           success: true,
           data: recordingInfo,
@@ -9891,7 +9807,7 @@ ipcMain.handle(
       // Otherwise return all active recordings
       return {
         success: true,
-        data: activeRecordings.getAll(),
+        data: recordingManager.getActiveRecordings(),
       };
     } catch (error) {
       console.error('Error getting active recording ID:', error);
@@ -10187,7 +10103,7 @@ ipcMain.handle(
         // Log the prepareDesktopAudioRecording API call
         sdkLogger.logApiCall('prepareDesktopAudioRecording');
 
-        const key = await RecallAiSdk.prepareDesktopAudioRecording();
+        const key = await recallProvider.sdk.prepareDesktopAudioRecording();
         console.log(
           'Prepared desktop audio recording with key:',
           typeof key === 'string' ? key.substring(0, 8) + '...' : key
@@ -10240,7 +10156,7 @@ ipcMain.handle(
         };
 
         // Register the recording in our active recordings tracker
-        activeRecordings.addRecording(key, validatedId, 'Desktop Recording');
+        recordingManager.addRecording(key, validatedId, 'Desktop Recording');
 
         // Save the updated data
         console.log(`[Upload] Writing meetingsData with uploadToken for meeting ${validatedId}...`);
@@ -10261,7 +10177,7 @@ ipcMain.handle(
 
         try {
           // Await the startRecording call to catch errors (e.g., 401 authentication failures)
-          await RecallAiSdk.startRecording({
+          await recallProvider.sdk.startRecording({
             windowId: key,
             uploadToken: uploadData.upload_token,
           });
@@ -10288,9 +10204,9 @@ ipcMain.handle(
           };
         } catch (startRecordingError) {
           console.error('✗ RecallAI SDK startRecording failed:', startRecordingError);
-          // Clean up the activeRecordings entry we added before attempting startRecording,
+          // Clean up the recording entry we added before attempting startRecording,
           // otherwise this orphaned entry can be killed by a later meeting-closed event
-          activeRecordings.removeRecording(key);
+          recordingManager.removeRecording(key);
           if (global.activeMeetingIds) {
             delete global.activeMeetingIds[key];
           }
@@ -10332,10 +10248,10 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
     });
 
     // Update our active recordings tracker
-    activeRecordings.updateState(validatedId, 'stopping');
+    recordingManager.updateState(validatedId, 'stopping');
 
     try {
-      RecallAiSdk.stopRecording({
+      recallProvider.sdk.stopRecording({
         windowId: validatedId,
       });
 
@@ -10351,7 +10267,7 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
       );
 
       // Clean up our tracking
-      activeRecordings.removeRecording(validatedId);
+      recordingManager.removeRecording(validatedId);
 
       // Return success since the recording is already stopped
       return { success: true, warning: 'Recording was already stopped' };
@@ -10841,7 +10757,7 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
 
     // Register this meeting in our active recordings tracker (even before starting)
     // This ensures the UI knows about it immediately
-    activeRecordings.addRecording(detectedMeeting.window.id, id, platformName);
+    recordingManager.addRecording(detectedMeeting.window.id, id, platformName);
 
     // Add to pastMeetings
     meetingsData.pastMeetings.unshift(newMeeting);
@@ -10906,7 +10822,7 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
       `[Recording Start] Starting recording for meeting ${id}, windowId: ${currentWindowId}`
     );
 
-    // If the windowId changed, update the meeting object and activeRecordings
+    // If the windowId changed, update the meeting object and recordingManager
     if (currentWindowId !== newMeeting.recordingId) {
       console.log(
         `[Recording Start] ⚠ Window ID changed! Old: ${newMeeting.recordingId}, New: ${currentWindowId}`
@@ -10922,9 +10838,9 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
         return data;
       });
 
-      // Update activeRecordings with new windowId
-      activeRecordings.removeRecording(newMeeting.recordingId);
-      activeRecordings.addRecording(currentWindowId, id, platformName);
+      // Update recordingManager with new windowId
+      recordingManager.removeRecording(newMeeting.recordingId);
+      recordingManager.addRecording(currentWindowId, id, platformName);
 
       // Update global tracking
       if (global.activeMeetingIds) {
@@ -10946,7 +10862,7 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
         });
 
         try {
-          RecallAiSdk.startRecording({
+          recallProvider.sdk.startRecording({
             windowId: currentWindowId,
           });
           console.log('[Recording Start] ✓ Recording started successfully (no token)');
@@ -10995,11 +10911,11 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
         });
 
         console.log(
-          `[Recording Start] ✓ Calling RecallAiSdk.startRecording with windowId: ${currentWindowId}`
+          `[Recording Start] ✓ Calling recallProvider.sdk.startRecording with windowId: ${currentWindowId}`
         );
 
         try {
-          RecallAiSdk.startRecording({
+          recallProvider.sdk.startRecording({
             windowId: currentWindowId,
             uploadToken: uploadData.upload_token,
           });
@@ -11025,7 +10941,7 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
       });
 
       try {
-        RecallAiSdk.startRecording({
+        recallProvider.sdk.startRecording({
           windowId: currentWindowId,
         });
         console.log('[Recording Start] ✓ Fallback recording started successfully');
