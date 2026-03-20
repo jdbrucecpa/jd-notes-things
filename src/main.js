@@ -2537,7 +2537,7 @@ async function initSDK() {
           if (transcriptionProvider === 'recallai') {
             // Recall.ai: Upload via SDK for async webhook-based transcription
             console.log('[Upload] Calling uploadRecording() with ONLY windowId (per docs)...');
-            const result = await recallProvider.sdk.uploadRecording({
+            const result = await recallProvider?.sdk?.uploadRecording({
               windowId: windowId,
             });
             console.log('[Upload] uploadRecording() completed with result:', result);
@@ -10171,130 +10171,115 @@ ipcMain.handle(
         meeting.recordingAction = 'new';
       }
 
+      // Initialize transcript array if not present
+      if (!meeting.transcript) {
+        meeting.transcript = [];
+      }
+
+      // UI-1: Set platform from detected meeting if available, otherwise default to in-person
+      if (!meeting.platform) {
+        if (recordingManager.detectedMeeting?.platform) {
+          meeting.platform = recordingManager.detectedMeeting.platform;
+          console.log(
+            `[Recording] UI-1: Setting platform from detected meeting: ${meeting.platform}`
+          );
+        } else if (detectedMeeting?.window?.platform) {
+          meeting.platform = detectedMeeting.window.platform;
+          console.log(
+            `[Recording] UI-1: Setting platform from legacy detected meeting: ${meeting.platform}`
+          );
+        } else {
+          meeting.platform = 'in-person';
+          console.log('[Recording] UI-1: No detected meeting, defaulting to in-person');
+        }
+      }
+
+      meeting.transcriptionProvider = transcriptionProvider;
+
       try {
-        // Prepare desktop audio recording - this is the key difference from our previous implementation
-        // It returns a key that we use as the window ID
+        const isLocalProvider = appSettings.recordingProvider === 'local';
 
-        // Log the prepareDesktopAudioRecording API call
-        sdkLogger.logApiCall('prepareDesktopAudioRecording');
+        if (isLocalProvider) {
+          // --- LOCAL PROVIDER PATH ---
+          console.log('[Recording] Starting local recording via RecordingManager');
+          const recordingId = await recordingManager.startRecording({
+            noteId: validatedId,
+            platform: meeting.platform,
+            meetingTitle: meeting.title,
+          });
 
-        const key = await recallProvider.sdk.prepareDesktopAudioRecording();
-        console.log(
-          'Prepared desktop audio recording with key:',
-          typeof key === 'string' ? key.substring(0, 8) + '...' : key
-        );
+          meeting.recordingId = recordingId;
+          console.log(`[Recording] Local recording started: ${recordingId}`);
+        } else {
+          // --- RECALL PROVIDER PATH ---
+          sdkLogger.logApiCall('prepareDesktopAudioRecording');
+          const key = await recallProvider.sdk.prepareDesktopAudioRecording();
+          console.log(
+            'Prepared desktop audio recording with key:',
+            typeof key === 'string' ? key.substring(0, 8) + '...' : key
+          );
 
-        // Create a recording token
-        const uploadData = await createDesktopSdkUpload();
-        if (!uploadData || !uploadData.upload_token) {
-          const errorMsg = uploadData?.error || 'Failed to create recording token';
-          console.error('[Recording] Upload token creation failed:', errorMsg);
-          return { success: false, error: errorMsg };
-        }
-
-        // Store the recording ID and upload token in the meeting
-        meeting.recordingId = key;
-        meeting.uploadToken = uploadData.upload_token; // Store for later matching
-        meeting.sdkUploadId = uploadData.id; // Store SDK Upload ID for webhook matching
-        meeting.recallRecordingId = uploadData.recording_id; // Store Recall Recording ID
-        meeting.transcriptionProvider = transcriptionProvider; // Store transcription provider
-        console.log(`[Upload] Saving IDs for manual recording ${validatedId}:`);
-        console.log(`  - recordingId (SDK window): ${key.substring(0, 8)}...`);
-        console.log(`  - uploadToken: ${uploadData.upload_token.substring(0, 8)}...`);
-        console.log(`  - sdkUploadId: ${uploadData.id}`);
-        console.log(`  - recallRecordingId: ${uploadData.recording_id}`);
-        console.log(`  - transcriptionProvider: ${transcriptionProvider}`);
-
-        // Initialize transcript array if not present
-        if (!meeting.transcript) {
-          meeting.transcript = [];
-        }
-
-        // UI-1: Set platform from detected meeting if available, otherwise default to in-person
-        if (!meeting.platform) {
-          if (detectedMeeting?.window?.platform) {
-            meeting.platform = detectedMeeting.window.platform;
-            console.log(
-              `[Recording] UI-1: Setting platform from detected meeting: ${meeting.platform}`
-            );
-          } else {
-            meeting.platform = 'in-person';
-            console.log('[Recording] UI-1: No detected meeting, defaulting to in-person');
+          const uploadData = await createDesktopSdkUpload();
+          if (!uploadData || !uploadData.upload_token) {
+            const errorMsg = uploadData?.error || 'Failed to create recording token';
+            console.error('[Recording] Upload token creation failed:', errorMsg);
+            return { success: false, error: errorMsg };
           }
-        }
 
-        // Store tracking info for the recording
-        global.activeMeetingIds = global.activeMeetingIds || {};
-        global.activeMeetingIds[key] = {
-          platformName: 'Desktop Recording',
-          noteId: validatedId,
-        };
+          meeting.recordingId = key;
+          meeting.uploadToken = uploadData.upload_token;
+          meeting.sdkUploadId = uploadData.id;
+          meeting.recallRecordingId = uploadData.recording_id;
 
-        // Register the recording in our active recordings tracker
-        recordingManager.addRecording(key, validatedId, 'Desktop Recording');
+          recordingManager.addRecording(key, validatedId, 'Desktop Recording');
 
-        // Save the updated data
-        console.log(`[Upload] Writing meetingsData with uploadToken for meeting ${validatedId}...`);
-        await fileOperationManager.writeData(meetingsData);
-        console.log(`[Upload] ✓ Completed writing meetingsData for meeting ${validatedId}`);
+          sdkLogger.logApiCall('startRecording', {
+            windowId: key,
+            uploadToken: `${uploadData.upload_token.substring(0, 8)}...`,
+          });
 
-        // Start recording with the key from prepareDesktopAudioRecording
-        console.log(
-          'Starting desktop recording with key:',
-          typeof key === 'string' ? key.substring(0, 8) + '...' : key
-        );
-
-        // Log the startRecording API call
-        sdkLogger.logApiCall('startRecording', {
-          windowId: key,
-          uploadToken: `${uploadData.upload_token.substring(0, 8)}...`, // Log truncated token for security
-        });
-
-        try {
-          // Await the startRecording call to catch errors (e.g., 401 authentication failures)
-          await recallProvider.sdk.startRecording({
+          await recallProvider?.sdk?.startRecording({
             windowId: key,
             uploadToken: uploadData.upload_token,
           });
-
           console.log('✓ RecallAI SDK startRecording succeeded');
 
           // SM-1: Initialize speech timeline for speaker matching
           initializeSpeechTimeline(key, Date.now());
-
-          // Update recording state and tray menu (Phase 10.7)
-          isRecording = true;
-          updateSystemTrayMenu();
-
-          // v1.2: Update widget with recording state
-          updateWidgetRecordingState(true, meeting.title);
-
-          // v1.2: Notify Stream Deck clients
-          expressApp.updateStreamDeckRecordingState(true, meeting.title);
-
-          return {
-            success: true,
-            recordingId: key,
-            meetingTitle: meeting.title,
-          };
-        } catch (startRecordingError) {
-          console.error('✗ RecallAI SDK startRecording failed:', startRecordingError);
-          // Clean up the recording entry we added before attempting startRecording,
-          // otherwise this orphaned entry can be killed by a later meeting-closed event
-          recordingManager.removeRecording(key);
-          if (global.activeMeetingIds) {
-            delete global.activeMeetingIds[key];
-          }
-          return {
-            success: false,
-            error: `Failed to start recording: ${startRecordingError.message || startRecordingError}`,
-          };
         }
-      } catch (sdkError) {
-        console.error('RecallAI SDK error:', sdkError);
+
+        // Store tracking info for the recording
+        global.activeMeetingIds = global.activeMeetingIds || {};
+        global.activeMeetingIds[meeting.recordingId] = {
+          platformName: isLocalProvider ? 'Local Recording' : 'Desktop Recording',
+          noteId: validatedId,
+        };
+
+        // Save the updated data
+        await fileOperationManager.writeData(meetingsData);
+
+        // Update recording state and tray menu
+        isRecording = true;
+        updateSystemTrayMenu();
+        updateWidgetRecordingState(true, meeting.title);
+        expressApp.updateStreamDeckRecordingState(true, meeting.title);
+
+        return {
+          success: true,
+          recordingId: meeting.recordingId,
+          meetingTitle: meeting.title,
+        };
+      } catch (recordingError) {
+        console.error('[Recording] Start recording failed:', recordingError);
+        if (meeting.recordingId) {
+          recordingManager.removeRecording(meeting.recordingId);
+          if (global.activeMeetingIds) {
+            delete global.activeMeetingIds[meeting.recordingId];
+          }
+        }
         return {
           success: false,
-          error: 'Failed to prepare desktop recording: ' + sdkError.message,
+          error: 'Failed to prepare desktop recording: ' + recordingError.message,
         };
       }
     } catch (error) {
@@ -10326,9 +10311,7 @@ ipcMain.handle('stopManualRecording', async (event, recordingId) => {
     recordingManager.updateState(validatedId, 'stopping');
 
     try {
-      recallProvider.sdk.stopRecording({
-        windowId: validatedId,
-      });
+      await recordingManager.stopRecording(validatedId);
 
       // The recording-ended event will be triggered automatically,
       // which will handle uploading and generating the summary
@@ -10937,7 +10920,7 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
         });
 
         try {
-          recallProvider.sdk.startRecording({
+          recallProvider?.sdk?.startRecording({
             windowId: currentWindowId,
           });
           console.log('[Recording Start] ✓ Recording started successfully (no token)');
@@ -10990,7 +10973,7 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
         );
 
         try {
-          recallProvider.sdk.startRecording({
+          recallProvider?.sdk?.startRecording({
             windowId: currentWindowId,
             uploadToken: uploadData.upload_token,
           });
@@ -11016,7 +10999,7 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
       });
 
       try {
-        recallProvider.sdk.startRecording({
+        recallProvider?.sdk?.startRecording({
           windowId: currentWindowId,
         });
         console.log('[Recording Start] ✓ Fallback recording started successfully');
