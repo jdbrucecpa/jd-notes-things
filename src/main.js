@@ -2518,9 +2518,10 @@ async function initSDK() {
           metadata: { windowId, provider: transcriptionProvider },
         });
 
-        // Check if recording file exists (SDK always creates MP3)
+        // Check if recording file exists
+        // LocalProvider provides audioFilePath directly; Recall SDK uses windows-desktop-{id}.mp3
         const fs = require('fs');
-        const recordingPath = path.join(RECORDING_PATH, `windows-desktop-${windowId}.mp3`);
+        const recordingPath = data.audioFilePath || path.join(RECORDING_PATH, `windows-desktop-${windowId}.mp3`);
         console.log('[Transcription] Checking for recording file:', recordingPath);
 
         if (fs.existsSync(recordingPath)) {
