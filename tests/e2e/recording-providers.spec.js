@@ -537,3 +537,102 @@ test.describe('5. Error Resilience', () => {
     expect(criticalErrors).toEqual([]);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6. LOCAL PROVIDER RECORDING PATH
+// ═══════════════════════════════════════════════════════════════════════════════
+
+test.describe('6. Local Provider Recording Path', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  test('can switch to Local provider via settings', async () => {
+    // Change recording provider to 'local' via IPC (faster than UI interaction)
+    const result = await mainPage.evaluate(async () => {
+      return await window.electronAPI.appUpdateSettings({ recordingProvider: 'local' });
+    });
+    expect(result.success).toBe(true);
+
+    // Verify the setting was applied
+    const settings = await mainPage.evaluate(async () => {
+      return await window.electronAPI.appGetSettings();
+    });
+    expect(settings.data.recordingProvider).toBe('local');
+    console.log('Switched to Local provider successfully');
+  });
+
+  test('startManualRecording does not crash in Local mode', async () => {
+    // This is the test that would have caught the bug:
+    // In Local mode, startManualRecording should NOT access recallProvider.sdk
+    // (which is null when using LocalProvider)
+
+    // Find a meeting to attempt recording on
+    const meetings = await mainPage.evaluate(async () => {
+      const result = await window.electronAPI.loadMeetingsData();
+      return result?.data?.pastMeetings || [];
+    });
+
+    if (meetings.length === 0) {
+      console.log('No meetings available to test recording — skipping');
+      test.skip();
+      return;
+    }
+
+    const meetingId = meetings[0].id;
+    console.log('Testing Local recording start with meeting:', meetingId);
+
+    // Try to start recording — this should NOT crash with null SDK reference
+    const result = await mainPage.evaluate(async (id) => {
+      try {
+        return await window.electronAPI.startManualRecording(id, 'assemblyai', 'new');
+      } catch (e) {
+        return { success: false, error: e.message, crashed: true };
+      }
+    }, meetingId);
+
+    console.log('Local recording start result:', JSON.stringify(result));
+
+    // The recording may fail (no loopback device in CI) but should NOT crash
+    // with "Cannot read properties of null (reading 'sdk')"
+    expect(result.crashed).not.toBe(true);
+    if (!result.success) {
+      // Acceptable failure reasons in test environment (no real audio device)
+      expect(result.error).not.toContain('Cannot read properties of null');
+      expect(result.error).not.toContain("reading 'sdk'");
+      console.log('Recording start failed gracefully:', result.error);
+    }
+  });
+
+  test('stopManualRecording does not crash in Local mode', async () => {
+    // Stop any recording that might be active — should not crash with null reference
+    const result = await mainPage.evaluate(async () => {
+      try {
+        return await window.electronAPI.stopManualRecording('nonexistent-id');
+      } catch (e) {
+        return { success: false, error: e.message, crashed: true };
+      }
+    });
+
+    console.log('Local stop recording result:', JSON.stringify(result));
+
+    // Should not crash with null reference
+    expect(result.crashed).not.toBe(true);
+    if (!result.success && result.error) {
+      expect(result.error).not.toContain('Cannot read properties of null');
+      expect(result.error).not.toContain("reading 'sdk'");
+    }
+  });
+
+  test('switch back to Recall provider for other tests', async () => {
+    // Clean up — switch back to Recall mode so other test suites are unaffected
+    const result = await mainPage.evaluate(async () => {
+      return await window.electronAPI.appUpdateSettings({ recordingProvider: 'recall' });
+    });
+    expect(result.success).toBe(true);
+
+    const settings = await mainPage.evaluate(async () => {
+      return await window.electronAPI.appGetSettings();
+    });
+    expect(settings.data.recordingProvider).toBe('recall');
+    console.log('Restored Recall provider successfully');
+  });
+});
