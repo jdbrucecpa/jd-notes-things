@@ -199,10 +199,10 @@ class RoutingEngine {
     const clients = databaseService.getAllClients().filter(c => c.vault_path && c.status === 'active');
     return {
       destinations: clients.map(c => ({
-        type: c.category === 'Client' ? 'client' : 'other',
-        id: c.id,
+        type: c.category === 'Client' ? 'client' : c.category === 'Industry' ? 'industry' : 'other',
+        slug: c.id,
         name: c.name,
-        vaultPath: c.vault_path,
+        path: c.vault_path,
       })),
     };
   }
