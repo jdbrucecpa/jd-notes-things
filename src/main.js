@@ -128,7 +128,6 @@ const {
   // Routing schemas
   routingAddOrganizationSchema,
   routingAddEmailsSchema,
-  routingDeleteOrganizationSchema,
   // Template schemas
   templatesEstimateCostSchema,
   templatesGenerateSummariesSchema,
@@ -1431,7 +1430,7 @@ async function initializeDefaultConfigFiles() {
     }
 
     // List of config files to copy (if missing)
-    const configFiles = ['routing.yaml', 'transcript-patterns.yaml', 'vocabulary.yaml'];
+    const configFiles = ['transcript-patterns.yaml', 'vocabulary.yaml'];
 
     // Copy each config file if it doesn't exist
     for (const filename of configFiles) {
@@ -6276,126 +6275,8 @@ ipcMain.handle('templates:reload', async () => {
 // ===================================================================
 
 // ===================================================================
-// Routing Configuration IPC Handlers (Phase 10.4)
+// Routing IPC Handlers (database-driven since v1.4)
 // ===================================================================
-
-// Helper function to get routing config path - always uses userData/config/
-function getRoutingConfigPath() {
-  return path.join(app.getPath('userData'), 'config', 'routing.yaml');
-}
-
-// Get routing configuration
-ipcMain.handle(
-  'routing:getConfig',
-  createIpcHandler(async () => {
-    console.log('[Routing IPC] Getting routing configuration');
-
-    const routingPath = getRoutingConfigPath();
-    console.log('[Routing IPC] Using config path:', routingPath);
-
-    if (!fs.existsSync(routingPath)) {
-      throw new Error('Routing configuration file not found at: ' + routingPath);
-    }
-
-    const content = fs.readFileSync(routingPath, 'utf8');
-    const config = yaml.load(content);
-
-    return {
-      config,
-      content,
-      path: routingPath,
-    };
-  })
-);
-
-// Save routing configuration
-ipcMain.handle(
-  'routing:saveConfig',
-  createIpcHandler(async (event, content) => {
-    console.log('[Routing IPC] Saving routing configuration');
-
-    const routingPath = getRoutingConfigPath();
-    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
-
-    // Create backup before saving
-    if (fs.existsSync(routingPath)) {
-      fs.copyFileSync(routingPath, backupPath);
-      console.log('[Routing IPC] Created backup at:', backupPath);
-    }
-
-    // Validate YAML before saving
-    try {
-      yaml.load(content);
-    } catch (yamlError) {
-      throw new Error(`Invalid YAML: ${yamlError.message}`);
-    }
-
-    // Save the new configuration
-    fs.writeFileSync(routingPath, content, 'utf8');
-    console.log('[Routing IPC] Routing configuration saved successfully');
-
-    // Reload routing engine
-    if (routingEngine) {
-      routingEngine.reloadConfig();
-      console.log('[Routing IPC] Routing engine reloaded');
-    }
-
-    return {};
-  })
-);
-
-// Validate routing configuration
-ipcMain.handle(
-  'routing:validateConfig',
-  createIpcHandler(async (event, content) => {
-    console.log('[Routing IPC] Validating routing configuration');
-
-    // Parse YAML
-    const config = yaml.load(content);
-    const errors = [];
-
-    // Validate structure
-    if (!config) {
-      errors.push('Configuration is empty');
-      return { valid: false, errors };
-    }
-
-    // Check for required sections
-    if (!config.clients && !config.industry && !config.internal) {
-      errors.push('At least one routing section (clients, industry, or internal) is required');
-    }
-
-    // Validate clients
-    if (config.clients) {
-      Object.keys(config.clients).forEach(key => {
-        const client = config.clients[key];
-        if (!client.vault_path) {
-          errors.push(`Client "${key}" is missing vault_path`);
-        }
-      });
-    }
-
-    // Validate industry
-    if (config.industry) {
-      Object.keys(config.industry).forEach(key => {
-        const ind = config.industry[key];
-        if (!ind.vault_path) {
-          errors.push(`Industry contact "${key}" is missing vault_path`);
-        }
-      });
-    }
-
-    // Validate internal
-    if (config.internal && !config.internal.vault_path) {
-      errors.push('Internal section is missing vault_path');
-    }
-
-    return {
-      valid: errors.length === 0,
-      errors,
-    };
-  })
-);
 
 // Test routing with given emails
 ipcMain.handle(
@@ -6725,106 +6606,6 @@ ipcMain.handle(
   })
 );
 
-// Delete organization from routing config
-ipcMain.handle(
-  'routing:deleteOrganization',
-  withValidation(routingDeleteOrganizationSchema, async (event, { type, id }) => {
-    console.log('[Routing IPC] Deleting organization:', type, id);
-
-    const routingPath = getRoutingConfigPath();
-
-    if (!fs.existsSync(routingPath)) {
-      throw new Error('Routing configuration file not found');
-    }
-
-    const content = fs.readFileSync(routingPath, 'utf8');
-    const config = yaml.load(content);
-
-    // Validate inputs
-    if (!type || !id) {
-      throw new Error('Type and ID are required');
-    }
-
-    // Map type names (handle both singular and plural forms)
-    // Schema sends: 'client', 'industry', 'internal'
-    // YAML uses: 'clients', 'industry', 'internal'
-    const typeKey = type === 'client' ? 'clients' : type;
-
-    // Prevent deleting internal (it's special)
-    if (typeKey === 'internal') {
-      throw new Error('Cannot delete internal organization');
-    }
-
-    // Check if organization exists
-    if (!config[typeKey] || !config[typeKey][id]) {
-      throw new Error(`Organization "${id}" not found in ${typeKey}`);
-    }
-
-    // Create backup before deleting
-    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
-    if (fs.existsSync(routingPath)) {
-      fs.copyFileSync(routingPath, backupPath);
-      console.log('[Routing IPC] Created backup at:', backupPath);
-    }
-
-    // Delete the organization
-    delete config[typeKey][id];
-
-    // Keep the section even if empty (don't delete it)
-    // This ensures the routing engine doesn't fail on reload
-
-    // Convert back to YAML and save
-    const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
-    fs.writeFileSync(routingPath, newContent, 'utf8');
-    console.log('[Routing IPC] Organization deleted successfully');
-
-    // Reload routing engine
-    if (routingEngine) {
-      routingEngine.reloadConfig();
-      console.log('[Routing IPC] Routing engine reloaded');
-    }
-
-    return { success: true, content: newContent };
-  })
-);
-
-// Restore routing configuration from backup
-ipcMain.handle(
-  'routing:restoreBackup',
-  createIpcHandler(async () => {
-    console.log('[Routing IPC] Restoring routing configuration from backup');
-
-    const routingPath = getRoutingConfigPath();
-    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
-
-    if (!fs.existsSync(backupPath)) {
-      throw new Error('Backup file not found. No backup available to restore.');
-    }
-
-    // Read the backup file
-    const backupContent = fs.readFileSync(backupPath, 'utf8');
-
-    // Validate the backup is valid YAML
-    try {
-      yaml.load(backupContent);
-    } catch (yamlError) {
-      throw new Error(`Backup file is corrupted: ${yamlError.message}`);
-    }
-
-    // Restore the backup by copying it to the main config
-    fs.copyFileSync(backupPath, routingPath);
-    console.log('[Routing IPC] Routing configuration restored from backup');
-
-    // Reload routing engine
-    if (routingEngine) {
-      routingEngine.reloadConfig();
-      console.log('[Routing IPC] Routing engine reloaded');
-    }
-
-    return {};
-  })
-);
-
 // ===================================================================
 // End Routing Configuration IPC Handlers
 // ===================================================================
@@ -6855,18 +6636,11 @@ ipcMain.handle('vocabulary:getStats', async () => {
   }
 });
 
-// Get client slugs from routing config (for client selector)
+// Get client slugs from database (for client selector)
 ipcMain.handle('vocabulary:getClientSlugs', async () => {
   try {
-    // Get client slugs from routing config
-    const routingPath = getRoutingConfigPath();
-    if (fs.existsSync(routingPath)) {
-      const content = fs.readFileSync(routingPath, 'utf8');
-      const config = yaml.load(content);
-      const clientSlugs = Object.keys(config?.clients || {});
-      return { success: true, data: clientSlugs };
-    }
-    return { success: true, data: [] };
+    const clients = databaseService.getAllClients().filter(c => c.status === 'active');
+    return { success: true, data: clients.map(c => c.id) };
   } catch (error) {
     console.error('[Vocabulary IPC] Error getting client slugs:', error);
     return { success: false, error: error.message };

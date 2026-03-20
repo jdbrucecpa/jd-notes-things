@@ -39,7 +39,7 @@ global:
     #   intensifier: 5
 
 # Client-specific vocabulary
-# Keys should match client slugs from routing.yaml
+# Keys should match client IDs from the companies database
 clients:
   # Example client vocabulary:
   # acme-corp:

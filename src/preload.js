@@ -126,10 +126,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model: options.model || null,
     }),
   templatesReload: () => ipcRenderer.invoke('templates:reload'),
-  // Routing Configuration (Phase 10.4)
-  routingGetConfig: () => ipcRenderer.invoke('routing:getConfig'),
-  routingSaveConfig: content => ipcRenderer.invoke('routing:saveConfig', content),
-  routingValidateConfig: content => ipcRenderer.invoke('routing:validateConfig', content),
+  // Routing (database-driven since v1.4)
   routingTestEmails: emails => ipcRenderer.invoke('routing:testEmails', emails),
   routingPreviewMeetingRoute: meetingId =>
     ipcRenderer.invoke('routing:previewMeetingRoute', meetingId),
@@ -139,9 +136,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('routing:addOrganization', { type, id, vaultPath, emails, contacts }),
   routingAddEmailsToOrganization: (type, slug, emails, contacts) =>
     ipcRenderer.invoke('routing:addEmailsToOrganization', { type, slug, emails, contacts }),
-  routingDeleteOrganization: (type, id) =>
-    ipcRenderer.invoke('routing:deleteOrganization', { type, id }),
-  routingRestoreBackup: () => ipcRenderer.invoke('routing:restoreBackup'),
   // Vocabulary Management (VC-2)
   vocabularyGetConfig: () => ipcRenderer.invoke('vocabulary:getConfig'),
   vocabularyGetStats: () => ipcRenderer.invoke('vocabulary:getStats'),
