@@ -6618,71 +6618,30 @@ ipcMain.handle(
   })
 );
 
-// CS-4.5: Add emails/domains to existing organization
+// CS-4.5: Add emails/domains to existing organization (database-driven, replaces YAML)
 ipcMain.handle(
   'routing:addEmailsToOrganization',
-  withValidation(routingAddEmailsSchema, async (event, { type, slug, emails, contacts }) => {
-    console.log('[Routing IPC] Adding emails to organization:', type, slug);
+  withValidation(routingAddEmailsSchema, async (event, { type, slug, emails }) => {
+    console.log('[Routing IPC] Adding emails to organization in DB:', type, slug);
 
-    const routingPath = getRoutingConfigPath();
-
-    if (!fs.existsSync(routingPath)) {
-      throw new Error('Routing configuration file not found');
+    if (!slug) {
+      throw new Error('Organization slug is required');
     }
 
-    const content = fs.readFileSync(routingPath, 'utf8');
-    const config = yaml.load(content);
-
-    // Validate inputs
-    if (!type || !slug) {
-      throw new Error('Type and slug are required');
+    const client = databaseService.getClient(slug);
+    if (!client) {
+      throw new Error(`Organization "${slug}" not found in database`);
     }
 
-    // Map type names (handle both singular and plural)
-    const typeKey = type === 'client' ? 'clients' : type === 'industry' ? 'industry' : type;
+    // Merge new domains with existing (deduplicate)
+    // getClient() already JSON-parses the domains column
+    const currentDomains = client.domains || [];
+    const newDomains = [...new Set([...currentDomains, ...(emails || [])])];
 
-    // Check if organization exists
-    if (!config[typeKey] || !config[typeKey][slug]) {
-      throw new Error(`Organization "${slug}" not found in ${typeKey}`);
-    }
+    databaseService.saveClient({ ...client, domains: newDomains });
+    console.log(`[Routing IPC] Updated domains for ${slug}: ${newDomains.join(', ')}`);
 
-    const org = config[typeKey][slug];
-
-    // Add new emails (deduplicate)
-    if (emails && emails.length > 0) {
-      const existingEmails = org.emails || [];
-      const newEmails = emails.filter(e => !existingEmails.includes(e));
-      org.emails = [...existingEmails, ...newEmails];
-      console.log(`[Routing IPC] Added ${newEmails.length} new email domains:`, newEmails);
-    }
-
-    // Add new contacts (deduplicate)
-    if (contacts && contacts.length > 0) {
-      const existingContacts = org.contacts || [];
-      const newContacts = contacts.filter(c => !existingContacts.includes(c));
-      org.contacts = [...existingContacts, ...newContacts];
-      console.log(`[Routing IPC] Added ${newContacts.length} new contacts:`, newContacts);
-    }
-
-    // Create backup before saving
-    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
-    if (fs.existsSync(routingPath)) {
-      fs.copyFileSync(routingPath, backupPath);
-      console.log('[Routing IPC] Created backup at:', backupPath);
-    }
-
-    // Convert back to YAML and save
-    const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
-    fs.writeFileSync(routingPath, newContent, 'utf8');
-    console.log('[Routing IPC] Emails added successfully');
-
-    // Reload routing engine
-    if (routingEngine) {
-      routingEngine.reloadConfig();
-      console.log('[Routing IPC] Routing engine reloaded');
-    }
-
-    return { success: true, content: newContent };
+    return { success: true };
   })
 );
 
