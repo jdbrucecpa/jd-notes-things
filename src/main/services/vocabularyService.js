@@ -139,7 +139,7 @@ class VocabularyService {
 
   /**
    * Get vocabulary for a specific client
-   * @param {string} clientSlug - Client identifier (matches routing.yaml)
+   * @param {string} clientSlug - Client identifier (matches clients database)
    * @returns {Object|null} Client vocabulary or null if not found
    */
   getClientVocabulary(clientSlug) {

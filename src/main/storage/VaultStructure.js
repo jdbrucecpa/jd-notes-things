@@ -172,7 +172,7 @@ class VaultStructure {
 
     // Reject paths containing directory traversal (..)
     // Check RAW path BEFORE normalization (normalize() resolves .. segments)
-    // This prevents attacks like "clients/../../config/routing.yaml"
+    // This prevents path traversal attacks like "clients/../../config/secrets"
     if (relativePath.includes('..')) {
       const error = new Error(`Directory traversal detected in path: ${relativePath}`);
       console.error('[VaultStructure Security]', error.message);

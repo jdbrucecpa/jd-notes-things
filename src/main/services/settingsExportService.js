@@ -3,7 +3,6 @@
  * Handles exporting and importing app configuration for backup/transfer.
  *
  * Export includes:
- * - Routing rules (routing.yaml)
  * - Vocabulary lists (vocabulary.yaml)
  * - Transcript patterns (transcript-patterns.yaml)
  * - Summary templates (config/templates/*)
@@ -44,7 +43,6 @@ class SettingsExportService {
     return {
       // Config files in userData/config/
       config: {
-        routing: path.join(this.configPath, 'routing.yaml'),
         vocabulary: path.join(this.configPath, 'vocabulary.yaml'),
         transcriptPatterns: path.join(this.configPath, 'transcript-patterns.yaml'),
       },
@@ -181,9 +179,6 @@ class SettingsExportService {
       archive.append(JSON.stringify(data.manifest, null, 2), { name: 'manifest.json' });
 
       // Add config files
-      if (data.files.routing) {
-        archive.append(data.files.routing, { name: 'config/routing.yaml' });
-      }
       if (data.files.vocabulary) {
         archive.append(data.files.vocabulary, { name: 'config/vocabulary.yaml' });
       }
