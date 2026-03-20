@@ -3287,7 +3287,7 @@ function deduplicateParticipants(participants) {
  * @param {Object|null} routingOverride - CS-4.4: Optional manual routing override
  * @returns {Promise<Object>} Export result with paths created
  */
-async function exportMeetingToObsidian(meeting, routingOverride = null) {
+async function exportMeetingToObsidian(meeting, routingOverride = null, options = {}) {
   if (!vaultStructure || !routingEngine) {
     console.log('[ObsidianExport] Export system not initialized - skipping export');
     return { success: false, error: 'Export system not initialized' };
@@ -3448,8 +3448,8 @@ async function exportMeetingToObsidian(meeting, routingOverride = null) {
       console.log(
         `[ObsidianExport] CS-4.4: Using routing override: ${fullPath} (${routingOverride.type})`
       );
-    } else if (meeting.obsidianLink) {
-      // Manual override - use existing path
+    } else if (meeting.obsidianLink && !options.forceReroute) {
+      // Use existing path from prior export (skip when forceReroute re-routes fresh)
       // Extract folder path from obsidianLink (remove filename)
       const linkPath = meeting.obsidianLink.replace(/[^/]+\.md$/, '');
       routes = [
@@ -6166,7 +6166,7 @@ ipcMain.handle(
 
         // Auto-trigger export to Obsidian after template generation
         console.log('[Template IPC] Auto-triggering Obsidian export...');
-        const exportResult = await exportMeetingToObsidian(meeting, routingOverride);
+        const exportResult = await exportMeetingToObsidian(meeting, routingOverride, { forceReroute: true });
 
         if (exportResult.success && exportResult.obsidianLink) {
           meeting.obsidianLink = exportResult.obsidianLink;
