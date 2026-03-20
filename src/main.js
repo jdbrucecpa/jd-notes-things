@@ -6614,6 +6614,23 @@ ipcMain.handle('routing:getAllDestinations', async () => {
   }
 });
 
+// Get all domains currently mapped to any client (for unmatched domain detection)
+ipcMain.handle('routing:getAllMappedDomains', async () => {
+  try {
+    const clients = databaseService.getAllClients();
+    const domains = new Set();
+    for (const client of clients) {
+      // getAllClients() already JSON-parses the domains column
+      const clientDomains = client.domains || [];
+      clientDomains.forEach(d => domains.add(d.toLowerCase()));
+    }
+    return { domains: [...domains] };
+  } catch (error) {
+    console.error('[Routing IPC] Error getting mapped domains:', error);
+    return { domains: [] };
+  }
+});
+
 // Helper function to build human-readable routing reason
 function buildRoutingReason(route, matchResults, participantEmails, orgName) {
   switch (route.type) {
