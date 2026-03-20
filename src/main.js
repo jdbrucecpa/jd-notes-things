@@ -6576,71 +6576,45 @@ function buildRoutingReason(route, matchResults, participantEmails, orgName) {
   }
 }
 
-// Add new organization to routing config
+// Add new organization to routing (database-driven, replaces YAML)
 ipcMain.handle(
   'routing:addOrganization',
-  withValidation(routingAddOrganizationSchema, async (event, { type, id, vaultPath, emails, contacts }) => {
-    console.log('[Routing IPC] Adding new organization:', type, id);
+  withValidation(routingAddOrganizationSchema, async (event, { type, id, vaultPath, emails }) => {
+    console.log('[Routing IPC] Adding new organization to DB:', type, id);
 
-    const routingPath = getRoutingConfigPath();
-
-    if (!fs.existsSync(routingPath)) {
-      throw new Error('Routing configuration file not found');
-    }
-
-    const content = fs.readFileSync(routingPath, 'utf8');
-    const config = yaml.load(content);
-
-    // Validate inputs
     if (!type || !id || !vaultPath) {
       throw new Error('Type, ID, and vault path are required');
     }
 
-    // Map type names (handle both singular and plural forms)
-    // Schema sends: 'client', 'industry', 'internal'
-    // YAML uses: 'clients', 'industry', 'internal'
-    const typeKey = type === 'client' ? 'clients' : type;
-
-    if (!['clients', 'industry', 'internal'].includes(typeKey)) {
-      throw new Error('Type must be "client", "industry", or "internal"');
+    if (!clientService) {
+      throw new Error('Client service not initialized');
     }
 
     // Check if organization already exists
-    if (config[typeKey] && config[typeKey][id]) {
-      throw new Error(`Organization "${id}" already exists in ${typeKey}`);
+    const existing = clientService.getClient(id);
+    if (existing) {
+      throw new Error(`Organization "${id}" already exists`);
     }
 
-    // Initialize section if it doesn't exist
-    if (!config[typeKey]) {
-      config[typeKey] = {};
+    // Create client in database
+    const category = type === 'client' ? 'Client' : type === 'industry' ? 'Industry' : 'Other';
+    const client = clientService.createClient({
+      id,
+      name: id,
+      vaultPath,
+      category,
+    });
+
+    // Add domains if provided
+    if (emails && emails.length > 0) {
+      clientService.updateClient(client.id, {
+        domains: [...new Set(emails)],
+      });
+      console.log(`[Routing IPC] Added ${emails.length} domain(s) to ${client.id}`);
     }
 
-    // Add the new organization
-    config[typeKey][id] = {
-      vault_path: vaultPath,
-      emails: emails || [],
-      contacts: contacts || [],
-    };
-
-    // Create backup before saving
-    const backupPath = routingPath.replace('.yaml', '.backup.yaml');
-    if (fs.existsSync(routingPath)) {
-      fs.copyFileSync(routingPath, backupPath);
-      console.log('[Routing IPC] Created backup at:', backupPath);
-    }
-
-    // Convert back to YAML and save
-    const newContent = yaml.dump(config, { lineWidth: -1, noRefs: true });
-    fs.writeFileSync(routingPath, newContent, 'utf8');
-    console.log('[Routing IPC] Organization added successfully');
-
-    // Reload routing engine
-    if (routingEngine) {
-      routingEngine.reloadConfig();
-      console.log('[Routing IPC] Routing engine reloaded');
-    }
-
-    return { success: true, content: newContent };
+    console.log('[Routing IPC] Organization added to DB successfully:', client.id);
+    return { success: true };
   })
 );
 
