@@ -134,6 +134,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   routingPreviewMeetingRoute: meetingId =>
     ipcRenderer.invoke('routing:previewMeetingRoute', meetingId),
   routingGetAllDestinations: () => ipcRenderer.invoke('routing:getAllDestinations'),
+  routingGetAllMappedDomains: () => ipcRenderer.invoke('routing:getAllMappedDomains'),
   routingAddOrganization: (type, id, vaultPath, emails, contacts) =>
     ipcRenderer.invoke('routing:addOrganization', { type, id, vaultPath, emails, contacts }),
   routingAddEmailsToOrganization: (type, slug, emails, contacts) =>

@@ -6222,30 +6222,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
 
-    // Get current routing config to find which domains are already mapped
+    // Get domains already mapped in the database
     try {
-      const { config } = await window.electronAPI.routingGetConfig();
-      const existingDomains = new Set();
-
-      // Collect all already-mapped domains
-      if (config.clients) {
-        Object.values(config.clients).forEach(client => {
-          (client.emails || []).forEach(d => existingDomains.add(d.toLowerCase()));
-        });
-      }
-      if (config.industry) {
-        Object.values(config.industry).forEach(ind => {
-          (ind.emails || []).forEach(d => existingDomains.add(d.toLowerCase()));
-        });
-      }
-      if (config.internal && config.internal.team_emails) {
-        config.internal.team_emails.forEach(d => existingDomains.add(d.toLowerCase()));
-      }
+      const { domains: mappedDomains } = await window.electronAPI.routingGetAllMappedDomains();
+      const existingDomains = new Set(mappedDomains);
 
       // Find domains not already mapped
       unmatchedDomains = [...domains].filter(d => !existingDomains.has(d));
     } catch (error) {
-      console.error('[Templates] Error getting routing config:', error);
+      console.error('[Templates] Error getting mapped domains:', error);
       unmatchedDomains = [...domains];
     }
 
