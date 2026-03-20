@@ -421,7 +421,7 @@ export function initializeSettingsUI() {
       if (window.electronAPI?.appUpdateSettings) {
         window.electronAPI.appUpdateSettings({ recordingProvider: newProvider });
       }
-      notifyInfo('Recording provider changed. Restart the app to apply.');
+      notifyInfo('Recording provider switched to ' + (newProvider === 'local' ? 'Local' : 'Recall.ai') + '.');
     });
   }
 

@@ -8677,10 +8677,42 @@ ipcMain.handle(
     if (updates.autoStartRecording !== undefined) {
       appSettings.autoStartRecording = updates.autoStartRecording;
     }
-    // v2.0: Recording provider (requires restart to take effect)
-    if (updates.recordingProvider !== undefined) {
+    // v2.0: Recording provider — hot-swap without restart
+    if (updates.recordingProvider !== undefined && updates.recordingProvider !== appSettings.recordingProvider) {
+      const oldProvider = appSettings.recordingProvider;
       appSettings.recordingProvider = updates.recordingProvider;
-      logger.ipc.info(`[IPC] Recording provider set to: ${updates.recordingProvider} (restart required)`);
+      logger.ipc.info(`[IPC] Switching recording provider: ${oldProvider} → ${updates.recordingProvider}`);
+
+      // Hot-swap the provider
+      try {
+        let newProvider;
+        let config;
+        if (updates.recordingProvider === 'local') {
+          newProvider = new LocalProvider();
+          config = { recordingPath: RECORDING_PATH };
+        } else {
+          newProvider = new RecallProvider(RecallAiSdk);
+          recallProvider = newProvider;
+          const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
+          config = {
+            sdkConfig: {
+              access_token: RECALLAI_API_KEY,
+              user_id: require('os').hostname(),
+              config: { recording_path: RECORDING_PATH },
+              recording_path: RECORDING_PATH,
+              api_url: RECALLAI_API_URL,
+            },
+          };
+        }
+        recordingProvider = newProvider;
+        await recordingManager.switchProvider(newProvider, config);
+        sdkReady = true;
+        logger.ipc.info(`[IPC] Recording provider switched to: ${updates.recordingProvider}`);
+      } catch (error) {
+        logger.ipc.error(`[IPC] Failed to switch recording provider: ${error.message}`);
+        // Revert setting on failure
+        appSettings.recordingProvider = oldProvider;
+      }
     }
 
     // Save to disk

@@ -84,6 +84,32 @@ class RecordingManager extends EventEmitter {
     return this.provider.shutdown();
   }
 
+  async switchProvider(newProvider, config) {
+    // Shut down old provider
+    try {
+      await this.provider.shutdown();
+    } catch (_err) {
+      // Old provider may already be stopped — non-fatal
+    }
+    this.provider.removeAllListeners();
+
+    // Reset state
+    this.recordings = {};
+    this.isRecording = false;
+    this.detectedMeeting = null;
+    this.recordingStartTime = null;
+    this.currentMeetingTitle = null;
+    this.currentMeetingId = null;
+
+    // Wire new provider
+    this.provider = newProvider;
+    this._bindProviderEvents();
+
+    // Initialize
+    await this.provider.initialize(config);
+    this.emit('provider-switched', { provider: newProvider.constructor.name });
+  }
+
   addRecording(recordingId, noteId, platform = 'unknown') {
     this.recordings[recordingId] = {
       noteId,

@@ -84,4 +84,35 @@ describe('RecordingManager', () => {
     provider.emit('upload-progress', { progress: 50 });
     expect(handler).toHaveBeenCalledWith({ progress: 50 });
   });
+
+  it('switchProvider swaps to a new provider', async () => {
+    const newProvider = new MockProvider();
+    const handler = vi.fn();
+    manager.on('provider-switched', handler);
+
+    await manager.switchProvider(newProvider, {});
+
+    expect(manager.provider).toBe(newProvider);
+    expect(manager.isRecording).toBe(false);
+    expect(manager.detectedMeeting).toBeNull();
+    expect(handler).toHaveBeenCalled();
+
+    // New provider events should work
+    const meetingHandler = vi.fn();
+    manager.on('meeting-detected', meetingHandler);
+    newProvider.emit('meeting-detected', { windowId: 'w2', platform: 'teams', title: 'New' });
+    expect(meetingHandler).toHaveBeenCalled();
+  });
+
+  it('switchProvider stops old provider events', async () => {
+    const oldHandler = vi.fn();
+    manager.on('meeting-detected', oldHandler);
+
+    const newProvider = new MockProvider();
+    await manager.switchProvider(newProvider, {});
+
+    // Old provider events should NOT trigger
+    provider.emit('meeting-detected', { windowId: 'old', platform: 'zoom', title: 'Old' });
+    expect(oldHandler).not.toHaveBeenCalled();
+  });
 });
