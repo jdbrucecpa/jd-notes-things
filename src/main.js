@@ -3487,7 +3487,7 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
     let routes;
     if (routingOverride) {
       // CS-4.4: Use manual routing override from template modal
-      // Build proper fullPath with /meetings/ subfolder like the routing engine does
+      // Build fullPath matching routing engine convention: vault_path/date-title-slug
       const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
       const dateStr = meetingDate.toISOString().split('T')[0];
       const titleSlug = meeting.title
@@ -3497,7 +3497,7 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
             .replace(/^-|-$/g, '')
         : 'meeting';
       const folderName = `${dateStr}-${titleSlug}`;
-      const fullPath = path.join(routingOverride.path, 'meetings', folderName);
+      const fullPath = path.join(routingOverride.path, folderName);
 
       routes = [
         {
