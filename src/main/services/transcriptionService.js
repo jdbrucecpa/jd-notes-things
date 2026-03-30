@@ -4,7 +4,7 @@ const path = require('path');
 
 /**
  * Unified Transcription Service
- * Supports multiple providers: Recall.ai, AssemblyAI, Deepgram
+ * Supports multiple providers: AssemblyAI, Deepgram, Local (JD Audio Service)
  *
  * Universal-3-Pro Features (AssemblyAI):
  * - Higher accuracy transcription with speech_models: ['universal-3-pro', 'universal-2']
@@ -22,9 +22,9 @@ const path = require('path');
 class TranscriptionService {
   constructor() {
     this.providers = {
-      recallai: this.transcribeWithRecallAI.bind(this),
       assemblyai: this.transcribeWithAssemblyAI.bind(this),
       deepgram: this.transcribeWithDeepgram.bind(this),
+      local: this.transcribeWithLocal.bind(this),
     };
     this.keyManagementService = null;
     this.backgroundTaskManager = null;
@@ -82,7 +82,7 @@ class TranscriptionService {
 
   /**
    * Main entry point - routes to the correct provider
-   * @param {string} provider - 'recallai', 'assemblyai', or 'deepgram'
+   * @param {string} provider - 'assemblyai', 'deepgram', or 'local'
    * @param {string} audioFilePath - Path to the MP3 file
    * @param {object} options - Provider-specific options
    * @returns {Promise<object>} Transcript with speaker diarization
@@ -106,11 +106,118 @@ class TranscriptionService {
   }
 
   /**
-   * Recall.ai (existing implementation - kept for when SDK is fixed)
-   * Note: Currently broken - SDK uploadRecording() doesn't work
+   * Local Transcription via JD Audio Service
+   * Calls a locally-running Python FastAPI server for offline transcription + speaker diarization
+   * @param {string} audioFilePath - Path to audio file
+   * @param {object} options - Transcription options
+   * @param {string} [options.aiServiceUrl='http://localhost:8374'] - Base URL of the JD Audio Service
+   * @param {Array} [options.speakerNames] - Known speaker names for diarization hints
+   * @param {number} [options.minSpeakers] - Minimum number of speakers expected
+   * @param {number} [options.maxSpeakers] - Maximum number of speakers expected
+   * @param {Array} [options.vocabulary] - Domain-specific vocabulary terms
+   * @param {string} [options.meetingId] - Meeting ID for background task tracking
    */
-  async transcribeWithRecallAI(audioFilePath, _options = {}) {
-    throw new Error('Recall.ai SDK upload is currently broken. Please use AssemblyAI or Deepgram.');
+  async transcribeWithLocal(audioFilePath, options = {}) {
+    const aiServiceUrl = options.aiServiceUrl || 'http://localhost:8374';
+
+    let taskId = null;
+
+    // Create background task if manager available
+    if (this.backgroundTaskManager) {
+      taskId = this.backgroundTaskManager.addTask({
+        type: 'transcription',
+        description: `Transcribing: ${path.basename(audioFilePath)}`,
+        meetingId: options.meetingId,
+        metadata: { audioPath: audioFilePath, provider: 'local' },
+      });
+    }
+
+    try {
+      // Health check — confirm service is running
+      this.updateTaskProgress(taskId, 5, 'Checking JD Audio Service...');
+      console.log('[Local] Checking JD Audio Service health...');
+      let healthOk = false;
+      try {
+        const healthRes = await fetch(`${aiServiceUrl}/health`, {
+          signal: AbortSignal.timeout(5000),
+        });
+        healthOk = healthRes.ok;
+      } catch {
+        healthOk = false;
+      }
+      if (!healthOk) {
+        throw new Error(
+          'JD Audio Service is not running. Start it from the system tray, or switch to cloud transcription in Settings.'
+        );
+      }
+      console.log('[Local] JD Audio Service is healthy');
+
+      // Estimate timeout from file size (rough: 1 MB ≈ 1 min of audio at 128 kbps)
+      const stats = fs.statSync(audioFilePath);
+      const estimatedDurationSec = (stats.size / (128 * 1024 / 8)) * 1; // bytes → seconds
+      const timeoutMs = (estimatedDurationSec * 0.5 + 60) * 1000;
+      console.log(
+        `[Local] File size: ${(stats.size / 1024).toFixed(2)} KB, estimated duration: ${estimatedDurationSec.toFixed(0)}s, timeout: ${(timeoutMs / 1000).toFixed(0)}s`
+      );
+
+      // POST /process
+      this.updateTaskProgress(taskId, 10, 'Sending audio to JD Audio Service...');
+      console.log('[Local] POSTing to /process...');
+      const response = await fetch(`${aiServiceUrl}/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audioPath: audioFilePath,
+          options: {
+            speakerNames: options.speakerNames,
+            minSpeakers: options.minSpeakers,
+            maxSpeakers: options.maxSpeakers,
+            vocabulary: options.vocabulary,
+          },
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text().catch(() => response.statusText);
+        throw new Error(`JD Audio Service returned ${response.status}: ${errText}`);
+      }
+
+      this.updateTaskProgress(taskId, 80, 'Processing transcript...');
+      const data = await response.json();
+
+      // Normalize to standard shape
+      // Service returns timestamps in seconds; convert to milliseconds
+      const entries = (data.entries || []).map(entry => ({
+        speaker: entry.speaker,
+        speakerId: entry.speakerId ?? entry.speaker_id ?? entry.speaker,
+        text: entry.text,
+        timestamp: typeof entry.timestamp === 'number' ? Math.round(entry.timestamp * 1000) : entry.timestamp,
+        words: entry.words || [],
+      }));
+
+      const result = {
+        text: data.text || entries.map(e => e.text).join(' '),
+        entries,
+        segments: data.segments || null,
+        provider: 'local',
+        confidence: data.confidence ?? 0.9,
+        audio_duration: data.audio_duration || null,
+      };
+
+      this.updateTaskProgress(taskId, 95, 'Finalizing...');
+      if (this.backgroundTaskManager && taskId) {
+        this.backgroundTaskManager.completeTask(taskId, {});
+      }
+
+      console.log('[Local] Transcription complete');
+      return result;
+    } catch (error) {
+      if (this.backgroundTaskManager && taskId) {
+        this.backgroundTaskManager.failTask(taskId, error.message);
+      }
+      throw error;
+    }
   }
 
   /**

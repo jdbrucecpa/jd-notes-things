@@ -314,7 +314,7 @@ const meetingAutoStartSchema = z.object({
 });
 
 // Transcription provider schema
-const transcriptionProviderSchema = z.enum(['assemblyai', 'deepgram', 'recallai']).optional();
+const transcriptionProviderSchema = z.enum(['assemblyai', 'deepgram', 'local']).optional();
 
 // ===================================================
 // Backup Schemas (v1.4)
