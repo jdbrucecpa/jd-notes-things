@@ -17,7 +17,7 @@ const fs = require('fs');
 const { app } = require('electron');
 const log = require('electron-log');
 
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 
 class DatabaseService {
   constructor() {
@@ -202,6 +202,33 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_client_contacts_email ON client_contacts(email);
       CREATE INDEX IF NOT EXISTS idx_client_contacts_client ON client_contacts(client_id);
       CREATE INDEX IF NOT EXISTS idx_clients_type ON clients(type);
+
+      -- v4 tables: voice_profiles, voice_samples
+      CREATE TABLE IF NOT EXISTS voice_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        google_contact_id TEXT,
+        contact_name TEXT NOT NULL,
+        contact_email TEXT,
+        embedding BLOB,
+        sample_count INTEGER DEFAULT 0,
+        total_duration REAL DEFAULT 0,
+        confidence REAL DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS voice_samples (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        profile_id INTEGER NOT NULL REFERENCES voice_profiles(id) ON DELETE CASCADE,
+        meeting_id TEXT REFERENCES meetings(id) ON DELETE SET NULL,
+        embedding BLOB,
+        duration REAL,
+        created_at TEXT DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_voice_profiles_email ON voice_profiles(contact_email);
+      CREATE INDEX IF NOT EXISTS idx_voice_profiles_contact ON voice_profiles(contact_name);
+      CREATE INDEX IF NOT EXISTS idx_voice_samples_profile ON voice_samples(profile_id);
     `);
   }
 
@@ -281,6 +308,41 @@ class DatabaseService {
         WHERE category IS NULL
       `).run();
       log.info('[Database] v2 → v3 migration complete');
+    }
+
+    if (oldVersion < 4) {
+      log.info('[Database] Running v3 → v4 migration: voice_profiles and voice_samples tables');
+      const migratev4 = this.db.transaction(() => {
+        this.db.exec(`
+          CREATE TABLE IF NOT EXISTS voice_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            google_contact_id TEXT,
+            contact_name TEXT NOT NULL,
+            contact_email TEXT,
+            embedding BLOB,
+            sample_count INTEGER DEFAULT 0,
+            total_duration REAL DEFAULT 0,
+            confidence REAL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+          );
+
+          CREATE TABLE IF NOT EXISTS voice_samples (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER NOT NULL REFERENCES voice_profiles(id) ON DELETE CASCADE,
+            meeting_id TEXT REFERENCES meetings(id) ON DELETE SET NULL,
+            embedding BLOB,
+            duration REAL,
+            created_at TEXT DEFAULT (datetime('now'))
+          );
+
+          CREATE INDEX IF NOT EXISTS idx_voice_profiles_email ON voice_profiles(contact_email);
+          CREATE INDEX IF NOT EXISTS idx_voice_profiles_contact ON voice_profiles(contact_name);
+          CREATE INDEX IF NOT EXISTS idx_voice_samples_profile ON voice_samples(profile_id);
+        `);
+      });
+      migratev4();
+      log.info('[Database] v3 → v4 migration complete');
     }
   }
 
@@ -389,6 +451,46 @@ class DatabaseService {
       `),
       getCalendarAttendees: this.db.prepare('SELECT * FROM calendar_attendees WHERE meeting_id = ?'),
       deleteCalendarAttendees: this.db.prepare('DELETE FROM calendar_attendees WHERE meeting_id = ?'),
+
+      // Voice profiles
+      insertVoiceProfile: this.db.prepare(`
+        INSERT INTO voice_profiles (
+          google_contact_id, contact_name, contact_email, embedding,
+          sample_count, total_duration, confidence
+        ) VALUES (
+          @google_contact_id, @contact_name, @contact_email, @embedding,
+          @sample_count, @total_duration, @confidence
+        )
+      `),
+      updateVoiceProfile: this.db.prepare(`
+        UPDATE voice_profiles SET
+          google_contact_id = @google_contact_id,
+          contact_name = @contact_name,
+          contact_email = @contact_email,
+          embedding = @embedding,
+          sample_count = @sample_count,
+          total_duration = @total_duration,
+          confidence = @confidence,
+          updated_at = datetime('now')
+        WHERE id = @id
+      `),
+      getVoiceProfile: this.db.prepare('SELECT * FROM voice_profiles WHERE id = ?'),
+      getVoiceProfileByEmail: this.db.prepare(
+        'SELECT * FROM voice_profiles WHERE contact_email = ? LIMIT 1'
+      ),
+      getVoiceProfileByContact: this.db.prepare(
+        'SELECT * FROM voice_profiles WHERE contact_name = ? LIMIT 1'
+      ),
+      getAllVoiceProfiles: this.db.prepare('SELECT * FROM voice_profiles ORDER BY contact_name'),
+      deleteVoiceProfile: this.db.prepare('DELETE FROM voice_profiles WHERE id = ?'),
+
+      // Voice samples
+      insertVoiceSample: this.db.prepare(`
+        INSERT INTO voice_samples (profile_id, meeting_id, embedding, duration)
+        VALUES (@profile_id, @meeting_id, @embedding, @duration)
+      `),
+      getVoiceSamples: this.db.prepare('SELECT * FROM voice_samples WHERE profile_id = ?'),
+      deleteVoiceSamples: this.db.prepare('DELETE FROM voice_samples WHERE profile_id = ?'),
     };
   }
 
@@ -1200,6 +1302,122 @@ class DatabaseService {
       ...row,
       domains: row.domains ? JSON.parse(row.domains) : [],
     };
+  }
+
+  // ======================================================================
+  // Voice profile operations (v2.0 local-first)
+  // ======================================================================
+
+  /**
+   * Save (insert or update) a voice profile.
+   * @param {Object} profile - { contactName, contactEmail?, googleContactId?, embedding?, sampleCount?, totalDuration?, confidence? }
+   * @param {number} [id] - If provided, update the existing profile with this id
+   * @returns {{ id: number }} The profile id
+   */
+  saveVoiceProfile(profile, id = null) {
+    if (id != null) {
+      this._stmts.updateVoiceProfile.run({
+        id,
+        google_contact_id: profile.googleContactId || null,
+        contact_name: profile.contactName,
+        contact_email: profile.contactEmail || null,
+        embedding: profile.embedding || null,
+        sample_count: profile.sampleCount || 0,
+        total_duration: profile.totalDuration || 0,
+        confidence: profile.confidence || 0,
+      });
+      return { id };
+    }
+    const result = this._stmts.insertVoiceProfile.run({
+      google_contact_id: profile.googleContactId || null,
+      contact_name: profile.contactName,
+      contact_email: profile.contactEmail || null,
+      embedding: profile.embedding || null,
+      sample_count: profile.sampleCount || 0,
+      total_duration: profile.totalDuration || 0,
+      confidence: profile.confidence || 0,
+    });
+    return { id: result.lastInsertRowid };
+  }
+
+  /**
+   * Get a voice profile by id.
+   * @param {number} id
+   * @returns {Object|null}
+   */
+  getVoiceProfile(id) {
+    return this._stmts.getVoiceProfile.get(id) || null;
+  }
+
+  /**
+   * Get a voice profile by contact email.
+   * @param {string} email
+   * @returns {Object|null}
+   */
+  getVoiceProfileByEmail(email) {
+    return this._stmts.getVoiceProfileByEmail.get(email) || null;
+  }
+
+  /**
+   * Get a voice profile by contact name.
+   * @param {string} contactName
+   * @returns {Object|null}
+   */
+  getVoiceProfileByContact(contactName) {
+    return this._stmts.getVoiceProfileByContact.get(contactName) || null;
+  }
+
+  /**
+   * Get all voice profiles ordered by contact name.
+   * @returns {Array}
+   */
+  getAllVoiceProfiles() {
+    return this._stmts.getAllVoiceProfiles.all();
+  }
+
+  /**
+   * Delete a voice profile and all its samples (cascade).
+   * @param {number} id
+   * @returns {boolean}
+   */
+  deleteVoiceProfile(id) {
+    const result = this._stmts.deleteVoiceProfile.run(id);
+    return result.changes > 0;
+  }
+
+  /**
+   * Add a voice sample to a profile.
+   * @param {number} profileId
+   * @param {Object} sample - { meetingId?, embedding?, duration? }
+   * @returns {{ id: number }}
+   */
+  addVoiceSample(profileId, sample) {
+    const result = this._stmts.insertVoiceSample.run({
+      profile_id: profileId,
+      meeting_id: sample.meetingId || null,
+      embedding: sample.embedding || null,
+      duration: sample.duration != null ? sample.duration : null,
+    });
+    return { id: result.lastInsertRowid };
+  }
+
+  /**
+   * Get all voice samples for a profile.
+   * @param {number} profileId
+   * @returns {Array}
+   */
+  getVoiceSamples(profileId) {
+    return this._stmts.getVoiceSamples.all(profileId);
+  }
+
+  /**
+   * Delete all voice samples for a profile.
+   * @param {number} profileId
+   * @returns {number} Number of deleted rows
+   */
+  deleteVoiceSamples(profileId) {
+    const result = this._stmts.deleteVoiceSamples.run(profileId);
+    return result.changes;
   }
 
   /**
