@@ -1315,13 +1315,14 @@ class DatabaseService {
    * @returns {{ id: number }} The profile id
    */
   saveVoiceProfile(profile, id = null) {
+    if (!profile.embedding) throw new Error('Voice profile embedding is required');
     if (id != null) {
       this._stmts.updateVoiceProfile.run({
         id,
         google_contact_id: profile.googleContactId || null,
         contact_name: profile.contactName,
         contact_email: profile.contactEmail || null,
-        embedding: profile.embedding || null,
+        embedding: profile.embedding,
         sample_count: profile.sampleCount || 0,
         total_duration: profile.totalDuration || 0,
         confidence: profile.confidence || 0,
@@ -1332,7 +1333,7 @@ class DatabaseService {
       google_contact_id: profile.googleContactId || null,
       contact_name: profile.contactName,
       contact_email: profile.contactEmail || null,
-      embedding: profile.embedding || null,
+      embedding: profile.embedding,
       sample_count: profile.sampleCount || 0,
       total_duration: profile.totalDuration || 0,
       confidence: profile.confidence || 0,
@@ -1392,10 +1393,12 @@ class DatabaseService {
    * @returns {{ id: number }}
    */
   addVoiceSample(profileId, sample) {
+    const { embedding } = sample;
+    if (!embedding) throw new Error('Voice sample embedding is required');
     const result = this._stmts.insertVoiceSample.run({
       profile_id: profileId,
       meeting_id: sample.meetingId || null,
-      embedding: sample.embedding || null,
+      embedding,
       duration: sample.duration != null ? sample.duration : null,
     });
     return { id: result.lastInsertRowid };
