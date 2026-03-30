@@ -154,7 +154,7 @@ class TranscriptionService {
 
       // Estimate timeout from file size (rough: 1 MB ≈ 1 min of audio at 128 kbps)
       const stats = fs.statSync(audioFilePath);
-      const estimatedDurationSec = (stats.size / (128 * 1024 / 8)) * 1; // bytes → seconds
+      const estimatedDurationSec = stats.size / (128 * 1024 / 8); // bytes → seconds
       const timeoutMs = (estimatedDurationSec * 0.5 + 60) * 1000;
       console.log(
         `[Local] File size: ${(stats.size / 1024).toFixed(2)} KB, estimated duration: ${estimatedDurationSec.toFixed(0)}s, timeout: ${(timeoutMs / 1000).toFixed(0)}s`
@@ -194,6 +194,7 @@ class TranscriptionService {
         text: entry.text,
         timestamp: typeof entry.timestamp === 'number' ? Math.round(entry.timestamp * 1000) : entry.timestamp,
         words: entry.words || [],
+        speakerIdentified: false,
       }));
 
       const result = {
