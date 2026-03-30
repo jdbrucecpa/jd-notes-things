@@ -390,7 +390,8 @@ class VoiceProfileService {
    * @returns {Promise<Array<{ speakerLabel: string, embedding: Float32Array }>>}
    */
   async embedSpeakers(audioFilePath, segments) {
-    const body = JSON.stringify({ audioFilePath, segments });
+    // audioPath matches the Plan A JD Audio Service API contract (not audioFilePath)
+    const body = JSON.stringify({ audioPath: audioFilePath, segments });
     const result = await this._postJson('/embed-speakers', body, 30000);
 
     // AI service returns embedding as number[], convert to Float32Array
@@ -429,6 +430,11 @@ class VoiceProfileService {
    *   1. Get embeddings from AI service
    *   2. Match against stored profiles (high confidence → auto-apply + update; medium → flag)
    *   3. Hybrid enrollment: if exactly 1 unmatched attendee, auto-enroll; else mark unmatched
+   *
+   * NOTE ON RETURN SHAPE: Returns a flat array of result objects, one per speaker label.
+   * An earlier design considered returning a keyed object ({ matched, pending, unmatched })
+   * but the flat array was chosen because callers need to iterate all results uniformly
+   * and the `status` field already discriminates the outcome for each speaker.
    *
    * @param {string} audioFilePath
    * @param {Array<{ speakerLabel: string, startMs: number, endMs: number }>} segments
@@ -526,7 +532,9 @@ class VoiceProfileService {
         confidence: 0.5,
       });
 
-      this.addSample(newProfileId, meetingId, speaker.embedding, duration);
+      // No addSample here — the embedding is already stored in the profile row created above.
+      // (addSample is used in the high-confidence match branch to add a NEW sample from
+      // a subsequent meeting to an existing profile.)
 
       log.info(
         `${LOG_PREFIX} Auto-enrolled ${speaker.speakerLabel} as ${attendee.name} (new profile ${newProfileId})`
