@@ -335,11 +335,11 @@ class GeminiAdapter extends LLMAdapter {
 }
 
 /**
- * Ollama Adapter (Local LLM)
- * Connects to a local Ollama instance via its OpenAI-compatible API.
+ * Local LLM Adapter
+ * Connects to a local LLM server (Ollama, LM Studio, etc.) via an OpenAI-compatible API.
  * No API key required — runs entirely on your machine.
  */
-class OllamaAdapter extends LLMAdapter {
+class LocalLLMAdapter extends LLMAdapter {
   constructor(model = 'llama3', baseUrl = 'http://localhost:11434') {
     super();
     // Ollama exposes an OpenAI-compatible API, so we reuse the openai client
@@ -379,7 +379,7 @@ class OllamaAdapter extends LLMAdapter {
     });
 
     if (completion.usage) {
-      console.log('[Ollama] Token Usage:', JSON.stringify(completion.usage, null, 2));
+      console.log('[Local LLM] Token Usage:', JSON.stringify(completion.usage, null, 2));
     }
 
     return {
@@ -433,7 +433,7 @@ class OllamaAdapter extends LLMAdapter {
   }
 
   getProviderName() {
-    return 'Ollama';
+    return 'Local LLM';
   }
 }
 
@@ -477,9 +477,9 @@ class LLMService {
 
       case 'ollama':
         console.log(
-          `[LLM Service] Initializing Ollama adapter with model: ${this.config.ollama?.model || 'llama3'}`
+          `[LLM Service] Initializing Local LLM adapter with model: ${this.config.ollama?.model || 'llama3'}`
         );
-        return new OllamaAdapter(
+        return new LocalLLMAdapter(
           this.config.ollama?.model || 'llama3',
           this.config.ollama?.baseUrl || 'http://localhost:11434'
         );
@@ -720,49 +720,70 @@ function createLLMServiceFromPreference(providerPreference) {
 }
 
 /**
- * Fetch available models from a local Ollama instance.
- * Calls GET /api/tags and returns an array of { name, size, modifiedAt }.
- * @param {string} [baseUrl='http://localhost:11434'] - Ollama server URL
- * @returns {Promise<Array<{name: string, size: number, modifiedAt: string}>>}
+ * Fetch available models from a local LLM server.
+ * Tries the Ollama /api/tags endpoint first, then falls back to the
+ * OpenAI-compatible /v1/models endpoint (used by LM Studio and others).
+ * @param {string} [baseUrl='http://localhost:11434'] - LLM server base URL
+ * @returns {Promise<Array<{name: string, size: number, modifiedAt: string|null}>>}
  */
-async function fetchOllamaModels(baseUrl = 'http://localhost:11434') {
-  const url = `${baseUrl.replace(/\/+$/, '')}/api/tags`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+async function fetchLocalModels(baseUrl = 'http://localhost:11434') {
+  const base = baseUrl.replace(/\/+$/, '');
 
+  // Try Ollama /api/tags first
   try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) {
-      throw new Error(`Ollama returned ${response.status}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(`${base}/api/tags`, { signal: controller.signal });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const data = await response.json();
+      return (data.models || []).map(m => ({
+        name: m.name,
+        size: m.size || 0,
+        modifiedAt: m.modified_at || null,
+      }));
+    } finally {
+      clearTimeout(timeout);
     }
-    const data = await response.json();
-    return (data.models || []).map(m => ({
-      name: m.name,
-      size: m.size || 0,
-      modifiedAt: m.modified_at || '',
-    }));
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      console.warn('[Ollama] Model list request timed out (5s)');
-    } else {
-      console.warn('[Ollama] Could not fetch models:', error.message);
-    }
-    return [];
-  } finally {
-    clearTimeout(timeout);
+  } catch {
+    // Ollama endpoint not available — try OpenAI-compatible /v1/models
   }
+
+  // Fall back to OpenAI-compatible /v1/models
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(`${base}/v1/models`, { signal: controller.signal });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const data = await response.json();
+      return (data.data || []).map(m => ({
+        name: m.id,
+        size: 0,
+        modifiedAt: null,
+      }));
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {
+    // OpenAI-compatible endpoint not available either
+  }
+
+  return [];
 }
 
 module.exports = {
   LLMService,
   AnthropicAdapter,
   GeminiAdapter,
-  OllamaAdapter,
+  OllamaAdapter: LocalLLMAdapter, // backward compat alias
+  LocalLLMAdapter,
   createLLMServiceFromEnv,
   createLLMServiceFromCredentials,
   createLLMServiceFromPreference,
   extractModelFromPreference,
-  fetchOllamaModels,
+  fetchLocalModels,
+  fetchOllamaModels: fetchLocalModels, // backward compat alias
   ANTHROPIC_MODEL_MAP,
   GEMINI_MODEL_MAP,
 };
