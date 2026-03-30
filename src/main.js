@@ -6863,7 +6863,7 @@ ipcMain.handle(
         throw new Error('Voice profile service not initialized');
       }
       // Create a new voice profile for this speaker-contact assignment
-      const embedding = data.embedding ? new Float32Array(data.embedding) : null;
+      const embedding = new Float32Array(data.embedding);
       const profile = voiceProfileService.saveProfile({
         googleContactId: data.googleContactId || null,
         contactName: data.contactName,
@@ -6873,11 +6873,6 @@ ipcMain.handle(
         totalDuration: 0,
         confidence: 0.5,
       });
-
-      // Add a sample if we have an embedding
-      if (embedding && profile.id) {
-        voiceProfileService.addSample(profile.id, data.meetingId, embedding, 0);
-      }
 
       return { success: true, profileId: profile.id };
     } catch (error) {

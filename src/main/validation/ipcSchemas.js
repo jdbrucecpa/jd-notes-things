@@ -328,7 +328,7 @@ const voiceProfileAssignSchema = z.object({
   contactName: z.string(),
   googleContactId: z.string().optional(),
   meetingId: z.string(),
-  embedding: z.array(z.number()).optional(),
+  embedding: z.array(z.number()).min(1),
 });
 
 // ===================================================
