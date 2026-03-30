@@ -23,6 +23,7 @@ let meetingParticipants = []; // Meeting participants for suggestions
  * @param {Function} onComplete - Callback when mappings are applied
  * @param {Object} options - Optional configuration
  * @param {Array} options.participants - Meeting participants for suggestions
+ * @param {Object} options.meetingSpeakerMapping - Speaker mapping from SpeakerMatcher (method, confidence, etc.)
  */
 export async function openSpeakerMappingModal(meetingId, transcript, onComplete, options = {}) {
   // Store participants for suggestions
@@ -153,9 +154,43 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
       };
     }
 
+    // Enrich suggestions with voice profile data from the meeting's speakerMapping
+    // (method, confidence, status, needsVerification, candidates, embedding)
+    const meetingSpeakerMapping = options.meetingSpeakerMapping || {};
+    for (const [speakerId, voiceData] of Object.entries(meetingSpeakerMapping)) {
+      if (!voiceData || typeof voiceData !== 'object') continue;
+      const existing = suggestions[speakerId] || {};
+      suggestions[speakerId] = {
+        ...existing,
+        contactName: existing.contactName || voiceData.name || null,
+        contactEmail: existing.contactEmail || voiceData.email || null,
+        obsidianLink: existing.obsidianLink || (voiceData.name ? `[[${voiceData.name}]]` : null),
+        // Voice profile identification metadata
+        method: voiceData.method || existing.method || null,
+        confidence: voiceData.confidence || existing.confidence || null,
+        status: voiceData.status || existing.status || null,
+        needsVerification: voiceData.needsVerification || existing.needsVerification || false,
+        embedding: voiceData.embedding || existing.embedding || null,
+        // Candidate attendees for manual assignment (from 'unmatched' entries)
+        candidateAttendees:
+          voiceData.candidates
+            ? voiceData.candidates.map(c => ({ name: c.contactName, email: c.contactEmail }))
+            : existing.candidateAttendees || null,
+      };
+    }
+
     // Add existing transcript mappings (highest priority - what's currently displayed)
     for (const [speakerId, speakerName] of Object.entries(existingMappings)) {
+      const existing = suggestions[speakerId] || {};
       suggestions[speakerId] = {
+        // Preserve voice profile metadata if already enriched
+        method: existing.method || null,
+        confidence: existing.confidence || null,
+        status: existing.status || null,
+        needsVerification: existing.needsVerification || false,
+        embedding: existing.embedding || null,
+        candidateAttendees: existing.candidateAttendees || null,
+        // Existing mapping fields (highest priority)
         contactName: speakerName,
         contactEmail: null,
         obsidianLink: `[[${speakerName}]]`,
@@ -395,6 +430,79 @@ function createSpeakerRow(speakerId, suggestion, stats = {}) {
       }
     </div>
   `;
+
+  // Add voice profile badge after the contact label if voice profile data is present
+  if (suggestion) {
+    const contactLabelEl = row.querySelector('.speaker-contact-label');
+    if (contactLabelEl) {
+      const isAutoEnrolled =
+        suggestion.method === 'voice-profile-auto-enrolled' || suggestion.status === 'auto-enrolled';
+      const isHighConfidenceVoice =
+        (suggestion.method === 'voice-profile' && suggestion.confidence === 'high') ||
+        suggestion.status === 'auto-matched';
+      const needsReview = suggestion.needsVerification === true || suggestion.status === 'pending-review';
+
+      if (isAutoEnrolled) {
+        contactLabelEl.insertAdjacentHTML(
+          'beforeend',
+          '<span class="voice-profile-badge new">new voice profile</span>'
+        );
+      } else if (isHighConfidenceVoice) {
+        contactLabelEl.insertAdjacentHTML(
+          'beforeend',
+          '<span class="voice-profile-badge verified">voice matched</span>'
+        );
+      } else if (needsReview) {
+        contactLabelEl.insertAdjacentHTML(
+          'beforeend',
+          '<span class="voice-profile-badge needs-review">verify</span>'
+        );
+      }
+    }
+  }
+
+  // Add candidate attendee assignment dropdown for unmatched speakers
+  if (suggestion && suggestion.candidateAttendees && suggestion.candidateAttendees.length > 0) {
+    const contactBox = row.querySelector('.speaker-contact-box');
+    if (contactBox) {
+      const select = document.createElement('select');
+      select.className = 'settings-select';
+      select.style.width = '200px';
+      select.style.marginTop = '6px';
+      const defaultOption = document.createElement('option');
+      defaultOption.value = '';
+      defaultOption.textContent = 'Assign contact...';
+      select.appendChild(defaultOption);
+
+      for (const candidate of suggestion.candidateAttendees) {
+        if (!candidate || !candidate.email) continue;
+        const option = document.createElement('option');
+        option.value = candidate.email;
+        option.textContent = escapeHtml(candidate.name || candidate.email);
+        select.appendChild(option);
+      }
+
+      select.addEventListener('change', async e => {
+        if (!e.target.value) return;
+        const candidate = suggestion.candidateAttendees.find(c => c.email === e.target.value);
+        if (!candidate) return;
+        try {
+          await window.electronAPI.voiceProfileAssign({
+            speakerLabel: speakerId,
+            contactEmail: candidate.email,
+            contactName: candidate.name || candidate.email,
+            meetingId: currentMeetingId,
+            embedding: suggestion.embedding || [],
+          });
+          notifySuccess(`Voice profile created for ${candidate.name || candidate.email}`);
+        } catch (err) {
+          console.error('[SpeakerMapping] voiceProfileAssign failed:', err);
+        }
+      });
+
+      contactBox.appendChild(select);
+    }
+  }
 
   // Set up event listeners for this row
   setupRowEventListeners(row, speakerId);

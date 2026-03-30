@@ -2732,6 +2732,7 @@ async function openFixSpeakersModal(onUpdate) {
     },
     {
       participants: currentMeeting.participants || [],
+      meetingSpeakerMapping: currentMeeting.speakerMapping || {},
     }
   );
 }
