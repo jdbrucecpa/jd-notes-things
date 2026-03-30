@@ -2465,7 +2465,8 @@ async function initSDK() {
       console.log('Recording processing complete - preparing for transcription');
 
       // Get the meeting ID, transcription provider, and participant emails for vocabulary
-      let transcriptionProvider = 'assemblyai'; // Default (recallai SDK upload is broken)
+      // Fallback chain: per-meeting override → app setting → default 'assemblyai'
+      let transcriptionProvider = 'assemblyai';
       let meetingId = null;
       let participantEmails = [];
       try {
@@ -2475,7 +2476,18 @@ async function initSDK() {
           meetingId = meeting.id;
           if (meeting.transcriptionProvider) {
             transcriptionProvider = meeting.transcriptionProvider;
-            console.log(`[Transcription] Using provider: ${transcriptionProvider}`);
+            console.log(`[Transcription] Using per-meeting provider: ${transcriptionProvider}`);
+          } else {
+            // Fall back to app-level setting from localStorage
+            try {
+              const preferences = await getProviderPreferences();
+              if (preferences.transcriptionProvider) {
+                transcriptionProvider = preferences.transcriptionProvider;
+                console.log(`[Transcription] Using app setting provider: ${transcriptionProvider}`);
+              }
+            } catch {
+              /* ignore - use default */
+            }
           }
           // VC-3.5: Capture participant emails for vocabulary lookup
           participantEmails = meeting.participantEmails || [];
@@ -2546,16 +2558,8 @@ async function initSDK() {
         }
 
         try {
-          if (transcriptionProvider === 'recallai') {
-            // Recall.ai: Upload via SDK for async webhook-based transcription
-            console.log('[Upload] Calling uploadRecording() with ONLY windowId (per docs)...');
-            const result = await recallProvider?.sdk?.uploadRecording({
-              windowId: windowId,
-            });
-            console.log('[Upload] uploadRecording() completed with result:', result);
-            console.log('[Upload] Waiting for webhook notification...');
-          } else {
-            // AssemblyAI or Deepgram: Direct transcription
+          {
+            // AssemblyAI, Deepgram, or Local: Direct transcription
             console.log(`[Transcription] Starting ${transcriptionProvider} transcription...`);
             console.log(`[Transcription] Audio file path: ${recordingPath}`);
 
@@ -2655,6 +2659,16 @@ async function initSDK() {
               );
             }
 
+            // v2.0: Pass AI service URL for local transcription provider
+            if (transcriptionProvider === 'local') {
+              const aiServiceUrl =
+                voiceProfileService?.aiServiceUrl || 'http://localhost:8374';
+              vocabularyOptions.aiServiceUrl = aiServiceUrl;
+              console.log(
+                `[Transcription] Local provider using AI service at: ${aiServiceUrl}`
+              );
+            }
+
             backgroundTaskManager.updateTask(recordingTaskId, 20, 'Starting transcription...');
             console.log(`[Transcription] Calling transcriptionService.transcribe()...`);
             const transcript = await transcriptionService.transcribe(
@@ -2709,6 +2723,13 @@ async function initSDK() {
               if (transcript.audio_duration) {
                 meetingsData.pastMeetings[meetingIndex].duration = transcript.audio_duration;
                 console.log(`[Transcription] Duration: ${transcript.audio_duration} seconds`);
+              }
+              // v2.0: Store segments from local transcription for voice profile matching
+              if (transcript.segments && transcript.segments.length > 0) {
+                meetingsData.pastMeetings[meetingIndex].segments = transcript.segments;
+                console.log(
+                  `[Transcription] Stored ${transcript.segments.length} segments for voice profile matching`
+                );
               }
 
               console.log('[Transcription] Writing updated meeting data...');
@@ -8437,13 +8458,15 @@ ipcMain.handle('settings:getProviderPreferences', async event => {
         return {
           autoSummaryProvider: settings.autoSummaryProvider || 'gemini-2.5-flash',
           templateSummaryProvider: settings.templateSummaryProvider || 'claude-haiku-4-5',
-          patternGenerationProvider: settings.patternGenerationProvider || 'gemini-2.5-flash-lite'
+          patternGenerationProvider: settings.patternGenerationProvider || 'gemini-2.5-flash-lite',
+          transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'assemblyai'
         };
       } catch (e) {
         return {
           autoSummaryProvider: 'gemini-2.5-flash',
           templateSummaryProvider: 'claude-haiku-4-5',
-          patternGenerationProvider: 'gemini-2.5-flash-lite'
+          patternGenerationProvider: 'gemini-2.5-flash-lite',
+          transcriptionProvider: 'assemblyai'
         };
       }
     })()
@@ -11713,7 +11736,7 @@ async function withProviderSwitch(providerType, callback, logContext = '[LLM]') 
 /**
  * Get provider preferences from renderer's localStorage
  * Default models (v1.3.2): Gemini Flash for budget tasks, Claude Haiku for quality
- * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string, patternGenerationProvider: string}>}
+ * @returns {Promise<{autoSummaryProvider: string, templateSummaryProvider: string, patternGenerationProvider: string, transcriptionProvider: string}>}
  */
 async function getProviderPreferences() {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -11722,6 +11745,7 @@ async function getProviderPreferences() {
       autoSummaryProvider: 'gemini-2.5-flash',
       templateSummaryProvider: 'claude-haiku-4-5',
       patternGenerationProvider: 'gemini-2.5-flash-lite',
+      transcriptionProvider: 'assemblyai',
     };
   }
 
@@ -11733,13 +11757,15 @@ async function getProviderPreferences() {
           return {
             autoSummaryProvider: settings.autoSummaryProvider || 'gemini-2.5-flash',
             templateSummaryProvider: settings.templateSummaryProvider || 'claude-haiku-4-5',
-            patternGenerationProvider: settings.patternGenerationProvider || 'gemini-2.5-flash-lite'
+            patternGenerationProvider: settings.patternGenerationProvider || 'gemini-2.5-flash-lite',
+            transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'assemblyai'
           };
         } catch (e) {
           return {
             autoSummaryProvider: 'gemini-2.5-flash',
             templateSummaryProvider: 'claude-haiku-4-5',
-            patternGenerationProvider: 'gemini-2.5-flash-lite'
+            patternGenerationProvider: 'gemini-2.5-flash-lite',
+            transcriptionProvider: 'assemblyai'
           };
         }
       })()
@@ -11751,6 +11777,7 @@ async function getProviderPreferences() {
       autoSummaryProvider: 'gemini-2.5-flash',
       templateSummaryProvider: 'claude-haiku-4-5',
       patternGenerationProvider: 'gemini-2.5-flash-lite',
+      transcriptionProvider: 'assemblyai',
     };
   }
 }
