@@ -548,6 +548,7 @@ class VoiceProfileService {
         confidence: 'enrolled',
         distance: unmatchedSpeakers[0].match ? unmatchedSpeakers[0].match.distance : null,
         status: 'auto-enrolled',
+        embedding: speaker.embedding,
       });
     } else {
       // Multiple unmatched speakers or ambiguous — mark as unmatched with candidate list
@@ -567,6 +568,7 @@ class VoiceProfileService {
             contactName: p.contactName,
             contactEmail: p.contactEmail,
           })),
+          embedding: speaker.embedding,
         });
       }
     }

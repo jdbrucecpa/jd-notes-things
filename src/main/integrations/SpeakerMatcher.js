@@ -199,15 +199,21 @@ class SpeakerMatcher {
         );
 
         for (const result of voiceProfileResults) {
+          // Build the mapping entry for ALL results (UI needs them for badges)
+          speakerMapping[result.speakerLabel] = {
+            email: result.contactEmail || null,
+            name: result.contactName || result.speakerLabel,
+            confidence: result.confidence,
+            method: result.status === 'auto-enrolled' ? 'voice-profile-auto-enrolled' : 'voice-profile',
+            distance: result.distance,
+            status: result.status,
+            needsVerification: result.confidence !== 'high',
+            candidates: result.candidates || undefined,
+            embedding: result.embedding ? Array.from(result.embedding) : undefined,
+          };
+
+          // Only mark high/medium as "matched" — others can still be re-matched by later stages
           if (result.confidence === 'high' || result.confidence === 'medium') {
-            speakerMapping[result.speakerLabel] = {
-              email: result.contactEmail || null,
-              name: result.contactName || result.speakerLabel,
-              confidence: result.confidence,
-              method: 'voice-profile',
-              distance: result.distance,
-              status: result.status,
-            };
             matchedSpeakers.add(result.speakerLabel);
           }
         }
@@ -230,9 +236,9 @@ class SpeakerMatcher {
         contacts
       );
 
-      // Merge timeline results, but don't overwrite Stage 0 voice-profile matches
+      // Merge timeline results, but don't overwrite high/medium voice-profile matches
       for (const [speakerLabel, mapping] of Object.entries(timelineMapping)) {
-        if (!speakerMapping[speakerLabel]) {
+        if (!matchedSpeakers.has(speakerLabel)) {
           speakerMapping[speakerLabel] = mapping;
           matchedSpeakers.add(speakerLabel);
         }
@@ -240,10 +246,9 @@ class SpeakerMatcher {
     }
 
     // Step 4: For unmatched speakers, use AssemblyAI identified names as supplementary
-    // Refresh matchedSpeakers from current speakerMapping state
-    for (const key of Object.keys(speakerMapping)) {
-      matchedSpeakers.add(key);
-    }
+    // NOTE: matchedSpeakers tracks high/medium-confidence matches only; low-confidence
+    // voice profile entries remain in speakerMapping for UI badges but are still
+    // eligible for re-matching by later stages.
     const unmatchedStats = new Map(
       Array.from(speakerStats.entries()).filter(([label]) => !matchedSpeakers.has(label))
     );
@@ -258,9 +263,9 @@ class SpeakerMatcher {
         options
       );
 
-      // Only take mappings for speakers not already matched by timeline
+      // Only take mappings for speakers not already matched by earlier stages
       for (const [speakerLabel, mapping] of Object.entries(identifiedMapping)) {
-        if (!speakerMapping[speakerLabel]) {
+        if (!matchedSpeakers.has(speakerLabel)) {
           speakerMapping[speakerLabel] = mapping;
           matchedSpeakers.add(speakerLabel);
         }
