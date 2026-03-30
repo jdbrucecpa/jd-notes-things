@@ -432,15 +432,9 @@ export function initializeSettingsUI() {
     });
   }
 
-  // Transcription Provider selection (v2.0)
-  if (transcriptionProviderSelect) {
-    transcriptionProviderSelect.addEventListener('change', e => {
-      const newProvider = e.target.value;
-      updateSetting('transcriptionProvider', newProvider);
-      const label = e.target.options[e.target.selectedIndex].text;
-      notifySuccess(`Transcription provider changed to ${label}`);
-    });
-  }
+  // Transcription Provider selection (v2.0) is handled by renderer.js
+  // which saves directly to localStorage key 'transcriptionProvider'.
+  // Do NOT add a duplicate change handler here.
 
   // AI Service URL input (v2.0)
   if (aiServiceUrlInput) {
@@ -650,7 +644,7 @@ export function initializeSettingsUI() {
     statusEl.className = 'service-status checking';
     try {
       const result = await window.electronAPI.aiServiceHealth();
-      if (result && result.ok) {
+      if (result && result.status === 'connected') {
         statusEl.textContent = 'Connected';
         statusEl.className = 'service-status connected';
       } else {
@@ -702,8 +696,8 @@ export function initializeSettingsUI() {
       recordingProviderSelect.value = 'local';
     }
 
-    // Switch transcription provider to local
-    updateSetting('transcriptionProvider', 'local');
+    // Switch transcription provider to local — use localStorage key that renderer.js reads
+    localStorage.setItem('transcriptionProvider', 'local');
     if (transcriptionProviderSelect) {
       transcriptionProviderSelect.value = 'local';
     }
@@ -806,9 +800,9 @@ export function initializeSettingsUI() {
       }
     }
 
-    // v2.0: Transcription provider
+    // v2.0: Transcription provider — read from localStorage to match renderer.js storage key
     if (transcriptionProviderSelect) {
-      transcriptionProviderSelect.value = currentSettings.transcriptionProvider || 'assemblyai';
+      transcriptionProviderSelect.value = localStorage.getItem('transcriptionProvider') || 'assemblyai';
     }
 
     // v2.0: Service endpoint URLs
