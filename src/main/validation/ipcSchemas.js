@@ -317,6 +317,21 @@ const meetingAutoStartSchema = z.object({
 const transcriptionProviderSchema = z.enum(['assemblyai', 'deepgram', 'local']).optional();
 
 // ===================================================
+// Voice Profile Schemas (v2.0)
+// ===================================================
+
+const voiceProfileIdSchema = z.number().int().positive();
+
+const voiceProfileAssignSchema = z.object({
+  speakerLabel: z.string(),
+  contactEmail: z.string().email(),
+  contactName: z.string(),
+  googleContactId: z.string().optional(),
+  meetingId: z.string(),
+  embedding: z.array(z.number()).optional(),
+});
+
+// ===================================================
 // Backup Schemas (v1.4)
 // ===================================================
 
@@ -542,6 +557,9 @@ module.exports = {
   meetingPlaceholderSchema,
   // Transcription re-run schema
   transcriptionRerunSchema,
+  // Voice profile schemas
+  voiceProfileIdSchema,
+  voiceProfileAssignSchema,
   // Helpers
   validateIpcInput,
   withValidation,

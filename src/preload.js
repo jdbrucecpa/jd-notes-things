@@ -349,6 +349,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   backupSelectOutputDir: () => ipcRenderer.invoke('backup:selectOutputDir'),
   backupSelectRestoreFile: () => ipcRenderer.invoke('backup:selectRestoreFile'),
 
+  // Voice profiles (v2.0)
+  voiceProfileGetAll: () => ipcRenderer.invoke('voiceProfile:getAll'),
+  voiceProfileDelete: (id) => ipcRenderer.invoke('voiceProfile:delete', id),
+  voiceProfileAssign: (data) => ipcRenderer.invoke('voiceProfile:assign', data),
+
+  // AI Service health (v2.0)
+  aiServiceHealth: () => ipcRenderer.invoke('aiService:health'),
+
+  // Local model discovery (v2.0 — dual endpoint)
+  listLocalModels: (baseUrl) => ipcRenderer.invoke('local:listModels', baseUrl),
+
   // Mock SDK test control (only functional in MOCK_SDK mode, safe no-ops otherwise)
   mockGetState: () => ipcRenderer.invoke('mock:getState'),
   mockTriggerMeetingClosed: () => ipcRenderer.invoke('mock:triggerMeetingClosed'),

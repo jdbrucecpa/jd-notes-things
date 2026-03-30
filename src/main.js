@@ -49,6 +49,7 @@ const { formatTranscriptForExport, generateExportFilename } = require('./main/ex
 const {
   createLLMServiceFromCredentials,
   fetchOllamaModels,
+  fetchLocalModels,
 } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
@@ -58,6 +59,7 @@ const backgroundTaskManager = require('./main/services/backgroundTaskManager');
 const databaseService = require('./main/services/databaseService');
 const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
+const { VoiceProfileService } = require('./main/services/voiceProfileService');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 const { RecordingManager, RecallProvider, LocalProvider } = require('./main/recording');
 
@@ -179,6 +181,9 @@ const {
   meetingPlaceholderSchema,
   // v1.4: Transcription re-run schema
   transcriptionRerunSchema,
+  // v2.0: Voice profile schemas
+  voiceProfileIdSchema,
+  voiceProfileAssignSchema,
 } = require('./main/validation/ipcSchemas');
 require('dotenv').config();
 
@@ -384,6 +389,9 @@ let importManager = null;
 // Speaker recognition system (Phase 6)
 let googleContacts = null;
 let speakerMatcher = null;
+
+// Voice profile service (v2.0)
+let voiceProfileService = null;
 
 // v1.3.0: Gmail integration
 const Gmail = require('./main/integrations/Gmail');
@@ -1530,6 +1538,10 @@ app.whenReady().then(async () => {
     databaseService.initialize();
     databaseService.migrateFromJson(meetingsFilePath);
     logger.main.info('Database service initialized');
+
+    // v2.0: Initialize voice profile service
+    voiceProfileService = new VoiceProfileService(databaseService);
+    logger.main.info('Voice profile service initialized');
   } catch (error) {
     logger.main.error('Database initialization failed:', error.message);
   }
@@ -2756,6 +2768,14 @@ async function initSDK() {
                         useWordCount: true,
                         speechTimeline,
                         participantData: participants,
+                        audioFilePath: recordingPath,
+                        segments: meetingForMatching.segments || [],
+                        meetingId: meetingForMatching.id || meetingId,
+                        calendarAttendees: (meetingForMatching.calendarAttendees || []).map(a => ({
+                          email: a.email,
+                          name: a.name,
+                          googleContactId: a.google_contact_resource || null,
+                        })),
                       }
                     );
 
@@ -3344,6 +3364,14 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
             useWordCount: true,
             speechTimeline,
             participantData: meeting.participants || [],
+            audioFilePath: meeting.videoFile || null,
+            segments: meeting.segments || [],
+            meetingId: meeting.id,
+            calendarAttendees: (meeting.calendarAttendees || []).map(a => ({
+              email: a.email,
+              name: a.name,
+              googleContactId: a.google_contact_resource || null,
+            })),
           }
         );
 
@@ -4521,6 +4549,9 @@ async function initializeGoogleServices(forceReinitialize = false) {
     if (googleContacts && (!speakerMatcher || forceReinitialize)) {
       console.log('[Google Services] Initializing Speaker Matcher...');
       speakerMatcher = new SpeakerMatcher(googleContacts, userProfile);
+      if (voiceProfileService) {
+        speakerMatcher.setVoiceProfileService(voiceProfileService);
+      }
     } else if (googleContacts) {
       console.log('[Google Services] Speaker Matcher already initialized');
     }
@@ -5449,6 +5480,9 @@ ipcMain.handle(
       const speakerMapping = await speakerMatcher.matchSpeakers(transcript, participantEmails, {
         ...options,
         speechTimeline,
+        segments: options?.segments || [],
+        meetingId: options?.meetingId || null,
+        calendarAttendees: options?.calendarAttendees || [],
       });
 
       // Apply mapping to transcript
@@ -6765,6 +6799,122 @@ ipcMain.handle('ollama:listModels', async () => {
 });
 
 // ===================================================================
+// v2.0: Local model discovery (dual endpoint — Ollama + OpenAI-compatible)
+// ===================================================================
+
+ipcMain.handle('local:listModels', async (_event, baseUrl) => {
+  try {
+    const url =
+      baseUrl ||
+      (await keyManagementService.getKey('OLLAMA_BASE_URL')) ||
+      process.env.OLLAMA_BASE_URL ||
+      'http://localhost:11434';
+    const models = await fetchLocalModels(url);
+    return { success: true, models };
+  } catch (error) {
+    console.error('[Local] Error listing models:', error);
+    return { success: false, error: error.message, models: [] };
+  }
+});
+
+// ===================================================================
+// v2.0: Voice Profile IPC Handlers
+// ===================================================================
+
+ipcMain.handle('voiceProfile:getAll', async () => {
+  try {
+    if (!voiceProfileService) {
+      throw new Error('Voice profile service not initialized');
+    }
+    const profiles = voiceProfileService.getAllProfiles();
+    // Convert Float32Array embeddings to plain Arrays for IPC serialization
+    const serialized = profiles.map(p => ({
+      ...p,
+      embedding: p.embedding ? Array.from(p.embedding) : null,
+    }));
+    return { success: true, profiles: serialized };
+  } catch (error) {
+    console.error('[VoiceProfile] Error getting all profiles:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle(
+  'voiceProfile:delete',
+  withValidation(voiceProfileIdSchema, async (_event, id) => {
+    try {
+      if (!voiceProfileService) {
+        throw new Error('Voice profile service not initialized');
+      }
+      const deleted = voiceProfileService.deleteProfile(id);
+      return { success: true, deleted };
+    } catch (error) {
+      console.error('[VoiceProfile] Error deleting profile:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
+
+ipcMain.handle(
+  'voiceProfile:assign',
+  withValidation(voiceProfileAssignSchema, async (_event, data) => {
+    try {
+      if (!voiceProfileService) {
+        throw new Error('Voice profile service not initialized');
+      }
+      // Create a new voice profile for this speaker-contact assignment
+      const embedding = data.embedding ? new Float32Array(data.embedding) : null;
+      const profile = voiceProfileService.saveProfile({
+        googleContactId: data.googleContactId || null,
+        contactName: data.contactName,
+        contactEmail: data.contactEmail,
+        embedding: embedding,
+        sampleCount: 1,
+        totalDuration: 0,
+        confidence: 0.5,
+      });
+
+      // Add a sample if we have an embedding
+      if (embedding && profile.id) {
+        voiceProfileService.addSample(profile.id, data.meetingId, embedding, 0);
+      }
+
+      return { success: true, profileId: profile.id };
+    } catch (error) {
+      console.error('[VoiceProfile] Error assigning profile:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
+
+// ===================================================================
+// v2.0: AI Service Health Check
+// ===================================================================
+
+ipcMain.handle('aiService:health', async () => {
+  try {
+    const aiServiceUrl = voiceProfileService
+      ? voiceProfileService.aiServiceUrl
+      : 'http://localhost:8374';
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    try {
+      const response = await fetch(`${aiServiceUrl}/health`, {
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      const body = await response.json();
+      return { success: true, status: 'connected', data: body };
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    return { success: true, status: 'disconnected', error: error.message };
+  }
+});
+
+// ===================================================================
 // End LLM Provider Management
 // ===================================================================
 
@@ -7720,6 +7870,14 @@ ipcMain.handle(
               includeOrganizer: true,
               useWordCount: true,
               participantData: meeting.participants || [],
+              audioFilePath: filePath || null,
+              segments: meeting.segments || [],
+              meetingId: meeting.id || meetingId,
+              calendarAttendees: (meeting.calendarAttendees || []).map(a => ({
+                email: a.email,
+                name: a.name,
+                googleContactId: a.google_contact_resource || null,
+              })),
             }
           );
 
@@ -8438,6 +8596,11 @@ ipcMain.handle(
         // Revert setting on failure
         appSettings.recordingProvider = oldProvider;
       }
+    }
+
+    // v2.0: AI service URL for voice profile service
+    if (updates.aiServiceUrl && voiceProfileService) {
+      voiceProfileService.setAIServiceUrl(updates.aiServiceUrl);
     }
 
     // Save to disk
