@@ -209,10 +209,10 @@ class DatabaseService {
         google_contact_id TEXT,
         contact_name TEXT NOT NULL,
         contact_email TEXT,
-        embedding BLOB,
-        sample_count INTEGER DEFAULT 0,
+        embedding BLOB NOT NULL,
+        sample_count INTEGER DEFAULT 1,
         total_duration REAL DEFAULT 0,
-        confidence REAL DEFAULT 0,
+        confidence REAL DEFAULT 0.5,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
       );
@@ -221,13 +221,13 @@ class DatabaseService {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         profile_id INTEGER NOT NULL REFERENCES voice_profiles(id) ON DELETE CASCADE,
         meeting_id TEXT REFERENCES meetings(id) ON DELETE SET NULL,
-        embedding BLOB,
-        duration REAL,
+        embedding BLOB NOT NULL,
+        duration REAL DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
       );
 
       CREATE INDEX IF NOT EXISTS idx_voice_profiles_email ON voice_profiles(contact_email);
-      CREATE INDEX IF NOT EXISTS idx_voice_profiles_contact ON voice_profiles(contact_name);
+      CREATE INDEX IF NOT EXISTS idx_voice_profiles_contact ON voice_profiles(google_contact_id);
       CREATE INDEX IF NOT EXISTS idx_voice_samples_profile ON voice_samples(profile_id);
     `);
   }
@@ -319,10 +319,10 @@ class DatabaseService {
             google_contact_id TEXT,
             contact_name TEXT NOT NULL,
             contact_email TEXT,
-            embedding BLOB,
-            sample_count INTEGER DEFAULT 0,
+            embedding BLOB NOT NULL,
+            sample_count INTEGER DEFAULT 1,
             total_duration REAL DEFAULT 0,
-            confidence REAL DEFAULT 0,
+            confidence REAL DEFAULT 0.5,
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now'))
           );
@@ -331,13 +331,13 @@ class DatabaseService {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             profile_id INTEGER NOT NULL REFERENCES voice_profiles(id) ON DELETE CASCADE,
             meeting_id TEXT REFERENCES meetings(id) ON DELETE SET NULL,
-            embedding BLOB,
-            duration REAL,
+            embedding BLOB NOT NULL,
+            duration REAL DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
           );
 
           CREATE INDEX IF NOT EXISTS idx_voice_profiles_email ON voice_profiles(contact_email);
-          CREATE INDEX IF NOT EXISTS idx_voice_profiles_contact ON voice_profiles(contact_name);
+          CREATE INDEX IF NOT EXISTS idx_voice_profiles_contact ON voice_profiles(google_contact_id);
           CREATE INDEX IF NOT EXISTS idx_voice_samples_profile ON voice_samples(profile_id);
         `);
       });
@@ -479,7 +479,7 @@ class DatabaseService {
         'SELECT * FROM voice_profiles WHERE contact_email = ? LIMIT 1'
       ),
       getVoiceProfileByContact: this.db.prepare(
-        'SELECT * FROM voice_profiles WHERE contact_name = ? LIMIT 1'
+        'SELECT * FROM voice_profiles WHERE google_contact_id = ? LIMIT 1'
       ),
       getAllVoiceProfiles: this.db.prepare('SELECT * FROM voice_profiles ORDER BY contact_name'),
       deleteVoiceProfile: this.db.prepare('DELETE FROM voice_profiles WHERE id = ?'),
@@ -1359,12 +1359,12 @@ class DatabaseService {
   }
 
   /**
-   * Get a voice profile by contact name.
-   * @param {string} contactName
+   * Get a voice profile by Google Contact ID.
+   * @param {string} googleContactId
    * @returns {Object|null}
    */
-  getVoiceProfileByContact(contactName) {
-    return this._stmts.getVoiceProfileByContact.get(contactName) || null;
+  getVoiceProfileByContact(googleContactId) {
+    return this._stmts.getVoiceProfileByContact.get(googleContactId) || null;
   }
 
   /**
