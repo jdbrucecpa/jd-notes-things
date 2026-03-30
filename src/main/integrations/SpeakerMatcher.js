@@ -20,6 +20,14 @@ class SpeakerMatcher {
   }
 
   /**
+   * Set the voice profile service for Stage 0 voice-embedding matching
+   * @param {Object} voiceProfileService - VoiceProfileService instance
+   */
+  setVoiceProfileService(voiceProfileService) {
+    this.voiceProfileService = voiceProfileService;
+  }
+
+  /**
    * Strict name matching for high-confidence speaker identification.
    * Requires both names to have 2+ words for substring matching.
    * Prevents "Ed" matching "Fred" while still allowing "JD Bruce" to match "JD Bruce Smith".
@@ -171,21 +179,71 @@ class SpeakerMatcher {
     // Step 2: Analyze speakers in transcript
     const speakerStats = this.analyzeSpeakers(transcript);
 
+    let speakerMapping = {};
+    const matchedSpeakers = new Set();
+
+    // Stage 0: Voice Profile Match (LOCAL MODE — highest confidence)
+    if (
+      this.voiceProfileService &&
+      options.audioFilePath &&
+      options.segments &&
+      options.segments.length > 0
+    ) {
+      try {
+        console.log('[SpeakerMatcher] Stage 0: Attempting voice profile matching...');
+        const voiceProfileResults = await this.voiceProfileService.identifySpeakers(
+          options.audioFilePath,
+          options.segments,
+          options.calendarAttendees || [],
+          options.meetingId || null
+        );
+
+        for (const result of voiceProfileResults) {
+          if (result.confidence === 'high' || result.confidence === 'medium') {
+            speakerMapping[result.speakerLabel] = {
+              email: result.contactEmail || null,
+              name: result.contactName || result.speakerLabel,
+              confidence: result.confidence,
+              method: 'voice-profile',
+              distance: result.distance,
+              status: result.status,
+            };
+            matchedSpeakers.add(result.speakerLabel);
+          }
+        }
+        console.log(
+          `[SpeakerMatcher] Stage 0: Matched ${matchedSpeakers.size} speakers via voice profiles`
+        );
+      } catch (error) {
+        console.error('[SpeakerMatcher] Stage 0 voice profile matching failed:', error.message);
+      }
+    }
+
     // Step 3: SDK speech timeline ALWAYS runs first when available (v1.3)
     // This gives us high-confidence matches from authoritative SDK participant names
-    let speakerMapping = {};
     if (speechTimeline && speechTimeline.participants && speechTimeline.participants.length > 0) {
       console.log('[SpeakerMatcher] SM-1: Using SDK speech timeline for high-confidence matching');
-      speakerMapping = this.matchUsingTimeline(
+      const timelineMapping = this.matchUsingTimeline(
         transcript,
         speechTimeline,
         participantEmails,
         contacts
       );
+
+      // Merge timeline results, but don't overwrite Stage 0 voice-profile matches
+      for (const [speakerLabel, mapping] of Object.entries(timelineMapping)) {
+        if (!speakerMapping[speakerLabel]) {
+          speakerMapping[speakerLabel] = mapping;
+          matchedSpeakers.add(speakerLabel);
+        }
+      }
     }
 
     // Step 4: For unmatched speakers, use AssemblyAI identified names as supplementary
-    const matchedSpeakers = new Set(Object.keys(speakerMapping));
+    // Refresh matchedSpeakers from current speakerMapping state
+    for (const key of Object.keys(speakerMapping)) {
+      matchedSpeakers.add(key);
+    }
     const unmatchedStats = new Map(
       Array.from(speakerStats.entries()).filter(([label]) => !matchedSpeakers.has(label))
     );

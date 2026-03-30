@@ -574,6 +574,104 @@ describe('SpeakerMatcher', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────
+  // Stage 0 — Voice Profile Matching
+  // ─────────────────────────────────────────────────────────────────
+
+  describe('matchSpeakers — Stage 0 voice profile matching', () => {
+    it('uses voice profile results when service is set', async () => {
+      const mockVoiceProfileService = {
+        identifySpeakers: vi.fn(async () => [
+          {
+            speakerLabel: 'Speaker A',
+            profileId: 42,
+            contactName: 'Jenn Kenning',
+            contactEmail: 'jenn@example.com',
+            confidence: 'high',
+            distance: 0.12,
+            status: 'auto-matched',
+          },
+          {
+            speakerLabel: 'Speaker B',
+            profileId: null,
+            contactName: null,
+            contactEmail: null,
+            confidence: 'low',
+            distance: 0.9,
+            status: 'unmatched',
+          },
+        ]),
+      };
+
+      matcher.setVoiceProfileService(mockVoiceProfileService);
+
+      const transcript = makeTranscript([
+        { speaker: 'Speaker A', text: 'Hello', timestamp: 1000 },
+        { speaker: 'Speaker B', text: 'Hi there', timestamp: 5000 },
+      ]);
+
+      const result = await matcher.matchSpeakers(
+        transcript,
+        ['jenn@example.com', 'jon@example.com'],
+        {
+          audioFilePath: '/tmp/test.wav',
+          segments: [
+            { speakerLabel: 'Speaker A', startMs: 0, endMs: 4000 },
+            { speakerLabel: 'Speaker B', startMs: 4000, endMs: 8000 },
+          ],
+          meetingId: 'mtg-123',
+          calendarAttendees: [
+            { name: 'Jenn Kenning', email: 'jenn@example.com' },
+            { name: 'Jon D. Jones', email: 'jon@example.com' },
+          ],
+          participantData: [
+            { name: 'Jenn Kenning', originalName: 'Jenn Kenning', email: 'jenn@example.com', isHost: true },
+            { name: 'Jon D. Jones', originalName: 'Jon D. Jones', email: 'jon@example.com' },
+          ],
+        }
+      );
+
+      // Speaker A should be matched via voice profile (high confidence)
+      expect(result['Speaker A']).toBeDefined();
+      expect(result['Speaker A'].method).toBe('voice-profile');
+      expect(result['Speaker A'].name).toBe('Jenn Kenning');
+      expect(result['Speaker A'].email).toBe('jenn@example.com');
+      expect(result['Speaker A'].confidence).toBe('high');
+
+      // Speaker B had low confidence from voice profiles, so should NOT be matched by Stage 0
+      // It should fall through to heuristics
+      expect(result['Speaker B']).toBeDefined();
+      expect(result['Speaker B'].method).not.toBe('voice-profile');
+
+      // Verify identifySpeakers was called with the right arguments
+      expect(mockVoiceProfileService.identifySpeakers).toHaveBeenCalledWith(
+        '/tmp/test.wav',
+        expect.any(Array),
+        expect.any(Array),
+        'mtg-123'
+      );
+    });
+
+    it('gracefully skips when no voiceProfileService is set', async () => {
+      // matcher does NOT have setVoiceProfileService called
+      const transcript = makeTranscript([
+        { speaker: 'Speaker A', text: 'Hello', timestamp: 1000 },
+      ]);
+
+      // Should not throw, even with empty options
+      const result = await matcher.matchSpeakers(transcript, ['jenn@example.com'], {
+        participantData: [
+          { name: 'Jenn Kenning', originalName: 'Jenn Kenning', email: 'jenn@example.com', isHost: true },
+        ],
+      });
+
+      expect(result).toBeDefined();
+      expect(result['Speaker A']).toBeDefined();
+      // Should fall through to heuristics since no voice profile service
+      expect(result['Speaker A'].method).not.toBe('voice-profile');
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────
   // applyMappingToTranscript
   // ─────────────────────────────────────────────────────────────────
 
