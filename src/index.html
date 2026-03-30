@@ -40,6 +40,13 @@
           opacity: 0;
         }
       }
+      .service-status { display: inline-block; font-size: 12px; }
+      .service-status.connected { color: #22c55e; }
+      .service-status.connected::before { content: '\25CF '; }
+      .service-status.disconnected { color: #ef4444; }
+      .service-status.disconnected::before { content: '\25CF '; }
+      .service-status.checking { color: #f59e0b; }
+      .service-status.checking::before { content: '\25CF '; }
     </style>
   </head>
   <body>
@@ -1584,9 +1591,50 @@
                 </div>
                 <div class="settings-item-control">
                   <select class="settings-select" id="transcriptionProviderSelect">
-                    <option value="assemblyai">AssemblyAI</option>
-                    <option value="deepgram">Deepgram</option>
+                    <option value="assemblyai">AssemblyAI — $0.37/hr (cloud)</option>
+                    <option value="deepgram">Deepgram — $0.43/hr (cloud)</option>
+                    <option value="local">Local — JD Audio Service (free, GPU required)</option>
                   </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Service Endpoints Section (v2.0) -->
+            <div class="settings-section">
+              <h3 class="settings-section-title">Service Endpoints</h3>
+              <div class="settings-item-description" style="margin-bottom: 16px;">
+                Configure URLs for local AI services. Used when local providers are selected.
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">JD Audio Service URL</div>
+                  <div class="settings-item-description">Local transcription and diarization service endpoint</div>
+                </div>
+                <div class="settings-item-control">
+                  <input type="text" class="settings-input" id="aiServiceUrlInput" placeholder="http://localhost:8374" />
+                  <span class="service-status" id="aiServiceStatus"></span>
+                </div>
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Local LLM Server URL</div>
+                  <div class="settings-item-description">Local LLM server endpoint (Ollama or compatible)</div>
+                </div>
+                <div class="settings-item-control">
+                  <input type="text" class="settings-input" id="localLLMUrlInput" placeholder="http://localhost:11434" />
+                  <span class="service-status" id="localLLMStatus"></span>
+                </div>
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Fully Local Preset</div>
+                  <div class="settings-item-description">Switch recording, transcription, and LLM to local providers in one click</div>
+                </div>
+                <div class="settings-item-control">
+                  <button class="btn btn-primary btn-sm" id="fullyLocalPresetBtn">Apply Fully Local</button>
                 </div>
               </div>
             </div>

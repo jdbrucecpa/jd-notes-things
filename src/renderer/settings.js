@@ -27,6 +27,9 @@ const DEFAULT_SETTINGS = {
   templateSummaryProvider: 'claude-haiku-4-5', // AI model for template summaries
   patternGenerationProvider: 'gemini-2.5-flash-lite', // AI model for pattern generation (cheapest option)
   recordingProvider: 'recall', // v2.0: 'recall' (Recall.ai SDK) or 'local' (FFmpeg + Window Monitoring)
+  transcriptionProvider: 'assemblyai', // v2.0: 'assemblyai', 'deepgram', or 'local' (JD Audio Service)
+  aiServiceUrl: 'http://localhost:8374', // v2.0: JD Audio Service endpoint
+  localLLMUrl: 'http://localhost:11434', // v2.0: Local LLM server (Ollama or compatible)
   // CRM Integration settings (OCRM)
   crmIntegration: {
     enabled: false, // Master toggle for CRM integration
@@ -153,6 +156,10 @@ export function initializeSettingsUI() {
     'patternGenerationProviderSelect'
   );
   const recordingProviderSelect = document.getElementById('recordingProviderSelect');
+  const transcriptionProviderSelect = document.getElementById('transcriptionProviderSelect');
+  const aiServiceUrlInput = document.getElementById('aiServiceUrlInput');
+  const localLLMUrlInput = document.getElementById('localLLMUrlInput');
+  const fullyLocalPresetBtn = document.getElementById('fullyLocalPresetBtn');
   const exportAllSettingsBtn = document.getElementById('exportAllSettingsBtn');
   const importAllSettingsBtn = document.getElementById('importAllSettingsBtn');
   const exportStatus = document.getElementById('exportStatus');
@@ -425,6 +432,50 @@ export function initializeSettingsUI() {
     });
   }
 
+  // Transcription Provider selection (v2.0)
+  if (transcriptionProviderSelect) {
+    transcriptionProviderSelect.addEventListener('change', e => {
+      const newProvider = e.target.value;
+      updateSetting('transcriptionProvider', newProvider);
+      const label = e.target.options[e.target.selectedIndex].text;
+      notifySuccess(`Transcription provider changed to ${label}`);
+    });
+  }
+
+  // AI Service URL input (v2.0)
+  if (aiServiceUrlInput) {
+    aiServiceUrlInput.addEventListener('change', e => {
+      const newUrl = e.target.value.trim();
+      updateSetting('aiServiceUrl', newUrl);
+      if (window.electronAPI?.appUpdateSettings) {
+        window.electronAPI.appUpdateSettings({ aiServiceUrl: newUrl });
+      }
+      checkAIServiceStatus();
+      notifySuccess('JD Audio Service URL updated');
+    });
+  }
+
+  // Local LLM URL input (v2.0)
+  if (localLLMUrlInput) {
+    localLLMUrlInput.addEventListener('change', e => {
+      const newUrl = e.target.value.trim();
+      updateSetting('localLLMUrl', newUrl);
+      if (window.electronAPI?.appUpdateSettings) {
+        window.electronAPI.appUpdateSettings({ localLLMUrl: newUrl });
+      }
+      checkLocalLLMStatus();
+      populateOllamaModelDropdowns();
+      notifySuccess('Local LLM Server URL updated');
+    });
+  }
+
+  // Fully Local Preset button (v2.0)
+  if (fullyLocalPresetBtn) {
+    fullyLocalPresetBtn.addEventListener('click', () => {
+      applyFullyLocalPreset();
+    });
+  }
+
   // Comprehensive Export All Settings (SE-1)
   if (exportAllSettingsBtn) {
     exportAllSettingsBtn.addEventListener('click', async () => {
@@ -590,6 +641,96 @@ export function initializeSettingsUI() {
   }
 
   /**
+   * Check and display connection status for the JD Audio Service.
+   */
+  async function checkAIServiceStatus() {
+    const statusEl = document.getElementById('aiServiceStatus');
+    if (!statusEl) return;
+    statusEl.textContent = 'Checking...';
+    statusEl.className = 'service-status checking';
+    try {
+      const result = await window.electronAPI.aiServiceHealth();
+      if (result && result.ok) {
+        statusEl.textContent = 'Connected';
+        statusEl.className = 'service-status connected';
+      } else {
+        statusEl.textContent = 'Disconnected';
+        statusEl.className = 'service-status disconnected';
+      }
+    } catch {
+      statusEl.textContent = 'Disconnected';
+      statusEl.className = 'service-status disconnected';
+    }
+  }
+
+  /**
+   * Check and display connection status for the local LLM server.
+   */
+  async function checkLocalLLMStatus() {
+    const statusEl = document.getElementById('localLLMStatus');
+    if (!statusEl) return;
+    statusEl.textContent = 'Checking...';
+    statusEl.className = 'service-status checking';
+    try {
+      const currentSettings = loadSettings();
+      const url = currentSettings.localLLMUrl || 'http://localhost:11434';
+      const result = await window.electronAPI.listLocalModels(url);
+      if (result && result.success) {
+        const count = result.models ? result.models.length : 0;
+        statusEl.textContent = count > 0 ? `Connected (${count} models)` : 'Connected (no models)';
+        statusEl.className = 'service-status connected';
+      } else {
+        statusEl.textContent = 'Disconnected';
+        statusEl.className = 'service-status disconnected';
+      }
+    } catch {
+      statusEl.textContent = 'Disconnected';
+      statusEl.className = 'service-status disconnected';
+    }
+  }
+
+  /**
+   * Apply the "Fully Local" preset: local recording, local transcription, and first available local LLM.
+   */
+  async function applyFullyLocalPreset() {
+    // Switch recording provider to local
+    updateSetting('recordingProvider', 'local');
+    if (window.electronAPI?.appUpdateSettings) {
+      window.electronAPI.appUpdateSettings({ recordingProvider: 'local' });
+    }
+    if (recordingProviderSelect) {
+      recordingProviderSelect.value = 'local';
+    }
+
+    // Switch transcription provider to local
+    updateSetting('transcriptionProvider', 'local');
+    if (transcriptionProviderSelect) {
+      transcriptionProviderSelect.value = 'local';
+    }
+
+    // Try to find a local model and apply to all LLM dropdowns
+    try {
+      const currentSettings = loadSettings();
+      const url = currentSettings.localLLMUrl || 'http://localhost:11434';
+      const result = await window.electronAPI.listLocalModels(url);
+      if (result && result.success && result.models && result.models.length > 0) {
+        const firstModel = result.models[0].name || result.models[0];
+        updateSetting('autoSummaryProvider', firstModel);
+        updateSetting('templateSummaryProvider', firstModel);
+        updateSetting('patternGenerationProvider', firstModel);
+        if (autoSummaryProviderSelect) autoSummaryProviderSelect.value = firstModel;
+        if (templateSummaryProviderSelect) templateSummaryProviderSelect.value = firstModel;
+        if (patternGenerationProviderSelect) patternGenerationProviderSelect.value = firstModel;
+        notifySuccess(`Fully local preset applied — using model: ${firstModel}`);
+      } else {
+        notifyInfo('Fully local preset applied. No local models found — configure your LLM server.');
+      }
+    } catch {
+      notifyInfo('Fully local preset applied. Could not reach local LLM server.');
+    }
+  }
+
+  /**
    * Load current settings into UI controls
    */
   function loadSettingsIntoUI() {
@@ -664,6 +805,23 @@ export function initializeSettingsUI() {
         recordingProviderSelect.value = currentSettings.recordingProvider || 'recall';
       }
     }
+
+    // v2.0: Transcription provider
+    if (transcriptionProviderSelect) {
+      transcriptionProviderSelect.value = currentSettings.transcriptionProvider || 'assemblyai';
+    }
+
+    // v2.0: Service endpoint URLs
+    if (aiServiceUrlInput) {
+      aiServiceUrlInput.value = currentSettings.aiServiceUrl || 'http://localhost:8374';
+    }
+    if (localLLMUrlInput) {
+      localLLMUrlInput.value = currentSettings.localLLMUrl || 'http://localhost:11434';
+    }
+
+    // v2.0: Check service statuses on load
+    checkAIServiceStatus();
+    checkLocalLLMStatus();
 
     // Update vault path (this will be populated from main process)
     if (vaultPathInput && window.electronAPI) {

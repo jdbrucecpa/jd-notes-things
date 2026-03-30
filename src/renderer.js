@@ -5281,9 +5281,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Show confirmation toast
       const providerNames = {
-        recallai: 'Recall.ai',
         assemblyai: 'AssemblyAI',
         deepgram: 'Deepgram',
+        local: 'Local (JD Audio Service)',
       };
       notifySuccess(`Transcription provider changed to ${providerNames[newProvider] || newProvider}`);
     });
