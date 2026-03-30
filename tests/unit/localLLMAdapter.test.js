@@ -76,6 +76,25 @@ describe('fetchLocalModels', () => {
     expect(mockFetch.mock.calls[1][0]).toMatch(/\/v1\/models$/);
   });
 
+  it('falls back to /v1/models when /api/tags returns non-ok status', async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: [{ id: 'mistral', owned_by: 'local' }],
+        }),
+      });
+
+    vi.stubGlobal('fetch', mockFetch);
+
+    const models = await fetchLocalModels('http://localhost:11434');
+    expect(models).toHaveLength(1);
+    expect(models[0].name).toBe('mistral');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('returns empty array when both endpoints fail', async () => {
     const mockFetch = vi
       .fn()
