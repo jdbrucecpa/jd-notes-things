@@ -219,7 +219,7 @@ class SpeakerMatcher {
       }
     }
 
-    // Step 3: SDK speech timeline ALWAYS runs first when available (v1.3)
+    // Step 1: SDK speech timeline (runs after Stage 0 voice profiles; v1.3)
     // This gives us high-confidence matches from authoritative SDK participant names
     if (speechTimeline && speechTimeline.participants && speechTimeline.participants.length > 0) {
       console.log('[SpeakerMatcher] SM-1: Using SDK speech timeline for high-confidence matching');
