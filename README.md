@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://www.microsoft.com/windows)
-[![Electron](https://img.shields.io/badge/Electron-39.x-47848F?logo=electron)](https://www.electronjs.org/)
+[![Electron](https://img.shields.io/badge/Electron-40.x-47848F?logo=electron)](https://www.electronjs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js)](https://nodejs.org/)
 
 [Features](#features) • [Installation](#installation) • [Configuration](#configuration) • [Usage](#usage) • [Contributing](#contributing)
@@ -29,22 +29,25 @@ JD Notes Things is a Windows desktop app that automatically records your Zoom, T
 
 ### Core Functionality
 
-- **One-click recording** — Capture system audio from any meeting platform
-- **Multi-provider transcription** — Choose AssemblyAI ($0.37/hr), Deepgram ($0.43/hr), or Recall.ai
-- **AI summaries** — Generate structured notes with OpenAI, Claude, or Azure OpenAI
+- **One-click recording** — Capture system audio from Zoom, Teams, or Google Meet
+- **Dual recording providers** — Recall.ai SDK or fully local (FFmpeg WASAPI + window monitoring)
+- **Multi-provider transcription** — AssemblyAI ($0.37/hr), Deepgram ($0.43/hr), or fully local (free, GPU required)
+- **AI summaries** — OpenAI, Claude, Gemini, or local LLM (Ollama/LM Studio)
+- **Voice profiles** — Speaker identification via voice fingerprints linked to Google Contacts
 - **Smart organization** — Auto-route meetings to the right folder based on who's in the call
 
 ### Integrations
 
 - **Google Calendar** — See upcoming meetings and auto-detect when they start
-- **Google Contacts** — Match speakers to real names in your transcripts
+- **Google Contacts** — Match speakers to real names, create contact/company pages
 - **Obsidian** — Native markdown output with proper linking between summary and transcript
 
 ### Developer-Friendly
 
 - **Template system** — Customize summary output with your own prompts
-- **YAML routing config** — Full control over where meetings land
-- **Cost optimized** — Prompt caching reduces LLM costs by 85-90%
+- **Mix-and-match providers** — Each layer (recording, transcription, summarization) independently switchable
+- **"Fully Local" preset** — One button switches everything to local providers
+- **Cost optimized** — Prompt caching reduces cloud LLM costs by 85-90%
 
 ---
 
@@ -115,14 +118,16 @@ Contributions to add cross-platform support are welcome!
 
 ## Configuration
 
-### Required API Keys
+### Required API Keys (Cloud Mode)
 
 | Service                  | Purpose             | Get Key                                                                         |
 | ------------------------ | ------------------- | ------------------------------------------------------------------------------- |
-| Recall.ai                | Audio recording     | [recall.ai](https://recall.ai)                                                  |
-| AssemblyAI _or_ Deepgram | Transcription       | [assemblyai.com](https://assemblyai.com) / [deepgram.com](https://deepgram.com) |
-| OpenAI _or_ Anthropic    | AI summaries        | [openai.com](https://openai.com) / [anthropic.com](https://anthropic.com)       |
+| Recall.ai                | Audio recording (cloud) | [recall.ai](https://recall.ai)                                              |
+| AssemblyAI _or_ Deepgram | Transcription (cloud) | [assemblyai.com](https://assemblyai.com) / [deepgram.com](https://deepgram.com) |
+| OpenAI _or_ Anthropic _or_ Google | AI summaries | [openai.com](https://openai.com) / [anthropic.com](https://anthropic.com) / [aistudio.google.com](https://aistudio.google.com) |
 | Google Cloud             | Calendar & Contacts | [console.cloud.google.com](https://console.cloud.google.com)                    |
+
+**Fully Local Mode:** No API keys needed except Google (for Calendar/Contacts). Requires [JD Audio Service](https://github.com/jdbrucecpa/jd-audio-service) and a local LLM server (Ollama or LM Studio).
 
 ### Environment Variables
 
@@ -149,29 +154,13 @@ VAULT_PATH=C:/Users/You/Documents/ObsidianVault
 
 ### Meeting Routing
 
-Control where meetings are saved by editing `config/routing.yaml`:
+Meetings are routed to folders based on participant organizations. Configure companies in **Settings → Clients**:
 
-```yaml
-clients:
-  acme-corp:
-    vault_path: clients/acme-corp
-    emails:
-      - acme.com
-    contacts:
-      - ceo@acme.com
+1. Companies are auto-discovered from Google Contacts organizations
+2. Assign each company a vault folder path and category (Client/Industry)
+3. When a meeting includes participants from a known organization, notes are saved to that company's folder
 
-internal:
-  vault_path: internal/meetings
-  team_emails:
-    - yourcompany.com
-
-settings:
-  unfiled_path: _unfiled
-```
-
-**Routing priority:** Email overrides → Exact contact match → Domain match → Internal → Unfiled
-
-See [`config/routing.yaml`](config/routing.yaml) for a complete example.
+**Routing priority:** Participant organization → Company DB match → Email domain fallback → Unfiled
 
 ---
 
@@ -252,10 +241,10 @@ The GitHub Actions workflow will automatically:
 ```
 src/
 ├── main/           # Electron main process
-│   ├── recording/  # Recall.ai SDK integration
-│   ├── services/   # Transcription, LLM, encryption
-│   ├── routing/    # Meeting organization logic
-│   └── integrations/  # Google Calendar/Contacts
+│   ├── recording/  # RecordingManager, RecallProvider, LocalProvider
+│   ├── services/   # Transcription, LLM, voice profiles, database
+│   ├── routing/    # DB-driven meeting organization
+│   └── integrations/  # Google Calendar/Contacts, SpeakerMatcher
 ├── renderer/       # React UI
 └── preload.js      # IPC bridge
 ```
@@ -264,13 +253,14 @@ src/
 
 ## Cost Estimates
 
-| Component     | Cost           | Notes                  |
-| ------------- | -------------- | ---------------------- |
-| Transcription | $0.37-0.43/hr  | AssemblyAI or Deepgram |
-| AI Summary    | ~$0.05/meeting | With prompt caching    |
-| **Total**     | **~$0.50/hr**  | For a typical meeting  |
+| Component     | Cloud Cost     | Local Cost | Notes                  |
+| ------------- | -------------- | ---------- | ---------------------- |
+| Recording     | Recall.ai fees | Free       | Local requires FFmpeg  |
+| Transcription | $0.37-0.43/hr  | Free       | Local requires GPU (~2.3GB VRAM) |
+| AI Summary    | ~$0.05/meeting | Free       | Local requires Ollama/LM Studio  |
+| **Total**     | **~$0.50/hr**  | **Free**   | Mix and match any combination |
 
-Prompt caching provides 85-90% cost reduction on LLM calls by reusing the transcript context across multiple summary sections.
+Cloud prompt caching provides 85-90% cost reduction on LLM calls. Local mode has zero ongoing costs after setup.
 
 ---
 
@@ -306,11 +296,9 @@ Contributions are welcome! Please:
 
 ## Roadmap
 
-- [ ] Real-time transcription during meetings
-- [ ] CRM integrations (HubSpot, Salesforce)
-- [ ] System tray controls
-- [ ] Keyboard shortcuts
+- [ ] Real-time streaming transcription during meetings
 - [ ] macOS support
+- [ ] Additional local model support (Whisper, etc.)
 
 ---
 
@@ -323,7 +311,9 @@ MIT License - see [LICENSE](LICENSE) for details.
 ## Acknowledgments
 
 - [Recall.ai](https://recall.ai) for the desktop recording SDK
-- [AssemblyAI](https://assemblyai.com) and [Deepgram](https://deepgram.com) for transcription
+- [AssemblyAI](https://assemblyai.com) and [Deepgram](https://deepgram.com) for cloud transcription
+- [NVIDIA NeMo Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) for local transcription
+- [PyAnnote](https://github.com/pyannote/pyannote-audio) for speaker diarization and voice embeddings
 - [Obsidian](https://obsidian.md) for being an amazing knowledge base
 
 ---
