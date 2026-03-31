@@ -44,7 +44,6 @@ const RoutingEngine = require('./main/routing/RoutingEngine');
 const ImportManager = require('./main/import/ImportManager');
 const TranscriptParser = require('./main/import/TranscriptParser');
 const PatternConfigLoader = require('./main/import/PatternConfigLoader');
-const { CrmRequestQueue } = require('./main/export/CrmRequestQueue');
 const { formatTranscriptForExport, generateExportFilename } = require('./main/export/transcriptExporter');
 const {
   createLLMServiceFromCredentials,
@@ -447,14 +446,6 @@ let appSettings = {
   streamDeck: {
     enabled: false, // v1.2: Enable Stream Deck WebSocket integration
   },
-  // OCRM: CRM Integration settings
-  crmIntegration: {
-    enabled: false, // Master toggle for CRM integration
-    pathStructure: 'legacy', // 'legacy' | 'ocrm' - folder structure to use
-    useRequestQueue: false, // Write .crm/requests/ JSON files
-    waitForAck: false, // Poll for acknowledgment from CRM plugin
-    ackTimeoutMs: 5000, // Timeout for acknowledgment polling
-  },
 };
 
 // Settings file path (Phase 10.7) - stored in config/ directory
@@ -487,7 +478,6 @@ function loadAppSettings() {
         notifications: { ...appSettings.notifications, ...savedSettings.notifications },
         shortcuts: { ...appSettings.shortcuts, ...savedSettings.shortcuts },
         streamDeck: { ...appSettings.streamDeck, ...savedSettings.streamDeck },
-        crmIntegration: { ...appSettings.crmIntegration, ...savedSettings.crmIntegration },
       };
       logger.main.info('App settings loaded successfully');
     }
@@ -1602,9 +1592,6 @@ app.whenReady().then(async () => {
 
   console.log('[ObsidianExport] Vault path:', vaultPath);
   vaultStructure = new VaultStructure(vaultPath);
-
-  // OCRM: Set settings provider for VaultStructure to access CRM integration settings
-  vaultStructure.setSettingsProvider(() => appSettings);
 
   // Initialize default config files on first launch (copies missing files, never overwrites)
   await initializeDefaultConfigFiles();
@@ -3622,45 +3609,6 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
             .replace(/^\//, '')
         : null;
 
-    // OCRM: Write CRM request queue if enabled
-    const crmSettings = appSettings.crmIntegration || {};
-    if (crmSettings.enabled && crmSettings.useRequestQueue) {
-      try {
-        const crmQueue = new CrmRequestQueue(vaultStructure.vaultBasePath);
-
-        // Build structured attendees from participants
-        const attendees = (meeting.participants || [])
-          .filter(p => p.name && !p.name.toLowerCase().includes('summary'))
-          .map(p => ({
-            name: p.name.replace(/^\[\[|\]\]$/g, ''),
-            email: p.email || null,
-            google_contact_id: p.googleContactResource || null,
-          }));
-
-        // Write meeting request
-        const firstRoute = routes[0] || {};
-        const meetingResult = await crmQueue.writeMeetingRequest(meeting, firstRoute, attendees);
-
-        if (meetingResult.success) {
-          console.log(`[ObsidianExport] CRM request written: ${meetingResult.id}`);
-
-          // Optionally wait for acknowledgment
-          if (crmSettings.waitForAck) {
-            const timeoutMs = crmSettings.ackTimeoutMs || 5000;
-            const ackResult = await crmQueue.checkAcknowledgment(meetingResult.id, timeoutMs);
-            if (ackResult.acknowledged) {
-              console.log('[ObsidianExport] CRM request acknowledged');
-            } else {
-              console.log('[ObsidianExport] CRM request acknowledgment timed out (non-blocking)');
-            }
-          }
-        }
-      } catch (crmError) {
-        // CRM queue errors should not fail the export
-        console.warn('[ObsidianExport] CRM request queue error (non-blocking):', crmError.message);
-      }
-    }
-
     return {
       success: true,
       paths: createdPaths,
@@ -5024,47 +4972,6 @@ ipcMain.handle('contacts:getByEmail', async (event, email) => {
   }
 });
 
-// Update custom fields on a contact
-ipcMain.handle('contacts:updateCustomFields', async (event, resourceName, fields) => {
-  try {
-    if (!googleContacts || !googleContacts.isAuthenticated()) {
-      return { success: false, error: 'Google Contacts not authenticated' };
-    }
-    await googleContacts.updateContactCustomFields(resourceName, fields);
-    return { success: true };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to update custom fields:', error.message);
-    return { success: false, error: error.message };
-  }
-});
-
-// Get custom fields from a contact
-ipcMain.handle('contacts:getCustomFields', async (event, resourceName) => {
-  try {
-    if (!googleContacts || !googleContacts.isAuthenticated()) {
-      return { success: false, error: 'Google Contacts not authenticated' };
-    }
-    const fields = await googleContacts.getContactCustomFields(resourceName);
-    return { success: true, fields };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to get custom fields:', error.message);
-    return { success: false, error: error.message };
-  }
-});
-
-// Update meeting stats on a contact (after meeting completes)
-ipcMain.handle('contacts:updateMeetingStats', async (event, resourceName, meetingInfo) => {
-  try {
-    if (!googleContacts || !googleContacts.isAuthenticated()) {
-      return { success: false, error: 'Google Contacts not authenticated' };
-    }
-    await googleContacts.updateMeetingStats(resourceName, meetingInfo);
-    return { success: true };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to update meeting stats:', error.message);
-    return { success: false, error: error.message };
-  }
-});
 
 // Google Contacts & Speaker Matching Service-Specific IPC Handlers
 // ===================================================================
@@ -6269,37 +6176,6 @@ ipcMain.handle('templates:reload', async () => {
 // ===================================================================
 // Routing IPC Handlers (database-driven since v1.4)
 // ===================================================================
-
-// Test routing with given emails
-ipcMain.handle(
-  'routing:testEmails',
-  createIpcHandler(async (event, emails) => {
-    console.log('[Routing IPC] Testing routing with emails:', emails);
-
-    if (!routingEngine) {
-      throw new Error('Routing engine not initialized');
-    }
-
-    // Use the testRoute method which is designed for this purpose
-    const decision = routingEngine.testRoute(emails);
-
-    // Get the primary route
-    const primaryRoute = decision.routes[0] || {};
-
-    return {
-      vaultPath: primaryRoute.fullPath || '_unfiled/',
-      reason: decision.multiOrg
-        ? `Multi-org meeting with ${decision.orgCount} organizations`
-        : primaryRoute.type
-          ? `Routed to ${primaryRoute.type}${primaryRoute.slug ? ` (${primaryRoute.slug})` : ''}`
-          : 'No match found - routed to unfiled',
-      matchedOrganizations: decision.routes.map(r => r.slug || r.type).filter(Boolean),
-      matchedEmails: emails.filter(email => {
-        return databaseService.matchEmailToClient(email) !== null;
-      }),
-    };
-  })
-);
 
 // CS-4: Preview routing for a meeting (used in template modal)
 ipcMain.handle(

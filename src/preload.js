@@ -127,7 +127,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }),
   templatesReload: () => ipcRenderer.invoke('templates:reload'),
   // Routing (database-driven since v1.4)
-  routingTestEmails: emails => ipcRenderer.invoke('routing:testEmails', emails),
   routingPreviewMeetingRoute: meetingId =>
     ipcRenderer.invoke('routing:previewMeetingRoute', meetingId),
   routingGetAllDestinations: () => ipcRenderer.invoke('routing:getAllDestinations'),
@@ -183,15 +182,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   contactsRematchParticipants: meetingId =>
     ipcRenderer.invoke('contacts:rematchParticipants', meetingId),
   contactsGetByEmail: email => ipcRenderer.invoke('contacts:getByEmail', email),
-  // v1.3.0: Contact write capabilities
+  // Contact write capabilities
   contactsCreateContact: contactData =>
     ipcRenderer.invoke('contacts:createContact', contactData),
-  contactsUpdateCustomFields: (resourceName, fields) =>
-    ipcRenderer.invoke('contacts:updateCustomFields', resourceName, fields),
-  contactsGetCustomFields: resourceName =>
-    ipcRenderer.invoke('contacts:getCustomFields', resourceName),
-  contactsUpdateMeetingStats: (resourceName, meetingInfo) =>
-    ipcRenderer.invoke('contacts:updateMeetingStats', resourceName, meetingInfo),
   speakersMatchSpeakers: (transcript, participantEmails, options) =>
     ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),
   speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) =>
