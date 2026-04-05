@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS = {
   autoSummaryProvider: 'gemini-2.5-flash', // AI model for auto-summaries (Budget-friendly default)
   templateSummaryProvider: 'claude-haiku-4-5', // AI model for template summaries
   patternGenerationProvider: 'gemini-2.5-flash-lite', // AI model for pattern generation (cheapest option)
-  recordingProvider: 'recall', // v2.0: 'recall' (Recall.ai SDK) or 'local' (FFmpeg + Window Monitoring)
+  // Note: recordingProvider is stored in main process app-settings.json (source of truth), NOT here.
   // Note: transcriptionProvider is stored in its own localStorage key, NOT here.
   // See renderer.js transcriptionProviderSelect handler.
   aiServiceUrl: 'http://localhost:8374', // v2.0: JD Audio Service endpoint
@@ -416,8 +416,7 @@ export function initializeSettingsUI() {
   if (recordingProviderSelect) {
     recordingProviderSelect.addEventListener('change', e => {
       const newProvider = e.target.value;
-      updateSetting('recordingProvider', newProvider);
-      // Sync to main process so the setting is persisted in app-settings.json
+      // recordingProvider lives in main process app-settings.json (source of truth)
       if (window.electronAPI?.appUpdateSettings) {
         window.electronAPI.appUpdateSettings({ recordingProvider: newProvider });
       }
@@ -680,8 +679,7 @@ export function initializeSettingsUI() {
    * Apply the "Fully Local" preset: local recording, local transcription, and first available local LLM.
    */
   async function applyFullyLocalPreset() {
-    // Switch recording provider to local
-    updateSetting('recordingProvider', 'local');
+    // Switch recording provider to local — recordingProvider lives in main process app-settings.json (source of truth)
     if (window.electronAPI?.appUpdateSettings) {
       window.electronAPI.appUpdateSettings({ recordingProvider: 'local' });
     }
@@ -782,14 +780,14 @@ export function initializeSettingsUI() {
             if (result.success && result.data?.recordingProvider) {
               recordingProviderSelect.value = result.data.recordingProvider;
             } else {
-              recordingProviderSelect.value = currentSettings.recordingProvider || 'recall';
+              recordingProviderSelect.value = 'recall';
             }
           })
           .catch(() => {
-            recordingProviderSelect.value = currentSettings.recordingProvider || 'recall';
+            recordingProviderSelect.value = 'recall';
           });
       } else {
-        recordingProviderSelect.value = currentSettings.recordingProvider || 'recall';
+        recordingProviderSelect.value = 'recall';
       }
     }
 
