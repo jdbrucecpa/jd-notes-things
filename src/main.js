@@ -8573,6 +8573,7 @@ ipcMain.handle('audioDevices:list', async () => {
     }
     const tempProvider = new LocalProvider();
     const devices = await tempProvider._enumerateDevices();
+    await tempProvider.shutdown();
     return { success: true, devices };
   } catch (error) {
     logger.ipc.error('[IPC] audioDevices:list failed:', error);
@@ -8610,12 +8611,15 @@ ipcMain.handle('audioDevices:test', async () => {
 
     return new Promise((resolve) => {
       const ff = spawn('ffmpeg', ffmpegArgs, { windowsHide: true });
+      let ffmpegStderr = '';
+      ff.stderr.on('data', (chunk) => { ffmpegStderr += chunk; });
 
       ff.on('close', (code) => {
         if (code === 0) {
           resolve({ success: true, filePath: testFile });
         } else {
-          resolve({ success: false, error: `FFmpeg exited with code ${code}` });
+          const detail = ffmpegStderr.slice(-300).trim();
+          resolve({ success: false, error: `FFmpeg exited with code ${code}`, detail });
         }
       });
 
