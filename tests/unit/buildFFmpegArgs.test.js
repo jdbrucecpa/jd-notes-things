@@ -121,6 +121,12 @@ describe('buildFFmpegArgs', () => {
     expect(() => buildFFmpegArgs([], defaultMixer, 'output.mp3')).toThrow();
   });
 
+  it('source with null device -- throws error', () => {
+    expect(() =>
+      buildFFmpegArgs([{ device: null, volume: 100 }], { autoBalance: false }, 'output.mp3')
+    ).toThrow();
+  });
+
   it('output always ends with MP3 encoding flags', () => {
     const sources = [{ device: 'Mic', volume: 100 }];
     const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');

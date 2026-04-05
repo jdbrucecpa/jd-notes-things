@@ -9,7 +9,7 @@
  * @param {string} outputPath - Path for the output MP3 file.
  * @returns {string[]} FFmpeg argument array (without the leading "ffmpeg" binary name).
  */
-function buildFFmpegArgs(sources, mixer, outputPath) {
+function buildFFmpegArgs(sources, mixer = {}, outputPath) {
   if (!sources || sources.length === 0) {
     throw new Error('buildFFmpegArgs: at least one audio source is required');
   }
@@ -18,6 +18,9 @@ function buildFFmpegArgs(sources, mixer, outputPath) {
 
   // Add input sources
   for (const source of sources) {
+    if (!source.device) {
+      throw new Error('buildFFmpegArgs: all sources must have a non-null device');
+    }
     args.push('-f', 'dshow', '-i', `audio=${source.device}`);
   }
 
