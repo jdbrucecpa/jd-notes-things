@@ -1598,6 +1598,103 @@
               </div>
             </div>
 
+            <!-- Local Recording Sources Section (v2.0 mixer) -->
+            <div class="settings-section" id="audioSourcesSection" style="display: none;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3 class="settings-section-title" style="margin-bottom: 0;">Local Recording Sources</h3>
+                <button class="btn btn-sm" id="audioDevicesRefreshBtn">Refresh Devices</button>
+              </div>
+              <div class="settings-item-description" style="margin-bottom: 16px;">
+                Configure audio inputs for local recording. At least one source must be enabled.
+              </div>
+
+              <!-- Source Slot 1: Microphone -->
+              <div class="settings-item" style="flex-direction: column; align-items: flex-start; gap: 8px;" id="audioSourceSlot0">
+                <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                  <input type="checkbox" id="audioSourceEnabled0" checked />
+                  <label for="audioSourceEnabled0" class="settings-item-label" style="margin: 0;">Microphone</label>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; width: 100%; padding-left: 24px;">
+                  <label style="min-width: 50px; font-size: 13px; color: var(--text-secondary);">Device:</label>
+                  <select class="settings-select" id="audioSourceDevice0" style="flex: 1;">
+                    <option value="">(none)</option>
+                  </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; width: 100%; padding-left: 24px;">
+                  <label style="min-width: 50px; font-size: 13px; color: var(--text-secondary);">Volume:</label>
+                  <input type="range" id="audioSourceVolume0" min="0" max="200" step="5" value="100" style="flex: 1;" />
+                  <span id="audioSourceVolumeLabel0" style="min-width: 40px; font-size: 13px;">100%</span>
+                </div>
+              </div>
+
+              <!-- Source Slot 2: System Audio -->
+              <div class="settings-item" style="flex-direction: column; align-items: flex-start; gap: 8px;" id="audioSourceSlot1">
+                <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                  <input type="checkbox" id="audioSourceEnabled1" checked />
+                  <label for="audioSourceEnabled1" class="settings-item-label" style="margin: 0;">System Audio</label>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; width: 100%; padding-left: 24px;">
+                  <label style="min-width: 50px; font-size: 13px; color: var(--text-secondary);">Device:</label>
+                  <select class="settings-select" id="audioSourceDevice1" style="flex: 1;">
+                    <option value="">(none)</option>
+                  </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; width: 100%; padding-left: 24px;">
+                  <label style="min-width: 50px; font-size: 13px; color: var(--text-secondary);">Volume:</label>
+                  <input type="range" id="audioSourceVolume1" min="0" max="200" step="5" value="100" style="flex: 1;" />
+                  <span id="audioSourceVolumeLabel1" style="min-width: 40px; font-size: 13px;">100%</span>
+                </div>
+              </div>
+
+              <!-- Source Slot 3: Extra -->
+              <div class="settings-item" style="flex-direction: column; align-items: flex-start; gap: 8px;" id="audioSourceSlot2">
+                <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                  <input type="checkbox" id="audioSourceEnabled2" />
+                  <label for="audioSourceEnabled2" class="settings-item-label" style="margin: 0;">Source 3</label>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; width: 100%; padding-left: 24px;">
+                  <label style="min-width: 50px; font-size: 13px; color: var(--text-secondary);">Device:</label>
+                  <select class="settings-select" id="audioSourceDevice2" style="flex: 1;">
+                    <option value="">(none)</option>
+                  </select>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px; width: 100%; padding-left: 24px;">
+                  <label style="min-width: 50px; font-size: 13px; color: var(--text-secondary);">Volume:</label>
+                  <input type="range" id="audioSourceVolume2" min="0" max="200" step="5" value="100" style="flex: 1;" />
+                  <span id="audioSourceVolumeLabel2" style="min-width: 40px; font-size: 13px;">100%</span>
+                </div>
+              </div>
+
+              <!-- Auto-balance toggle -->
+              <div class="settings-item" style="margin-top: 8px;">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Auto-balance audio levels</div>
+                  <div class="settings-item-description">Dynamically normalize volume across sources to prevent one from drowning out another</div>
+                </div>
+                <div class="settings-item-control">
+                  <input type="checkbox" id="audioMixerAutoBalance" checked />
+                </div>
+              </div>
+
+              <!-- Test recording -->
+              <div class="settings-item" style="margin-top: 8px;">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Test Recording</div>
+                  <div class="settings-item-description">Record 3 seconds from configured sources to verify levels</div>
+                </div>
+                <div class="settings-item-control" style="display: flex; align-items: center; gap: 8px;">
+                  <button class="btn btn-sm" id="audioTestRecordBtn">Test Recording</button>
+                  <span id="audioTestStatus" style="font-size: 13px; color: var(--text-secondary);"></span>
+                </div>
+              </div>
+              <div id="audioTestPlayback" style="display: none; padding: 8px 0 0 0;">
+                <audio id="audioTestPlayer" controls style="width: 100%;"></audio>
+              </div>
+
+              <!-- Error message area -->
+              <div id="audioSourcesError" style="display: none; color: var(--error-color, #e74c3c); font-size: 13px; padding: 8px 0;"></div>
+            </div>
+
             <!-- Transcription Provider Section -->
             <div class="settings-section">
               <h3 class="settings-section-title">Transcription Provider</h3>
