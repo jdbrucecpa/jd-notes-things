@@ -433,6 +433,7 @@ export function initializeSettingsUI() {
         window.electronAPI.appUpdateSettings({ recordingProvider: newProvider });
       }
       notifyInfo('Recording provider switched to ' + (newProvider === 'local' ? 'Local' : 'Recall.ai') + '.');
+      updateAudioSourcesVisibility();
     });
   }
 
@@ -574,10 +575,6 @@ export function initializeSettingsUI() {
         audioTestRecordBtn.disabled = false;
       }
     });
-  }
-
-  if (recordingProviderSelect) {
-    recordingProviderSelect.addEventListener('change', () => updateAudioSourcesVisibility());
   }
 
   // Comprehensive Export All Settings (SE-1)
@@ -967,6 +964,7 @@ export function initializeSettingsUI() {
     }
     if (recordingProviderSelect) {
       recordingProviderSelect.value = 'local';
+      updateAudioSourcesVisibility();
     }
 
     // Switch transcription provider to local — use localStorage key that renderer.js reads
