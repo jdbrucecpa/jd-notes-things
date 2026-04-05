@@ -58,4 +58,30 @@ describe('LocalProvider', () => {
     const result = provider._parseMeetingFromTitle(null, 'unknown.exe');
     expect(result).toBeNull();
   });
+
+  // v2.0 mixer: setAudioConfig
+  it('setAudioConfig stores sources and mixer settings', () => {
+    const sources = [
+      { label: 'Mic', device: 'Test Mic', volume: 120, enabled: true },
+      { label: 'System', device: 'Stereo Mix', volume: 80, enabled: true },
+    ];
+    const mixer = { autoBalance: true };
+
+    provider.setAudioConfig(sources, mixer);
+
+    expect(provider._audioSources).toEqual(sources);
+    expect(provider._audioMixer).toEqual(mixer);
+  });
+
+  it('setAudioConfig defaults to empty array and autoBalance false for null args', () => {
+    provider.setAudioConfig(null, null);
+
+    expect(provider._audioSources).toEqual([]);
+    expect(provider._audioMixer).toEqual({ autoBalance: false });
+  });
+
+  it('constructor initializes audio config with defaults', () => {
+    expect(provider._audioSources).toEqual([]);
+    expect(provider._audioMixer).toEqual({ autoBalance: false });
+  });
 });
