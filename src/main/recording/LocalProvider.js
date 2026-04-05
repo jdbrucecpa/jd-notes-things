@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { RecordingProvider } = require('./RecordingProvider');
+const { buildFFmpegArgs } = require('./buildFFmpegArgs');
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -29,6 +30,8 @@ class LocalProvider extends RecordingProvider {
     this._ffmpegProcess = null;
     this._activeRecording = null; // { recordingId, audioFilePath }
     this._pollInterval = null;
+    this._audioSources = []; // Populated via setAudioConfig()
+    this._audioMixer = { autoBalance: false };
     this._recordingPath = path.join(
       process.env.APPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Roaming'),
       'jd-notes-things',
@@ -57,6 +60,11 @@ class LocalProvider extends RecordingProvider {
     }
 
     this._startPolling();
+
+    // Store audio config if provided
+    if (config.audioSources || config.audioMixer) {
+      this.setAudioConfig(config.audioSources, config.audioMixer);
+    }
   }
 
   /**
@@ -278,7 +286,17 @@ class LocalProvider extends RecordingProvider {
    * Returns a device name string or null if none found.
    * @returns {Promise<string|null>}
    */
-  _findLoopbackDevice() {
+  async _findLoopbackDevice() {
+    const devices = await this._enumerateDevices();
+    const loopback = devices.find(d => d.isLoopback);
+    return loopback ? loopback.name : null;
+  }
+
+  /**
+   * Enumerate all dshow audio devices by parsing FFmpeg output.
+   * @returns {Promise<Array<{name: string, isLoopback: boolean, isMicrophone: boolean}>>}
+   */
+  _enumerateDevices() {
     return new Promise((resolve) => {
       const ff = spawn('ffmpeg', [
         '-list_devices', 'true',
@@ -290,56 +308,90 @@ class LocalProvider extends RecordingProvider {
       ff.stderr.on('data', chunk => { stderr += chunk; });
 
       ff.on('close', () => {
-        // FFmpeg exits non-zero when listing devices — that is normal
+        const devices = [];
         const lines = stderr.split('\n');
+        let inAudioSection = false;
         for (const line of lines) {
           const lower = line.toLowerCase();
-          // Common WASAPI loopback device names
-          if (
-            lower.includes('stereo mix') ||
-            lower.includes('wave out mix') ||
-            lower.includes('loopback') ||
-            lower.includes('virtual cable') ||
-            lower.includes('vb-audio')
-          ) {
-            // Extract the device name from the dshow listing line:
-            // [dshow @ ...] "Stereo Mix (Realtek Audio)"
-            const match = line.match(/"([^"]+)"/);
-            if (match) {
-              resolve(match[1]);
-              return;
-            }
+          if (lower.includes('directshow audio devices')) {
+            inAudioSection = true;
+            continue;
           }
+          if (lower.includes('directshow video devices')) {
+            inAudioSection = false;
+            continue;
+          }
+          if (!inAudioSection) continue;
+
+          const match = line.match(/"([^"]+)"/);
+          if (!match) continue;
+          if (lower.includes('alternative name')) continue;
+
+          const name = match[1];
+          const nameLower = name.toLowerCase();
+          const isLoopback =
+            nameLower.includes('stereo mix') ||
+            nameLower.includes('wave out mix') ||
+            nameLower.includes('loopback') ||
+            nameLower.includes('virtual cable') ||
+            nameLower.includes('vb-audio');
+          const isMicrophone =
+            nameLower.includes('microphone') || nameLower.includes('mic');
+
+          devices.push({ name, isLoopback, isMicrophone });
         }
-        resolve(null);
+        resolve(devices);
       });
 
-      ff.on('error', () => resolve(null));
+      ff.on('error', () => resolve([]));
     });
   }
 
   /**
-   * Spawn FFmpeg to capture WASAPI loopback audio to `outputPath`.
-   * Falls back to the default dshow audio device if no loopback device is found.
+   * Update audio source and mixer configuration. Takes effect on next recording start.
+   * @param {Array<{label: string, device: string|null, volume: number, enabled: boolean}>} sources
+   * @param {{autoBalance: boolean}} mixer
+   */
+  setAudioConfig(sources, mixer) {
+    this._audioSources = sources || [];
+    this._audioMixer = mixer || { autoBalance: false };
+  }
+
+  /**
+   * Spawn FFmpeg to capture audio from configured sources to `outputPath`.
+   * Uses multi-source mixing when audioSources are configured,
+   * falls back to single loopback device otherwise.
    * @param {string} outputPath
    */
   async _startFFmpeg(outputPath) {
-    const loopbackDevice = await this._findLoopbackDevice();
+    let ffmpegArgs;
 
-    // Build the audio input source
-    const audioInput = loopbackDevice
-      ? `audio=${loopbackDevice}`
-      : 'audio=virtual-audio-capturer'; // default fallback (common with screen recorders)
+    // Get enabled sources from config
+    const enabledSources = this._audioSources
+      .filter(s => s.enabled && s.device)
+      .map(s => ({ device: s.device, volume: s.volume }));
 
-    this._ffmpegProcess = spawn('ffmpeg', [
-      '-y',                 // overwrite without asking
-      '-f', 'dshow',
-      '-i', audioInput,
-      '-acodec', 'libmp3lame',
-      '-ab', '128k',
-      '-ar', '44100',
-      outputPath,
-    ], { windowsHide: true });
+    if (enabledSources.length > 0) {
+      ffmpegArgs = buildFFmpegArgs(enabledSources, this._audioMixer, outputPath);
+    } else {
+      // Fallback: single loopback device (backward compat)
+      const loopbackDevice = await this._findLoopbackDevice();
+      const audioInput = loopbackDevice
+        ? `audio=${loopbackDevice}`
+        : 'audio=virtual-audio-capturer';
+
+      ffmpegArgs = [
+        '-y',
+        '-f', 'dshow',
+        '-i', audioInput,
+        '-acodec', 'libmp3lame',
+        '-ab', '128k',
+        '-ar', '44100',
+        outputPath,
+      ];
+    }
+
+    this._ffmpegProcess = spawn('ffmpeg', ffmpegArgs, { windowsHide: true });
 
     const { recordingId, audioFilePath } = this._activeRecording;
 
@@ -354,8 +406,7 @@ class LocalProvider extends RecordingProvider {
     });
 
     this._ffmpegProcess.stderr.on('data', (_chunk) => {
-      // FFmpeg writes its progress to stderr — suppress for now.
-      // Could emit progress events here in future.
+      // FFmpeg writes its progress to stderr -- suppress for now.
     });
   }
 }
