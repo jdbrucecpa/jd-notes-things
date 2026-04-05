@@ -310,36 +310,69 @@ class LocalProvider extends RecordingProvider {
       ff.on('close', () => {
         const devices = [];
         const lines = stderr.split('\n');
-        let inAudioSection = false;
-        for (const line of lines) {
-          const lower = line.toLowerCase();
-          if (lower.includes('directshow audio devices')) {
-            inAudioSection = true;
-            continue;
+
+        // FFmpeg dshow output has two formats:
+        // Older: section headers "DirectShow audio devices" / "DirectShow video devices"
+        // Newer (8.x+): each line has type suffix like "Device Name" (audio)
+        const hasNewFormat = lines.some(l => /"\s*\(audio\)/.test(l));
+
+        if (hasNewFormat) {
+          // New format: "DeviceName" (audio) — type on each line
+          for (const line of lines) {
+            const lower = line.toLowerCase();
+            if (lower.includes('alternative name')) continue;
+            if (!lower.includes('(audio)')) continue;
+
+            const match = line.match(/"([^"]+)"/);
+            if (!match) continue;
+
+            const name = match[1];
+            const nameLower = name.toLowerCase();
+            const isLoopback =
+              nameLower.includes('stereo mix') ||
+              nameLower.includes('wave out mix') ||
+              nameLower.includes('loopback') ||
+              nameLower.includes('virtual cable') ||
+              nameLower.includes('vb-audio');
+            const isMicrophone =
+              nameLower.includes('microphone') || nameLower.includes('mic');
+
+            devices.push({ name, isLoopback, isMicrophone });
           }
-          if (lower.includes('directshow video devices')) {
-            inAudioSection = false;
-            continue;
+        } else {
+          // Legacy format: section-based with "DirectShow audio devices" header
+          let inAudioSection = false;
+          for (const line of lines) {
+            const lower = line.toLowerCase();
+            if (lower.includes('directshow audio devices')) {
+              inAudioSection = true;
+              continue;
+            }
+            if (lower.includes('directshow video devices')) {
+              inAudioSection = false;
+              continue;
+            }
+            if (!inAudioSection) continue;
+
+            const match = line.match(/"([^"]+)"/);
+            if (!match) continue;
+            if (lower.includes('alternative name')) continue;
+
+            const name = match[1];
+            const nameLower = name.toLowerCase();
+            const isLoopback =
+              nameLower.includes('stereo mix') ||
+              nameLower.includes('wave out mix') ||
+              nameLower.includes('loopback') ||
+              nameLower.includes('virtual cable') ||
+              nameLower.includes('vb-audio');
+            const isMicrophone =
+              nameLower.includes('microphone') || nameLower.includes('mic');
+
+            devices.push({ name, isLoopback, isMicrophone });
           }
-          if (!inAudioSection) continue;
-
-          const match = line.match(/"([^"]+)"/);
-          if (!match) continue;
-          if (lower.includes('alternative name')) continue;
-
-          const name = match[1];
-          const nameLower = name.toLowerCase();
-          const isLoopback =
-            nameLower.includes('stereo mix') ||
-            nameLower.includes('wave out mix') ||
-            nameLower.includes('loopback') ||
-            nameLower.includes('virtual cable') ||
-            nameLower.includes('vb-audio');
-          const isMicrophone =
-            nameLower.includes('microphone') || nameLower.includes('mic');
-
-          devices.push({ name, isLoopback, isMicrophone });
         }
+
         resolve(devices);
       });
 
