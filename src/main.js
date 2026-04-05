@@ -2500,9 +2500,7 @@ async function initSDK() {
         });
       }
 
-      // Clean up active recording state immediately
-      recordingManager.removeRecording(windowId);
-      console.log(`[Recording] Cleaned up active recording: ${windowId}`);
+      // Recording cleanup already handled by RecordingManager's recording-ended handler
 
       // Update recording state and tray menu (Phase 10.7)
       isRecording = false;
@@ -3003,11 +3001,13 @@ async function initSDK() {
 
   // Listen for real-time events (participant joins and video frames)
   // Note: No longer processing real-time transcripts - we use async transcription after recording
-  // TODO(v2.0): Convert to recordingManager events once participant/speech handlers
+  // TODO: Convert to recordingManager events once participant/speech handlers
   // are updated to accept the normalized data shape instead of raw SDK events.
-  // Only register Recall SDK-specific realtime event listener when using Recall provider
-  if (providerSetting !== 'local') {
-    RecallAiSdk.addEventListener('realtime-event', async evt => {
+  // Registered unconditionally — handler checks current provider to avoid
+  // processing events when using Local recording mode.
+  RecallAiSdk.addEventListener('realtime-event', async evt => {
+      // Skip when using local provider (SDK events are irrelevant)
+      if (appSettings.recordingProvider === 'local') return;
       // Only log non-video frame events to prevent flooding the logger
       if (evt.event !== 'video_separate_png.data') {
         console.log('Received realtime event:', evt.event);
@@ -3033,7 +3033,6 @@ async function initSDK() {
       }
       // Real-time transcript events removed - using async transcription instead
     });
-  }
 
   // Handle errors (via RecordingManager abstraction)
   recordingManager.on('error', (data) => {

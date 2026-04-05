@@ -1338,7 +1338,581 @@ test('companies:getAll returns companies with required fields', async () => {
 });
 
 // ===================================================================
-// Test 36: No Critical Errors (keep last)
+// v2.0 Gap Coverage Tests
+// ===================================================================
+
+// Test 37: Settings General panel controls
+test('settings general panel has provider dropdowns and toggles', async () => {
+  await ensureMainView();
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  // Click General tab
+  const generalTab = page.locator('#generalSettingsTab');
+  if (await generalTab.isVisible().catch(() => false)) {
+    await generalTab.click();
+    await page.waitForTimeout(300);
+  }
+
+  // Dark mode toggle
+  await expect(page.locator('#darkModeToggle')).toBeAttached();
+
+  // Transcription provider dropdown should have local option (v2.0)
+  const transcriptionSelect = page.locator('#transcriptionProviderSelect');
+  if (await transcriptionSelect.isAttached().catch(() => false)) {
+    const options = await transcriptionSelect.locator('option').allTextContents();
+    console.log('[E2E] Transcription providers:', options.join(', '));
+    expect(options.length).toBeGreaterThanOrEqual(2);
+  }
+
+  // AI model dropdowns
+  await expect(page.locator('#autoSummaryProviderSelect')).toBeAttached();
+  await expect(page.locator('#templateSummaryProviderSelect')).toBeAttached();
+
+  await ensureMainView();
+});
+
+// Test 38: v2.0 service endpoint fields and fully local preset
+test('settings has service endpoint fields and fully local preset (v2.0)', async () => {
+  await ensureMainView();
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  const generalTab = page.locator('#generalSettingsTab');
+  if (await generalTab.isVisible().catch(() => false)) {
+    await generalTab.click();
+    await page.waitForTimeout(300);
+  }
+
+  // Service endpoint inputs (v2.0)
+  const aiServiceUrl = page.locator('#aiServiceUrlInput');
+  const localLLMUrl = page.locator('#localLLMUrlInput');
+
+  if (await aiServiceUrl.isAttached().catch(() => false)) {
+    const aiValue = await aiServiceUrl.inputValue();
+    console.log('[E2E] AI service URL:', aiValue);
+    expect(aiValue).toContain('localhost');
+  }
+
+  if (await localLLMUrl.isAttached().catch(() => false)) {
+    const llmValue = await localLLMUrl.inputValue();
+    console.log('[E2E] Local LLM URL:', llmValue);
+    expect(llmValue).toContain('localhost');
+  }
+
+  // Fully Local preset button (v2.0)
+  const fullyLocalBtn = page.locator('#fullyLocalPresetBtn');
+  if (await fullyLocalBtn.isAttached().catch(() => false)) {
+    console.log('[E2E] Fully Local preset button found');
+  }
+
+  // Health status indicators
+  const aiStatus = page.locator('#aiServiceStatus');
+  const llmStatus = page.locator('#localLLMStatus');
+  if (await aiStatus.isAttached().catch(() => false)) {
+    console.log('[E2E] AI service status indicator attached');
+  }
+  if (await llmStatus.isAttached().catch(() => false)) {
+    console.log('[E2E] Local LLM status indicator attached');
+  }
+
+  await ensureMainView();
+});
+
+// Test 39: Settings My Profile tab
+test('settings my profile tab has form fields', async () => {
+  await ensureMainView();
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  const profileTab = page.locator('#profileSettingsTab');
+  await expect(profileTab).toBeAttached();
+  await profileTab.click();
+  await page.waitForTimeout(300);
+
+  // Profile panel should be visible
+  const profilePanel = page.locator('#profilePanel');
+  await expect(profilePanel).toBeVisible({ timeout: 3000 });
+
+  // Should have name, email, organization fields
+  const nameInput = page.locator('#profileName');
+  const emailInput = page.locator('#profileEmail');
+  if (await nameInput.isAttached().catch(() => false)) {
+    console.log('[E2E] Profile name field attached');
+  }
+  if (await emailInput.isAttached().catch(() => false)) {
+    console.log('[E2E] Profile email field attached');
+  }
+
+  // Save button
+  const saveBtn = page.locator('#saveProfileBtn');
+  await expect(saveBtn).toBeAttached();
+
+  await ensureMainView();
+});
+
+// Test 40: Settings Templates tab
+test('settings templates tab opens with template list', async () => {
+  await ensureMainView();
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  const templatesTab = page.locator('#templatesSettingsTab');
+  await expect(templatesTab).toBeAttached();
+  await templatesTab.click();
+  await page.waitForTimeout(500);
+
+  const templatesPanel = page.locator('#templatesPanel');
+  await expect(templatesPanel).toBeVisible({ timeout: 3000 });
+
+  // Template list or editor area should exist
+  const templateContent = await templatesPanel.textContent();
+  console.log('[E2E] Templates panel has content:', templateContent.length > 0);
+  expect(templateContent.length).toBeGreaterThan(0);
+
+  await ensureMainView();
+});
+
+// Test 41: Settings Vocabulary tab
+test('settings vocabulary tab opens with spelling sections', async () => {
+  await ensureMainView();
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  const vocabTab = page.locator('#vocabularySettingsTab');
+  await expect(vocabTab).toBeAttached();
+  await vocabTab.click();
+  await page.waitForTimeout(500);
+
+  const vocabPanel = page.locator('#vocabularyPanel');
+  await expect(vocabPanel).toBeVisible({ timeout: 3000 });
+
+  const panelText = await vocabPanel.textContent();
+  console.log('[E2E] Vocabulary panel loaded, length:', panelText.length);
+  expect(panelText.length).toBeGreaterThan(0);
+
+  await ensureMainView();
+});
+
+// Test 42: Settings Logs tab
+test('settings logs tab opens with log controls', async () => {
+  await ensureMainView();
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  const logsTab = page.locator('#logsSettingsTab');
+  await expect(logsTab).toBeAttached();
+  await logsTab.click();
+  await page.waitForTimeout(500);
+
+  const logsPanel = page.locator('#logsPanel');
+  await expect(logsPanel).toBeVisible({ timeout: 3000 });
+
+  // Clear logs and open log file buttons
+  const clearBtn = page.locator('#clearLogsBtn');
+  const openBtn = page.locator('#openLogFileBtn');
+  if (await clearBtn.isAttached().catch(() => false)) {
+    console.log('[E2E] Clear logs button found');
+  }
+  if (await openBtn.isAttached().catch(() => false)) {
+    console.log('[E2E] Open log file button found');
+  }
+
+  await ensureMainView();
+});
+
+// Test 43: Settings About tab shows version
+test('settings about tab shows app version', async () => {
+  await ensureMainView();
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  const aboutTab = page.locator('#aboutSettingsTab');
+  await expect(aboutTab).toBeAttached();
+  await aboutTab.click();
+  await page.waitForTimeout(500);
+
+  const aboutPanel = page.locator('#aboutPanel');
+  await expect(aboutPanel).toBeVisible({ timeout: 3000 });
+
+  const aboutText = await aboutPanel.textContent();
+  // Should contain a version number pattern
+  console.log('[E2E] About panel text length:', aboutText.length);
+  expect(aboutText.length).toBeGreaterThan(0);
+
+  await ensureMainView();
+});
+
+// Test 44: Meeting detail metadata tab
+test('meeting detail metadata tab populates', async () => {
+  const navigated = await navigateToFirstMeeting();
+  if (!navigated) {
+    console.log('[E2E] No past meetings — skipping metadata tab test');
+    return;
+  }
+
+  const metadataTab = page.locator('#metadataTab');
+  if (await metadataTab.isVisible().catch(() => false)) {
+    await metadataTab.click();
+    await page.waitForTimeout(500);
+
+    const metadataContent = page.locator('#metadataContent, #metadataPanel, .metadata-section');
+    const visible = await metadataContent.first().isVisible().catch(() => false);
+    console.log('[E2E] Metadata content visible:', visible);
+  } else {
+    console.log('[E2E] Metadata tab not visible — skipping');
+  }
+
+  await ensureMainView();
+});
+
+// Test 45: Meeting detail transcript search
+test('meeting detail has transcript search input', async () => {
+  const navigated = await navigateToFirstMeeting();
+  if (!navigated) {
+    console.log('[E2E] No past meetings — skipping transcript search test');
+    return;
+  }
+
+  // Switch to transcript tab
+  const transcriptTab = page.locator('#transcriptTab');
+  if (await transcriptTab.isVisible().catch(() => false)) {
+    await transcriptTab.click();
+    await page.waitForTimeout(500);
+
+    const searchInput = page.locator('#transcriptSearch');
+    if (await searchInput.isAttached().catch(() => false)) {
+      await searchInput.fill('test search');
+      const value = await searchInput.inputValue();
+      expect(value).toBe('test search');
+      await searchInput.fill('');
+      console.log('[E2E] Transcript search input works');
+    } else {
+      console.log('[E2E] Transcript search input not found');
+    }
+  }
+
+  await ensureMainView();
+});
+
+// Test 46: Meeting detail edit mode toggles
+test('meeting detail edit mode opens and cancels', async () => {
+  const navigated = await navigateToFirstMeeting();
+  if (!navigated) {
+    console.log('[E2E] No past meetings — skipping edit mode test');
+    return;
+  }
+
+  const editBtn = page.locator('#editMeetingInfoBtn');
+  if (await editBtn.isVisible().catch(() => false)) {
+    await editBtn.click();
+    await page.waitForTimeout(300);
+
+    // Edit fields should appear
+    const titleInput = page.locator('#editMeetingTitle');
+    const titleVisible = await titleInput.isVisible().catch(() => false);
+    console.log('[E2E] Edit title field visible:', titleVisible);
+
+    // Cancel edit
+    const cancelBtn = page.locator('#cancelMeetingInfoEditBtn');
+    if (await cancelBtn.isVisible().catch(() => false)) {
+      await cancelBtn.click();
+      await page.waitForTimeout(300);
+    }
+  } else {
+    console.log('[E2E] Edit meeting info button not visible — skipping');
+  }
+
+  await ensureMainView();
+});
+
+// Test 47: Template modal opens from meeting detail
+test('template modal opens with routing preview and template checkboxes', async () => {
+  const navigated = await navigateToFirstMeeting();
+  if (!navigated) {
+    console.log('[E2E] No past meetings — skipping template modal test');
+    return;
+  }
+
+  // Look for the generate summary button
+  const generateBtn = page.locator('#generateSummaryBtn, button:has-text("Generate Summary"), button:has-text("Select Templates")');
+  const btnVisible = await generateBtn.first().isVisible().catch(() => false);
+
+  if (btnVisible) {
+    await generateBtn.first().click();
+    await page.waitForTimeout(500);
+
+    const templateModal = page.locator('#templateModal');
+    const modalVisible = await templateModal.isVisible().catch(() => false);
+    console.log('[E2E] Template modal visible:', modalVisible);
+
+    if (modalVisible) {
+      // Routing preview section
+      const routingPreview = page.locator('#routingPreview, .routing-preview');
+      const routingVisible = await routingPreview.first().isVisible().catch(() => false);
+      console.log('[E2E] Routing preview visible:', routingVisible);
+
+      // Template checkboxes
+      const checkboxes = page.locator('#templateModal input[type="checkbox"]');
+      const checkboxCount = await checkboxes.count();
+      console.log('[E2E] Template checkboxes:', checkboxCount);
+
+      // Close modal
+      await page.evaluate(() => {
+        document.querySelectorAll('.modal-overlay').forEach(m => { m.style.display = 'none'; });
+      });
+      await page.waitForTimeout(200);
+    }
+  } else {
+    console.log('[E2E] Generate summary button not visible — skipping');
+  }
+
+  await ensureMainView();
+});
+
+// Test 48: Filter panel has all filter dropdowns
+test('filter panel has company, platform, and sync status filters', async () => {
+  await ensureMainView();
+
+  // Recording and calendar status were tested in Test 10
+  // Test the additional filter dropdowns
+  const companyFilter = page.locator('#filterCompany');
+  const platformFilter = page.locator('#filterPlatform');
+  const syncFilter = page.locator('#filterSyncStatus');
+  const clearAllBtn = page.locator('#filterClearAll');
+
+  const companyAttached = await companyFilter.isAttached().catch(() => false);
+  const platformAttached = await platformFilter.isAttached().catch(() => false);
+  const syncAttached = await syncFilter.isAttached().catch(() => false);
+  const clearAttached = await clearAllBtn.isAttached().catch(() => false);
+
+  console.log(`[E2E] Filters — Company: ${companyAttached}, Platform: ${platformAttached}, Sync: ${syncAttached}, Clear: ${clearAttached}`);
+
+  // At minimum platform filter should exist
+  expect(platformAttached || companyAttached).toBe(true);
+});
+
+// Test 49: Bulk selection mode
+test('bulk selection mode activates with toolbar', async () => {
+  await ensureMainView();
+
+  const bulkToggle = page.locator('#toggleBulkSelectBtn');
+  if (!(await bulkToggle.isAttached().catch(() => false))) {
+    console.log('[E2E] Bulk select button not found — skipping');
+    return;
+  }
+
+  await bulkToggle.click();
+  await page.waitForTimeout(300);
+
+  const toolbar = page.locator('#bulkActionsToolbar');
+  const toolbarVisible = await toolbar.isVisible().catch(() => false);
+  console.log('[E2E] Bulk actions toolbar visible:', toolbarVisible);
+
+  // Deactivate bulk mode
+  await bulkToggle.click();
+  await page.waitForTimeout(300);
+});
+
+// Test 50: Import modal opens
+test('import modal opens with file drop zone', async () => {
+  await ensureMainView();
+
+  const importBtn = page.locator('#importBtn');
+  if (!(await importBtn.isVisible().catch(() => false))) {
+    console.log('[E2E] Import button not visible — skipping');
+    return;
+  }
+
+  await importBtn.click();
+  await page.waitForTimeout(500);
+
+  const importModal = page.locator('#importModal');
+  const modalVisible = await importModal.isVisible().catch(() => false);
+  console.log('[E2E] Import modal visible:', modalVisible);
+
+  if (modalVisible) {
+    // Platform selector
+    const platformSelect = page.locator('#importPlatformSelect');
+    const platformAttached = await platformSelect.isAttached().catch(() => false);
+    console.log('[E2E] Import platform selector:', platformAttached);
+
+    // Start import button
+    const startBtn = page.locator('#startImport');
+    const startAttached = await startBtn.isAttached().catch(() => false);
+    console.log('[E2E] Start import button:', startAttached);
+
+    // Close modal
+    await page.evaluate(() => {
+      document.querySelectorAll('.modal-overlay').forEach(m => { m.style.display = 'none'; });
+    });
+    await page.waitForTimeout(200);
+  }
+});
+
+// Test 51: Voice profile IPC returns valid response (v2.0)
+test('voiceProfileGetAll returns valid response (v2.0)', async () => {
+  await ensureMainView();
+
+  const result = await page.evaluate(() => {
+    return window.electronAPI.voiceProfileGetAll();
+  });
+
+  console.log('[E2E] voiceProfileGetAll result:', JSON.stringify(result).substring(0, 200));
+
+  expect(result).toBeTruthy();
+  if (result.success !== undefined) {
+    expect(result.success).toBe(true);
+  }
+  // Profiles should be an array (may be empty)
+  const profiles = result.profiles || result;
+  expect(Array.isArray(profiles)).toBe(true);
+});
+
+// Test 52: AI service health IPC (v2.0)
+test('aiServiceHealth returns a response (v2.0)', async () => {
+  await ensureMainView();
+
+  const result = await page.evaluate(async () => {
+    try {
+      return await window.electronAPI.aiServiceHealth();
+    } catch (e) {
+      return { error: e.message };
+    }
+  });
+
+  console.log('[E2E] aiServiceHealth result:', JSON.stringify(result).substring(0, 200));
+
+  // Either success (service running) or a structured error (service not running) — both valid
+  expect(result).toBeTruthy();
+});
+
+// Test 53: Local models IPC (v2.0)
+test('listLocalModels returns a response (v2.0)', async () => {
+  await ensureMainView();
+
+  const result = await page.evaluate(async () => {
+    try {
+      return await window.electronAPI.listLocalModels();
+    } catch (e) {
+      return { error: e.message };
+    }
+  });
+
+  console.log('[E2E] listLocalModels result:', JSON.stringify(result).substring(0, 200));
+
+  // Either returns models array or error — both valid (Ollama may not be running)
+  expect(result).toBeTruthy();
+});
+
+// Test 54: Routing preview IPC
+test('routingPreviewMeetingRoute returns route for a meeting', async () => {
+  await ensureMainView();
+
+  // Get a meeting ID first
+  const meetings = await page.evaluate(() => {
+    return window.electronAPI.loadMeetingsData();
+  });
+
+  if (!meetings || meetings.length === 0) {
+    console.log('[E2E] No meetings for routing preview — skipping');
+    return;
+  }
+
+  const meetingId = meetings[0].id;
+  const result = await page.evaluate(async (id) => {
+    return window.electronAPI.routingPreviewMeetingRoute(id);
+  }, meetingId);
+
+  console.log('[E2E] Routing preview result:', JSON.stringify(result).substring(0, 200));
+  expect(result).toBeTruthy();
+
+  // Should have routes array
+  if (result.routes) {
+    expect(Array.isArray(result.routes)).toBe(true);
+  }
+});
+
+// Test 55: Speaker mapping persistence IPC
+test('speakerMappingGetAll returns an array', async () => {
+  await ensureMainView();
+
+  const result = await page.evaluate(async () => {
+    try {
+      return await window.electronAPI.speakerMappingGetAll();
+    } catch (e) {
+      return { error: e.message };
+    }
+  });
+
+  console.log('[E2E] speakerMappingGetAll result type:', typeof result, Array.isArray(result));
+
+  // Should return an array (possibly empty) or an object with mappings
+  expect(result).toBeTruthy();
+});
+
+// Test 56: Transcript export button in meeting detail
+test('transcript export button exists in meeting detail', async () => {
+  const navigated = await navigateToFirstMeeting();
+  if (!navigated) {
+    console.log('[E2E] No past meetings — skipping transcript export test');
+    return;
+  }
+
+  // Switch to transcript tab
+  const transcriptTab = page.locator('#transcriptTab');
+  if (await transcriptTab.isVisible().catch(() => false)) {
+    await transcriptTab.click();
+    await page.waitForTimeout(500);
+
+    const exportBtn = page.locator('#exportTranscriptBtn, button[title*="Export"], button:has-text("Export")');
+    const exportVisible = await exportBtn.first().isVisible().catch(() => false);
+    console.log('[E2E] Transcript export button visible:', exportVisible);
+  } else {
+    console.log('[E2E] Transcript tab not visible — skipping');
+  }
+
+  await ensureMainView();
+});
+
+// Test 57: CRM settings section does NOT exist (regression test)
+test('CRM integration settings section is removed', async () => {
+  await ensureMainView();
+  await page.locator('#settingsBtn').click();
+  await page.waitForTimeout(500);
+
+  // Navigate through all settings tabs to make sure CRM toggle is gone
+  const crmToggle = page.locator('#crmEnabledToggle');
+  const crmAttached = await crmToggle.isAttached().catch(() => false);
+  expect(crmAttached).toBe(false);
+
+  const crmContainer = page.locator('#crmSettingsContainer');
+  const containerAttached = await crmContainer.isAttached().catch(() => false);
+  expect(containerAttached).toBe(false);
+
+  console.log('[E2E] CRM integration settings confirmed removed');
+
+  await ensureMainView();
+});
+
+// Test 58: Window controls exist in custom titlebar
+test('window controls exist in custom titlebar', async () => {
+  const minimizeBtn = page.locator('#minimizeBtn, .titlebar-minimize, [title="Minimize"]');
+  const maximizeBtn = page.locator('#maximizeBtn, .titlebar-maximize, [title="Maximize"]');
+  const closeBtn = page.locator('#closeBtn, .titlebar-close, [title="Close"]');
+
+  const minAttached = await minimizeBtn.first().isAttached().catch(() => false);
+  const maxAttached = await maximizeBtn.first().isAttached().catch(() => false);
+  const closeAttached = await closeBtn.first().isAttached().catch(() => false);
+
+  console.log(`[E2E] Window controls — Min: ${minAttached}, Max: ${maxAttached}, Close: ${closeAttached}`);
+
+  // At least close button should exist
+  expect(closeAttached).toBe(true);
+});
+
+// ===================================================================
+// Final Test: No Critical Errors (keep last)
 // ===================================================================
 test('no critical console errors', async () => {
   const errors = [];

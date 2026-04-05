@@ -15,6 +15,8 @@ let documentClickHandler = null; // Single delegated click handler
 let mergeMode = false; // Whether merge selection mode is active
 const selectedForMerge = new Set(); // Speakers selected for merging
 let meetingParticipants = []; // Meeting participants for suggestions
+let autoMergedMappings = {}; // Auto-merged speaker mappings (was window._autoMergedMappings)
+let duplicateSuggestions = []; // Duplicate speaker suggestions (was window._duplicateSuggestions)
 
 /**
  * Open the speaker mapping modal for a meeting
@@ -95,7 +97,7 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
 
     // Apply auto-merges and filter speaker list
     let filteredSpeakerIds = [...speakerIds];
-    const autoMergedMappings = {};
+    const localAutoMerged = {};
 
     if (dupResult.success && dupResult.autoMerge?.length > 0) {
       for (const merge of dupResult.autoMerge) {
@@ -103,7 +105,7 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
         // Remove the "from" speaker from the list
         filteredSpeakerIds = filteredSpeakerIds.filter(id => id !== merge.from);
         // Add to auto-merged mappings (will be applied when user saves)
-        autoMergedMappings[merge.from] = {
+        localAutoMerged[merge.from] = {
           contactName: merge.to,
           contactEmail: null,
           obsidianLink: `[[${merge.to}]]`,
@@ -116,11 +118,11 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
       }
     }
 
-    // Store auto-merged mappings for later application
-    window._autoMergedMappings = autoMergedMappings;
+    // Store auto-merged mappings in module state for later application
+    autoMergedMappings = localAutoMerged;
 
     // Store suggestions for merge UI
-    window._duplicateSuggestions = dupResult.success ? dupResult.suggestions : [];
+    duplicateSuggestions = dupResult.success ? dupResult.suggestions : [];
 
     // Get suggestions from known mappings
     const suggestStart = performance.now();
@@ -206,8 +208,8 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
     );
 
     // Render duplicate suggestions section if any
-    if (window._duplicateSuggestions?.length > 0) {
-      renderDuplicateSuggestions(speakersList, window._duplicateSuggestions);
+    if (duplicateSuggestions?.length > 0) {
+      renderDuplicateSuggestions(speakersList, duplicateSuggestions);
     }
 
     // Update stats
@@ -478,7 +480,7 @@ function createSpeakerRow(speakerId, suggestion, stats = {}) {
         if (!candidate || !candidate.email) continue;
         const option = document.createElement('option');
         option.value = candidate.email;
-        option.textContent = escapeHtml(candidate.name || candidate.email);
+        option.textContent = candidate.name || candidate.email;
         select.appendChild(option);
       }
 
@@ -486,17 +488,30 @@ function createSpeakerRow(speakerId, suggestion, stats = {}) {
         if (!e.target.value) return;
         const candidate = suggestion.candidateAttendees.find(c => c.email === e.target.value);
         if (!candidate) return;
+
+        // Voice profile assignment requires a valid embedding from the AI service
+        if (!suggestion.embedding || suggestion.embedding.length === 0) {
+          notifyError('No voice embedding available — cannot create voice profile');
+          e.target.value = '';
+          return;
+        }
+
         try {
-          await window.electronAPI.voiceProfileAssign({
+          const result = await window.electronAPI.voiceProfileAssign({
             speakerLabel: speakerId,
             contactEmail: candidate.email,
             contactName: candidate.name || candidate.email,
             meetingId: currentMeetingId,
-            embedding: suggestion.embedding || [],
+            embedding: suggestion.embedding,
           });
-          notifySuccess(`Voice profile created for ${candidate.name || candidate.email}`);
+          if (result.success) {
+            notifySuccess(`Voice profile created for ${candidate.name || candidate.email}`);
+          } else {
+            notifyError(`Failed to create voice profile: ${result.error || 'Unknown error'}`);
+          }
         } catch (err) {
           console.error('[SpeakerMapping] voiceProfileAssign failed:', err);
+          notifyError('Failed to assign voice profile');
         }
       });
 
@@ -991,7 +1006,7 @@ function setupModalEventListeners(onComplete) {
   applyBtn.onclick = async () => {
     // Merge auto-merged mappings with user mappings
     const allMappings = {
-      ...(window._autoMergedMappings || {}),
+      ...autoMergedMappings,
       ...currentMappings,
     };
 

@@ -5623,7 +5623,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       recordIcon.style.display = 'none';
       stopIcon.style.display = 'block';
 
-      // Get transcription provider from localStorage (default to assemblyai since recallai SDK upload is broken)
+      // Get transcription provider from localStorage (default to assemblyai)
       const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'assemblyai';
 
       // Call the API to start recording with action

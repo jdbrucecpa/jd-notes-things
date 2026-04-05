@@ -74,32 +74,42 @@ class LocalProvider extends RecordingProvider {
     const audioFilePath = path.join(this._recordingPath, filename);
     const recordingId = audioFilePath;
 
-    await this._startFFmpeg(audioFilePath);
-
+    // Set state BEFORE starting FFmpeg so the close handler has valid data
     this._recording = true;
     this._activeRecording = { recordingId, audioFilePath };
+
+    await this._startFFmpeg(audioFilePath);
     this.emit('recording-started', { recordingId, audioFilePath });
     return recordingId;
   }
 
   /**
-   * Stop the active FFmpeg recording. The 'recording-ended' event fires when
-   * ffmpeg exits cleanly.
+   * Stop the active FFmpeg recording. Resolves when FFmpeg has exited.
+   * The 'recording-ended' event fires from the process close handler.
    * @param {string} [_recordingId] - ignored; only one recording at a time
+   * @returns {Promise<void>}
    */
   async stopRecording(_recordingId) {
-    if (!this._ffmpegProcess) {
+    const proc = this._ffmpegProcess;
+    if (!proc) {
       return;
     }
 
+    // Wait for the process to actually exit
+    const exitPromise = new Promise((resolve) => {
+      proc.on('close', () => resolve());
+    });
+
     // Send 'q' to FFmpeg stdin to trigger a clean shutdown
     try {
-      this._ffmpegProcess.stdin.write('q');
-      this._ffmpegProcess.stdin.end();
+      proc.stdin.write('q');
+      proc.stdin.end();
     } catch (_err) {
       // If stdin is already closed, kill the process directly
-      this._ffmpegProcess.kill('SIGTERM');
+      proc.kill('SIGTERM');
     }
+
+    return exitPromise;
   }
 
   async shutdown() {
@@ -331,7 +341,7 @@ class LocalProvider extends RecordingProvider {
       outputPath,
     ], { windowsHide: true });
 
-    const { recordingId, audioFilePath } = this._activeRecording || { recordingId: outputPath, audioFilePath: outputPath };
+    const { recordingId, audioFilePath } = this._activeRecording;
 
     this._ffmpegProcess.on('close', (code) => {
       this._recording = false;

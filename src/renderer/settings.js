@@ -27,7 +27,8 @@ const DEFAULT_SETTINGS = {
   templateSummaryProvider: 'claude-haiku-4-5', // AI model for template summaries
   patternGenerationProvider: 'gemini-2.5-flash-lite', // AI model for pattern generation (cheapest option)
   recordingProvider: 'recall', // v2.0: 'recall' (Recall.ai SDK) or 'local' (FFmpeg + Window Monitoring)
-  transcriptionProvider: 'assemblyai', // v2.0: 'assemblyai', 'deepgram', or 'local' (JD Audio Service)
+  // Note: transcriptionProvider is stored in its own localStorage key, NOT here.
+  // See renderer.js transcriptionProviderSelect handler.
   aiServiceUrl: 'http://localhost:8374', // v2.0: JD Audio Service endpoint
   localLLMUrl: 'http://localhost:11434', // v2.0: Local LLM server (Ollama or compatible)
 };

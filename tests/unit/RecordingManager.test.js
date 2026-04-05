@@ -31,11 +31,18 @@ describe('RecordingManager', () => {
     expect(Object.keys(recordings)).toHaveLength(1);
   });
 
-  it('cleans up after stopRecording', async () => {
+  it('cleans up after stopRecording + recording-ended', async () => {
     await manager.startRecording({ noteId: 'note-1', platform: 'zoom' });
     const recordingId = Object.keys(manager.getActiveRecordings())[0];
+
+    // stopRecording marks state as 'stopping' but defers cleanup to recording-ended
     await manager.stopRecording(recordingId);
+    expect(manager.isRecording).toBe(true); // still true until provider confirms
+
+    // Provider fires recording-ended → manager cleans up
+    provider.emit('recording-ended', { recordingId, audioFilePath: '/tmp/a.mp3' });
     expect(manager.isRecording).toBe(false);
+    expect(Object.keys(manager.getActiveRecordings())).toHaveLength(0);
   });
 
   it('forwards meeting-detected from provider', () => {

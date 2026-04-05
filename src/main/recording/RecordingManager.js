@@ -42,6 +42,11 @@ class RecordingManager extends EventEmitter {
       const { recordingId } = data;
       this.removeRecording(recordingId);
       this.isRecording = Object.keys(this.recordings).length > 0;
+      if (!this.isRecording) {
+        this.recordingStartTime = null;
+        this.currentMeetingTitle = null;
+        this.currentMeetingId = null;
+      }
       this.emit('recording-ended', data);
     });
 
@@ -49,8 +54,8 @@ class RecordingManager extends EventEmitter {
       this.emit('error', data);
     });
 
-    // Forward Recall-specific events without transformation
-    for (const event of ['participant-joined', 'speech-activity', 'upload-progress', 'sdk-state-change']) {
+    // Forward provider-specific events without transformation
+    for (const event of ['participant-joined', 'speech-activity', 'upload-progress', 'sdk-state-change', 'permissions-granted']) {
       this.provider.on(event, (data) => this.emit(event, data));
     }
   }
@@ -74,10 +79,9 @@ class RecordingManager extends EventEmitter {
 
   async stopRecording(recordingId) {
     this.updateState(recordingId, 'stopping');
-    const result = await this.provider.stopRecording(recordingId);
-    this.removeRecording(recordingId);
-    this.isRecording = Object.keys(this.recordings).length > 0;
-    return result;
+    // Recording cleanup happens in the 'recording-ended' event handler,
+    // which fires after the provider actually finishes (FFmpeg exits, SDK stops).
+    return this.provider.stopRecording(recordingId);
   }
 
   async shutdown() {
