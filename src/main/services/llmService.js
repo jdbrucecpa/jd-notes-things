@@ -783,7 +783,6 @@ module.exports = {
   createLLMServiceFromPreference,
   extractModelFromPreference,
   fetchLocalModels,
-  fetchOllamaModels: fetchLocalModels, // backward compat alias
   ANTHROPIC_MODEL_MAP,
   GEMINI_MODEL_MAP,
 };

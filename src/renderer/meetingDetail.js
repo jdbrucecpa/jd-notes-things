@@ -2142,9 +2142,9 @@ async function getModelOptions() {
   ];
 
   // Dynamically add available Ollama models
-  if (window.electronAPI?.listOllamaModels) {
+  if (window.electronAPI?.listLocalModels) {
     try {
-      const result = await window.electronAPI.listOllamaModels();
+      const result = await window.electronAPI.listLocalModels();
       if (result.success && result.models.length > 0) {
         result.models.forEach(m => {
           const sizeGB = m.size ? ` (${(m.size / 1e9).toFixed(1)}GB)` : '';

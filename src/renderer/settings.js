@@ -841,7 +841,7 @@ export function initializeSettingsUI() {
  * Falls back to a "No models found" disabled option if Ollama is unreachable.
  */
 export async function populateOllamaModelDropdowns() {
-  if (!window.electronAPI?.listOllamaModels) return;
+  if (!window.electronAPI?.listLocalModels) return;
 
   const optgroups = document.querySelectorAll('.ollama-model-group');
   if (optgroups.length === 0) return;
@@ -854,7 +854,7 @@ export async function populateOllamaModelDropdowns() {
   });
 
   try {
-    const result = await window.electronAPI.listOllamaModels();
+    const result = await window.electronAPI.listLocalModels();
     const models = result.success && result.models.length > 0 ? result.models : [];
 
     optgroups.forEach(og => {

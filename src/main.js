@@ -47,7 +47,6 @@ const PatternConfigLoader = require('./main/import/PatternConfigLoader');
 const { formatTranscriptForExport, generateExportFilename } = require('./main/export/transcriptExporter');
 const {
   createLLMServiceFromCredentials,
-  fetchOllamaModels,
   fetchLocalModels,
 } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
@@ -6670,21 +6669,6 @@ ipcMain.handle(
     }
   })
 );
-
-// List available Ollama models from the local instance
-ipcMain.handle('ollama:listModels', async () => {
-  try {
-    const baseUrl =
-      (await keyManagementService.getKey('OLLAMA_BASE_URL')) ||
-      process.env.OLLAMA_BASE_URL ||
-      'http://localhost:11434';
-    const models = await fetchOllamaModels(baseUrl);
-    return { success: true, models };
-  } catch (error) {
-    console.error('[Ollama] Error listing models:', error);
-    return { success: false, error: error.message, models: [] };
-  }
-});
 
 // ===================================================================
 // v2.0: Local model discovery (dual endpoint — Ollama + OpenAI-compatible)
