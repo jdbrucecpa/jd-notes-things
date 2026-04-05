@@ -60,6 +60,7 @@ const clientService = require('./main/services/clientService');
 const { VoiceProfileService } = require('./main/services/voiceProfileService');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 const { RecordingManager, RecallProvider, LocalProvider } = require('./main/recording');
+const { AIServiceManager } = require('./main/services/aiServiceManager');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
@@ -407,6 +408,9 @@ let currentViewedMeetingInfo = null; // Full meeting info for the currently view
 let recallProvider = null;
 let recordingProvider = null; // The active provider (RecallProvider or LocalProvider)
 let recordingManager = null;
+
+// v2.0: JD Audio Service manager (auto-launch for local transcription)
+const aiServiceManager = new AIServiceManager();
 
 // Meeting monitor state
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
@@ -1534,6 +1538,14 @@ app.whenReady().then(async () => {
     logger.main.info('User will need to configure LLM API keys in settings');
   }
 
+  // Configure AI service manager from settings
+  if (appSettings.aiServicePath) {
+    aiServiceManager.setServicePath(appSettings.aiServicePath);
+  }
+  if (appSettings.aiServiceUrl) {
+    aiServiceManager.setServiceUrl(appSettings.aiServiceUrl);
+  }
+
   // Initialize the Recall.ai SDK
   await initSDK();
 
@@ -1886,6 +1898,10 @@ app.on('before-quit', async () => {
     tray = null;
     console.log('[Tray] Destroyed tray icon');
   }
+
+  // Stop JD Audio Service if we launched it
+  aiServiceManager.shutdown();
+  console.log('[AIService] Shutdown');
 
   // Stop meeting monitor
   if (meetingMonitorInterval) {
@@ -2640,6 +2656,13 @@ async function initSDK() {
               console.log(
                 `[Transcription] Local provider using AI service at: ${aiServiceUrl}`
               );
+
+              // Ensure the service is running before transcription
+              const serviceReady = await aiServiceManager.ensureRunning();
+              if (!serviceReady) {
+                console.error('[Transcription] JD Audio Service failed to start');
+                backgroundTaskManager.updateTask(recordingTaskId, 15, 'Starting AI service failed — transcription may fail');
+              }
             }
 
             backgroundTaskManager.updateTask(recordingTaskId, 20, 'Starting transcription...');
@@ -6781,6 +6804,15 @@ ipcMain.handle('aiService:health', async () => {
   }
 });
 
+ipcMain.handle('aiService:start', async () => {
+  try {
+    const healthy = await aiServiceManager.ensureRunning();
+    return { success: healthy, status: healthy ? 'connected' : 'failed' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
 // ===================================================================
 // End LLM Provider Management
 // ===================================================================
@@ -8468,8 +8500,15 @@ ipcMain.handle(
     }
 
     // v2.0: AI service URL for voice profile service
-    if (updates.aiServiceUrl && voiceProfileService) {
-      voiceProfileService.setAIServiceUrl(updates.aiServiceUrl);
+    if (updates.aiServiceUrl) {
+      if (voiceProfileService) {
+        voiceProfileService.setAIServiceUrl(updates.aiServiceUrl);
+      }
+      aiServiceManager.setServiceUrl(updates.aiServiceUrl);
+    }
+
+    if (updates.aiServicePath) {
+      aiServiceManager.setServicePath(updates.aiServicePath);
     }
 
     // Save to disk

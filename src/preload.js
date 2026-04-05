@@ -348,6 +348,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // AI Service health (v2.0)
   aiServiceHealth: () => ipcRenderer.invoke('aiService:health'),
+  aiServiceStart: () => ipcRenderer.invoke('aiService:start'),
 
   // Local model discovery (v2.0 — dual endpoint)
   listLocalModels: (baseUrl) => ipcRenderer.invoke('local:listModels', baseUrl),
