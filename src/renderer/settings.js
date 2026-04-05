@@ -30,6 +30,7 @@ const DEFAULT_SETTINGS = {
   // Note: transcriptionProvider is stored in its own localStorage key, NOT here.
   // See renderer.js transcriptionProviderSelect handler.
   aiServiceUrl: 'http://localhost:8374', // v2.0: JD Audio Service endpoint
+  aiServicePath: 'C:\\Users\\brigh\\Documents\\code\\jd-audio-service', // v2.0: JD Audio Service directory
   localLLMUrl: 'http://localhost:11434', // v2.0: Local LLM server (Ollama or compatible)
 };
 
@@ -151,6 +152,8 @@ export function initializeSettingsUI() {
   const recordingProviderSelect = document.getElementById('recordingProviderSelect');
   const transcriptionProviderSelect = document.getElementById('transcriptionProviderSelect');
   const aiServiceUrlInput = document.getElementById('aiServiceUrlInput');
+  const aiServiceStartBtn = document.getElementById('aiServiceStartBtn');
+  const aiServicePathInput = document.getElementById('aiServicePathInput');
   const localLLMUrlInput = document.getElementById('localLLMUrlInput');
   const fullyLocalPresetBtn = document.getElementById('fullyLocalPresetBtn');
   const exportAllSettingsBtn = document.getElementById('exportAllSettingsBtn');
@@ -441,6 +444,38 @@ export function initializeSettingsUI() {
     });
   }
 
+  // AI Service Start button
+  if (aiServiceStartBtn) {
+    aiServiceStartBtn.addEventListener('click', async () => {
+      aiServiceStartBtn.textContent = 'Starting...';
+      aiServiceStartBtn.disabled = true;
+      try {
+        const result = await window.electronAPI.aiServiceStart();
+        if (result.success) {
+          notifySuccess('JD Audio Service started');
+          await checkAIServiceStatus();
+        } else {
+          notifyError('Failed to start JD Audio Service: ' + (result.error || 'timeout'));
+        }
+      } catch {
+        notifyError('Failed to start JD Audio Service');
+      }
+      aiServiceStartBtn.textContent = 'Start';
+      aiServiceStartBtn.disabled = false;
+    });
+  }
+
+  // AI Service Path
+  if (aiServicePathInput) {
+    aiServicePathInput.addEventListener('change', e => {
+      const newPath = e.target.value.trim();
+      if (window.electronAPI?.appUpdateSettings) {
+        window.electronAPI.appUpdateSettings({ aiServicePath: newPath });
+      }
+      notifySuccess('JD Audio Service path updated');
+    });
+  }
+
   // Local LLM URL input (v2.0)
   if (localLLMUrlInput) {
     localLLMUrlInput.addEventListener('change', e => {
@@ -631,6 +666,7 @@ export function initializeSettingsUI() {
    */
   async function checkAIServiceStatus() {
     const statusEl = document.getElementById('aiServiceStatus');
+    const startBtn = document.getElementById('aiServiceStartBtn');
     if (!statusEl) return;
     statusEl.textContent = 'Checking...';
     statusEl.className = 'service-status checking';
@@ -639,13 +675,16 @@ export function initializeSettingsUI() {
       if (result && result.status === 'connected') {
         statusEl.textContent = 'Connected';
         statusEl.className = 'service-status connected';
+        if (startBtn) startBtn.style.display = 'none';
       } else {
         statusEl.textContent = 'Disconnected';
         statusEl.className = 'service-status disconnected';
+        if (startBtn) startBtn.style.display = 'inline-block';
       }
     } catch {
       statusEl.textContent = 'Disconnected';
       statusEl.className = 'service-status disconnected';
+      if (startBtn) startBtn.style.display = 'inline-block';
     }
   }
 
@@ -799,6 +838,9 @@ export function initializeSettingsUI() {
     // v2.0: Service endpoint URLs
     if (aiServiceUrlInput) {
       aiServiceUrlInput.value = currentSettings.aiServiceUrl || 'http://localhost:8374';
+    }
+    if (aiServicePathInput) {
+      aiServicePathInput.value = currentSettings.aiServicePath || 'C:\\Users\\brigh\\Documents\\code\\jd-audio-service';
     }
     if (localLLMUrlInput) {
       localLLMUrlInput.value = currentSettings.localLLMUrl || 'http://localhost:11434';
