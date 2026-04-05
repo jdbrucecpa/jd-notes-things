@@ -77,8 +77,8 @@ class RecallProvider extends RecordingProvider {
     this.sdk.addEventListener('recording-ended', (event) => {
       this._recording = false;
       this.emit('recording-ended', {
-        recordingId: event.windowId || event.recordingId,
-        audioFilePath: event.filePath,
+        recordingId: event.window?.id || event.windowId || event.recordingId,
+        audioFilePath: event.filePath || event.window?.filePath,
         raw: event,
       });
     });
@@ -90,7 +90,7 @@ class RecallProvider extends RecordingProvider {
     this.sdk.addEventListener('sdk-state-change', (event) => {
       if (event.state === 'recording') {
         this._recording = true;
-        this.emit('recording-started', { recordingId: event.windowId });
+        this.emit('recording-started', { recordingId: event.window?.id || event.windowId });
       }
       this.emit('sdk-state-change', { state: event.state, raw: event });
     });
