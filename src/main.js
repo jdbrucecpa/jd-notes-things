@@ -28,6 +28,7 @@ if (process.env.E2E_TEST) {
 }
 const path = require('node:path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const crypto = require('crypto');
 const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
@@ -2224,6 +2225,8 @@ async function initSDK() {
     try {
       await recordingManager.initialize({
         recordingPath: RECORDING_PATH,
+        audioSources: appSettings.audioSources,
+        audioMixer: appSettings.audioMixer,
       });
       sdkReady = true;
       logger.main.info('[Recording] LocalProvider initialization complete');
@@ -8487,7 +8490,11 @@ ipcMain.handle(
         let config;
         if (updates.recordingProvider === 'local') {
           newProvider = new LocalProvider();
-          config = { recordingPath: RECORDING_PATH };
+          config = {
+            recordingPath: RECORDING_PATH,
+            audioSources: appSettings.audioSources,
+            audioMixer: appSettings.audioMixer,
+          };
         } else {
           newProvider = new RecallProvider(RecallAiSdk);
           recallProvider = newProvider;
@@ -8510,6 +8517,26 @@ ipcMain.handle(
         logger.ipc.error(`[IPC] Failed to switch recording provider: ${error.message}`);
         // Revert setting on failure
         appSettings.recordingProvider = oldProvider;
+      }
+    }
+
+    // v2.0: Audio source config for local recording mixer
+    if (updates.audioSources !== undefined) {
+      appSettings.audioSources = updates.audioSources;
+      if (recordingProvider && typeof recordingProvider.setAudioConfig === 'function') {
+        recordingProvider.setAudioConfig(
+          updates.audioSources,
+          updates.audioMixer || appSettings.audioMixer || { autoBalance: false }
+        );
+      }
+    }
+    if (updates.audioMixer !== undefined) {
+      appSettings.audioMixer = updates.audioMixer;
+      if (recordingProvider && typeof recordingProvider.setAudioConfig === 'function') {
+        recordingProvider.setAudioConfig(
+          appSettings.audioSources || [],
+          updates.audioMixer
+        );
       }
     }
 
@@ -8536,6 +8563,71 @@ ipcMain.handle(
     }
   })
 );
+
+// Audio device enumeration (v2.0 mixer)
+ipcMain.handle('audioDevices:list', async () => {
+  try {
+    if (recordingProvider && typeof recordingProvider._enumerateDevices === 'function') {
+      const devices = await recordingProvider._enumerateDevices();
+      return { success: true, devices };
+    }
+    const tempProvider = new LocalProvider();
+    const devices = await tempProvider._enumerateDevices();
+    return { success: true, devices };
+  } catch (error) {
+    logger.ipc.error('[IPC] audioDevices:list failed:', error);
+    return { success: false, devices: [], error: error.message };
+  }
+});
+
+// Test recording from configured sources (v2.0 mixer)
+ipcMain.handle('audioDevices:test', async () => {
+  try {
+    const { buildFFmpegArgs } = require('./main/recording/buildFFmpegArgs');
+
+    const sources = (appSettings.audioSources || [])
+      .filter(s => s.enabled && s.device)
+      .map(s => ({ device: s.device, volume: s.volume }));
+
+    if (sources.length === 0) {
+      return { success: false, error: 'No audio sources configured' };
+    }
+
+    const testFile = path.join(
+      RECORDING_PATH,
+      `test-recording-${Date.now()}.mp3`
+    );
+
+    const ffmpegArgs = buildFFmpegArgs(
+      sources,
+      appSettings.audioMixer || { autoBalance: false },
+      testFile
+    );
+    // Insert -t 3 after the last -i argument to limit to 3 seconds
+    const lastInputIdx = ffmpegArgs.lastIndexOf('-i');
+    const insertIdx = lastInputIdx + 2;
+    ffmpegArgs.splice(insertIdx, 0, '-t', '3');
+
+    return new Promise((resolve) => {
+      const ff = spawn('ffmpeg', ffmpegArgs, { windowsHide: true });
+
+      ff.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true, filePath: testFile });
+        } else {
+          resolve({ success: false, error: `FFmpeg exited with code ${code}` });
+        }
+      });
+
+      ff.on('error', (err) => {
+        resolve({ success: false, error: err.message });
+      });
+    });
+  } catch (error) {
+    logger.ipc.error('[IPC] audioDevices:test failed:', error);
+    return { success: false, error: error.message };
+  }
+});
 
 // v1.2: Get Stream Deck status
 ipcMain.handle('app:getStreamDeckStatus', async () => {

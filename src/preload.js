@@ -346,6 +346,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   voiceProfileDelete: (id) => ipcRenderer.invoke('voiceProfile:delete', id),
   voiceProfileAssign: (data) => ipcRenderer.invoke('voiceProfile:assign', data),
 
+  // Audio device management (v2.0 mixer)
+  audioDevicesList: () => ipcRenderer.invoke('audioDevices:list'),
+  audioDevicesTest: () => ipcRenderer.invoke('audioDevices:test'),
+
   // AI Service health (v2.0)
   aiServiceHealth: () => ipcRenderer.invoke('aiService:health'),
   aiServiceStart: () => ipcRenderer.invoke('aiService:start'),
