@@ -21,6 +21,7 @@ class RecallProvider extends RecordingProvider {
     this.sdk = sdk;
     this.sdkReady = false;
     this._recording = false;
+    this._activeWindowId = null; // Track from sdk-state-change for recording-ended fallback
     this._restartDelayMs = options.restartDelayMs ?? 3000;
   }
 
@@ -75,9 +76,11 @@ class RecallProvider extends RecordingProvider {
     });
 
     this.sdk.addEventListener('recording-ended', (event) => {
+      const windowId = event.window?.id || event.windowId || this._activeWindowId;
       this._recording = false;
+      this._activeWindowId = null;
       this.emit('recording-ended', {
-        recordingId: event.window?.id || event.windowId || event.recordingId,
+        recordingId: windowId,
         audioFilePath: event.filePath || event.window?.filePath,
         raw: event,
       });
@@ -88,9 +91,11 @@ class RecallProvider extends RecordingProvider {
     });
 
     this.sdk.addEventListener('sdk-state-change', (event) => {
+      const windowId = event.window?.id || event.windowId;
       if (event.state === 'recording') {
         this._recording = true;
-        this.emit('recording-started', { recordingId: event.window?.id || event.windowId });
+        this._activeWindowId = windowId || this._activeWindowId;
+        this.emit('recording-started', { recordingId: this._activeWindowId });
       }
       this.emit('sdk-state-change', { state: event.state, raw: event });
     });
@@ -134,6 +139,7 @@ class RecallProvider extends RecordingProvider {
     }
 
     this._recording = true;
+    this._activeWindowId = key;
     return key;
   }
 
