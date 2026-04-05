@@ -399,11 +399,7 @@ let gmail = null;
 let mainWindow;
 let recordingWidget = null; // Floating recording widget window (v1.2)
 let tray = null; // System tray icon (Phase 10.7)
-let isRecording = false; // Track recording state for UI updates (Phase 10.7)
 let sdkReady = false; // Track when SDK is fully initialized (after restart workaround)
-let recordingStartTime = null; // Track when recording started for widget timer (v1.2)
-let currentRecordingMeetingTitle = null; // Track current meeting title for widget (v1.2)
-let currentRecordingMeetingId = null; // Track current meeting ID for widget (v1.2 fix)
 let currentViewedMeetingId = null; // Track which meeting is currently open in the app (v1.2 fix)
 let currentViewedMeetingInfo = null; // Full meeting info for the currently viewed meeting (v1.2 fix)
 
@@ -796,11 +792,11 @@ function updateSystemTrayMenu() {
   try {
     const isDev = process.env.NODE_ENV === 'development';
     const appLabel = isDev ? 'JD Notes Things Dev' : 'JD Notes Things';
-    const contextMenu = Menu.buildFromTemplate(buildTrayMenu(isRecording));
+    const contextMenu = Menu.buildFromTemplate(buildTrayMenu(recordingManager?.isRecording ?? false));
 
     tray.setContextMenu(contextMenu);
-    tray.setToolTip(isRecording ? `${appLabel} - Recording` : appLabel);
-    logger.main.debug('[Tray] Menu updated, recording:', isRecording);
+    tray.setToolTip(recordingManager?.isRecording ? `${appLabel} - Recording` : appLabel);
+    logger.main.debug('[Tray] Menu updated, recording:', recordingManager?.isRecording);
   } catch (error) {
     logger.main.error('[Tray] Failed to update tray menu:', error);
   }
@@ -931,7 +927,7 @@ async function checkUpcomingMeetings() {
     }
 
     // v1.2: Handle meetings starting now based on settings
-    if (meetingsStartingNow.length > 0 && !isRecording) {
+    if (meetingsStartingNow.length > 0 && !recordingManager?.isRecording) {
       const globalAutoStartEnabled =
         appSettings.notifications?.autoStartRecording || appSettings.autoStartRecording;
       // Check both old location (notifications) and new location (top-level) for showRecordingWidget
@@ -1278,7 +1274,7 @@ function createRecordingWidget() {
   // Hide widget when it loses focus (optional - can be changed in settings)
   recordingWidget.on('blur', () => {
     // Keep visible if recording
-    if (!isRecording) {
+    if (!recordingManager?.isRecording) {
       // Don't auto-hide, let user close manually
     }
   });
@@ -1358,23 +1354,17 @@ function hideRecordingWidget() {
 function updateWidgetRecordingState(recording, meetingTitle = null, meetingId = null, meetingInfo = null) {
   if (recordingWidget && !recordingWidget.isDestroyed()) {
     if (recording) {
-      recordingStartTime = Date.now();
-      currentRecordingMeetingTitle = meetingTitle;
-      currentRecordingMeetingId = meetingId;
       recordingWidget.webContents.send('widget:update', {
         type: 'recording-started',
-        startTime: recordingStartTime,
-        meetingTitle: meetingTitle,
-        meetingId: meetingId,
+        startTime: recordingManager?.recordingStartTime ?? Date.now(),
+        meetingTitle: meetingTitle || recordingManager?.currentMeetingTitle,
+        meetingId: meetingId || recordingManager?.currentMeetingId,
         meetingInfo: meetingInfo,
       });
     } else {
       recordingWidget.webContents.send('widget:update', {
         type: 'recording-stopped',
       });
-      recordingStartTime = null;
-      currentRecordingMeetingTitle = null;
-      currentRecordingMeetingId = null;
     }
   }
 }
@@ -1705,8 +1695,8 @@ app.whenReady().then(async () => {
       }
     },
     getStatus: () => ({
-      isRecording,
-      meetingTitle: currentRecordingMeetingTitle,
+      isRecording: recordingManager?.isRecording ?? false,
+      meetingTitle: recordingManager?.currentMeetingTitle ?? null,
       meetingDetected: detectedMeeting !== null,
       platform: detectedMeeting?.window?.platform || null,
     }),
@@ -2331,7 +2321,7 @@ async function initSDK() {
         ? appSettings.showRecordingWidget
         : (appSettings.notifications?.showRecordingWidget ?? true);
 
-    if (showWidgetOnDetection && !isRecording) {
+    if (showWidgetOnDetection && !recordingManager?.isRecording) {
       // Check if widget is already visible to avoid re-popping
       const widgetAlreadyVisible =
         recordingWidget && !recordingWidget.isDestroyed() && recordingWidget.isVisible();
@@ -2502,8 +2492,7 @@ async function initSDK() {
 
       // Recording cleanup already handled by RecordingManager's recording-ended handler
 
-      // Update recording state and tray menu (Phase 10.7)
-      isRecording = false;
+      // Update tray menu (Phase 10.7) — RecordingManager already owns isRecording state
       updateSystemTrayMenu();
 
       // v1.2: Update widget with recording state
@@ -2979,6 +2968,9 @@ async function initSDK() {
         if (noteId) {
           // If recording started, add it to our active recordings
           recordingManager.addRecording(window.id, noteId, window.platform || 'unknown');
+          const meetingRecord = databaseService.getMeeting(noteId);
+          recordingManager.currentMeetingTitle = meetingRecord?.title ?? recordingManager.currentMeetingTitle;
+          recordingManager.currentMeetingId = noteId;
         }
       } else if (code === 'paused') {
         console.log('Recording paused');
@@ -9316,8 +9308,8 @@ ipcMain.on('widget:open-meeting', (_event, meetingId) => {
   if (!meetingId ||
       (typeof meetingId === 'string' && (meetingId.startsWith('detected-') || meetingId.startsWith('calendar-')))) {
     // Priority: current recording > currently viewed meeting
-    if (currentRecordingMeetingId) {
-      realMeetingId = currentRecordingMeetingId;
+    if (recordingManager?.currentMeetingId) {
+      realMeetingId = recordingManager.currentMeetingId;
       logger.main.info('[Widget] Using currentRecordingMeetingId:', realMeetingId);
     } else if (currentViewedMeetingId) {
       realMeetingId = currentViewedMeetingId;
@@ -9353,17 +9345,17 @@ ipcMain.on('widget:open-meeting', (_event, meetingId) => {
 ipcMain.on('widget:request-sync', _event => {
   if (recordingWidget && !recordingWidget.isDestroyed()) {
     // v1.2 fix: Include meeting ID and currently viewed meeting info
-    const meetingInfo = currentViewedMeetingInfo || (currentRecordingMeetingId ? {
-      id: currentRecordingMeetingId,
-      title: currentRecordingMeetingTitle,
+    const meetingInfo = currentViewedMeetingInfo || (recordingManager?.currentMeetingId ? {
+      id: recordingManager.currentMeetingId,
+      title: recordingManager.currentMeetingTitle,
     } : null);
 
     recordingWidget.webContents.send('widget:update', {
       type: 'sync-state',
-      isRecording: isRecording,
-      startTime: recordingStartTime,
-      meetingTitle: currentRecordingMeetingTitle,
-      meetingId: currentRecordingMeetingId,
+      isRecording: recordingManager?.isRecording ?? false,
+      startTime: recordingManager?.recordingStartTime ?? null,
+      meetingTitle: recordingManager?.currentMeetingTitle ?? null,
+      meetingId: recordingManager?.currentMeetingId ?? null,
       meetingInfo: meetingInfo,
       // v1.2 fix: Include currently viewed meeting for info button
       currentViewedMeeting: currentViewedMeetingInfo,
@@ -9593,9 +9585,9 @@ ipcMain.handle('widget:get-recording-context', async () => {
   try {
     const context = {
       // Current state
-      isRecording: isRecording,
-      currentRecordingMeetingId: currentRecordingMeetingId,
-      currentRecordingMeetingTitle: currentRecordingMeetingTitle,
+      isRecording: recordingManager?.isRecording ?? false,
+      currentRecordingMeetingId: recordingManager?.currentMeetingId ?? null,
+      currentRecordingMeetingTitle: recordingManager?.currentMeetingTitle ?? null,
 
       // Detected platform meeting
       detectedMeeting: detectedMeeting ? {
@@ -10013,6 +10005,8 @@ ipcMain.handle(
           meeting.recallRecordingId = uploadData.recording_id;
 
           recordingManager.addRecording(key, validatedId, 'Desktop Recording');
+          recordingManager.currentMeetingTitle = meeting.title;
+          recordingManager.currentMeetingId = validatedId;
 
           sdkLogger.logApiCall('startRecording', {
             windowId: key,
@@ -10039,8 +10033,7 @@ ipcMain.handle(
         // Save the updated data
         await fileOperationManager.writeData(meetingsData);
 
-        // Update recording state and tray menu
-        isRecording = true;
+        // Update tray menu — RecordingManager already owns isRecording state
         updateSystemTrayMenu();
         updateWidgetRecordingState(true, meeting.title);
         expressApp.updateStreamDeckRecordingState(true, meeting.title);
@@ -10597,6 +10590,8 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
     // Register this meeting in our active recordings tracker (even before starting)
     // This ensures the UI knows about it immediately
     recordingManager.addRecording(detectedMeeting.window.id, id, platformName);
+    recordingManager.currentMeetingTitle = newMeeting.title;
+    recordingManager.currentMeetingId = id;
 
     // Add to pastMeetings
     meetingsData.pastMeetings.unshift(newMeeting);
@@ -10680,6 +10675,8 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
       // Update recordingManager with new windowId
       recordingManager.removeRecording(newMeeting.recordingId);
       recordingManager.addRecording(currentWindowId, id, platformName);
+      recordingManager.currentMeetingTitle = newMeeting.title;
+      recordingManager.currentMeetingId = id;
 
       // Update global tracking
       if (global.activeMeetingIds) {

@@ -34,7 +34,7 @@ class RecordingManager extends EventEmitter {
 
     this.provider.on('recording-started', (data) => {
       this.isRecording = true;
-      this.recordingStartTime = new Date();
+      this.recordingStartTime = Date.now();
       this.emit('recording-started', data);
     });
 
@@ -70,7 +70,7 @@ class RecordingManager extends EventEmitter {
 
     this.addRecording(recordingId, noteId, platform);
     this.isRecording = true;
-    this.recordingStartTime = new Date();
+    this.recordingStartTime = Date.now();
     this.currentMeetingTitle = options.meetingTitle || null;
     this.currentMeetingId = noteId;
 
@@ -119,7 +119,7 @@ class RecordingManager extends EventEmitter {
       noteId,
       platform,
       state: 'recording',
-      startTime: new Date(),
+      startTime: Date.now(),
     };
   }
 
