@@ -19,8 +19,21 @@ const log = require('electron-log');
 
 class SafeStorageKeyManager {
   constructor() {
-    this.filePath = path.join(app.getPath('userData'), 'secure-keys.json');
+    // Resolved lazily via _getFilePath() — constructor runs at require() time,
+    // before app.setPath('userData') redirects to the dev-mode directory.
+    this._filePath = null;
     this._cache = null; // In-memory cache of { keyName: base64EncryptedValue }
+  }
+
+  /**
+   * Resolve the secure-keys.json path on first use (after app.setPath has run).
+   * @returns {string}
+   */
+  _getFilePath() {
+    if (!this._filePath) {
+      this._filePath = path.join(app.getPath('userData'), 'secure-keys.json');
+    }
+    return this._filePath;
   }
 
   /**
@@ -39,8 +52,8 @@ class SafeStorageKeyManager {
     if (this._cache) return this._cache;
 
     try {
-      if (fs.existsSync(this.filePath)) {
-        const raw = fs.readFileSync(this.filePath, 'utf-8');
+      if (fs.existsSync(this._getFilePath())) {
+        const raw = fs.readFileSync(this._getFilePath(), 'utf-8');
         this._cache = JSON.parse(raw);
       } else {
         this._cache = {};
@@ -58,11 +71,11 @@ class SafeStorageKeyManager {
    */
   _saveStore() {
     try {
-      const dir = path.dirname(this.filePath);
+      const dir = path.dirname(this._getFilePath());
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(this.filePath, JSON.stringify(this._cache, null, 2), 'utf-8');
+      fs.writeFileSync(this._getFilePath(), JSON.stringify(this._cache, null, 2), 'utf-8');
     } catch (error) {
       log.error('[SafeStorage] Failed to write secure-keys.json:', error.message);
       throw error;
