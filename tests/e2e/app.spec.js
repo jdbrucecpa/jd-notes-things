@@ -1359,7 +1359,7 @@ test('settings general panel has provider dropdowns and toggles', async () => {
 
   // Transcription provider dropdown should have local option (v2.0)
   const transcriptionSelect = page.locator('#transcriptionProviderSelect');
-  if (await transcriptionSelect.isAttached().catch(() => false)) {
+  if (await transcriptionSelect.count().then(c => c > 0).catch(() => false)) {
     const options = await transcriptionSelect.locator('option').allTextContents();
     console.log('[E2E] Transcription providers:', options.join(', '));
     expect(options.length).toBeGreaterThanOrEqual(2);
@@ -1388,13 +1388,13 @@ test('settings has service endpoint fields and fully local preset (v2.0)', async
   const aiServiceUrl = page.locator('#aiServiceUrlInput');
   const localLLMUrl = page.locator('#localLLMUrlInput');
 
-  if (await aiServiceUrl.isAttached().catch(() => false)) {
+  if (await aiServiceUrl.count().then(c => c > 0).catch(() => false)) {
     const aiValue = await aiServiceUrl.inputValue();
     console.log('[E2E] AI service URL:', aiValue);
     expect(aiValue).toContain('localhost');
   }
 
-  if (await localLLMUrl.isAttached().catch(() => false)) {
+  if (await localLLMUrl.count().then(c => c > 0).catch(() => false)) {
     const llmValue = await localLLMUrl.inputValue();
     console.log('[E2E] Local LLM URL:', llmValue);
     expect(llmValue).toContain('localhost');
@@ -1402,17 +1402,17 @@ test('settings has service endpoint fields and fully local preset (v2.0)', async
 
   // Fully Local preset button (v2.0)
   const fullyLocalBtn = page.locator('#fullyLocalPresetBtn');
-  if (await fullyLocalBtn.isAttached().catch(() => false)) {
+  if (await fullyLocalBtn.count().then(c => c > 0).catch(() => false)) {
     console.log('[E2E] Fully Local preset button found');
   }
 
   // Health status indicators
   const aiStatus = page.locator('#aiServiceStatus');
   const llmStatus = page.locator('#localLLMStatus');
-  if (await aiStatus.isAttached().catch(() => false)) {
+  if (await aiStatus.count().then(c => c > 0).catch(() => false)) {
     console.log('[E2E] AI service status indicator attached');
   }
-  if (await llmStatus.isAttached().catch(() => false)) {
+  if (await llmStatus.count().then(c => c > 0).catch(() => false)) {
     console.log('[E2E] Local LLM status indicator attached');
   }
 
@@ -1437,10 +1437,10 @@ test('settings my profile tab has form fields', async () => {
   // Should have name, email, organization fields
   const nameInput = page.locator('#profileName');
   const emailInput = page.locator('#profileEmail');
-  if (await nameInput.isAttached().catch(() => false)) {
+  if (await nameInput.count().then(c => c > 0).catch(() => false)) {
     console.log('[E2E] Profile name field attached');
   }
-  if (await emailInput.isAttached().catch(() => false)) {
+  if (await emailInput.count().then(c => c > 0).catch(() => false)) {
     console.log('[E2E] Profile email field attached');
   }
 
@@ -1511,10 +1511,10 @@ test('settings logs tab opens with log controls', async () => {
   // Clear logs and open log file buttons
   const clearBtn = page.locator('#clearLogsBtn');
   const openBtn = page.locator('#openLogFileBtn');
-  if (await clearBtn.isAttached().catch(() => false)) {
+  if (await clearBtn.count().then(c => c > 0).catch(() => false)) {
     console.log('[E2E] Clear logs button found');
   }
-  if (await openBtn.isAttached().catch(() => false)) {
+  if (await openBtn.count().then(c => c > 0).catch(() => false)) {
     console.log('[E2E] Open log file button found');
   }
 
@@ -1581,7 +1581,7 @@ test('meeting detail has transcript search input', async () => {
     await page.waitForTimeout(500);
 
     const searchInput = page.locator('#transcriptSearch');
-    if (await searchInput.isAttached().catch(() => false)) {
+    if (await searchInput.count().then(c => c > 0).catch(() => false)) {
       await searchInput.fill('test search');
       const value = await searchInput.inputValue();
       expect(value).toBe('test search');
@@ -1681,10 +1681,10 @@ test('filter panel has company, platform, and sync status filters', async () => 
   const syncFilter = page.locator('#filterSyncStatus');
   const clearAllBtn = page.locator('#filterClearAll');
 
-  const companyAttached = await companyFilter.isAttached().catch(() => false);
-  const platformAttached = await platformFilter.isAttached().catch(() => false);
-  const syncAttached = await syncFilter.isAttached().catch(() => false);
-  const clearAttached = await clearAllBtn.isAttached().catch(() => false);
+  const companyAttached = await companyFilter.count().then(c => c > 0).catch(() => false);
+  const platformAttached = await platformFilter.count().then(c => c > 0).catch(() => false);
+  const syncAttached = await syncFilter.count().then(c => c > 0).catch(() => false);
+  const clearAttached = await clearAllBtn.count().then(c => c > 0).catch(() => false);
 
   console.log(`[E2E] Filters — Company: ${companyAttached}, Platform: ${platformAttached}, Sync: ${syncAttached}, Clear: ${clearAttached}`);
 
@@ -1697,7 +1697,7 @@ test('bulk selection mode activates with toolbar', async () => {
   await ensureMainView();
 
   const bulkToggle = page.locator('#toggleBulkSelectBtn');
-  if (!(await bulkToggle.isAttached().catch(() => false))) {
+  if (!(await bulkToggle.count().then(c => c > 0).catch(() => false))) {
     console.log('[E2E] Bulk select button not found — skipping');
     return;
   }
@@ -1709,8 +1709,8 @@ test('bulk selection mode activates with toolbar', async () => {
   const toolbarVisible = await toolbar.isVisible().catch(() => false);
   console.log('[E2E] Bulk actions toolbar visible:', toolbarVisible);
 
-  // Deactivate bulk mode
-  await bulkToggle.click();
+  // Deactivate bulk mode (button is hidden behind toolbar overlay, click via JS)
+  await page.evaluate(() => document.getElementById('toggleBulkSelectBtn')?.click());
   await page.waitForTimeout(300);
 });
 
@@ -1734,12 +1734,12 @@ test('import modal opens with file drop zone', async () => {
   if (modalVisible) {
     // Platform selector
     const platformSelect = page.locator('#importPlatformSelect');
-    const platformAttached = await platformSelect.isAttached().catch(() => false);
+    const platformAttached = await platformSelect.count().then(c => c > 0).catch(() => false);
     console.log('[E2E] Import platform selector:', platformAttached);
 
     // Start import button
     const startBtn = page.locator('#startImport');
-    const startAttached = await startBtn.isAttached().catch(() => false);
+    const startAttached = await startBtn.count().then(c => c > 0).catch(() => false);
     console.log('[E2E] Start import button:', startAttached);
 
     // Close modal
@@ -1810,11 +1810,12 @@ test('routingPreviewMeetingRoute returns route for a meeting', async () => {
   await ensureMainView();
 
   // Get a meeting ID first
-  const meetings = await page.evaluate(() => {
+  const meetingsData = await page.evaluate(() => {
     return window.electronAPI.loadMeetingsData();
   });
+  const meetings = meetingsData?.pastMeetings || [];
 
-  if (!meetings || meetings.length === 0) {
+  if (meetings.length === 0) {
     console.log('[E2E] No meetings for routing preview — skipping');
     return;
   }
@@ -1883,11 +1884,11 @@ test('CRM integration settings section is removed', async () => {
 
   // Navigate through all settings tabs to make sure CRM toggle is gone
   const crmToggle = page.locator('#crmEnabledToggle');
-  const crmAttached = await crmToggle.isAttached().catch(() => false);
+  const crmAttached = await crmToggle.count().then(c => c > 0).catch(() => false);
   expect(crmAttached).toBe(false);
 
   const crmContainer = page.locator('#crmSettingsContainer');
-  const containerAttached = await crmContainer.isAttached().catch(() => false);
+  const containerAttached = await crmContainer.count().then(c => c > 0).catch(() => false);
   expect(containerAttached).toBe(false);
 
   console.log('[E2E] CRM integration settings confirmed removed');
@@ -1901,9 +1902,9 @@ test('window controls exist in custom titlebar', async () => {
   const maximizeBtn = page.locator('#maximizeBtn, .titlebar-maximize, [title="Maximize"]');
   const closeBtn = page.locator('#closeBtn, .titlebar-close, [title="Close"]');
 
-  const minAttached = await minimizeBtn.first().isAttached().catch(() => false);
-  const maxAttached = await maximizeBtn.first().isAttached().catch(() => false);
-  const closeAttached = await closeBtn.first().isAttached().catch(() => false);
+  const minAttached = await minimizeBtn.first().count().then(c => c > 0).catch(() => false);
+  const maxAttached = await maximizeBtn.first().count().then(c => c > 0).catch(() => false);
+  const closeAttached = await closeBtn.first().count().then(c => c > 0).catch(() => false);
 
   console.log(`[E2E] Window controls — Min: ${minAttached}, Max: ${maxAttached}, Close: ${closeAttached}`);
 
