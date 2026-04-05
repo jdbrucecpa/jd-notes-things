@@ -104,7 +104,12 @@ A "Local Recording Sources" section that appears when recording provider is "loc
 
 1. **Where to build the FFmpeg command** — pure function that takes `[{device, volume}]` and returns the args array? Easy to test.
 2. **Device enumeration caching** — devices don't change often, cache for the session with a refresh button
-3. **Volume normalization** — amix can cause clipping with multiple sources. Consider using `dynaudnorm` filter or reducing individual volumes proportionally.
+3. **Auto-balancing / normalization** — The user wants automatic volume balancing across sources so a loud system audio doesn't drown out a quiet mic. FFmpeg has several options:
+   - `dynaudnorm` — dynamic audio normalizer, adjusts volume in real-time per-frame. Good for leveling out sources that vary in loudness. Can sound "pumpy" if parameters aren't tuned.
+   - `loudnorm` — EBU R128 loudness normalization. Better quality but designed for post-processing (two-pass). Single-pass mode exists but is less accurate.
+   - `compand` — compressor/expander, can boost quiet signals and limit loud ones. Most flexible but hardest to configure.
+   - Per-source `volume` filter + `amix` with `normalize=1` (default) — amix already normalizes by dividing by the number of inputs. Combined with per-source volume sliders, this may be sufficient.
+   - **Recommended approach:** Start with `amix normalize=1` + per-source volume sliders as the baseline. Add a "Auto-balance" toggle that applies `dynaudnorm` to the mixed output with sensible defaults (e.g., `dynaudnorm=f=150:g=15:p=0.95`). Let the user disable it if it sounds bad. This keeps the FFmpeg command manageable and gives users control.
 4. **Error handling** — if a device disappears mid-recording (USB mic unplugged), FFmpeg crashes. The recording-ended handler already handles this, but we should surface a clear error.
 
 ## Codebase Reference
