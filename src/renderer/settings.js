@@ -156,6 +156,15 @@ export function initializeSettingsUI() {
   const aiServicePathInput = document.getElementById('aiServicePathInput');
   const localLLMUrlInput = document.getElementById('localLLMUrlInput');
   const fullyLocalPresetBtn = document.getElementById('fullyLocalPresetBtn');
+  // Audio source controls (v2.0 mixer)
+  const audioSourcesSection = document.getElementById('audioSourcesSection');
+  const audioDevicesRefreshBtn = document.getElementById('audioDevicesRefreshBtn');
+  const audioTestRecordBtn = document.getElementById('audioTestRecordBtn');
+  const audioTestStatus = document.getElementById('audioTestStatus');
+  const audioTestPlayback = document.getElementById('audioTestPlayback');
+  const audioTestPlayer = document.getElementById('audioTestPlayer');
+  const audioMixerAutoBalance = document.getElementById('audioMixerAutoBalance');
+  const audioSourcesError = document.getElementById('audioSourcesError');
   const exportAllSettingsBtn = document.getElementById('exportAllSettingsBtn');
   const importAllSettingsBtn = document.getElementById('importAllSettingsBtn');
   const exportStatus = document.getElementById('exportStatus');
@@ -497,6 +506,80 @@ export function initializeSettingsUI() {
     });
   }
 
+  // Audio source event handlers (v2.0 mixer)
+  if (audioDevicesRefreshBtn) {
+    audioDevicesRefreshBtn.addEventListener('click', () => {
+      cachedAudioDevices = null;
+      refreshAudioDevices();
+    });
+  }
+
+  for (let i = 0; i < 3; i++) {
+    const checkbox = document.getElementById(`audioSourceEnabled${i}`);
+    if (checkbox) {
+      checkbox.addEventListener('change', () => {
+        updateSlotDisabledState(i, checkbox.checked);
+        saveAudioSourceConfig();
+      });
+    }
+  }
+
+  for (let i = 0; i < 3; i++) {
+    const select = document.getElementById(`audioSourceDevice${i}`);
+    if (select) {
+      select.addEventListener('change', () => saveAudioSourceConfig());
+    }
+  }
+
+  for (let i = 0; i < 3; i++) {
+    const slider = document.getElementById(`audioSourceVolume${i}`);
+    const label = document.getElementById(`audioSourceVolumeLabel${i}`);
+    if (slider) {
+      slider.addEventListener('input', () => {
+        if (label) label.textContent = `${slider.value}%`;
+      });
+      slider.addEventListener('change', () => {
+        if (label) label.textContent = `${slider.value}%`;
+        saveAudioSourceConfig();
+      });
+    }
+  }
+
+  if (audioMixerAutoBalance) {
+    audioMixerAutoBalance.addEventListener('change', () => saveAudioSourceConfig());
+  }
+
+  if (audioTestRecordBtn) {
+    audioTestRecordBtn.addEventListener('click', async () => {
+      if (!window.electronAPI?.audioDevicesTest) return;
+
+      audioTestRecordBtn.disabled = true;
+      if (audioTestStatus) audioTestStatus.textContent = 'Recording 3 seconds...';
+      if (audioTestPlayback) audioTestPlayback.style.display = 'none';
+
+      try {
+        const result = await window.electronAPI.audioDevicesTest();
+        if (result.success) {
+          if (audioTestStatus) audioTestStatus.textContent = 'Done!';
+          if (audioTestPlayer && audioTestPlayback) {
+            audioTestPlayer.src = `file://${result.filePath.replace(/\\/g, '/')}`;
+            audioTestPlayback.style.display = '';
+          }
+        } else {
+          if (audioTestStatus) audioTestStatus.textContent = result.error || 'Test failed';
+        }
+      } catch (err) {
+        if (audioTestStatus) audioTestStatus.textContent = 'Error: ' + err.message;
+      } finally {
+        audioTestRecordBtn.disabled = false;
+      }
+    });
+  }
+
+  if (recordingProviderSelect) {
+    recordingProviderSelect.addEventListener('change', () => updateAudioSourcesVisibility());
+  }
+
   // Comprehensive Export All Settings (SE-1)
   if (exportAllSettingsBtn) {
     exportAllSettingsBtn.addEventListener('click', async () => {
@@ -714,6 +797,166 @@ export function initializeSettingsUI() {
     }
   }
 
+  // Cached device list for session
+  let cachedAudioDevices = null;
+
+  const SLOT_LABELS = ['Microphone', 'System Audio', 'Source 3'];
+
+  async function refreshAudioDevices() {
+    if (!window.electronAPI?.audioDevicesList) return;
+
+    try {
+      const result = await window.electronAPI.audioDevicesList();
+      if (!result.success) {
+        showAudioSourcesError(result.error || 'Failed to enumerate audio devices');
+        return;
+      }
+
+      cachedAudioDevices = result.devices;
+      if (audioSourcesError) audioSourcesError.style.display = 'none';
+
+      if (result.devices.length === 0) {
+        showAudioSourcesError('No audio devices detected. Is FFmpeg installed?');
+        if (audioTestRecordBtn) audioTestRecordBtn.disabled = true;
+        return;
+      }
+      if (audioTestRecordBtn) audioTestRecordBtn.disabled = false;
+
+      for (let i = 0; i < 3; i++) {
+        const select = document.getElementById(`audioSourceDevice${i}`);
+        if (!select) continue;
+
+        const currentValue = select.value;
+
+        // Clear and rebuild options using safe DOM methods
+        while (select.options.length > 0) {
+          select.remove(0);
+        }
+        const noneOpt = document.createElement('option');
+        noneOpt.value = '';
+        noneOpt.textContent = '(none)';
+        select.appendChild(noneOpt);
+
+        for (const device of result.devices) {
+          const opt = document.createElement('option');
+          opt.value = device.name;
+          opt.textContent = device.name;
+          select.appendChild(opt);
+        }
+
+        if (currentValue && result.devices.some(d => d.name === currentValue)) {
+          select.value = currentValue;
+        }
+      }
+
+      applyAudioSourceDefaults(result.devices);
+    } catch (err) {
+      showAudioSourcesError('Failed to list audio devices: ' + err.message);
+    }
+  }
+
+  async function applyAudioSourceDefaults(devices) {
+    let hasSavedConfig = false;
+    try {
+      const result = await window.electronAPI.appGetSettings();
+      if (result.success && result.data?.audioSources?.length > 0) {
+        loadAudioSourcesFromConfig(result.data.audioSources, result.data.audioMixer);
+        hasSavedConfig = true;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    if (hasSavedConfig) return;
+
+    const micDevice = devices.find(d => d.isMicrophone);
+    const loopbackDevice = devices.find(d => d.isLoopback);
+
+    const select0 = document.getElementById('audioSourceDevice0');
+    if (select0 && micDevice) select0.value = micDevice.name;
+
+    const select1 = document.getElementById('audioSourceDevice1');
+    if (select1 && loopbackDevice) select1.value = loopbackDevice.name;
+
+    saveAudioSourceConfig();
+  }
+
+  function loadAudioSourcesFromConfig(sources, mixer) {
+    for (let i = 0; i < 3; i++) {
+      const source = sources[i];
+      if (!source) continue;
+
+      const checkbox = document.getElementById(`audioSourceEnabled${i}`);
+      const select = document.getElementById(`audioSourceDevice${i}`);
+      const slider = document.getElementById(`audioSourceVolume${i}`);
+      const label = document.getElementById(`audioSourceVolumeLabel${i}`);
+
+      if (checkbox) checkbox.checked = source.enabled;
+      if (select) select.value = source.device || '';
+      if (slider) slider.value = source.volume;
+      if (label) label.textContent = `${source.volume}%`;
+
+      updateSlotDisabledState(i, source.enabled);
+    }
+
+    if (audioMixerAutoBalance && mixer) {
+      audioMixerAutoBalance.checked = mixer.autoBalance !== false;
+    }
+  }
+
+  function saveAudioSourceConfig() {
+    const audioSources = [];
+    for (let i = 0; i < 3; i++) {
+      const checkbox = document.getElementById(`audioSourceEnabled${i}`);
+      const select = document.getElementById(`audioSourceDevice${i}`);
+      const slider = document.getElementById(`audioSourceVolume${i}`);
+
+      audioSources.push({
+        label: SLOT_LABELS[i],
+        device: select?.value || null,
+        volume: parseInt(slider?.value || '100', 10),
+        enabled: checkbox?.checked || false,
+      });
+    }
+
+    const audioMixerConfig = {
+      autoBalance: audioMixerAutoBalance?.checked !== false,
+    };
+
+    if (window.electronAPI?.appUpdateSettings) {
+      window.electronAPI.appUpdateSettings({
+        audioSources,
+        audioMixer: audioMixerConfig,
+      });
+    }
+  }
+
+  function updateSlotDisabledState(slotIndex, enabled) {
+    const select = document.getElementById(`audioSourceDevice${slotIndex}`);
+    const slider = document.getElementById(`audioSourceVolume${slotIndex}`);
+    if (select) select.disabled = !enabled;
+    if (slider) slider.disabled = !enabled;
+  }
+
+  function updateAudioSourcesVisibility() {
+    if (!audioSourcesSection) return;
+    const provider = recordingProviderSelect?.value || 'recall';
+    if (provider === 'local') {
+      audioSourcesSection.style.display = '';
+      if (!cachedAudioDevices) {
+        refreshAudioDevices();
+      }
+    } else {
+      audioSourcesSection.style.display = 'none';
+    }
+  }
+
+  function showAudioSourcesError(message) {
+    if (!audioSourcesError) return;
+    audioSourcesError.textContent = message;
+    audioSourcesError.style.display = '';
+  }
+
   /**
    * Apply the "Fully Local" preset: local recording, local transcription, and first available local LLM.
    */
@@ -849,6 +1092,9 @@ export function initializeSettingsUI() {
     // v2.0: Check service statuses on load
     checkAIServiceStatus();
     checkLocalLLMStatus();
+
+    // v2.0: Show/hide audio sources section based on recording provider
+    setTimeout(() => updateAudioSourcesVisibility(), 100);
 
     // Update vault path (this will be populated from main process)
     if (vaultPathInput && window.electronAPI) {
