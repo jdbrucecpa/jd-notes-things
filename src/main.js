@@ -2293,6 +2293,20 @@ async function initSDK() {
 
   // Event listeners registered below
 
+  // Notify renderer of recording state changes (works for both Recall and Local providers)
+  recordingManager.on('recording-started', (data) => {
+    console.log('[Recording] recording-started event:', data.recordingId);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      // Find the noteId for this recording
+      const recording = recordingManager.getActiveRecordings()[data.recordingId];
+      mainWindow.webContents.send('recording-state-change', {
+        recordingId: data.recordingId,
+        state: 'recording',
+        noteId: recording?.noteId || recordingManager.currentMeetingId,
+      });
+    }
+  });
+
   // Listen for meeting detected events (via RecordingManager abstraction)
   recordingManager.on('meeting-detected', (data) => {
     console.log('Meeting detected:', data);
