@@ -21,7 +21,19 @@ function buildFFmpegArgs(sources, mixer = {}, outputPath) {
     if (!source.device) {
       throw new Error('buildFFmpegArgs: all sources must have a non-null device');
     }
-    args.push('-f', 'dshow', '-i', `audio=${source.device}`);
+    const sourceType = source.type || 'dshow';
+    if (sourceType === 'wasapi') {
+      // WASAPI loopback: raw PCM via named pipe
+      args.push(
+        '-f', 's16le',
+        '-ar', String(source.sampleRate || 48000),
+        '-ac', String(source.channels || 2),
+        '-i', source.device
+      );
+    } else {
+      // DirectShow input device (mic, stereo mix, etc.)
+      args.push('-f', 'dshow', '-i', `audio=${source.device}`);
+    }
   }
 
   // Determine if we need a filter_complex

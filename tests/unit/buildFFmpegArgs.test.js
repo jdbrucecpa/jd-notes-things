@@ -143,4 +143,77 @@ describe('buildFFmpegArgs', () => {
     const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
     expect(args[0]).toBe('-y');
   });
+
+  // WASAPI source type tests
+  it('wasapi source -- uses PCM format args instead of dshow', () => {
+    const sources = [
+      { device: '\\\\.\\pipe\\jdnotes_wasapi_0', volume: 100, type: 'wasapi', sampleRate: 48000, channels: 2 },
+    ];
+    const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
+
+    expect(args).toContain('-f');
+    expect(args).toContain('s16le');
+    expect(args).toContain('-ar');
+    expect(args).toContain('48000');
+    expect(args).toContain('-ac');
+    expect(args).toContain('2');
+    expect(args).not.toContain('dshow');
+    expect(args).not.toContain('-filter_complex');
+  });
+
+  it('mixed dshow + wasapi sources -- correct args for both', () => {
+    const sources = [
+      { device: 'Mic (USB)', volume: 100, type: 'dshow' },
+      { device: '\\\\.\\pipe\\jdnotes_wasapi_0', volume: 80, type: 'wasapi', sampleRate: 48000, channels: 2 },
+    ];
+    const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
+
+    // First input: dshow
+    const firstFIdx = args.indexOf('-f');
+    expect(args[firstFIdx + 1]).toBe('dshow');
+
+    // Second input: s16le
+    const secondFIdx = args.indexOf('-f', firstFIdx + 1);
+    expect(args[secondFIdx + 1]).toBe('s16le');
+
+    // Has amix
+    const filter = args[args.indexOf('-filter_complex') + 1];
+    expect(filter).toContain('amix=inputs=2');
+  });
+
+  it('wasapi source without type field -- defaults to dshow (backward compat)', () => {
+    const sources = [{ device: 'Mic', volume: 100 }];
+    const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
+
+    expect(args).toContain('dshow');
+    expect(args).not.toContain('s16le');
+  });
+
+  it('all wasapi sources -- no dshow args at all', () => {
+    const sources = [
+      { device: '\\\\.\\pipe\\jdnotes_wasapi_0', volume: 100, type: 'wasapi', sampleRate: 48000, channels: 2 },
+      { device: '\\\\.\\pipe\\jdnotes_wasapi_1', volume: 100, type: 'wasapi', sampleRate: 44100, channels: 2 },
+    ];
+    const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
+
+    expect(args).not.toContain('dshow');
+    expect(args.filter(a => a === 's16le').length).toBe(2);
+  });
+
+  it('wasapi source includes -ar and -ac before pipe path', () => {
+    const sources = [
+      { device: '\\\\.\\pipe\\jdnotes_wasapi_0', volume: 100, type: 'wasapi', sampleRate: 44100, channels: 1 },
+    ];
+    const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
+
+    const fIdx = args.indexOf('-f');
+    expect(args[fIdx + 1]).toBe('s16le');
+    const arIdx = args.indexOf('-ar');
+    expect(args[arIdx + 1]).toBe('44100');
+    const acIdx = args.indexOf('-ac');
+    expect(args[acIdx + 1]).toBe('1');
+    // -i comes after format args
+    const iIdx = args.indexOf('-i');
+    expect(iIdx).toBeGreaterThan(acIdx);
+  });
 });
