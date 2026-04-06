@@ -8585,10 +8585,16 @@ ipcMain.handle('audioDevices:list', async () => {
 ipcMain.handle('audioDevices:test', async () => {
   try {
     const { buildFFmpegArgs } = require('./main/recording/buildFFmpegArgs');
+    const { WasapiCapture } = require('./main/recording/WasapiCapture');
 
     const sources = (appSettings.audioSources || [])
       .filter(s => s.enabled && s.device)
-      .map(s => ({ device: s.device, volume: s.volume }));
+      .map(s => ({
+        device: s.device,
+        volume: s.volume,
+        type: s.type || 'dshow',
+        deviceId: s.deviceId || null,
+      }));
 
     if (sources.length === 0) {
       return { success: false, error: 'No audio sources configured' };
@@ -8599,8 +8605,35 @@ ipcMain.handle('audioDevices:test', async () => {
       `test-recording-${Date.now()}.mp3`
     );
 
+    // Start WASAPI captures for output sources
+    const wasapiCaptures = [];
+    const resolvedSources = [];
+    let pipeIndex = 0;
+
+    for (const source of sources) {
+      if (source.type === 'wasapi' && source.deviceId) {
+        const capture = new WasapiCapture();
+        const { pipePath, sampleRate, channels } = await capture.start(source.deviceId, pipeIndex);
+        wasapiCaptures.push(capture);
+        pipeIndex++;
+        resolvedSources.push({
+          device: pipePath,
+          volume: source.volume,
+          type: 'wasapi',
+          sampleRate,
+          channels,
+        });
+      } else {
+        resolvedSources.push({
+          device: source.device,
+          volume: source.volume,
+          type: 'dshow',
+        });
+      }
+    }
+
     const ffmpegArgs = buildFFmpegArgs(
-      sources,
+      resolvedSources,
       appSettings.audioMixer || { autoBalance: false },
       testFile
     );
@@ -8614,7 +8647,12 @@ ipcMain.handle('audioDevices:test', async () => {
       let ffmpegStderr = '';
       ff.stderr.on('data', (chunk) => { ffmpegStderr += chunk; });
 
-      ff.on('close', (code) => {
+      ff.on('close', async (code) => {
+        // Clean up WASAPI captures
+        for (const c of wasapiCaptures) {
+          try { await c.stop(); } catch { /* ignore */ }
+        }
+
         if (code === 0) {
           resolve({ success: true, filePath: testFile });
         } else {
@@ -8623,7 +8661,10 @@ ipcMain.handle('audioDevices:test', async () => {
         }
       });
 
-      ff.on('error', (err) => {
+      ff.on('error', async (err) => {
+        for (const c of wasapiCaptures) {
+          try { await c.stop(); } catch { /* ignore */ }
+        }
         resolve({ success: false, error: err.message });
       });
     });

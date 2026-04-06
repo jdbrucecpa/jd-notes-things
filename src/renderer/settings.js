@@ -819,6 +819,10 @@ export function initializeSettingsUI() {
       }
       if (audioTestRecordBtn) audioTestRecordBtn.disabled = false;
 
+      // Separate input and output devices
+      const inputDevices = result.devices.filter(d => d.type !== 'wasapi');
+      const outputDevices = result.devices.filter(d => d.type === 'wasapi');
+
       for (let i = 0; i < 3; i++) {
         const select = document.getElementById(`audioSourceDevice${i}`);
         if (!select) continue;
@@ -834,13 +838,36 @@ export function initializeSettingsUI() {
         noneOpt.textContent = '(none)';
         select.appendChild(noneOpt);
 
-        for (const device of result.devices) {
-          const opt = document.createElement('option');
-          opt.value = device.name;
-          opt.textContent = device.name;
-          select.appendChild(opt);
+        // Input devices
+        if (inputDevices.length > 0) {
+          const inputGroup = document.createElement('optgroup');
+          inputGroup.label = 'Input Devices';
+          for (const device of inputDevices) {
+            const opt = document.createElement('option');
+            opt.value = device.name;
+            opt.textContent = device.name;
+            opt.dataset.type = 'dshow';
+            inputGroup.appendChild(opt);
+          }
+          select.appendChild(inputGroup);
         }
 
+        // Output devices (WASAPI loopback)
+        if (outputDevices.length > 0) {
+          const outputGroup = document.createElement('optgroup');
+          outputGroup.label = 'Output Devices (Loopback)';
+          for (const device of outputDevices) {
+            const opt = document.createElement('option');
+            opt.value = device.name;
+            opt.textContent = device.name;
+            opt.dataset.type = 'wasapi';
+            opt.dataset.deviceId = device.deviceId || '';
+            outputGroup.appendChild(opt);
+          }
+          select.appendChild(outputGroup);
+        }
+
+        // Restore previous selection if it still exists
         if (currentValue && result.devices.some(d => d.name === currentValue)) {
           select.value = currentValue;
         }
@@ -867,13 +894,15 @@ export function initializeSettingsUI() {
     if (hasSavedConfig) return;
 
     const micDevice = devices.find(d => d.isMicrophone);
-    const loopbackDevice = devices.find(d => d.isLoopback);
+    // Prefer WASAPI default output device, fall back to dshow loopback
+    const systemDevice = devices.find(d => d.type === 'wasapi' && d.isDefault)
+      || devices.find(d => d.isLoopback);
 
     const select0 = document.getElementById('audioSourceDevice0');
     if (select0 && micDevice) select0.value = micDevice.name;
 
     const select1 = document.getElementById('audioSourceDevice1');
-    if (select1 && loopbackDevice) select1.value = loopbackDevice.name;
+    if (select1 && systemDevice) select1.value = systemDevice.name;
 
     saveAudioSourceConfig();
   }
@@ -908,9 +937,16 @@ export function initializeSettingsUI() {
       const select = document.getElementById(`audioSourceDevice${i}`);
       const slider = document.getElementById(`audioSourceVolume${i}`);
 
+      // Get type and deviceId from the selected option's dataset
+      const selectedOption = select?.selectedOptions?.[0];
+      const type = selectedOption?.dataset?.type || 'dshow';
+      const deviceId = selectedOption?.dataset?.deviceId || null;
+
       audioSources.push({
         label: SLOT_LABELS[i],
         device: select?.value || null,
+        type: type,
+        deviceId: deviceId,
         volume: parseInt(slider?.value || '100', 10),
         enabled: checkbox?.checked || false,
       });
