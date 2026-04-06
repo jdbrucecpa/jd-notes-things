@@ -829,10 +829,8 @@ export function initializeSettingsUI() {
 
         const currentValue = select.value;
 
-        // Clear and rebuild options using safe DOM methods
-        while (select.options.length > 0) {
-          select.remove(0);
-        }
+        // Clear all children (options AND optgroups)
+        select.replaceChildren();
         const noneOpt = document.createElement('option');
         noneOpt.value = '';
         noneOpt.textContent = '(none)';

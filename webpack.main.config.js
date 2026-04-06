@@ -13,6 +13,8 @@ const externals = {
   keytar: 'commonjs keytar',
   // Optional dependency for unzipper S3 support - not used
   '@aws-sdk/client-s3': 'commonjs @aws-sdk/client-s3',
+  // Native N-API module for WASAPI loopback audio capture (v2.0 mixer)
+  'native-recorder-nodejs': 'commonjs native-recorder-nodejs',
 };
 
 // Only externalize the real SDK when NOT in mock mode.
