@@ -92,6 +92,7 @@
     "marked": "^17.0.3",
     "monaco-editor": "^0.55.1",
     "monaco-editor-webpack-plugin": "^7.1.1",
+    "native-recorder-nodejs": "^1.2.0",
     "openai": "^6.25.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
