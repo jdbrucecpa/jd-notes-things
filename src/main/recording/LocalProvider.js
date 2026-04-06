@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { RecordingProvider } = require('./RecordingProvider');
 const { buildFFmpegArgs } = require('./buildFFmpegArgs');
+const { WasapiCapture } = require('./WasapiCapture');
 
 const POLL_INTERVAL_MS = 2000;
 
@@ -32,6 +33,7 @@ class LocalProvider extends RecordingProvider {
     this._pollInterval = null;
     this._audioSources = []; // Populated via setAudioConfig()
     this._audioMixer = { autoBalance: false };
+    this._wasapiCaptures = []; // Active WasapiCapture instances during recording
     this._recordingPath = path.join(
       process.env.APPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Roaming'),
       'jd-notes-things',
@@ -121,6 +123,9 @@ class LocalProvider extends RecordingProvider {
   }
 
   async shutdown() {
+    // Stop any active WASAPI captures
+    await this._stopWasapiCaptures();
+
     this._stopPolling();
 
     if (this._ffmpegProcess) {
@@ -307,7 +312,7 @@ class LocalProvider extends RecordingProvider {
       let stderr = '';
       ff.stderr.on('data', chunk => { stderr += chunk; });
 
-      ff.on('close', () => {
+      ff.on('close', async () => {
         const devices = [];
         const lines = stderr.split('\n');
 
@@ -373,6 +378,25 @@ class LocalProvider extends RecordingProvider {
           }
         }
 
+        // Merge WASAPI output devices if available
+        if (WasapiCapture.isAvailable()) {
+          try {
+            const outputDevices = await WasapiCapture.getOutputDevices();
+            for (const od of outputDevices) {
+              devices.push({
+                name: od.name,
+                type: 'wasapi',
+                deviceId: od.deviceId,
+                isLoopback: false,
+                isMicrophone: false,
+                isDefault: od.isDefault,
+              });
+            }
+          } catch {
+            // WASAPI enumeration failed — continue with dshow-only devices
+          }
+        }
+
         resolve(devices);
       });
 
@@ -392,8 +416,8 @@ class LocalProvider extends RecordingProvider {
 
   /**
    * Spawn FFmpeg to capture audio from configured sources to `outputPath`.
-   * Uses multi-source mixing when audioSources are configured,
-   * falls back to single loopback device otherwise.
+   * Supports both dshow (mic) and WASAPI (output device loopback) sources.
+   * Falls back to single loopback device if no sources configured.
    * @param {string} outputPath
    */
   async _startFFmpeg(outputPath) {
@@ -402,10 +426,46 @@ class LocalProvider extends RecordingProvider {
     // Get enabled sources from config
     const enabledSources = this._audioSources
       .filter(s => s.enabled && s.device)
-      .map(s => ({ device: s.device, volume: s.volume }));
+      .map(s => ({
+        device: s.device,
+        volume: s.volume,
+        type: s.type || 'dshow',
+        deviceId: s.deviceId || null,
+      }));
 
     if (enabledSources.length > 0) {
-      ffmpegArgs = buildFFmpegArgs(enabledSources, this._audioMixer, outputPath);
+      // Start WASAPI captures for output device sources
+      const resolvedSources = [];
+      let pipeIndex = 0;
+
+      for (const source of enabledSources) {
+        if (source.type === 'wasapi' && source.deviceId) {
+          const capture = new WasapiCapture();
+          capture.on('error', (err) => {
+            this.emit('error', { type: 'wasapi-error', message: err.message });
+          });
+
+          const { pipePath, sampleRate, channels } = await capture.start(source.deviceId, pipeIndex);
+          this._wasapiCaptures.push(capture);
+          pipeIndex++;
+
+          resolvedSources.push({
+            device: pipePath,
+            volume: source.volume,
+            type: 'wasapi',
+            sampleRate,
+            channels,
+          });
+        } else {
+          resolvedSources.push({
+            device: source.device,
+            volume: source.volume,
+            type: 'dshow',
+          });
+        }
+      }
+
+      ffmpegArgs = buildFFmpegArgs(resolvedSources, this._audioMixer, outputPath);
     } else {
       // Fallback: single loopback device (backward compat)
       const loopbackDevice = await this._findLoopbackDevice();
@@ -431,6 +491,8 @@ class LocalProvider extends RecordingProvider {
     this._ffmpegProcess.on('close', (code) => {
       this._recording = false;
       this._ffmpegProcess = null;
+      // Stop all WASAPI captures
+      this._stopWasapiCaptures();
       this.emit('recording-ended', { recordingId, audioFilePath, exitCode: code });
     });
 
@@ -441,6 +503,21 @@ class LocalProvider extends RecordingProvider {
     this._ffmpegProcess.stderr.on('data', (_chunk) => {
       // FFmpeg writes its progress to stderr -- suppress for now.
     });
+  }
+
+  /**
+   * Stop all active WASAPI captures.
+   */
+  async _stopWasapiCaptures() {
+    const captures = this._wasapiCaptures;
+    this._wasapiCaptures = [];
+    for (const capture of captures) {
+      try {
+        await capture.stop();
+      } catch {
+        // Already stopped
+      }
+    }
   }
 }
 
