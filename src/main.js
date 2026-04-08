@@ -2428,28 +2428,47 @@ async function initSDK() {
 
     // Log the SDK meeting-closed event
     sdkLogger.logEvent('meeting-closed', {
-      windowId: evt.window.id,
+      windowId: evt.window?.id,
     });
 
-    const windowId = evt.window?.id;
+    // Resolve windowId with fallbacks — the Recall SDK v2 sometimes fires
+    // meeting-closed with undefined window.id (same issue discovered in
+    // recording-ended events). Fall back to the tracked detectedMeeting.
+    const windowId = evt.window?.id || detectedMeeting?.window?.id;
 
     // Automatically stop recording when meeting ends
-    // NOTE: WindowId might have changed during recording, so check both the event windowId
-    // AND all active recordings to ensure we catch everything
     let recordingToStop = null;
 
     if (windowId && activeRecordings.hasActiveRecording(windowId)) {
-      // Direct match - use the event's windowId
+      // Direct match - use the resolved windowId
       recordingToStop = windowId;
       console.log(`Meeting ended - found recording with matching windowId: ${windowId}`);
     } else {
-      // No direct match - do NOT stop an unrelated recording.
-      // The old fallback would grab ANY active recording and stop it, causing
-      // recordings to be killed when unrelated meeting windows closed.
-      console.log(
-        `Meeting closed for windowId ${windowId} but no matching active recording found. ` +
-          `Ignoring (active recordings: ${Object.keys(activeRecordings.getAll()).join(', ') || 'none'})`
-      );
+      // No direct match — check if there's a sole active recording.
+      // The calendar-meeting path registers recordings with a key from
+      // prepareDesktopAudioRecording() which may differ from the Zoom
+      // window ID. For a single-user app with one recording at a time,
+      // stopping the only active recording is safe.
+      const allRecordings = activeRecordings.getAll();
+      const activeKeys = Object.keys(allRecordings);
+
+      if (activeKeys.length === 1) {
+        recordingToStop = activeKeys[0];
+        console.log(
+          `Meeting ended - no direct windowId match (event: ${evt.window?.id}, detected: ${detectedMeeting?.window?.id}). ` +
+            `Stopping sole active recording: ${recordingToStop}`
+        );
+      } else if (activeKeys.length > 1) {
+        console.log(
+          `Meeting closed for windowId ${windowId} but ${activeKeys.length} recordings active — ` +
+            `not stopping to avoid killing unrelated recording ` +
+            `(active: ${activeKeys.join(', ')})`
+        );
+      } else {
+        console.log(
+          `Meeting closed for windowId ${windowId} but no active recordings found.`
+        );
+      }
     }
 
     if (recordingToStop) {
@@ -2483,10 +2502,12 @@ async function initSDK() {
       console.log(`No active recording found to stop (windowId: ${windowId})`);
     }
 
-    // Clean up the global tracking when a meeting ends
-    if (windowId && global.activeMeetingIds && global.activeMeetingIds[windowId]) {
-      console.log(`Cleaning up meeting tracking for: ${windowId}`);
-      delete global.activeMeetingIds[windowId];
+    // Clean up the global tracking when a meeting ends — check both the event
+    // windowId and the resolved windowId (which may come from detectedMeeting)
+    const cleanupId = evt.window?.id || windowId;
+    if (cleanupId && global.activeMeetingIds && global.activeMeetingIds[cleanupId]) {
+      console.log(`Cleaning up meeting tracking for: ${cleanupId}`);
+      delete global.activeMeetingIds[cleanupId];
     }
 
     // Only clean up the specific windowId that closed — don't nuke unrelated recordings
@@ -2506,12 +2527,27 @@ async function initSDK() {
   RecallAiSdk.addEventListener('recording-ended', async evt => {
     console.log('Recording ended:', evt);
 
+    // Resolve windowId — Recall SDK v2 sometimes fires recording-ended with
+    // undefined window.id. Fall back to the sole active recording key.
+    let windowId = evt.window?.id;
+    if (!windowId) {
+      const activeKeys = Object.keys(activeRecordings.getAll());
+      if (activeKeys.length === 1) {
+        windowId = activeKeys[0];
+        console.log(
+          `[Recording] recording-ended had no window.id — resolved from sole active recording: ${windowId}`
+        );
+      } else {
+        console.error(
+          `[Recording] recording-ended had no window.id and ${activeKeys.length} active recordings — cannot resolve`
+        );
+      }
+    }
+
     // Log the SDK recording-ended event
     sdkLogger.logEvent('recording-ended', {
-      windowId: evt.window.id,
+      windowId: windowId,
     });
-
-    const windowId = evt.window.id;
 
     try {
       // Update the note with recording information (marks as complete)
