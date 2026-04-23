@@ -21,7 +21,8 @@
       "Bash(rm:*)",
       "Bash(npm outdated:*)",
       "Bash(git checkout:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [
       "Bash(rm -rf *):*",
