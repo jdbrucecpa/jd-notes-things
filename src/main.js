@@ -32,6 +32,7 @@ const { spawn } = require('child_process');
 const crypto = require('crypto');
 const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
+const { updateElectronApp } = require('update-electron-app');
 const sdkLogger = require('./sdk-logger');
 const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema } = require('./shared/validation');
 const { z } = require('zod');
@@ -1485,9 +1486,31 @@ app.whenReady().then(async () => {
   });
 
   // Set up logger event listener to send logs from main to renderer
+  // Also persist to disk so SDK events (meeting-detected/closed, recording-ended,
+  // upload progress, errors) survive app restarts and are available for post-mortem
+  // diagnosis of issues like auto-stop failures.
   sdkLogger.onLog(logEntry => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('sdk-log', logEntry);
+    }
+
+    try {
+      const payload =
+        logEntry.type === 'api-call'
+          ? `api-call ${logEntry.method} ${JSON.stringify(logEntry.params || {})}`
+          : logEntry.type === 'event'
+            ? `event ${logEntry.eventType} ${JSON.stringify(logEntry.data || {})}`
+            : logEntry.type === 'error'
+              ? `error ${logEntry.errorType}: ${logEntry.message}`
+              : `${logEntry.type} ${logEntry.message || ''}`;
+      const line = `[SDK] ${payload}`;
+      if (logEntry.type === 'error') {
+        logger.main.error(line);
+      } else {
+        logger.main.info(line);
+      }
+    } catch (err) {
+      logger.main.warn('[SDK] Failed to serialize SDK log entry:', err.message);
     }
   });
 
@@ -1777,12 +1800,30 @@ app.whenReady().then(async () => {
   createSystemTray();
   registerGlobalShortcuts();
 
-  // Initialize auto-updater event handlers (manual check only, no automatic polling)
+  // Initialize auto-updater (only in production).
+  //
+  // History: prior versions of this file used update-electron-app but it was
+  // removed in commit 213c5b3 (Feb 2026) and replaced with a hand-rolled
+  // autoUpdater.setFeedURL() call that silently failed on Windows — users
+  // got stuck multiple versions behind. Restoring update-electron-app fixes
+  // that: it sets the feedURL with the correct headers/serverType, polls on
+  // an interval, and cooperates with Squirrel.Windows.
   if (!process.env.ELECTRON_IS_DEV && app.isPackaged) {
-    logger.main.info('[AutoUpdater] Initializing update event handlers (manual check only)...');
+    logger.main.info('[AutoUpdater] Initializing auto-updater...');
     try {
-      // Set up custom update event handlers for in-app notification
-      // These fire when a manual check is triggered via settings:checkForUpdates
+      updateElectronApp({
+        repo: 'jdbrucecpa/jd-notes-things',
+        updateInterval: '1 hour',
+        notifyUser: false, // Custom in-app banner replaces the default dialog
+        logger: {
+          log: (...args) => logger.main.info('[AutoUpdater]', ...args),
+          info: (...args) => logger.main.info('[AutoUpdater]', ...args),
+          warn: (...args) => logger.main.warn('[AutoUpdater]', ...args),
+          error: (...args) => logger.main.error('[AutoUpdater]', ...args),
+        },
+      });
+
+      // Subscribe to autoUpdater events for the in-app update banner UI.
       const { autoUpdater } = require('electron');
 
       autoUpdater.on('checking-for-update', () => {
@@ -2386,25 +2427,44 @@ async function initSDK() {
       windowId: data.windowId,
     });
 
-    const windowId = data.windowId;
+    // Resolve windowId with fallbacks — Recall SDK v2 sometimes fires
+    // meeting-closed with undefined window.id. Fall back to the tracked
+    // detectedMeeting so auto-stop still fires. (Ported from v1.4.6.)
+    const windowId = data.windowId || detectedMeeting?.window?.id;
 
     // Automatically stop recording when meeting ends
-    // NOTE: WindowId might have changed during recording, so check both the event windowId
-    // AND all active recordings to ensure we catch everything
     let recordingToStop = null;
 
     if (windowId && recordingManager.hasActiveRecording(windowId)) {
-      // Direct match - use the event's windowId
+      // Direct match - use the resolved windowId
       recordingToStop = windowId;
       console.log(`Meeting ended - found recording with matching windowId: ${windowId}`);
     } else {
-      // No direct match - do NOT stop an unrelated recording.
-      // The old fallback would grab ANY active recording and stop it, causing
-      // recordings to be killed when unrelated meeting windows closed.
-      console.log(
-        `Meeting closed for windowId ${windowId} but no matching active recording found. ` +
-          `Ignoring (active recordings: ${Object.keys(recordingManager.getActiveRecordings()).join(', ') || 'none'})`
-      );
+      // No direct match — check if there's a sole active recording.
+      // The calendar-meeting path registers recordings with a key that may
+      // differ from the Zoom window ID. For a single-user app with one
+      // recording at a time, stopping the only active recording is safe.
+      // (Ported from v1.4.6.)
+      const allRecordings = recordingManager.getActiveRecordings();
+      const activeKeys = Object.keys(allRecordings);
+
+      if (activeKeys.length === 1) {
+        recordingToStop = activeKeys[0];
+        console.log(
+          `Meeting ended - no direct windowId match (event: ${data.windowId}, detected: ${detectedMeeting?.window?.id}). ` +
+            `Stopping sole active recording: ${recordingToStop}`
+        );
+      } else if (activeKeys.length > 1) {
+        console.log(
+          `Meeting closed for windowId ${windowId} but ${activeKeys.length} recordings active — ` +
+            `not stopping to avoid killing unrelated recording ` +
+            `(active: ${activeKeys.join(', ')})`
+        );
+      } else {
+        console.log(
+          `Meeting closed for windowId ${windowId} but no active recordings found.`
+        );
+      }
     }
 
     if (recordingToStop) {
@@ -2438,10 +2498,12 @@ async function initSDK() {
       console.log(`No active recording found to stop (windowId: ${windowId})`);
     }
 
-    // Clean up the global tracking when a meeting ends
-    if (windowId && global.activeMeetingIds && global.activeMeetingIds[windowId]) {
-      console.log(`Cleaning up meeting tracking for: ${windowId}`);
-      delete global.activeMeetingIds[windowId];
+    // Clean up the global tracking when a meeting ends — check both the event
+    // windowId and the resolved windowId (which may come from detectedMeeting).
+    const cleanupId = data.windowId || windowId;
+    if (cleanupId && global.activeMeetingIds && global.activeMeetingIds[cleanupId]) {
+      console.log(`Cleaning up meeting tracking for: ${cleanupId}`);
+      delete global.activeMeetingIds[cleanupId];
     }
 
     // Only clean up the specific windowId that closed — don't nuke unrelated recordings
@@ -8211,12 +8273,11 @@ ipcMain.handle('settings:checkForUpdates', async () => {
   }
 
   try {
-    // Use electron's autoUpdater to check for updates
+    // Reuse the feed URL set by updateElectronApp at startup — do NOT call
+    // setFeedURL here. Calling it without the headers/serverType that
+    // update-electron-app configures would downgrade the feed and break the
+    // Windows update path (the regression this project hit in Feb 2026).
     const { autoUpdater: electronAutoUpdater } = require('electron');
-
-    // Set the feed URL for Squirrel.Windows
-    const feedURL = `https://update.electronjs.org/jdbrucecpa/jd-notes-things/${process.platform}-${process.arch}/${app.getVersion()}`;
-    electronAutoUpdater.setFeedURL({ url: feedURL });
 
     // Wrap the event-based check in a Promise
     return new Promise(resolve => {

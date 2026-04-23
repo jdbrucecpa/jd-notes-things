@@ -680,6 +680,7 @@ export function initializeSettingsUI() {
   }
 
   // Load version information
+  const appVersionEl = document.getElementById('appVersion');
   if (electronVersion && window.electronAPI) {
     window.electronAPI
       .getAppVersion()
@@ -687,6 +688,9 @@ export function initializeSettingsUI() {
         electronVersion.textContent = version.electron || '-';
         nodeVersion.textContent = version.node || '-';
         chromeVersion.textContent = version.chrome || '-';
+        if (appVersionEl && version.app) {
+          appVersionEl.textContent = `v${version.app}`;
+        }
       })
       .catch(() => {
         electronVersion.textContent = 'N/A';
