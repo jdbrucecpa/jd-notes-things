@@ -58,6 +58,9 @@ const backgroundTaskManager = require('./main/services/backgroundTaskManager');
 const databaseService = require('./main/services/databaseService');
 const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
+const {
+  resolveMeetingClosedTarget,
+} = require('./main/services/recordingAutoStopResolver');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
@@ -2431,45 +2434,25 @@ async function initSDK() {
       windowId: evt.window?.id,
     });
 
-    // Resolve windowId with fallbacks — the Recall SDK v2 sometimes fires
-    // meeting-closed with undefined window.id (same issue discovered in
-    // recording-ended events). Fall back to the tracked detectedMeeting.
-    const windowId = evt.window?.id || detectedMeeting?.window?.id;
+    // v1.4.7: Decide what to stop and what to clear via a pure resolver so the
+    // logic is unit-testable. See recordingAutoStopResolver.js for the full
+    // reasoning behind which Recall SDK quirks each branch handles.
+    const sdkWindowId = evt.window?.id;
+    const detectedWindowId = detectedMeeting?.window?.id;
 
-    // Automatically stop recording when meeting ends
-    let recordingToStop = null;
+    const decision = resolveMeetingClosedTarget({
+      sdkWindowId,
+      detectedWindowId,
+      activeRecordingKeys: Object.keys(activeRecordings.getAll()),
+    });
 
-    if (windowId && activeRecordings.hasActiveRecording(windowId)) {
-      // Direct match - use the resolved windowId
-      recordingToStop = windowId;
-      console.log(`Meeting ended - found recording with matching windowId: ${windowId}`);
-    } else {
-      // No direct match — check if there's a sole active recording.
-      // The calendar-meeting path registers recordings with a key from
-      // prepareDesktopAudioRecording() which may differ from the Zoom
-      // window ID. For a single-user app with one recording at a time,
-      // stopping the only active recording is safe.
-      const allRecordings = activeRecordings.getAll();
-      const activeKeys = Object.keys(allRecordings);
+    console.log(
+      `[meeting-closed] decision=${decision.reason} sdkWindowId=${sdkWindowId} ` +
+        `detectedWindowId=${detectedWindowId} recordingToStop=${decision.recordingToStop} ` +
+        `shouldClearDetectedMeeting=${decision.shouldClearDetectedMeeting}`
+    );
 
-      if (activeKeys.length === 1) {
-        recordingToStop = activeKeys[0];
-        console.log(
-          `Meeting ended - no direct windowId match (event: ${evt.window?.id}, detected: ${detectedMeeting?.window?.id}). ` +
-            `Stopping sole active recording: ${recordingToStop}`
-        );
-      } else if (activeKeys.length > 1) {
-        console.log(
-          `Meeting closed for windowId ${windowId} but ${activeKeys.length} recordings active — ` +
-            `not stopping to avoid killing unrelated recording ` +
-            `(active: ${activeKeys.join(', ')})`
-        );
-      } else {
-        console.log(
-          `Meeting closed for windowId ${windowId} but no active recordings found.`
-        );
-      }
-    }
+    const recordingToStop = decision.recordingToStop;
 
     if (recordingToStop) {
       console.log(`Stopping recording for window: ${recordingToStop}`);
@@ -2498,28 +2481,27 @@ async function initSDK() {
         // Still update our internal state
         activeRecordings.updateState(recordingToStop, 'stopping');
       }
-    } else {
-      console.log(`No active recording found to stop (windowId: ${windowId})`);
     }
 
-    // Clean up the global tracking when a meeting ends — check both the event
-    // windowId and the resolved windowId (which may come from detectedMeeting)
-    const cleanupId = evt.window?.id || windowId;
-    if (cleanupId && global.activeMeetingIds && global.activeMeetingIds[cleanupId]) {
-      console.log(`Cleaning up meeting tracking for: ${cleanupId}`);
-      delete global.activeMeetingIds[cleanupId];
+    // Clean up the global meeting tracking for the SDK-provided windowId, if any.
+    if (sdkWindowId && global.activeMeetingIds && global.activeMeetingIds[sdkWindowId]) {
+      console.log(`Cleaning up meeting tracking for: ${sdkWindowId}`);
+      delete global.activeMeetingIds[sdkWindowId];
     }
 
-    // Only clean up the specific windowId that closed — don't nuke unrelated recordings
+    // Only reset the user-facing detected-meeting state when the resolver says
+    // the user's actual meeting closed. If a transient unrelated window closed
+    // (e.g., a Teams lobby/preview window), leave detection alone so the
+    // widget and renderer keep showing the still-active meeting.
+    if (decision.shouldClearDetectedMeeting) {
+      detectedMeeting = null;
 
-    detectedMeeting = null;
-
-    // Send the meeting closed status to the renderer process
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('meeting-detection-status', {
-        detected: false,
-        platform: null,
-      });
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('meeting-detection-status', {
+          detected: false,
+          platform: null,
+        });
+      }
     }
   });
 
