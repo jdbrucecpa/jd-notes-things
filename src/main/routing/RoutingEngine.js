@@ -52,28 +52,54 @@ class RoutingEngine {
     const matchedCompanies = new Set();
     const routedClientIds = [];
 
+    console.log(`[RoutingEngine] Routing "${meetingTitle}" — ${participants.length} participants, ${participantEmails.length} emails`);
+
     // Primary: match via participant organization field → clients DB
     for (const participant of participants) {
       const org = participant.organization;
-      if (!org || matchedCompanies.has(org.toLowerCase())) continue;
-
+      const ident = participant.email || participant.name || '?';
+      if (!org) {
+        console.log(`[RoutingEngine]   ${ident}: no organization field — skipping primary match`);
+        continue;
+      }
+      if (matchedCompanies.has(org.toLowerCase())) {
+        console.log(`[RoutingEngine]   ${ident}: org "${org}" already matched`);
+        continue;
+      }
       const company = databaseService.matchOrganizationToCompany(org);
       if (company && company.vault_path) {
+        console.log(`[RoutingEngine]   ${ident}: org "${org}" → "${company.name}" (vault_path set) ✓`);
         matchedCompanies.add(org.toLowerCase());
         routedClientIds.push(company.id);
         routes.push(this._buildRouteFromCompany(company, folderName, dateStr, titleSlug));
+      } else if (company) {
+        console.log(`[RoutingEngine]   ${ident}: org "${org}" → "${company.name}" but vault_path is empty — ignored`);
+      } else {
+        console.log(`[RoutingEngine]   ${ident}: org "${org}" — no client matches by name`);
       }
     }
 
     // Fallback: match via client_contacts table (email-based)
     if (routes.length === 0 && this._clientService) {
+      console.log(`[RoutingEngine] No org matches — trying email fallback`);
       for (const email of participantEmails) {
         const match = this._clientService.matchEmailToClient(email);
-        if (match && match.vault_path && !matchedCompanies.has(match.name.toLowerCase())) {
-          matchedCompanies.add(match.name.toLowerCase());
-          routedClientIds.push(match.id);
-          routes.push(this._buildRouteFromCompany(match, folderName, dateStr, titleSlug));
+        if (!match) {
+          console.log(`[RoutingEngine]   ${email}: no client_contacts or domain match`);
+          continue;
         }
+        if (!match.vault_path) {
+          console.log(`[RoutingEngine]   ${email}: matched "${match.name}" via ${match.matchType} but vault_path is empty — ignored`);
+          continue;
+        }
+        if (matchedCompanies.has(match.name.toLowerCase())) {
+          console.log(`[RoutingEngine]   ${email}: "${match.name}" already matched`);
+          continue;
+        }
+        console.log(`[RoutingEngine]   ${email}: matched "${match.name}" via ${match.matchType} ✓`);
+        matchedCompanies.add(match.name.toLowerCase());
+        routedClientIds.push(match.id);
+        routes.push(this._buildRouteFromCompany(match, folderName, dateStr, titleSlug));
       }
     }
 

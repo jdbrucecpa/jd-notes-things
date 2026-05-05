@@ -6868,8 +6868,11 @@ ipcMain.handle(
       return { success: false, error: 'Meeting not found' };
     }
 
-    // Export to Obsidian
-    const result = await exportMeetingToObsidian(meeting);
+    // Export to Obsidian — forceReroute so the engine re-evaluates against current
+    // client/routing config every click (instead of reusing a previously cached
+    // meeting.obsidianLink). This means newly added clients/folders take effect
+    // on the next Export without requiring an Unlink first.
+    const result = await exportMeetingToObsidian(meeting, null, { forceReroute: true });
 
     // If successful, save obsidianLink back to meeting object
     if (result.success && result.obsidianLink) {
