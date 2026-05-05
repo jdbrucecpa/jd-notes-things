@@ -1693,8 +1693,10 @@ async function showAddClientPicker() {
       opt.appendChild(countSpan);
 
       opt.addEventListener('click', async () => {
+        const folderResult = await window.electronAPI.companiesSelectFolder();
+        if (!folderResult.success || !folderResult.folderPath) return;
         await window.electronAPI.companiesUpdate({
-          name: c.name, vaultPath: '', category: 'Client',
+          name: c.name, vaultPath: folderResult.folderPath, category: 'Client',
         });
         picker.style.display = 'none';
         renderClientsTab();
