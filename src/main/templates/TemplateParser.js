@@ -200,21 +200,21 @@ class TemplateParser {
     // ═══════════════════════════════════════════════════════════════════
     // BUDGET TIER - Best for high-volume, cost-sensitive tasks
     // ═══════════════════════════════════════════════════════════════════
-    'gemini-2.5-flash-lite': {
-      input: 0.075, // $0.075 per 1M tokens
-      output: 0.3, // $0.30 per 1M tokens
+    'gemini-3.1-flash-lite': {
+      input: 0.25, // $0.25 per 1M tokens
+      output: 1.5, // $1.50 per 1M tokens
       tier: 'budget',
-      updated: '2026-02-28',
+      updated: '2026-07-07',
     },
 
     // ═══════════════════════════════════════════════════════════════════
     // BALANCED TIER - Good balance of quality and cost
     // ═══════════════════════════════════════════════════════════════════
-    'gemini-2.5-flash': {
-      input: 0.15, // $0.15 per 1M tokens
-      output: 0.6, // $0.60 per 1M tokens
+    'gemini-3.5-flash': {
+      input: 1.5, // $1.50 per 1M tokens
+      output: 9.0, // $9.00 per 1M tokens
       tier: 'balanced',
-      updated: '2026-02-28',
+      updated: '2026-07-07',
     },
     'claude-haiku-4-5': {
       input: 0.8, // $0.80 per 1M tokens
@@ -226,11 +226,12 @@ class TemplateParser {
     // ═══════════════════════════════════════════════════════════════════
     // PREMIUM TIER - Best quality for important summaries
     // ═══════════════════════════════════════════════════════════════════
-    'claude-sonnet-4-6': {
+    'claude-sonnet-5': {
+      // Standard rate; intro pricing of $2.00/$10.00 applies through 2026-08-31
       input: 3.0, // $3.00 per 1M tokens
       output: 15.0, // $15.00 per 1M tokens
       tier: 'premium',
-      updated: '2026-02-28',
+      updated: '2026-07-07',
     },
 
     // Ollama models (any ollama-* prefix) are always free — handled dynamically in estimateTokens
@@ -241,10 +242,10 @@ class TemplateParser {
    * Using rough estimate: 1 token ≈ 4 characters
    * @param {Object} template - Template object
    * @param {string} transcriptText - Meeting transcript
-   * @param {string} provider - Model provider (e.g., 'gemini-2.5-flash', 'claude-haiku-4-5', 'claude-sonnet-4-6')
+   * @param {string} provider - Model provider (e.g., 'gemini-3.1-flash-lite', 'claude-haiku-4-5', 'claude-sonnet-5')
    * @returns {Object} Token estimates and cost
    */
-  static estimateTokens(template, transcriptText, provider = 'gemini-2.5-flash') {
+  static estimateTokens(template, transcriptText, provider = 'gemini-3.1-flash-lite') {
     // Estimate input tokens (transcript + all prompts)
     const transcriptTokens = Math.ceil(transcriptText.length / 4);
     const promptsText = template.sections.map(s => s.prompt).join(' ');
@@ -257,11 +258,11 @@ class TemplateParser {
     // Total tokens
     const totalTokens = inputTokens + outputTokens;
 
-    // Get pricing for the selected provider (Ollama models are always free, fallback to gemini-2.5-flash)
+    // Get pricing for the selected provider (Ollama models are always free, fallback to gemini-3.1-flash-lite)
     const pricing =
       this.MODEL_PRICING[provider] ||
       (provider && provider.startsWith('ollama-') ? { input: 0, output: 0 } : null) ||
-      this.MODEL_PRICING['gemini-2.5-flash'];
+      this.MODEL_PRICING['gemini-3.1-flash-lite'];
 
     // Cost estimation using provider-specific pricing
     const inputCost = (inputTokens / 1000000) * pricing.input;

@@ -11,6 +11,10 @@ import { escapeHtml } from './security.js';
 let editor = null;
 let currentTemplateId = null;
 let templates = [];
+// True while the user is composing a brand-new template (before first save)
+let creatingNew = false;
+
+const VALID_TEMPLATE_EXTENSIONS = ['.md', '.yaml', '.yml', '.json', '.txt'];
 
 /**
  * Initialize the template editor
@@ -199,11 +203,15 @@ async function selectTemplate(templateId) {
       throw new Error(response?.error || 'Failed to load template content');
     }
 
+    // Leaving "new template" composition mode when an existing one is opened
+    creatingNew = false;
     currentTemplateId = templateId;
     const template = templates.find(t => t.id === templateId);
 
     // Update UI
-    document.getElementById('templateNameInput').value = `${templateId}${template.format}`;
+    const nameInput = document.getElementById('templateNameInput');
+    nameInput.value = `${templateId}${template.format}`;
+    nameInput.readOnly = true;
     document.getElementById('saveTemplateBtn').disabled = false;
     document.getElementById('deleteTemplateBtn').disabled = false;
 
@@ -277,29 +285,151 @@ function updatePreview() {
 }
 
 /**
- * Create new template
+ * Split a typed file name into a base name and a valid template format.
+ * "weekly-review.yaml" → { name: 'weekly-review', format: '.yaml' }
+ * "weekly review"      → { name: 'weekly review', format: '.md' }  (default)
+ */
+function splitNameAndFormat(raw) {
+  const value = (raw || '').trim();
+  const dot = value.lastIndexOf('.');
+  if (dot > 0) {
+    const ext = value.slice(dot).toLowerCase();
+    if (VALID_TEMPLATE_EXTENSIONS.includes(ext)) {
+      return { name: value.slice(0, dot), format: ext };
+    }
+  }
+  return { name: value, format: '.md' };
+}
+
+/**
+ * Begin composing a new template. The user types a file name in the toolbar
+ * input and edits the scaffold in Monaco; "Save Template" persists it.
  */
 function createNewTemplate() {
-  notifyInfo('Create new template feature coming soon');
-  // TODO: Implement create new template
+  creatingNew = true;
+  currentTemplateId = null;
+
+  const nameInput = document.getElementById('templateNameInput');
+  nameInput.readOnly = false;
+  nameInput.value = '';
+  nameInput.placeholder = 'new-template-name.md';
+  nameInput.focus();
+
+  // Clear the visual selection in the list
+  document.querySelectorAll('.template-list-item').forEach(item => item.classList.remove('selected'));
+
+  // Seed the editor with an editable Markdown scaffold
+  const scaffold = `<!-- Template Metadata:
+name: New Template
+description: New template
+type: general
+cost_estimate: 0.01
+-->
+
+## Summary
+
+<!-- Prompt: Describe what this section should produce from the transcript. -->
+`;
+  monaco.editor.setModelLanguage(editor.getModel(), 'markdown');
+  editor.setValue(scaffold);
+  editor.updateOptions({ readOnly: false });
+
+  document.getElementById('saveTemplateBtn').disabled = false;
+  document.getElementById('deleteTemplateBtn').disabled = true;
+
+  notifyInfo('Enter a file name (e.g. my-template.md), edit the content, then click Save Template');
 }
 
 /**
- * Delete current template
+ * Delete the currently selected template file.
  */
-function deleteTemplate() {
+async function deleteTemplate() {
   if (!currentTemplateId) return;
-  notifyInfo('Delete template feature coming soon');
-  // TODO: Implement delete template
+
+  const template = templates.find(t => t.id === currentTemplateId);
+  const label = template ? `${currentTemplateId}${template.format}` : currentTemplateId;
+  if (!window.confirm(`Delete template "${label}"? This removes the file from disk.`)) {
+    return;
+  }
+
+  try {
+    const response = await window.electronAPI.templatesDelete(currentTemplateId);
+    if (!response || !response.success) {
+      throw new Error(response?.error || 'Failed to delete template');
+    }
+
+    notifyInfo(`Deleted template "${label}"`);
+
+    // Reset editor state
+    currentTemplateId = null;
+    editor.setValue('// Select a template to edit');
+    editor.updateOptions({ readOnly: true });
+    document.getElementById('templateNameInput').value = '';
+    document.getElementById('saveTemplateBtn').disabled = true;
+    document.getElementById('deleteTemplateBtn').disabled = true;
+
+    await loadTemplates();
+  } catch (error) {
+    console.error('[TemplateEditor] Failed to delete template:', error);
+    notifyError(error, { prefix: 'Failed to delete template:' });
+  }
 }
 
 /**
- * Save current template
+ * Save the current editor content — either creating a new template file
+ * (when in "new" mode) or overwriting the selected one.
  */
-function saveTemplate() {
-  if (!currentTemplateId) return;
-  notifyInfo('Save template feature coming soon');
-  // TODO: Implement save template (needs IPC handler)
+async function saveTemplate() {
+  const content = editor.getValue();
+
+  try {
+    if (creatingNew) {
+      const { name, format } = splitNameAndFormat(
+        document.getElementById('templateNameInput').value
+      );
+      if (!name) {
+        notifyError('Please enter a name for the new template');
+        return;
+      }
+
+      const response = await window.electronAPI.templatesCreate(name, format, content);
+      if (!response || !response.success) {
+        throw new Error(response?.error || 'Failed to create template');
+      }
+
+      creatingNew = false;
+      const newId = response.template?.id;
+      notifyInfo(`Created template "${newId || name}"`);
+
+      await loadTemplates();
+      if (newId) {
+        await selectTemplate(newId);
+      }
+      return;
+    }
+
+    if (!currentTemplateId) {
+      notifyError('No template selected');
+      return;
+    }
+
+    const response = await window.electronAPI.templatesSave(currentTemplateId, content);
+    if (!response || !response.success) {
+      throw new Error(response?.error || 'Failed to save template');
+    }
+
+    if (response.warning) {
+      notifyError(response.warning);
+    } else {
+      notifyInfo(`Saved template "${currentTemplateId}"`);
+    }
+
+    // Refresh the list so name/metadata changes are reflected
+    await loadTemplates();
+  } catch (error) {
+    console.error('[TemplateEditor] Failed to save template:', error);
+    notifyError(error, { prefix: 'Failed to save template:' });
+  }
 }
 
 /**

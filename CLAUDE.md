@@ -16,7 +16,7 @@ See [`README.md`](./README.md) for project overview and setup instructions.
 - **Recording:** Dual-provider — Recall.ai Desktop SDK 2.x or Local (FFmpeg WASAPI + window monitoring)
 - **Transcription:** Multi-provider (AssemblyAI, Deepgram, Local via JD Audio Service) with runtime switching
 - **LLM:** Multi-provider (OpenAI, Anthropic Claude, Azure OpenAI, Google Gemini, Local via Ollama/LM Studio) with prompt caching
-- **Local AI Service:** JD Audio Service (separate Python FastAPI app) — Parakeet TDT + PyAnnote diarization + speaker embeddings
+- **Local AI Service:** JD Audio Service (separate Python FastAPI app) — Whisper large-v3-turbo (faster-whisper) + wav2vec2 forced alignment + PyAnnote diarization + speaker embeddings
 - **Security:** Windows DPAPI encryption, Windows Credential Manager for API keys
 - **OAuth:** Google OAuth 2.0 (unified Calendar + Contacts)
 
@@ -132,7 +132,7 @@ Unified `TranscriptionService` with provider-specific adapters:
 
 - **AssemblyAI:** $0.37/hr (3-step API: upload → transcribe → poll)
 - **Deepgram:** $0.43/hr (direct upload)
-- **Local:** Free — JD Audio Service (Parakeet TDT 0.6B + PyAnnote diarization). Requires GPU with ~2.3GB VRAM.
+- **Local:** Free — JD Audio Service (Whisper large-v3-turbo via faster-whisper + PyAnnote diarization). Requires an NVIDIA GPU with CUDA.
 
 Runtime switching via UI dropdown with localStorage persistence. The `recallai` transcription provider was removed in v2.0.
 
@@ -170,7 +170,7 @@ Multi-stage matching pipeline in `SpeakerMatcher.js`:
 4. **Stage 3: Heuristics** — Count-based, first speaker, most talkative algorithms
 5. Label transcript with actual names via Google Contacts enrichment
 
-Voice profiles are linked to Google Contacts and stored in the `voice_profiles` / `voice_samples` SQLite tables (schema v4). Embeddings are 256-dimensional PyAnnote vectors.
+Voice profiles are linked to Google Contacts and stored in the `voice_profiles` / `voice_samples` SQLite tables (schema v4). Embeddings are PyAnnote (`pyannote/embedding`) speaker vectors; the vector dimension is model-determined and storage (`voiceProfileService.js`) is dimension-agnostic (derives length from the incoming embedding rather than hardcoding it).
 
 ### Participant Data Model (IMPORTANT)
 
@@ -213,9 +213,9 @@ Voice profiles are linked to Google Contacts and stored in the `voice_profiles` 
 v2.0 adds fully local alternatives to every cloud dependency while keeping all cloud providers functional. Any layer (recording, transcription, summarization) can independently use local or cloud providers.
 
 - **Local Recording:** FFmpeg WASAPI audio capture + window monitoring (Zoom/Teams only, not Google Meet)
-- **Local Transcription:** JD Audio Service — Parakeet TDT 0.6B + PyAnnote diarization (separate Python app at `C:\Users\brigh\Documents\code\jd-audio-service`)
+- **Local Transcription:** JD Audio Service — Whisper large-v3-turbo (faster-whisper / CTranslate2) + wav2vec2 alignment + PyAnnote diarization (separate Python app at `C:\Users\brigh\Documents\code\jd-audio-service`)
 - **Local LLM:** Ollama or LM Studio via LocalLLMAdapter
-- **Voice Profiles:** PyAnnote 256-d speaker embeddings stored in SQLite, linked to Google Contacts
+- **Voice Profiles:** PyAnnote speaker embeddings stored in SQLite (dimension-agnostic storage), linked to Google Contacts
 - **"Apply Fully Local" preset:** One button sets all layers to local providers
 
 ### Key v2.0 Details

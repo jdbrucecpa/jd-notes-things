@@ -17,7 +17,9 @@
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
-const archiver = require('archiver');
+// archiver 8 is ESM-only and dropped the factory export — reconstruct it from the Archiver class.
+const { Archiver } = require('archiver');
+const archiver = (format, options) => new Archiver(format, options);
 const unzipper = require('unzipper');
 
 const LOG_PREFIX = '[SettingsExport]';

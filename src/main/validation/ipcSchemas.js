@@ -99,6 +99,19 @@ const templatesGenerateSummariesSchema = z.object({
   model: z.string().nullable().optional(),
 });
 
+const templateFormatSchema = z.enum(['.md', '.yaml', '.yml', '.json', '.txt']);
+
+const templatesCreateSchema = z.object({
+  name: z.string().min(1, 'Template name cannot be empty'),
+  format: templateFormatSchema.optional().default('.md'),
+  content: z.string().optional(),
+});
+
+const templatesSaveSchema = z.object({
+  templateId: templateIdSchema,
+  content: z.string(),
+});
+
 // ===================================================
 // LLM Schema (actively used)
 // ===================================================
@@ -499,6 +512,8 @@ module.exports = {
   // Template schemas
   templatesEstimateCostSchema,
   templatesGenerateSummariesSchema,
+  templatesCreateSchema,
+  templatesSaveSchema,
   // LLM schema
   llmSwitchProviderSchema,
   // Vocabulary schemas

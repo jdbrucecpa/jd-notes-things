@@ -126,6 +126,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       model: options.model || null,
     }),
   templatesReload: () => ipcRenderer.invoke('templates:reload'),
+  templatesCreate: (name, format, content) =>
+    ipcRenderer.invoke('templates:create', { name, format, content }),
+  templatesSave: (templateId, content) =>
+    ipcRenderer.invoke('templates:save', { templateId, content }),
+  templatesDelete: templateId => ipcRenderer.invoke('templates:delete', templateId),
   // Routing (database-driven since v1.4)
   routingPreviewMeetingRoute: meetingId =>
     ipcRenderer.invoke('routing:previewMeetingRoute', meetingId),

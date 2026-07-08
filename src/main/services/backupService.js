@@ -7,7 +7,9 @@
 
 const path = require('path');
 const fs = require('fs');
-const archiver = require('archiver');
+// archiver 8 is ESM-only and dropped the factory export — reconstruct it from the Archiver class.
+const { Archiver } = require('archiver');
+const archiver = (format, options) => new Archiver(format, options);
 const { app } = require('electron');
 const log = require('electron-log');
 const databaseService = require('./databaseService');

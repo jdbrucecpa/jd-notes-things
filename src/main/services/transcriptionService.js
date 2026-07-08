@@ -203,7 +203,8 @@ class TranscriptionService {
         segments: data.segments || null,
         provider: 'local',
         confidence: data.confidence ?? 0.9,
-        audio_duration: data.audio_duration || null,
+        // JD Audio Service returns the field as `duration`; keep audio_duration fallback for safety.
+        audio_duration: data.duration ?? data.audio_duration ?? null,
       };
 
       this.updateTaskProgress(taskId, 95, 'Finalizing...');

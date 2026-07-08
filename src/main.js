@@ -129,6 +129,8 @@ const {
   // Template schemas
   templatesEstimateCostSchema,
   templatesGenerateSummariesSchema,
+  templatesCreateSchema,
+  templatesSaveSchema,
   // LLM schemas
   llmSwitchProviderSchema,
   // Vocabulary schemas
@@ -6261,6 +6263,59 @@ ipcMain.handle('templates:reload', async () => {
   }
 });
 
+// Create a new template file (Phase 10.3 completion)
+ipcMain.handle(
+  'templates:create',
+  withValidation(templatesCreateSchema, async (event, { name, format, content }) => {
+    try {
+      console.log('[Template IPC] Creating template:', name, format);
+      const template = templateManager.createTemplate({ name, format, content });
+      return { success: true, template };
+    } catch (error) {
+      console.error('[Template IPC] Failed to create template:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
+
+// Save (overwrite) an existing template file
+ipcMain.handle(
+  'templates:save',
+  withValidation(templatesSaveSchema, async (event, { templateId, content }) => {
+    try {
+      console.log('[Template IPC] Saving template:', templateId);
+      const template = templateManager.saveTemplate(templateId, content);
+      if (!template) {
+        // File was written but no longer parses as a valid template
+        return {
+          success: true,
+          warning: 'Saved to disk, but the content no longer parses as a valid template.',
+          template: null,
+        };
+      }
+      return { success: true, template };
+    } catch (error) {
+      console.error('[Template IPC] Failed to save template:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
+
+// Delete a template file
+ipcMain.handle(
+  'templates:delete',
+  withValidation(stringIdSchema, async (event, templateId) => {
+    try {
+      console.log('[Template IPC] Deleting template:', templateId);
+      templateManager.deleteTemplate(templateId);
+      return { success: true };
+    } catch (error) {
+      console.error('[Template IPC] Failed to delete template:', error);
+      return { success: false, error: error.message };
+    }
+  })
+);
+
 // ===================================================================
 // End Template System IPC Handlers
 // ===================================================================
@@ -8417,16 +8472,16 @@ ipcMain.handle('settings:getProviderPreferences', async event => {
       try {
         const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
         return {
-          autoSummaryProvider: settings.autoSummaryProvider || 'gemini-2.5-flash',
-          templateSummaryProvider: settings.templateSummaryProvider || 'claude-haiku-4-5',
-          patternGenerationProvider: settings.patternGenerationProvider || 'gemini-2.5-flash-lite',
+          autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-4-5',
+          templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5',
+          patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-4-5',
           transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'assemblyai'
         };
       } catch (e) {
         return {
-          autoSummaryProvider: 'gemini-2.5-flash',
-          templateSummaryProvider: 'claude-haiku-4-5',
-          patternGenerationProvider: 'gemini-2.5-flash-lite',
+          autoSummaryProvider: 'claude-haiku-4-5',
+          templateSummaryProvider: 'claude-sonnet-5',
+          patternGenerationProvider: 'claude-haiku-4-5',
           transcriptionProvider: 'assemblyai'
         };
       }
@@ -11782,7 +11837,7 @@ async function processRecallAITranscript(transcript, meetingId, _windowId) {
 
 /**
  * Map provider preference value to simple provider name
- * @param {string} providerValue - Value from settings (e.g., 'claude-haiku-4-5', 'gemini-2.5-flash', 'ollama-llama3')
+ * @param {string} providerValue - Value from settings (e.g., 'claude-haiku-4-5', 'gemini-3.1-flash-lite', 'ollama-llama3')
  * @returns {string} Provider name for llmService.switchProvider() (e.g., 'anthropic', 'gemini', 'ollama')
  */
 function mapProviderValue(providerValue) {
@@ -11849,9 +11904,9 @@ async function getProviderPreferences() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     console.warn('[LLM] Main window not available, using default providers');
     return {
-      autoSummaryProvider: 'gemini-2.5-flash',
-      templateSummaryProvider: 'claude-haiku-4-5',
-      patternGenerationProvider: 'gemini-2.5-flash-lite',
+      autoSummaryProvider: 'claude-haiku-4-5',
+      templateSummaryProvider: 'claude-sonnet-5',
+      patternGenerationProvider: 'claude-haiku-4-5',
       transcriptionProvider: 'assemblyai',
     };
   }
@@ -11862,16 +11917,16 @@ async function getProviderPreferences() {
         try {
           const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
           return {
-            autoSummaryProvider: settings.autoSummaryProvider || 'gemini-2.5-flash',
-            templateSummaryProvider: settings.templateSummaryProvider || 'claude-haiku-4-5',
-            patternGenerationProvider: settings.patternGenerationProvider || 'gemini-2.5-flash-lite',
+            autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-4-5',
+            templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5',
+            patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-4-5',
             transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'assemblyai'
           };
         } catch (e) {
           return {
-            autoSummaryProvider: 'gemini-2.5-flash',
-            templateSummaryProvider: 'claude-haiku-4-5',
-            patternGenerationProvider: 'gemini-2.5-flash-lite',
+            autoSummaryProvider: 'claude-haiku-4-5',
+            templateSummaryProvider: 'claude-sonnet-5',
+            patternGenerationProvider: 'claude-haiku-4-5',
             transcriptionProvider: 'assemblyai'
           };
         }
@@ -11881,9 +11936,9 @@ async function getProviderPreferences() {
   } catch (error) {
     console.error('[LLM] Error reading provider preferences:', error);
     return {
-      autoSummaryProvider: 'gemini-2.5-flash',
-      templateSummaryProvider: 'claude-haiku-4-5',
-      patternGenerationProvider: 'gemini-2.5-flash-lite',
+      autoSummaryProvider: 'claude-haiku-4-5',
+      templateSummaryProvider: 'claude-sonnet-5',
+      patternGenerationProvider: 'claude-haiku-4-5',
       transcriptionProvider: 'assemblyai',
     };
   }

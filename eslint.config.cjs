@@ -10,6 +10,7 @@ module.exports = [
     ignores: [
       'node_modules/**',
       '.webpack/**',
+      '.claude/**',
       'out/**',
       'dist/**',
       'vault/**',

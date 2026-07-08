@@ -6427,7 +6427,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       // Get current template summary provider setting
       const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
-      const provider = settings.templateSummaryProvider || 'claude-haiku-4-5';
+      const provider = settings.templateSummaryProvider || 'claude-sonnet-5';
 
       const result = await window.electronAPI.templatesEstimateCost(
         selectedTemplateIds,

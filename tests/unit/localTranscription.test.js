@@ -40,7 +40,7 @@ function makeMockFetch({ healthOk = true, processData = null } = {}) {
         ],
         segments: null,
         confidence: 0.92,
-        audio_duration: 45.0,
+        duration: 45.0, // real JD Audio Service field name; normalizer maps it to result.audio_duration
       };
       return {
         ok: true,

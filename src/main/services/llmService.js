@@ -55,20 +55,48 @@ const ANTHROPIC_MODEL_MAP = {
   // Budget tier
   'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
   // Premium tier
-  'claude-sonnet-4-6': 'claude-sonnet-4-6',
+  'claude-sonnet-5': 'claude-sonnet-5',
 };
 
 const GEMINI_MODEL_MAP = {
-  // Budget tier
-  'gemini-2.5-flash-lite': 'gemini-2.5-flash-lite-preview-06-17',
+  // Budget tier (current cheapest text model)
+  'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite',
   // Balanced tier
-  'gemini-2.5-flash': 'gemini-2.5-flash-preview-05-20',
+  'gemini-3.5-flash': 'gemini-3.5-flash',
 };
+
+/**
+ * Claude models using the modern request surface (Opus 4.7+, Sonnet 5, Fable 5):
+ * sampling params (temperature/top_p/top_k) and budget_tokens are REJECTED with a 400.
+ * Older models (Haiku 4.5, Sonnet 4.6, Opus 4.6 and earlier) still accept temperature.
+ */
+const CLAUDE_MODERN_PARAM_MODELS = [
+  'claude-opus-4-7',
+  'claude-opus-4-8',
+  'claude-sonnet-5',
+  'claude-fable-5',
+  'claude-mythos-5',
+];
+
+/**
+ * Modern models that accept `thinking: { type: 'disabled' }` to run without thinking.
+ * Excludes Fable 5 / Mythos 5 (thinking is always on there — an explicit disabled 400s);
+ * for those the thinking field would be omitted entirely.
+ */
+const CLAUDE_THINKING_DISABLE_MODELS = ['claude-opus-4-7', 'claude-opus-4-8', 'claude-sonnet-5'];
+
+function claudeUsesModernParams(modelId) {
+  return CLAUDE_MODERN_PARAM_MODELS.some(m => modelId && modelId.startsWith(m));
+}
+
+function claudeSupportsThinkingDisabled(modelId) {
+  return CLAUDE_THINKING_DISABLE_MODELS.some(m => modelId && modelId.startsWith(m));
+}
 
 /**
  * Extract model ID from preference string
  * e.g., 'claude-haiku-4-5' => 'claude-haiku-4-5-20251001'
- * e.g., 'gemini-2.5-flash' => 'gemini-2.5-flash-preview-05-20'
+ * e.g., 'gemini-3.5-flash' => 'gemini-3.5-flash'
  * e.g., 'ollama-llama3' => 'llama3'
  */
 function extractModelFromPreference(preference) {
@@ -134,13 +162,24 @@ class AnthropicAdapter extends LLMAdapter {
       messages = [{ role: 'user', content: userPrompt }];
     }
 
-    const message = await this.client.messages.create({
+    const requestParams = {
       model: this.model,
       system: systemConfig,
       messages: messages,
       max_tokens: maxTokens,
-      temperature,
-    });
+    };
+    // Modern Claude models (Opus 4.7+, Sonnet 5) reject sampling params with a 400.
+    // Older models (Haiku 4.5, Sonnet 4.6) still accept temperature.
+    if (claudeUsesModernParams(this.model)) {
+      // Keep summaries non-thinking so thinking tokens don't consume max_tokens.
+      if (claudeSupportsThinkingDisabled(this.model)) {
+        requestParams.thinking = { type: 'disabled' };
+      }
+    } else {
+      requestParams.temperature = temperature;
+    }
+
+    const message = await this.client.messages.create(requestParams);
 
     // Log token usage and cache statistics
     if (message.usage) {
@@ -206,13 +245,22 @@ class AnthropicAdapter extends LLMAdapter {
       messages = [{ role: 'user', content: userPrompt }];
     }
 
-    const stream = this.client.messages.stream({
+    const streamParams = {
       model: this.model,
       system: systemConfig,
       messages: messages,
       max_tokens: maxTokens,
-      temperature,
-    });
+    };
+    // Modern Claude models (Opus 4.7+, Sonnet 5) reject sampling params with a 400.
+    if (claudeUsesModernParams(this.model)) {
+      if (claudeSupportsThinkingDisabled(this.model)) {
+        streamParams.thinking = { type: 'disabled' };
+      }
+    } else {
+      streamParams.temperature = temperature;
+    }
+
+    const stream = this.client.messages.stream(streamParams);
 
     return new Promise((resolve, reject) => {
       let fullText = '';
@@ -244,7 +292,7 @@ class AnthropicAdapter extends LLMAdapter {
  * Supports Gemini 2.5 Flash and Flash Lite models
  */
 class GeminiAdapter extends LLMAdapter {
-  constructor(apiKey, model = 'gemini-2.5-flash-preview-05-20') {
+  constructor(apiKey, model = 'gemini-3.1-flash-lite') {
     super();
     this.genAI = new GoogleGenerativeAI(apiKey);
     this.model = model;
@@ -471,7 +519,7 @@ class LLMService {
           throw new Error('Google API key (Gemini) is required');
         }
         console.log(
-          `[LLM Service] Initializing Gemini adapter with model: ${this.config.gemini.model || 'gemini-2.5-flash-preview-05-20'}`
+          `[LLM Service] Initializing Gemini adapter with model: ${this.config.gemini.model || 'gemini-3.1-flash-lite'}`
         );
         return new GeminiAdapter(this.config.gemini.apiKey, this.config.gemini.model);
 
@@ -559,7 +607,7 @@ class LLMService {
 
   /**
    * Switch to a specific model using preference string
-   * @param {string} preference - Full preference string (e.g., 'claude-haiku-4-5', 'gemini-2.5-flash', 'ollama-llama3')
+   * @param {string} preference - Full preference string (e.g., 'claude-haiku-4-5', 'gemini-3.1-flash-lite', 'ollama-llama3')
    */
   switchToPreference(preference) {
     const model = extractModelFromPreference(preference);
@@ -588,7 +636,7 @@ class LLMService {
     if (this.config.provider === 'anthropic') {
       return this.config.anthropic?.model || 'claude-haiku-4-5-20251001';
     } else if (this.config.provider === 'gemini') {
-      return this.config.gemini?.model || 'gemini-2.5-flash-preview-05-20';
+      return this.config.gemini?.model || 'gemini-3.1-flash-lite';
     } else if (this.config.provider === 'ollama') {
       return this.config.ollama?.model || 'llama3';
     }
@@ -620,7 +668,7 @@ function createLLMServiceFromEnv() {
     },
     gemini: {
       apiKey: process.env.GOOGLE_API_KEY,
-      model: 'gemini-2.5-flash-preview-05-20',
+      model: 'gemini-3.1-flash-lite',
     },
     ollama: {
       model: process.env.OLLAMA_MODEL || 'llama3',
@@ -666,7 +714,7 @@ async function createLLMServiceFromCredentials(keyManagementService) {
     },
     gemini: {
       apiKey: geminiKey,
-      model: 'gemini-2.5-flash-preview-05-20',
+      model: 'gemini-3.1-flash-lite',
     },
     ollama: {
       model: ollamaModel,
@@ -679,7 +727,7 @@ async function createLLMServiceFromCredentials(keyManagementService) {
 
 /**
  * Create LLM service from a provider preference string
- * @param {string} providerPreference - e.g., 'claude-haiku-4-5', 'gemini-2.5-flash', 'ollama-llama3'
+ * @param {string} providerPreference - e.g., 'claude-haiku-4-5', 'gemini-3.1-flash-lite', 'ollama-llama3'
  * @returns {LLMService}
  */
 function createLLMServiceFromPreference(providerPreference) {
@@ -690,7 +738,7 @@ function createLLMServiceFromPreference(providerPreference) {
     },
     gemini: {
       apiKey: process.env.GOOGLE_API_KEY,
-      model: 'gemini-2.5-flash-preview-05-20',
+      model: 'gemini-3.1-flash-lite',
     },
     ollama: {
       model: process.env.OLLAMA_MODEL || 'llama3',

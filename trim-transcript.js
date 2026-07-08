@@ -45,30 +45,30 @@ async function main() {
     process.exit(1);
   }
 
-  var meetingId = meetings[0].values[0][0];
-  var meetingTitle = meetings[0].values[0][1];
-  var meetingDate = meetings[0].values[0][2];
+  const meetingId = meetings[0].values[0][0];
+  const meetingTitle = meetings[0].values[0][1];
+  const meetingDate = meetings[0].values[0][2];
   console.log('Found meeting: "' + meetingTitle + '" on ' + meetingDate + ' (ID: ' + meetingId + ')');
 
   // Step 2: Count entries using parameterized queries
-  var stmt;
+  let stmt;
 
   stmt = db.prepare('SELECT COUNT(*) FROM transcript_entries WHERE meeting_id = ?');
   stmt.bind([meetingId]);
   stmt.step();
-  var totalCount = stmt.get()[0];
+  const totalCount = stmt.get()[0];
   stmt.free();
 
   stmt = db.prepare('SELECT COUNT(*) FROM transcript_entries WHERE meeting_id = ? AND timestamp <= ?');
   stmt.bind([meetingId, CUTOFF_TIMESTAMP]);
   stmt.step();
-  var keepCount = stmt.get()[0];
+  const keepCount = stmt.get()[0];
   stmt.free();
 
   stmt = db.prepare('SELECT COUNT(*) FROM transcript_entries WHERE meeting_id = ? AND timestamp > ?');
   stmt.bind([meetingId, CUTOFF_TIMESTAMP]);
   stmt.step();
-  var deleteCount = stmt.get()[0];
+  const deleteCount = stmt.get()[0];
   stmt.free();
 
   console.log('\nTotal transcript entries: ' + totalCount);
@@ -77,29 +77,29 @@ async function main() {
 
   // Step 3: Show the last entries we're keeping and first entries we're deleting
   console.log('\n--- Last 3 entries to KEEP ---');
-  var lastKeep = db.exec(
+  const lastKeep = db.exec(
     'SELECT entry_order, speaker_display_name, text, timestamp FROM transcript_entries ' +
     'WHERE meeting_id = \'' + meetingId + '\' AND timestamp <= ' + CUTOFF_TIMESTAMP +
     ' ORDER BY entry_order DESC LIMIT 3'
   );
   if (lastKeep.length) {
     lastKeep[0].values.reverse().forEach(function(row) {
-      var mins = Math.floor(row[3] / 60);
-      var secs = Math.floor(row[3] % 60);
+      const mins = Math.floor(row[3] / 60);
+      const secs = Math.floor(row[3] % 60);
       console.log('  [' + mins + ':' + String(secs).padStart(2, '0') + '] ' + row[1] + ': ' + row[2]);
     });
   }
 
   console.log('\n--- First 3 entries to DELETE ---');
-  var firstDel = db.exec(
+  const firstDel = db.exec(
     'SELECT entry_order, speaker_display_name, text, timestamp FROM transcript_entries ' +
     'WHERE meeting_id = \'' + meetingId + '\' AND timestamp > ' + CUTOFF_TIMESTAMP +
     ' ORDER BY entry_order ASC LIMIT 3'
   );
   if (firstDel.length) {
     firstDel[0].values.forEach(function(row) {
-      var mins = Math.floor(row[3] / 60);
-      var secs = Math.floor(row[3] % 60);
+      const mins = Math.floor(row[3] / 60);
+      const secs = Math.floor(row[3] % 60);
       console.log('  [' + mins + ':' + String(secs).padStart(2, '0') + '] ' + row[1] + ': ' + row[2]);
     });
   }
@@ -115,18 +115,18 @@ async function main() {
   stmt.bind([meetingId, CUTOFF_TIMESTAMP]);
   stmt.step();
   stmt.free();
-  var changes = db.getRowsModified();
+  const changes = db.getRowsModified();
   console.log('\nDeleted ' + changes + ' transcript entries.');
 
   // Step 5: Update meeting duration
   stmt = db.prepare('SELECT MAX(end_timestamp) FROM transcript_entries WHERE meeting_id = ?');
   stmt.bind([meetingId]);
   stmt.step();
-  var maxTs = stmt.get()[0];
+  const maxTs = stmt.get()[0];
   stmt.free();
 
   if (maxTs) {
-    var newDuration = Math.ceil(maxTs);
+    const newDuration = Math.ceil(maxTs);
     stmt = db.prepare('UPDATE meetings SET duration = ?, updated_at = datetime(\'now\') WHERE id = ?');
     stmt.bind([newDuration, meetingId]);
     stmt.step();
@@ -135,8 +135,8 @@ async function main() {
   }
 
   // Step 6: Write back to file
-  var data = db.export();
-  var buffer = Buffer.from(data);
+  const data = db.export();
+  const buffer = Buffer.from(data);
   fs.writeFileSync(DB_PATH, buffer);
   console.log('\nDatabase saved to ' + DB_PATH);
 
