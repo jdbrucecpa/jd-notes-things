@@ -60,6 +60,9 @@ const databaseService = require('./main/services/databaseService');
 const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
 const { VoiceProfileService } = require('./main/services/voiceProfileService');
+const {
+  resolveMeetingClosedTarget,
+} = require('./main/services/recordingAutoStopResolver');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 const { RecordingManager, RecallProvider, LocalProvider } = require('./main/recording');
 const { AIServiceManager } = require('./main/services/aiServiceManager');
@@ -2429,45 +2432,28 @@ async function initSDK() {
       windowId: data.windowId,
     });
 
-    // Resolve windowId with fallbacks — Recall SDK v2 sometimes fires
-    // meeting-closed with undefined window.id. Fall back to the tracked
-    // detectedMeeting so auto-stop still fires. (Ported from v1.4.6.)
-    const windowId = data.windowId || detectedMeeting?.window?.id;
+    // v1.4.7: Decide what to stop and what to clear via a pure resolver so the
+    // logic is unit-testable. See recordingAutoStopResolver.js for the full
+    // reasoning behind which Recall SDK quirks each branch handles — in
+    // particular, distinguishing "SDK gave no windowId" (safe to stop the sole
+    // recording) from "an unrelated window closed" (e.g. a Teams lobby/preview
+    // window), which the v1.4.6 logic conflated and would wrongly stop.
+    const sdkWindowId = data.windowId;
+    const detectedWindowId = detectedMeeting?.window?.id;
 
-    // Automatically stop recording when meeting ends
-    let recordingToStop = null;
+    const decision = resolveMeetingClosedTarget({
+      sdkWindowId,
+      detectedWindowId,
+      activeRecordingKeys: Object.keys(recordingManager.getActiveRecordings()),
+    });
 
-    if (windowId && recordingManager.hasActiveRecording(windowId)) {
-      // Direct match - use the resolved windowId
-      recordingToStop = windowId;
-      console.log(`Meeting ended - found recording with matching windowId: ${windowId}`);
-    } else {
-      // No direct match — check if there's a sole active recording.
-      // The calendar-meeting path registers recordings with a key that may
-      // differ from the Zoom window ID. For a single-user app with one
-      // recording at a time, stopping the only active recording is safe.
-      // (Ported from v1.4.6.)
-      const allRecordings = recordingManager.getActiveRecordings();
-      const activeKeys = Object.keys(allRecordings);
+    console.log(
+      `[meeting-closed] decision=${decision.reason} sdkWindowId=${sdkWindowId} ` +
+        `detectedWindowId=${detectedWindowId} recordingToStop=${decision.recordingToStop} ` +
+        `shouldClearDetectedMeeting=${decision.shouldClearDetectedMeeting}`
+    );
 
-      if (activeKeys.length === 1) {
-        recordingToStop = activeKeys[0];
-        console.log(
-          `Meeting ended - no direct windowId match (event: ${data.windowId}, detected: ${detectedMeeting?.window?.id}). ` +
-            `Stopping sole active recording: ${recordingToStop}`
-        );
-      } else if (activeKeys.length > 1) {
-        console.log(
-          `Meeting closed for windowId ${windowId} but ${activeKeys.length} recordings active — ` +
-            `not stopping to avoid killing unrelated recording ` +
-            `(active: ${activeKeys.join(', ')})`
-        );
-      } else {
-        console.log(
-          `Meeting closed for windowId ${windowId} but no active recordings found.`
-        );
-      }
-    }
+    const recordingToStop = decision.recordingToStop;
 
     if (recordingToStop) {
       console.log(`Stopping recording for window: ${recordingToStop}`);
@@ -2496,28 +2482,27 @@ async function initSDK() {
         // Still update our internal state
         recordingManager.updateState(recordingToStop, 'stopping');
       }
-    } else {
-      console.log(`No active recording found to stop (windowId: ${windowId})`);
     }
 
-    // Clean up the global tracking when a meeting ends — check both the event
-    // windowId and the resolved windowId (which may come from detectedMeeting).
-    const cleanupId = data.windowId || windowId;
-    if (cleanupId && global.activeMeetingIds && global.activeMeetingIds[cleanupId]) {
-      console.log(`Cleaning up meeting tracking for: ${cleanupId}`);
-      delete global.activeMeetingIds[cleanupId];
+    // Clean up the global meeting tracking for the SDK-provided windowId, if any.
+    if (sdkWindowId && global.activeMeetingIds && global.activeMeetingIds[sdkWindowId]) {
+      console.log(`Cleaning up meeting tracking for: ${sdkWindowId}`);
+      delete global.activeMeetingIds[sdkWindowId];
     }
 
-    // Only clean up the specific windowId that closed — don't nuke unrelated recordings
+    // Only reset the user-facing detected-meeting state when the resolver says
+    // the user's actual meeting closed. If a transient unrelated window closed
+    // (e.g. a Teams lobby/preview window), leave detection alone so the widget
+    // and renderer keep showing the still-active meeting.
+    if (decision.shouldClearDetectedMeeting) {
+      detectedMeeting = null;
 
-    detectedMeeting = null;
-
-    // Send the meeting closed status to the renderer process
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('meeting-detection-status', {
-        detected: false,
-        platform: null,
-      });
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('meeting-detection-status', {
+          detected: false,
+          platform: null,
+        });
+      }
     }
   });
 
@@ -6970,8 +6955,11 @@ ipcMain.handle(
       return { success: false, error: 'Meeting not found' };
     }
 
-    // Export to Obsidian
-    const result = await exportMeetingToObsidian(meeting);
+    // Export to Obsidian — forceReroute so the engine re-evaluates against the
+    // current client/routing config on every click instead of reusing a
+    // previously cached meeting.obsidianLink. This means newly added
+    // clients/folders take effect on the next Export without an Unlink first.
+    const result = await exportMeetingToObsidian(meeting, null, { forceReroute: true });
 
     // If successful, save obsidianLink back to meeting object
     if (result.success && result.obsidianLink) {

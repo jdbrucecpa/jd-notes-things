@@ -2,6 +2,28 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
+// Axios sets error.message to "Request failed with status code 400" and discards
+// the response body. Surface the body so toasts/logs show the real cause
+// (e.g. "Insufficient credits", "model not allowed on your plan").
+function describeHttpError(label, error) {
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+  let body = '';
+  if (data != null) {
+    if (typeof data === 'string') {
+      body = data;
+    } else if (typeof data.error === 'string') {
+      body = data.error;
+    } else {
+      try { body = JSON.stringify(data); } catch { body = String(data); }
+    }
+  }
+  if (status) {
+    return body ? `${label} ${status}: ${body.slice(0, 500)}` : `${label} ${status}`;
+  }
+  return `${label}: ${error?.message || 'unknown error'}`;
+}
+
 /**
  * Unified Transcription Service
  * Supports multiple providers: AssemblyAI, Deepgram, Local (JD Audio Service)
@@ -297,16 +319,20 @@ class TranscriptionService {
   async uploadToAssemblyAI(audioFilePath, apiKey) {
     const audioStream = fs.createReadStream(audioFilePath);
 
-    const response = await axios.post('https://api.assemblyai.com/v2/upload', audioStream, {
-      headers: {
-        authorization: apiKey,
-        'content-type': 'application/octet-stream',
-      },
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-    });
+    try {
+      const response = await axios.post('https://api.assemblyai.com/v2/upload', audioStream, {
+        headers: {
+          authorization: apiKey,
+          'content-type': 'application/octet-stream',
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      });
 
-    return response.data.upload_url;
+      return response.data.upload_url;
+    } catch (err) {
+      throw new Error(describeHttpError('AssemblyAI upload failed', err));
+    }
   }
 
   async requestAssemblyAITranscription(uploadUrl, apiKey, options = {}) {
@@ -368,14 +394,18 @@ class TranscriptionService {
 
     console.log('[AssemblyAI] Request body:', JSON.stringify(requestBody, null, 2));
 
-    const response = await axios.post('https://api.assemblyai.com/v2/transcript', requestBody, {
-      headers: {
-        authorization: apiKey,
-        'content-type': 'application/json',
-      },
-    });
+    try {
+      const response = await axios.post('https://api.assemblyai.com/v2/transcript', requestBody, {
+        headers: {
+          authorization: apiKey,
+          'content-type': 'application/json',
+        },
+      });
 
-    return response.data.id;
+      return response.data.id;
+    } catch (err) {
+      throw new Error(describeHttpError('AssemblyAI transcript request failed', err));
+    }
   }
 
   async pollAssemblyAITranscript(transcriptId, apiKey, taskId = null) {
@@ -383,9 +413,14 @@ class TranscriptionService {
     let attempts = 0;
 
     while (attempts < maxAttempts) {
-      const response = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-        headers: { authorization: apiKey },
-      });
+      let response;
+      try {
+        response = await axios.get(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+          headers: { authorization: apiKey },
+        });
+      } catch (err) {
+        throw new Error(describeHttpError('AssemblyAI poll failed', err));
+      }
 
       const status = response.data.status;
       console.log(`[AssemblyAI] Status: ${status}`);
@@ -483,14 +518,19 @@ class TranscriptionService {
       console.log(`[Deepgram] Using ${options.keywords.length} keyword boosts`);
     }
 
-    const response = await axios.post(url, audioStream, {
-      headers: {
-        Authorization: `Token ${DEEPGRAM_API_KEY}`,
-        'Content-Type': 'audio/mpeg',
-      },
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-    });
+    let response;
+    try {
+      response = await axios.post(url, audioStream, {
+        headers: {
+          Authorization: `Token ${DEEPGRAM_API_KEY}`,
+          'Content-Type': 'audio/mpeg',
+        },
+        maxBodyLength: Infinity,
+        maxContentLength: Infinity,
+      });
+    } catch (err) {
+      throw new Error(describeHttpError('Deepgram transcription failed', err));
+    }
 
     console.log('[Deepgram] ✓ Transcription complete');
     return this.formatDeepgramTranscript(response.data);

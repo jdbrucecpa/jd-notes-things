@@ -2061,8 +2061,13 @@ async function showAddClientPicker() {
       opt.appendChild(countSpan);
 
       opt.addEventListener('click', async () => {
+        // Prompt for the vault folder first — a client saved with an empty
+        // vaultPath is silently ignored by the routing engine, so the button
+        // appeared to do nothing. Bail out if the user cancels the picker.
+        const folderResult = await window.electronAPI.companiesSelectFolder();
+        if (!folderResult.success || !folderResult.folderPath) return;
         await window.electronAPI.companiesUpdate({
-          name: c.name, vaultPath: '', category: 'Client',
+          name: c.name, vaultPath: folderResult.folderPath, category: 'Client',
         });
         picker.style.display = 'none';
         renderClientsTab();
