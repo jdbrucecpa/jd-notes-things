@@ -5,6 +5,14 @@ const { RecordingProvider } = require('./RecordingProvider');
 const { buildFFmpegArgs } = require('./buildFFmpegArgs');
 const { WasapiCapture } = require('./WasapiCapture');
 
+// Prefer electron-log in the app; fall back to console in tests / non-Electron.
+let log;
+try {
+  log = require('electron-log');
+} catch {
+  log = console;
+}
+
 const POLL_INTERVAL_MS = 2000;
 
 const ZOOM_TITLES = ['Zoom Meeting', 'Zoom Webinar'];
@@ -30,10 +38,16 @@ class LocalProvider extends RecordingProvider {
     this._activeMeeting = null; // { windowId, platform, title, processName }
     this._ffmpegProcess = null;
     this._activeRecording = null; // { recordingId, audioFilePath }
+    this._ffmpegStderrTail = ''; // rolling tail of FFmpeg stderr for diagnostics
     this._pollInterval = null;
     this._audioSources = []; // Populated via setAudioConfig()
     this._audioMixer = { autoBalance: false };
     this._wasapiCaptures = []; // Active WasapiCapture instances during recording
+    // Stop-sequence timings. FFmpeg's interactive 'q' quit is unreliable over a
+    // piped stdin with live dshow + WASAPI named-pipe inputs, so stopRecording
+    // force-kills if 'q' doesn't terminate FFmpeg within the grace window.
+    this._gracefulQuitMs = 2500;
+    this._forceKillMs = 1500;
     this._recordingPath = path.join(
       process.env.APPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Roaming'),
       'jd-notes-things',
@@ -94,32 +108,82 @@ class LocalProvider extends RecordingProvider {
   }
 
   /**
-   * Stop the active FFmpeg recording. Resolves when FFmpeg has exited.
+   * Stop the active FFmpeg recording. Resolves once FFmpeg has exited.
    * The 'recording-ended' event fires from the process close handler.
+   *
+   * FFmpeg's interactive 'q' quit is unreliable over a piped (non-console) stdin
+   * when it is juggling live inputs — especially a dshow device plus WASAPI named
+   * pipes — because it only checks stdin between input reads and can block on a
+   * pipe read. So we ask it to quit gracefully (lets libmp3lame flush its final
+   * frames) but force-kill if it hasn't exited within the grace window. MP3 has
+   * no container trailer, so a force-killed file is still playable to the last frame.
+   *
    * @param {string} [_recordingId] - ignored; only one recording at a time
    * @returns {Promise<void>}
    */
   async stopRecording(_recordingId) {
     const proc = this._ffmpegProcess;
     if (!proc) {
+      // No process to stop — make sure we don't leave a stale "recording" flag
+      // that would block the next startRecording with "already recording".
+      if (this._recording) {
+        this._recording = false;
+        await this._stopWasapiCaptures();
+      }
       return;
     }
 
-    // Wait for the process to actually exit
+    // Resolve as soon as FFmpeg actually exits (whether via 'q' or a kill).
     const exitPromise = new Promise((resolve) => {
-      proc.on('close', () => resolve());
+      proc.once('close', () => resolve());
     });
 
-    // Send 'q' to FFmpeg stdin to trigger a clean shutdown
+    // 1. Graceful: ask FFmpeg to quit so libmp3lame flushes its final frames.
     try {
       proc.stdin.write('q');
       proc.stdin.end();
     } catch (_err) {
-      // If stdin is already closed, kill the process directly
-      proc.kill('SIGTERM');
+      // stdin already closed — the force-kill below still guarantees termination.
     }
 
-    return exitPromise;
+    // 2. Guaranteed: force-kill if 'q' didn't terminate FFmpeg in time.
+    let killTimer = setTimeout(() => {
+      killTimer = null;
+      try {
+        proc.kill(); // TerminateProcess on Windows → fires 'close'
+      } catch (_err) {
+        /* already exited */
+      }
+      // Absolute last resort if the process still hasn't gone.
+      setTimeout(() => {
+        try {
+          proc.kill('SIGKILL');
+        } catch (_err) {
+          /* already exited */
+        }
+      }, this._forceKillMs);
+    }, this._gracefulQuitMs);
+
+    await exitPromise;
+    if (killTimer) {
+      clearTimeout(killTimer);
+    }
+  }
+
+  /**
+   * Cleanup when the FFmpeg process exits (graceful quit OR force-kill).
+   * Single source of truth for tearing down recording state.
+   */
+  _handleFfmpegClose(recordingId, audioFilePath, code) {
+    this._recording = false;
+    this._ffmpegProcess = null;
+    this._stopWasapiCaptures();
+    // Surface FFmpeg's exit + stderr tail so a failed/empty recording is diagnosable.
+    log.info(`[LocalProvider] FFmpeg exited (code=${code}).`);
+    if (this._ffmpegStderrTail) {
+      log.info(`[LocalProvider] FFmpeg stderr tail:\n${this._ffmpegStderrTail}`);
+    }
+    this.emit('recording-ended', { recordingId, audioFilePath, exitCode: code });
   }
 
   async shutdown() {
@@ -484,24 +548,24 @@ class LocalProvider extends RecordingProvider {
       ];
     }
 
+    log.info('[LocalProvider] Spawning FFmpeg:', ['ffmpeg', ...ffmpegArgs].join(' '));
+    this._ffmpegStderrTail = '';
     this._ffmpegProcess = spawn('ffmpeg', ffmpegArgs, { windowsHide: true });
 
     const { recordingId, audioFilePath } = this._activeRecording;
 
-    this._ffmpegProcess.on('close', (code) => {
-      this._recording = false;
-      this._ffmpegProcess = null;
-      // Stop all WASAPI captures
-      this._stopWasapiCaptures();
-      this.emit('recording-ended', { recordingId, audioFilePath, exitCode: code });
-    });
+    this._ffmpegProcess.on('close', (code) =>
+      this._handleFfmpegClose(recordingId, audioFilePath, code)
+    );
 
     this._ffmpegProcess.on('error', (err) => {
       this.emit('error', { type: 'ffmpeg-error', message: err.message });
     });
 
-    this._ffmpegProcess.stderr.on('data', (_chunk) => {
-      // FFmpeg writes its progress to stderr -- suppress for now.
+    this._ffmpegProcess.stderr.on('data', (chunk) => {
+      // Keep a rolling tail of FFmpeg stderr (format errors, missing devices,
+      // etc.). FFmpeg writes both progress and errors here.
+      this._ffmpegStderrTail = (this._ffmpegStderrTail + chunk.toString()).slice(-4000);
     });
   }
 

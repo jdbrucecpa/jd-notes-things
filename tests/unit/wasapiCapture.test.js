@@ -100,4 +100,50 @@ describe('WasapiCapture', () => {
       expect(capture.isCapturing).toBe(false);
     });
   });
+
+  // Silence pacing keeps the pipe fed at real-time byte-rate so a silent WASAPI
+  // output source never starves FFmpeg (which otherwise blocks on the empty pipe
+  // read → 0-byte recording + can't stop cleanly).
+  describe('silence pacing (_computeSilenceDeficit)', () => {
+    let capture;
+
+    beforeEach(() => {
+      capture = new WasapiCapture();
+      // 48 kHz stereo 16-bit → 192000 B/s, 4 bytes/frame.
+      capture._byteRate = 48000 * 2 * 2;
+      capture._frameBytes = 2 * 2;
+      capture._bytesWritten = 0;
+    });
+
+    it('fills the full real-time deficit when no real data has arrived', () => {
+      expect(capture._computeSilenceDeficit(1000)).toBe(192000);
+    });
+
+    it('returns 0 when real data has kept the pipe caught up', () => {
+      capture._bytesWritten = 192000;
+      expect(capture._computeSilenceDeficit(1000)).toBe(0);
+    });
+
+    it('fills only the shortfall when real data partially kept up', () => {
+      capture._bytesWritten = 96000;
+      expect(capture._computeSilenceDeficit(1000)).toBe(96000);
+    });
+
+    it('caps a large gap at ~1 second of silence per call', () => {
+      expect(capture._computeSilenceDeficit(5000)).toBe(192000);
+    });
+
+    it('aligns silence to whole audio frames', () => {
+      capture._bytesWritten = 1; // force a non-frame-aligned deficit
+      const deficit = capture._computeSilenceDeficit(1000);
+      expect(deficit % capture._frameBytes).toBe(0);
+      expect(deficit).toBe(191996);
+    });
+
+    it('returns 0 before the byte-rate is known', () => {
+      capture._byteRate = 0;
+      capture._frameBytes = 0;
+      expect(capture._computeSilenceDeficit(1000)).toBe(0);
+    });
+  });
 });
