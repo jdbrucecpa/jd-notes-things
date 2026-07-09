@@ -6,6 +6,10 @@ const path = require('path');
  * guessed? Pure diff: prevMapping is meeting.speakerMapping (pipeline output),
  * newMappings is the Fix Speakers payload ({ label: { contactName, contactEmail } }).
  * Returns one record per label whose assigned person changed.
+ *
+ * Identity comparison: emails are authoritative when both sides have one;
+ * otherwise name equality decides. Enriching an unchanged name with an email
+ * is NOT a correction.
  */
 function diffCorrections(meetingId, prevMapping, newMappings) {
   const out = [];

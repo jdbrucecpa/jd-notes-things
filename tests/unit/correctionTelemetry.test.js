@@ -54,6 +54,22 @@ describe('diffCorrections (pure)', () => {
     });
   });
 
+  it('emits when an email-backed identity is replaced by a differing name-only identity', () => {
+    const diffs = diffCorrections(
+      'm1',
+      { SPEAKER_00: { name: 'Kurt', email: 'kurt@x.com', method: 'x' } },
+      { SPEAKER_00: { contactName: 'Kurt Anderson', contactEmail: null } }
+    );
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0]).toMatchObject({
+      speakerLabel: 'SPEAKER_00',
+      fromName: 'Kurt',
+      fromMethod: 'x',
+      toName: 'Kurt Anderson',
+      toEmail: null,
+    });
+  });
+
   it('skips null entry values in newMappings without throwing', () => {
     const diffs = diffCorrections('m1', prev, {
       SPEAKER_00: null,
