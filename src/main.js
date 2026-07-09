@@ -7211,12 +7211,17 @@ ipcMain.handle(
 // already contributed samples). Long-running: an unbounded run embeds up to
 // ~200 meetings sequentially (minutes of GPU time) — progress via
 // backgroundTaskManager; pass { limit } for a staged first run.
+let voiceBackfillInFlight = false;
 ipcMain.handle(
   'voiceProfile:backfill',
   withValidation(voiceProfileBackfillSchema, async (_event, args) => {
     if (!voiceProfileService) {
       return { success: false, error: 'Voice profile service not initialized' };
     }
+    if (voiceBackfillInFlight) {
+      return { success: false, error: 'Backfill already running' };
+    }
+    voiceBackfillInFlight = true;
     const taskId = backgroundTaskManager.addTask({
       type: 'voice-backfill',
       description: 'Backfilling voice profiles from past meetings',
@@ -7253,6 +7258,8 @@ ipcMain.handle(
     } catch (error) {
       backgroundTaskManager.failTask(taskId, error.message);
       return { success: false, error: error.message };
+    } finally {
+      voiceBackfillInFlight = false;
     }
   })
 );

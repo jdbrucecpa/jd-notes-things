@@ -1883,6 +1883,13 @@ async function loadVoiceProfiles() {
       del.className = 'btn btn-outline btn-sm';
       del.textContent = 'Delete';
       del.addEventListener('click', async () => {
+        if (
+          !confirm(
+            `Delete voice profile for ${p.contactName}? This removes all ${p.sampleCount} sample${p.sampleCount === 1 ? '' : 's'} and cannot be undone.`
+          )
+        ) {
+          return;
+        }
         await window.electronAPI.voiceProfileDelete(Number(p.id));
         loadVoiceProfiles();
       });
