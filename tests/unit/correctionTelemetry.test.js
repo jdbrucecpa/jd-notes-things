@@ -30,6 +30,38 @@ describe('diffCorrections (pure)', () => {
   it('ignores labels with no prior mapping entry', () => {
     expect(diffCorrections('m1', {}, { X: { contactName: 'A' } })).toEqual([]);
   });
+
+  it('treats adding an email to the same name as enrichment, not a correction', () => {
+    const diffs = diffCorrections(
+      'm1',
+      { SPEAKER_00: { name: 'Kurt', email: null, method: 'unverified-positional', confidence: 'low' } },
+      { SPEAKER_00: { contactName: 'Kurt', contactEmail: 'kurt@x.com' } }
+    );
+    expect(diffs).toEqual([]);
+  });
+
+  it('treats emails as authoritative when both sides have one (same name, different email)', () => {
+    const diffs = diffCorrections(
+      'm1',
+      { SPEAKER_00: { name: 'Kurt', email: 'kurt@x.com', method: 'voice-profile', confidence: 'high' } },
+      { SPEAKER_00: { contactName: 'Kurt', contactEmail: 'kurt@other.com' } }
+    );
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0]).toMatchObject({
+      speakerLabel: 'SPEAKER_00',
+      fromMethod: 'voice-profile',
+      toEmail: 'kurt@other.com',
+    });
+  });
+
+  it('skips null entry values in newMappings without throwing', () => {
+    const diffs = diffCorrections('m1', prev, {
+      SPEAKER_00: null,
+      SPEAKER_01: { contactName: 'Melissa H', contactEmail: 'melissa@x.com' },
+    });
+    expect(diffs).toHaveLength(1);
+    expect(diffs[0].speakerLabel).toBe('SPEAKER_01');
+  });
 });
 
 describe('CorrectionTelemetry (file-backed)', () => {

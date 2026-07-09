@@ -11,11 +11,24 @@ function diffCorrections(meetingId, prevMapping, newMappings) {
   const out = [];
   if (!prevMapping || !newMappings) return out;
   for (const [label, next] of Object.entries(newMappings)) {
+    if (!next || typeof next !== 'object') continue;
     const prev = prevMapping[label];
     if (!prev) continue;
-    const prevKey = (prev.email || prev.name || '').toLowerCase();
-    const nextKey = (next.contactEmail || next.contactName || '').toLowerCase();
-    if (!nextKey || prevKey === nextKey) continue;
+    const prevName = (prev.name || '').toLowerCase();
+    const prevEmail = (prev.email || '').toLowerCase();
+    const nextName = (next.contactName || '').toLowerCase();
+    const nextEmail = (next.contactEmail || '').toLowerCase();
+
+    // Person-identity comparison: emails are authoritative when BOTH sides
+    // have one; otherwise fall back to name equality. Supplying an email for
+    // the same name is an enrichment, not a correction.
+    let changed;
+    if (prevEmail && nextEmail) {
+      changed = prevEmail !== nextEmail;
+    } else {
+      changed = !!nextName && prevName !== nextName;
+    }
+    if (!changed) continue;
     out.push({
       at: new Date().toISOString(),
       meetingId,
