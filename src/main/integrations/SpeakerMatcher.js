@@ -219,6 +219,9 @@ class SpeakerMatcher {
         );
 
         for (const result of voiceProfileResults) {
+          // Stage 1 (track anchor) outranks voice profiles — never overwrite
+          // an already-matched label (spec precedence: track-anchor > voice-profile).
+          if (matchedSpeakers.has(result.speakerLabel)) continue;
           // Build the mapping entry for ALL results (UI needs them for badges)
           speakerMapping[result.speakerLabel] = {
             email: result.contactEmail || null,

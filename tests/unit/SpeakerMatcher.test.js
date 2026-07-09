@@ -751,6 +751,38 @@ describe('SpeakerMatcher', () => {
       expect(mapping.SPEAKER_01?.name).toBe('J.D. Bruce');
     });
 
+    it('survives Stage 0 voice-profile results for the same label (anchor outranks)', async () => {
+      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const fakeVoiceProfileService = {
+        identifySpeakers: vi.fn(async () => [
+          {
+            speakerLabel: 'SPEAKER_01',
+            profileId: 7,
+            contactName: 'Wrong Person',
+            contactEmail: 'wrong@x.com',
+            confidence: 'high',
+            distance: 0.1,
+            status: 'auto-matched',
+          },
+        ]),
+      };
+      m.setVoiceProfileService(fakeVoiceProfileService);
+
+      const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
+        trackAnchor: { userLabel: 'SPEAKER_01', userDominance: 0.9, remoteLabels: [] },
+        audioFilePath: 'x.mp3',
+        segments: [{ speaker: 'SPEAKER_01', start: 0, end: 10 }],
+        participantData: [
+          { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' },
+          { name: 'Stacie Rasmussen', email: 'stacie@x.com' },
+        ],
+      });
+
+      // The Stage-1 anchor must survive Stage 0 — voice-profile result ignored.
+      expect(mapping.SPEAKER_01.name).toBe('J.D. Bruce');
+      expect(mapping.SPEAKER_01.method).toBe('track-anchor');
+    });
+
     it('behaves identically to before when no trackAnchor is provided (regression)', async () => {
       const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
       const withUndefined = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
