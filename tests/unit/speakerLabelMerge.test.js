@@ -45,8 +45,13 @@ describe('mergeNearDuplicateLabels', () => {
     expect(out.segments).toEqual([]);
   });
 
-  it('merges 3-way chain (A≈B, B≈C) with transitive resolution', () => {
-    // A has 100s, B has 50s, C has 30s — A should be the survivor
+  it('merges a genuine transitive chain (A≈B, B≈C, but A NOT ≈ C) with multi-hop resolution', () => {
+    // Unit-circle embeddings at 0°, 30°, 60°:
+    //   dist(A,B) = 1 - cos(30°) ≈ 0.134 ≤ 0.15  (merges)
+    //   dist(B,C) = 1 - cos(30°) ≈ 0.134 ≤ 0.15  (merges)
+    //   dist(A,C) = 1 - cos(60°) = 0.5           (does NOT merge directly)
+    // C can only reach A through B, so this exercises transitive resolution.
+    // Durations: A (100s) > B (50s) > C (30s), so A is the ultimate survivor.
     const segments = [
       { speaker: 'SPEAKER_A', start: 0, end: 100 },   // 100s duration
       { speaker: 'SPEAKER_B', start: 100, end: 150 },  // 50s duration
@@ -54,24 +59,23 @@ describe('mergeNearDuplicateLabels', () => {
     ];
     const embeddings = [
       { speakerLabel: 'SPEAKER_A', ...emb([1, 0, 0]) },
-      { speakerLabel: 'SPEAKER_B', ...emb([0.998, 0.01, 0]) },  // near-identical to A
-      { speakerLabel: 'SPEAKER_C', ...emb([0.997, 0.015, 0]) }, // near-identical to B (and A)
+      { speakerLabel: 'SPEAKER_B', ...emb([0.8660254, 0.5, 0]) }, // 30° from A
+      { speakerLabel: 'SPEAKER_C', ...emb([0.5, 0.8660254, 0]) }, // 60° from A, 30° from B
     ];
 
     const { relabelMap, segments: merged, embeddings: keptEmbeddings } =
       mergeNearDuplicateLabels(segments, embeddings);
 
-    // Both B and C should map to A (transitive resolution)
+    // C maps to A (NOT to intermediate B) — proving multi-hop flattening
     expect(relabelMap).toEqual({ SPEAKER_B: 'SPEAKER_A', SPEAKER_C: 'SPEAKER_A' });
-    expect(relabelMap.SPEAKER_B).toBe('SPEAKER_A');
     expect(relabelMap.SPEAKER_C).toBe('SPEAKER_A');
 
     // No intermediate hops: relabelMap values are fully-resolved survivors
     expect(Object.values(relabelMap).every(v => !relabelMap[v])).toBe(true);
 
-    // Merged segments contain only A (plus any other distinct labels)
-    const speakerLabels = merged.map(s => s.speaker);
-    expect(speakerLabels.every(s => s === 'SPEAKER_A')).toBe(true);
+    // All three original labels' segments now carry SPEAKER_A
+    expect(merged).toHaveLength(3);
+    expect(merged.every(s => s.speaker === 'SPEAKER_A')).toBe(true);
 
     // Only A's embedding is kept
     expect(keptEmbeddings.map(e => e.speakerLabel)).toEqual(['SPEAKER_A']);
