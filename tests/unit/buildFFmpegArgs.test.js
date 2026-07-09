@@ -217,3 +217,61 @@ describe('buildFFmpegArgs', () => {
     expect(iIdx).toBeGreaterThan(acIdx);
   });
 });
+
+describe('buildFFmpegArgs track outputs', () => {
+  const MIC = { device: 'My Mic', volume: 100, type: 'dshow' };
+  const W0 = {
+    device: '\\\\.\\pipe\\p0',
+    volume: 100,
+    type: 'wasapi',
+    sampleRate: 48000,
+    channels: 2,
+  };
+  const W1 = {
+    device: '\\\\.\\pipe\\p1',
+    volume: 100,
+    type: 'wasapi',
+    sampleRate: 96000,
+    channels: 8,
+  };
+
+  it('emits mic solo output via asplit, pre-volume', () => {
+    const args = buildFFmpegArgs([MIC, W0], {}, 'out.mp3', { micTrackPath: 'mic.mp3' });
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toContain('[0:a]asplit=2[mic_solo][mic_in]');
+    expect(fc).toContain('[mic_in]volume=1.0[a0]');
+    // main output then mic output
+    const mapIdxs = args.map((a, i) => (a === '-map' ? i : -1)).filter(i => i >= 0);
+    expect(args[mapIdxs[0] + 1]).toBe('[out]');
+    expect(args[mapIdxs[1] + 1]).toBe('[mic_solo]');
+    expect(args[args.length - 1]).toBe('mic.mp3');
+  });
+
+  it('emits system submix from multiple wasapi inputs', () => {
+    const args = buildFFmpegArgs([MIC, W0, W1], {}, 'out.mp3', { systemTrackPath: 'sys.mp3' });
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toContain('[1:a]asplit=2[sys_src0][w_in1]');
+    expect(fc).toContain('[2:a]asplit=2[sys_src1][w_in2]');
+    expect(fc).toContain('[sys_src0][sys_src1]amix=inputs=2:duration=longest[sys_solo]');
+    expect(args).toContain('[sys_solo]');
+  });
+
+  it('single wasapi input: solo comes straight off the split', () => {
+    const args = buildFFmpegArgs([MIC, W0], {}, 'out.mp3', { systemTrackPath: 'sys.mp3' });
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toContain('[1:a]asplit=2[sys_solo][w_in1]');
+    expect(fc).not.toContain('amix=inputs=1');
+  });
+
+  it('no trackOutputs → byte-identical behavior to before (regression)', () => {
+    const a = buildFFmpegArgs([MIC, W0], { autoBalance: true }, 'out.mp3');
+    const b = buildFFmpegArgs([MIC, W0], { autoBalance: true }, 'out.mp3', {});
+    expect(a).toEqual(b);
+    expect(a.join(' ')).not.toContain('asplit');
+  });
+
+  it('micTrackPath with no dshow source is ignored', () => {
+    const args = buildFFmpegArgs([W0], {}, 'out.mp3', { micTrackPath: 'mic.mp3' });
+    expect(args).not.toContain('mic.mp3');
+  });
+});
