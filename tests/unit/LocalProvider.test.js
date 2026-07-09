@@ -133,4 +133,59 @@ describe('LocalProvider', () => {
 
     expect(provider._recording).toBe(false);
   });
+
+  // Close-debounce regression: a meeting window's title can drop out of the
+  // window list for a single poll while the meeting is still live (Zoom in
+  // particular). meeting-closed must only fire after CLOSE_CONFIRM_POLLS
+  // consecutive absent polls — otherwise a flicker spuriously closes the meeting
+  // (and, with auto-stop wired, would stop a live recording mid-meeting).
+  describe('meeting detection close-debounce', () => {
+    const ZOOM = [{ processName: 'zoom', title: 'Zoom Meeting', pid: 123 }];
+    const NONE = [];
+
+    it('emits meeting-detected once when a meeting window appears', async () => {
+      vi.spyOn(provider, '_getWindowList').mockResolvedValue(ZOOM);
+      const detected = vi.fn();
+      provider.on('meeting-detected', detected);
+
+      await provider._pollForMeetings();
+      await provider._pollForMeetings(); // still present — must not re-emit
+
+      expect(detected).toHaveBeenCalledTimes(1);
+      expect(detected).toHaveBeenCalledWith(expect.objectContaining({ windowId: 'zoom-123', platform: 'zoom' }));
+    });
+
+    it('does NOT emit meeting-closed on a single missed poll (flicker)', async () => {
+      const list = vi.spyOn(provider, '_getWindowList');
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      list.mockResolvedValueOnce(ZOOM); // detected
+      await provider._pollForMeetings();
+      list.mockResolvedValueOnce(NONE); // one flicker
+      await provider._pollForMeetings();
+      list.mockResolvedValueOnce(ZOOM); // back again before the confirm threshold
+      await provider._pollForMeetings();
+
+      expect(closed).not.toHaveBeenCalled();
+      expect(provider._meetingDetected).toBe(true);
+    });
+
+    it('emits meeting-closed once after CLOSE_CONFIRM_POLLS consecutive misses', async () => {
+      const list = vi.spyOn(provider, '_getWindowList');
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      list.mockResolvedValueOnce(ZOOM); // detected
+      await provider._pollForMeetings();
+      list.mockResolvedValue(NONE); // gone for good
+      await provider._pollForMeetings(); // miss 1 — no close yet
+      expect(closed).not.toHaveBeenCalled();
+      await provider._pollForMeetings(); // miss 2 — close
+
+      expect(closed).toHaveBeenCalledTimes(1);
+      expect(closed).toHaveBeenCalledWith({ windowId: 'zoom-123' });
+      expect(provider._meetingDetected).toBe(false);
+    });
+  });
 });

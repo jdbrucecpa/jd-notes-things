@@ -2366,8 +2366,26 @@ async function initSDK() {
       windowId: data.windowId,
     });
 
-    // Keep global detectedMeeting in raw SDK event format for backward compatibility
-    detectedMeeting = data.raw;
+    // Normalize the provider event into one canonical shape. RecallProvider and
+    // LocalProvider both emit top-level { windowId, platform, title }, but the
+    // many consumers below read detectedMeeting.window.{id,platform,title} (the
+    // original Recall SDK shape). Synthesize that .window sub-object from the flat
+    // fields so every consumer works regardless of which provider fired.
+    //
+    // Previously this stored `data.raw`, which only RecallProvider populates —
+    // under LocalProvider it was `undefined`. That single mismatch caused two
+    // bugs: (1) "Join detected meeting" split-brained (checkForDetectedMeeting's
+    // `!== null` passed on `undefined` while joinDetectedMeeting's `!x` failed),
+    // leaving the button stuck on "Joining…", and (2) meeting-close auto-stop
+    // never fired because detectedMeeting?.window?.id was undefined.
+    detectedMeeting = data
+      ? {
+          windowId: data.windowId,
+          platform: data.platform,
+          title: data.title,
+          window: { id: data.windowId, platform: data.platform, title: data.title },
+        }
+      : null;
 
     // Map platform codes to readable names
     const platformNames = {
@@ -2701,6 +2719,23 @@ async function initSDK() {
                   vocabularyOptions.speakerNames = speakerNames;
                   console.log(
                     `[Transcription] v1.2.5: Speaker names for identification: ${speakerNames.join(', ')}`
+                  );
+                }
+
+                // v2.0: Speaker-count hint for local diarization. The JD Audio
+                // Service already threads maxSpeakers → PyAnnote max_speakers
+                // (schemas.py → routes.py → processor.py → diarizer.py); this
+                // call site was the only missing link. Known participants give
+                // an upper bound on distinct speakers, which measurably reduces
+                // diarization over-splitting. Cloud adapters ignore the field.
+                const knownParticipantCount = Math.max(
+                  zoomParticipants.length,
+                  calendarAttendees.length
+                );
+                if (knownParticipantCount >= 2) {
+                  vocabularyOptions.maxSpeakers = knownParticipantCount;
+                  console.log(
+                    `[Transcription] Diarization maxSpeakers hint: ${knownParticipantCount}`
                   );
                 }
 
@@ -10813,6 +10848,79 @@ async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 
       detectedMeeting.window.id,
       detectedMeeting.window.platform
     );
+
+    // v2.0: The Local provider records system audio directly — it has no Recall
+    // SDK, no windowId-keyed recording, and no upload token. Everything below
+    // this branch is Recall-specific (prepareDesktopAudioRecording, upload
+    // tokens, recallProvider.sdk.startRecording), so under the Local provider it
+    // would create a note but never actually record. Instead, model the join on
+    // the working "Record" button: create the note, then start the recording
+    // through recordingManager.startRecording — the exact same engine the Record
+    // button uses (see the local branch of the startManualRecording handler).
+    if (appSettings.recordingProvider === 'local') {
+      const id = 'meeting-' + Date.now();
+      const now = new Date();
+      const sdkPlatform = detectedMeeting.window.platform || 'unknown';
+      const title = `${platformName} Meeting - ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+      const newMeeting = {
+        id,
+        type: 'document',
+        title,
+        subtitle: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        hasDemo: false,
+        date: now.toISOString(),
+        participants: [],
+        content: `# ${platformName} Meeting Notes\nRecording: In Progress...`,
+        platform: sdkPlatform,
+        transcript: [],
+        transcriptionProvider,
+      };
+
+      // Persist the note BEFORE starting so the recording pipeline has it on disk.
+      let meetingsData;
+      try {
+        meetingsData = await fileOperationManager.readMeetingsData();
+      } catch (error) {
+        console.error('[Meeting Creation] Local: error reading meetings data:', error);
+        meetingsData = { upcomingMeetings: [], pastMeetings: [] };
+      }
+      meetingsData.pastMeetings.unshift(newMeeting);
+      await fileOperationManager.writeData(meetingsData);
+
+      // Start the recording via the provider-agnostic manager (records system
+      // audio; recording is keyed by the audio file path, not a windowId).
+      const recordingId = await recordingManager.startRecording({
+        noteId: id,
+        platform: sdkPlatform,
+        meetingTitle: title,
+      });
+
+      // Save the returned recordingId back onto the note for later matching.
+      await fileOperationManager.scheduleOperation(async data => {
+        const idx = data.pastMeetings.findIndex(m => m.id === id);
+        if (idx !== -1) {
+          data.pastMeetings[idx].recordingId = recordingId;
+        }
+        return data;
+      });
+
+      recordingManager.currentMeetingTitle = title;
+      recordingManager.currentMeetingId = id;
+      updateWidgetRecordingState(true, title, id, newMeeting);
+
+      // Open the new note in the renderer (small delay so the write settles).
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('open-meeting-note', id);
+          }
+        }, 500);
+      }
+
+      console.log(`[Meeting Creation] ✓ Local recording started for ${id}: ${recordingId}`);
+      return id;
+    }
 
     // Store the meeting window ID for later reference with transcript events
     global.activeMeetingIds = global.activeMeetingIds || {};

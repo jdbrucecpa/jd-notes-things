@@ -14,10 +14,63 @@ try {
 }
 
 const POLL_INTERVAL_MS = 2000;
+// Consecutive polls a meeting window must be absent before we declare it closed.
+// 2 polls @ 2s ≈ 4s of confirmed absence — long enough to ride out title flicker,
+// short enough that auto-stop still fires promptly when the meeting really ends.
+const CLOSE_CONFIRM_POLLS = 2;
 
 const ZOOM_TITLES = ['Zoom Meeting', 'Zoom Webinar'];
 const TEAMS_TITLE_SUFFIX = '| Microsoft Teams';
 const TEAMS_PROCESS_NAMES = ['ms-teams', 'teams'];
+
+// Robust window enumeration. `Get-Process | Where MainWindowTitle` only sees each
+// process's *main* window — but Zoom's meeting window is frequently NOT its main
+// window, so its "Zoom Meeting" title drops in and out between polls, causing the
+// meeting to appear to open/close repeatedly. Instead we enumerate ALL visible
+// top-level windows via user32 EnumWindows (P/Invoke through Add-Type), which
+// finds the meeting window regardless of main-window status. Output shape matches
+// the old command — [{ ProcessName, MainWindowTitle, Id }] — so parsing is unchanged.
+//
+// Note: Add-Type recompiles the helper on each spawn (~a few hundred ms of CPU
+// every poll). Acceptable for a single-user desktop app; a persistent PowerShell
+// host process would eliminate it if this ever shows up as meaningful overhead.
+const WINDOW_ENUM_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @"
+using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public class JDNWin { public string Title; public int Pid; }
+public class JDNWindows {
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumProc cb, IntPtr p);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] private static extern int GetWindowTextLength(IntPtr h);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  private delegate bool EnumProc(IntPtr h, IntPtr p);
+  public static List<JDNWin> Get() {
+    var r = new List<JDNWin>();
+    EnumProc cb = (h, p) => {
+      if (!IsWindowVisible(h)) return true;
+      int len = GetWindowTextLength(h);
+      if (len == 0) return true;
+      var sb = new StringBuilder(len + 1);
+      GetWindowText(h, sb, sb.Capacity);
+      uint pid; GetWindowThreadProcessId(h, out pid);
+      r.Add(new JDNWin { Title = sb.ToString(), Pid = (int)pid });
+      return true;
+    };
+    EnumWindows(cb, IntPtr.Zero);
+    GC.KeepAlive(cb);
+    return r;
+  }
+}
+"@
+$procs = @{}
+Get-Process | ForEach-Object { $procs[[int]$_.Id] = $_.ProcessName }
+[JDNWindows]::Get() | ForEach-Object { [PSCustomObject]@{ ProcessName = $procs[[int]$_.Pid]; MainWindowTitle = $_.Title; Id = $_.Pid } } | ConvertTo-Json
+`;
 
 /**
  * LocalProvider — meeting detection via PowerShell window polling + audio
@@ -43,6 +96,13 @@ class LocalProvider extends RecordingProvider {
     this._audioSources = []; // Populated via setAudioConfig()
     this._audioMixer = { autoBalance: false };
     this._wasapiCaptures = []; // Active WasapiCapture instances during recording
+    // Close-debounce: a meeting window's title can momentarily drop out of the
+    // window list between polls (Zoom in particular reshuffles which of its
+    // windows is "current"). Require the meeting window to be absent for several
+    // consecutive polls before declaring it closed, so a single flicker doesn't
+    // spuriously fire meeting-closed (and, once auto-stop is wired, stop a live
+    // recording mid-meeting).
+    this._missCount = 0;
     // Stop-sequence timings. FFmpeg's interactive 'q' quit is unreliable over a
     // piped stdin with live dshow + WASAPI named-pipe inputs, so stopRecording
     // force-kills if 'q' doesn't terminate FFmpeg within the grace window.
@@ -242,22 +302,38 @@ class LocalProvider extends RecordingProvider {
       }
     }
 
-    if (detectedMeeting && !this._meetingDetected) {
-      // New meeting appeared
-      this._meetingDetected = true;
-      this._activeMeeting = detectedMeeting;
-      this.emit('meeting-detected', {
-        windowId: detectedMeeting.windowId,
-        platform: detectedMeeting.platform,
-        title: detectedMeeting.title,
-        processName: detectedMeeting.processName,
-      });
-    } else if (!detectedMeeting && this._meetingDetected) {
-      // Meeting went away
-      const prev = this._activeMeeting;
-      this._meetingDetected = false;
-      this._activeMeeting = null;
-      this.emit('meeting-closed', { windowId: prev?.windowId });
+    if (detectedMeeting) {
+      // A meeting window is present this poll — reset the close-debounce counter.
+      this._missCount = 0;
+      if (!this._meetingDetected) {
+        // New meeting appeared
+        this._meetingDetected = true;
+        this._activeMeeting = detectedMeeting;
+        this.emit('meeting-detected', {
+          windowId: detectedMeeting.windowId,
+          platform: detectedMeeting.platform,
+          title: detectedMeeting.title,
+          processName: detectedMeeting.processName,
+        });
+      } else if (this._activeMeeting?.windowId !== detectedMeeting.windowId) {
+        // The tracked meeting window changed (e.g. a new meeting replaced the old
+        // one). Update our reference so meeting-closed reports the right windowId,
+        // but don't re-emit meeting-detected for what is effectively the same
+        // ongoing "in a meeting" state.
+        this._activeMeeting = detectedMeeting;
+      }
+    } else if (this._meetingDetected) {
+      // No meeting window this poll. Don't declare it closed immediately — the
+      // title can drop out for a single poll while the meeting is still live.
+      // Only fire meeting-closed after CLOSE_CONFIRM_POLLS consecutive misses.
+      this._missCount += 1;
+      if (this._missCount >= CLOSE_CONFIRM_POLLS) {
+        const prev = this._activeMeeting;
+        this._meetingDetected = false;
+        this._activeMeeting = null;
+        this._missCount = 0;
+        this.emit('meeting-closed', { windowId: prev?.windowId });
+      }
     }
   }
 
@@ -270,7 +346,7 @@ class LocalProvider extends RecordingProvider {
       const ps = spawn('powershell', [
         '-NoProfile',
         '-Command',
-        "Get-Process | Where-Object { $_.MainWindowTitle -ne \"\" } | Select-Object ProcessName, MainWindowTitle, Id | ConvertTo-Json",
+        WINDOW_ENUM_SCRIPT,
       ], { windowsHide: true });
 
       let stdout = '';

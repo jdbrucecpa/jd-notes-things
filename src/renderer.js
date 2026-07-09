@@ -4715,8 +4715,16 @@ document.addEventListener('DOMContentLoaded', async () => {
           const transcriptionProvider =
             localStorage.getItem('transcriptionProvider') || 'assemblyai';
           console.log('[Join Meeting] Using transcription provider:', transcriptionProvider);
-          await window.electronAPI.joinDetectedMeeting(transcriptionProvider);
-          // Keep button disabled as we're navigating to a different view
+          const joinResult = await window.electronAPI.joinDetectedMeeting(transcriptionProvider);
+          // On success we navigate to the new note, so leave the button disabled.
+          // But a {success:false} result must reset the button — otherwise a
+          // failed join leaves it stuck showing the "Joining…" spinner forever.
+          if (!joinResult || !joinResult.success) {
+            console.error('[Join Meeting] Join failed:', joinResult?.error);
+            joinButton.disabled = false;
+            joinButton.textContent = originalText;
+            notifyError(joinResult?.error || 'Could not join the detected meeting');
+          }
         } else {
           console.log('No active meeting detected');
 
