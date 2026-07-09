@@ -24,6 +24,10 @@ const DISTANCE_HIGH_CONFIDENCE = 0.25;
 /** Flag for human verification: distance ≤ this means medium confidence */
 const DISTANCE_MEDIUM_CONFIDENCE = 0.45;
 
+/** High-confidence additionally requires beating the runner-up by this margin.
+ *  Prevents confident false matches between similar voices as the roster grows. */
+const DISTANCE_MATCH_MARGIN = 0.1;
+
 // ============================================================
 // Pure math functions (exported for direct unit testing)
 // ============================================================
@@ -342,9 +346,13 @@ class VoiceProfileService {
    * Find the best matching profile for an embedding.
    * Returns null if no profiles exist.
    *
+   * High-confidence matches additionally require beating the runner-up by DISTANCE_MATCH_MARGIN
+   * to prevent confident false matches between similar voices as the roster grows.
+   *
    * @param {Float32Array} embedding
-   * @returns {{ profile: Object, distance: number, confidence: string }|null}
+   * @returns {{ profile: Object, distance: number, margin: number, confidence: string }|null}
    *   confidence is 'high' | 'medium' | 'low'
+   *   margin is (secondDistance - bestDistance); Infinity if only one profile
    */
   findBestMatch(embedding) {
     const profiles = this.getAllProfiles();
@@ -352,18 +360,24 @@ class VoiceProfileService {
 
     let bestProfile = null;
     let bestDistance = Infinity;
+    let secondDistance = Infinity;
 
     for (const profile of profiles) {
       const dist = cosineDistance(embedding, profile.embedding);
       if (dist < bestDistance) {
+        secondDistance = bestDistance;
         bestDistance = dist;
         bestProfile = profile;
+      } else if (dist < secondDistance) {
+        secondDistance = dist;
       }
     }
 
+    const margin = secondDistance - bestDistance; // Infinity when single profile
     let confidenceLevel;
     if (bestDistance <= DISTANCE_HIGH_CONFIDENCE) {
-      confidenceLevel = 'high';
+      // Margin rule: 'high' must also clearly beat the runner-up.
+      confidenceLevel = margin >= DISTANCE_MATCH_MARGIN ? 'high' : 'medium';
     } else if (bestDistance <= DISTANCE_MEDIUM_CONFIDENCE) {
       confidenceLevel = 'medium';
     } else {
@@ -373,6 +387,7 @@ class VoiceProfileService {
     return {
       profile: bestProfile,
       distance: bestDistance,
+      margin,
       confidence: confidenceLevel,
     };
   }
@@ -704,4 +719,5 @@ module.exports = {
   weightedAverageEmbedding,
   DISTANCE_HIGH_CONFIDENCE,
   DISTANCE_MEDIUM_CONFIDENCE,
+  DISTANCE_MATCH_MARGIN,
 };

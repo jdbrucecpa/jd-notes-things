@@ -21,6 +21,7 @@ const {
   weightedAverageEmbedding,
   DISTANCE_HIGH_CONFIDENCE,
   DISTANCE_MEDIUM_CONFIDENCE,
+  DISTANCE_MATCH_MARGIN,
 } = require('../../src/main/services/voiceProfileService.js');
 
 // ============================================================
@@ -525,5 +526,64 @@ describe('identifySpeakers with precomputed embeddings', () => {
     expect(svc.embedSpeakers).not.toHaveBeenCalled();
     expect(results).toHaveLength(1);
     expect(results[0].speakerLabel).toBe('SPEAKER_00');
+  });
+});
+
+// ============================================================
+// 8. findBestMatch margin rule
+// ============================================================
+
+describe('findBestMatch margin rule', () => {
+  function makeProfileRow(id, contactName, embedding, opts = {}) {
+    return {
+      id,
+      google_contact_id: opts.googleContactId || null,
+      contact_name: contactName,
+      contact_email: opts.contactEmail || null,
+      embedding: serializeEmbedding(embedding),
+      sample_count: opts.sampleCount ?? 1,
+      total_duration: opts.totalDuration ?? 0,
+      confidence: opts.confidence ?? 0.5,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+  }
+
+  it('demotes high → medium when the runner-up is within the margin', () => {
+    const db = {
+      getAllVoiceProfiles: () => [
+        makeProfileRow(1, 'Alice', new Float32Array([1, 0, 0])),
+        makeProfileRow(2, 'Bob', new Float32Array([0.995, 0.0999, 0])),
+      ],
+    };
+    const svc = new VoiceProfileService(db);
+    // Query close to both: best distance ≤ 0.25 (high band) but margin < DISTANCE_MATCH_MARGIN
+    const result = svc.findBestMatch(new Float32Array([0.999, 0.045, 0]));
+    expect(result.confidence).toBe('medium');
+    expect(result.margin).toBeLessThan(DISTANCE_MATCH_MARGIN);
+  });
+
+  it('keeps high when the runner-up is far', () => {
+    const db = {
+      getAllVoiceProfiles: () => [
+        makeProfileRow(1, 'Alice', new Float32Array([1, 0, 0])),
+        makeProfileRow(2, 'Bob', new Float32Array([0, 1, 0])),
+      ],
+    };
+    const svc = new VoiceProfileService(db);
+    const result = svc.findBestMatch(new Float32Array([1, 0.01, 0]));
+    expect(result.confidence).toBe('high');
+    expect(result.profile.contactName).toBe('Alice');
+  });
+
+  it('single profile: no margin demotion possible', () => {
+    const db = {
+      getAllVoiceProfiles: () => [
+        makeProfileRow(1, 'Alice', new Float32Array([1, 0, 0])),
+      ],
+    };
+    const svc = new VoiceProfileService(db);
+    const result = svc.findBestMatch(new Float32Array([1, 0.01, 0]));
+    expect(result.confidence).toBe('high');
   });
 });
