@@ -43,6 +43,19 @@ describe('mergeNearDuplicateLabels', () => {
     const out = mergeNearDuplicateLabels([], []);
     expect(out.relabelMap).toEqual({});
     expect(out.segments).toEqual([]);
+    expect(out.embeddings).toEqual([]);
+  });
+
+  it('passes segments through unchanged when there are no embeddings', () => {
+    // Embedding extraction failed — real segments must NOT be dropped
+    const realSegments = [
+      { speaker: 'SPEAKER_00', start: 0, end: 30 },
+      { speaker: 'SPEAKER_00', start: 45, end: 90 },
+    ];
+    const out = mergeNearDuplicateLabels(realSegments, []);
+    expect(out.segments).toEqual(realSegments);
+    expect(out.relabelMap).toEqual({});
+    expect(out.embeddings).toEqual([]);
   });
 
   it('merges a genuine transitive chain (A≈B, B≈C, but A NOT ≈ C) with multi-hop resolution', () => {

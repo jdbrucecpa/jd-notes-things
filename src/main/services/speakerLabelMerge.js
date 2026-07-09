@@ -15,6 +15,10 @@ const { cosineDistance } = require('./voiceProfileService');
 /**
  * Stage 0 diarization label merge: distance ≤ this means near-identical voice
  * within one meeting (stricter than cross-meeting profile threshold 0.25).
+ *
+ * Note: merging is single-linkage, so transitive chains can join A and C via B
+ * even when dist(A,C) > threshold — acceptable at meeting scale (≤~10 labels)
+ * with this strict 0.15 threshold.
  */
 const MERGE_DISTANCE_THRESHOLD = 0.15;
 
@@ -34,9 +38,10 @@ const MERGE_DISTANCE_THRESHOLD = 0.15;
  * }}
  */
 function mergeNearDuplicateLabels(segments, embeddings) {
-  // Handle empty inputs
+  // Nothing to merge (no segments, or embedding extraction failed): pass
+  // the original inputs through unchanged — never drop real segments.
   if (segments.length === 0 || embeddings.length === 0) {
-    return { relabelMap: {}, segments: [], embeddings: [] };
+    return { relabelMap: {}, segments, embeddings };
   }
 
   // Compute total duration for each speaker label
