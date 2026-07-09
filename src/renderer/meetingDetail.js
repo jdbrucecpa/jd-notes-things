@@ -1313,6 +1313,7 @@ function showRerunProviderPicker() {
     dialog.appendChild(desc);
 
     const providers = [
+      { id: 'local', name: 'Local (JD Audio Service)', price: 'Free' },
       { id: 'assemblyai', name: 'AssemblyAI', price: '$0.37/hr' },
       { id: 'deepgram', name: 'Deepgram', price: '$0.43/hr' },
     ];

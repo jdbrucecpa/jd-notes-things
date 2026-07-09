@@ -8000,7 +8000,9 @@ ipcMain.handle(
       if (!provider && !meeting.transcriptionProvider && mainWindow && !mainWindow.isDestroyed()) {
         try {
           storedProvider = await mainWindow.webContents.executeJavaScript(
-            "localStorage.getItem('transcription-provider')"
+            // Same key the renderer writes (camelCase) — a hyphenated key here
+            // previously read a key that never exists.
+            "localStorage.getItem('transcriptionProvider')"
           );
         } catch { /* ignore if renderer not ready */ }
       }
@@ -8008,6 +8010,16 @@ ipcMain.handle(
         meeting.transcriptionProvider ||
         storedProvider ||
         'local';
+
+      // Local transcription needs the JD Audio Service up (mirrors the
+      // recording pipeline's ensureRunning call).
+      if (transcriptionProvider === 'local') {
+        const serviceReady = await aiServiceManager.ensureRunning();
+        if (!serviceReady) {
+          backgroundTaskManager.failTask(taskId, 'JD Audio Service failed to start');
+          return { success: false, error: 'JD Audio Service failed to start — check the local AI service.' };
+        }
+      }
 
       backgroundTaskManager.updateTask(taskId, 10, 'Starting transcription...');
       event.sender.send('import:progress', {
@@ -8029,15 +8041,49 @@ ipcMain.handle(
       meeting.transcriptionProvider = transcriptionProvider;
       meeting.transcriptConfidence = transcript.confidence || null;
       meeting.videoFile = filePath;
+      // Fresh diarization segments (local provider) — without this the
+      // speaker-matching call below would use the PREVIOUS transcription's
+      // segments (or none, for pre-v2.0 meetings), starving voice-profile
+      // matching of the data it needs.
+      if (transcript.segments && transcript.segments.length > 0) {
+        meeting.segments = transcript.segments;
+      }
 
       // Speaker matching: try to map speakers to contacts
       if (speakerMatcher && meeting.transcript.length > 0) {
         backgroundTaskManager.updateTask(taskId, 60, 'Matching speakers...');
         try {
           const participantEmails = meeting.participantEmails || [];
+
+          // Enriched attendee list with dedup + user inclusion (mirrors the
+          // recording pipeline's waterfall attendee plumbing) so re-runs on
+          // meetings without participant emails still reach speaker matching
+          // and voice-profile auto-enroll can pair speaker ↔ attendee.
+          const rerunAttendees = [];
+          const seenRerunKeys = new Set();
+          const pushRerunAttendee = a => {
+            const key = (a.email || a.name || '').toLowerCase();
+            if (!key || seenRerunKeys.has(key)) return;
+            seenRerunKeys.add(key);
+            rerunAttendees.push(a);
+          };
+          for (const a of meeting.calendarAttendees || []) {
+            pushRerunAttendee({ name: a.name, email: a.email, googleContactId: a.google_contact_resource || null });
+          }
+          for (const p of meeting.participants || []) {
+            pushRerunAttendee({ name: p.originalName || p.name, email: p.email || null, googleContactId: p.googleContactResource || null });
+          }
+          if (userProfile?.name) {
+            pushRerunAttendee({ name: userProfile.name, email: userProfile.email || null, googleContactId: null });
+          }
+
+          const matchIdentifiers = participantEmails.length > 0
+            ? participantEmails
+            : rerunAttendees.map(a => a.email || a.name).filter(Boolean);
+
           const speakerMapping = await speakerMatcher.matchSpeakers(
             meeting.transcript,
-            participantEmails,
+            matchIdentifiers,
             {
               includeOrganizer: true,
               useWordCount: true,
@@ -8045,11 +8091,7 @@ ipcMain.handle(
               audioFilePath: filePath || null,
               segments: meeting.segments || [],
               meetingId: meeting.id || meetingId,
-              calendarAttendees: (meeting.calendarAttendees || []).map(a => ({
-                email: a.email,
-                name: a.name,
-                googleContactId: a.google_contact_resource || null,
-              })),
+              calendarAttendees: rerunAttendees,
             }
           );
 
