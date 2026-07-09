@@ -2578,6 +2578,37 @@ async function initSDK() {
         );
       }
 
+      // Task 6: Persist isolation-track paths onto the meeting record now, before
+      // transcription runs. Transcription can take minutes and may fail entirely,
+      // so the track paths must be saved immediately to survive regardless of the
+      // transcription outcome. Recall provider events won't have these fields.
+      if (data.micAudioFilePath || data.appAudioFilePath || data.systemAudioFilePath) {
+        const micAudioFilePath = data.micAudioFilePath || null;
+        const appAudioFilePath = data.appAudioFilePath || null;
+        const systemAudioFilePath = data.systemAudioFilePath || null;
+        try {
+          await fileOperationManager.scheduleOperation(async trackData => {
+            const idx = trackData.pastMeetings.findIndex(m => m.recordingId === windowId);
+            if (idx !== -1) {
+              trackData.pastMeetings[idx].micAudioFilePath = micAudioFilePath;
+              trackData.pastMeetings[idx].appAudioFilePath = appAudioFilePath;
+              trackData.pastMeetings[idx].systemAudioFilePath = systemAudioFilePath;
+              console.log(
+                `[Recording] Persisted track paths for ${trackData.pastMeetings[idx].id}:`,
+                { mic: micAudioFilePath, app: appAudioFilePath, sys: systemAudioFilePath }
+              );
+            } else {
+              console.warn(
+                `[Recording] Could not find meeting for recordingId ${windowId} to persist track paths`
+              );
+            }
+            return trackData;
+          });
+        } catch (error) {
+          console.error('[Recording] Error persisting isolation-track paths:', error);
+        }
+      }
+
       // Immediately notify renderer that recording has ended (update UI right away)
       if (mainWindow && !mainWindow.isDestroyed() && meetingId) {
         console.log(
