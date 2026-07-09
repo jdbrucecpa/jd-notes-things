@@ -438,3 +438,63 @@ describe('VoiceProfileService CRUD', () => {
     expect(samples[0].duration).toBe(8.0);
   });
 });
+
+// ============================================================
+// 5. embedSpeakers response mapping (service contract)
+// ============================================================
+
+describe('embedSpeakers response mapping (service contract)', () => {
+  let service;
+
+  beforeEach(() => {
+    service = new VoiceProfileService({});
+  });
+
+  it('maps {embeddings:[{speaker,vector,duration}]} → [{speakerLabel, embedding}]', async () => {
+    service._postJson = vi.fn().mockResolvedValue({
+      embeddings: [
+        { speaker: 'SPEAKER_00', vector: [0.1, 0.2], duration: 12.5 },
+        { speaker: 'SPEAKER_01', vector: [0.3, 0.4], duration: 8.0 },
+      ],
+    });
+
+    const out = await service.embedSpeakers('C:/x.mp3', [
+      { speaker: 'SPEAKER_00', start: 0, end: 12.5 },
+    ]);
+
+    expect(out).toHaveLength(2);
+    expect(out[0].speakerLabel).toBe('SPEAKER_00');
+    expect(out[0].embedding).toBeInstanceOf(Float32Array);
+    expect(Array.from(out[0].embedding)).toEqual([
+      expect.closeTo(0.1),
+      expect.closeTo(0.2),
+    ]);
+    expect(out[1].speakerLabel).toBe('SPEAKER_01');
+    expect(out[1].embedding).toBeInstanceOf(Float32Array);
+    expect(Array.from(out[1].embedding)).toEqual([
+      expect.closeTo(0.3),
+      expect.closeTo(0.4),
+    ]);
+  });
+});
+
+// ============================================================
+// 6. _segmentDuration (seconds-based segments)
+// ============================================================
+
+describe('_segmentDuration (seconds-based segments)', () => {
+  let service;
+
+  beforeEach(() => {
+    service = new VoiceProfileService({});
+  });
+
+  it('sums durations for a label from {speaker,start,end} seconds', () => {
+    const segments = [
+      { speaker: 'SPEAKER_00', start: 0, end: 10.5 },
+      { speaker: 'SPEAKER_01', start: 10.5, end: 12 },
+      { speaker: 'SPEAKER_00', start: 12, end: 14.5 },
+    ];
+    expect(service._segmentDuration(segments, 'SPEAKER_00')).toBeCloseTo(13.0);
+  });
+});

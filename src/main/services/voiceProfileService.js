@@ -385,19 +385,21 @@ class VoiceProfileService {
    * Call the AI service to get embeddings for speakers in an audio file.
    * POST /embed-speakers, 30s timeout.
    *
+   * Service contract (EmbedSpeakersResponse): { embeddings: [{ speaker, vector, duration }] }
+   *
    * @param {string} audioFilePath - Absolute path to audio file
-   * @param {Array<{ speakerLabel: string, startMs: number, endMs: number }>} segments
+   * @param {Array<{ speaker: string, start: number, end: number }>} segments - Diarization segments in SECONDS
    * @returns {Promise<Array<{ speakerLabel: string, embedding: Float32Array }>>}
    */
   async embedSpeakers(audioFilePath, segments) {
-    // audioPath matches the Plan A JD Audio Service API contract (not audioFilePath)
+    // audioPath matches the JD Audio Service API contract (not audioFilePath)
     const body = JSON.stringify({ audioPath: audioFilePath, segments });
     const result = await this._postJson('/embed-speakers', body, 30000);
 
-    // AI service returns embedding as number[], convert to Float32Array
-    return (result.speakers || []).map(s => ({
-      speakerLabel: s.speakerLabel,
-      embedding: new Float32Array(s.embedding),
+    // Service contract (EmbedSpeakersResponse): { embeddings: [{ speaker, vector, duration }] }
+    return (result.embeddings || []).map(s => ({
+      speakerLabel: s.speaker,
+      embedding: new Float32Array(s.vector),
     }));
   }
 
@@ -437,7 +439,7 @@ class VoiceProfileService {
    * and the `status` field already discriminates the outcome for each speaker.
    *
    * @param {string} audioFilePath
-   * @param {Array<{ speakerLabel: string, startMs: number, endMs: number }>} segments
+   * @param {Array<{ speaker: string, start: number, end: number }>} segments - Diarization segments in SECONDS
    * @param {Array<{ name: string, email: string, googleContactId?: string }>} calendarAttendees
    * @param {string} meetingId
    * @returns {Promise<Array<{
@@ -602,14 +604,15 @@ class VoiceProfileService {
 
   /**
    * Total duration for a speaker label from the segments array.
-   * @param {Array} segments
+   * Segments are { speaker, start, end } in SECONDS (JD Audio Service shape).
+   * @param {Array<{speaker: string, start: number, end: number}>} segments
    * @param {string} speakerLabel
    * @returns {number} Duration in seconds
    */
   _segmentDuration(segments, speakerLabel) {
     return segments
-      .filter(s => s.speakerLabel === speakerLabel)
-      .reduce((sum, s) => sum + Math.max(0, (s.endMs - s.startMs) / 1000), 0);
+      .filter(s => s.speaker === speakerLabel)
+      .reduce((sum, s) => sum + Math.max(0, s.end - s.start), 0);
   }
 
   /**
