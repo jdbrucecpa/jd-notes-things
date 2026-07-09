@@ -8049,6 +8049,46 @@ ipcMain.handle(
         meeting.segments = transcript.segments;
       }
 
+      // v2.0 speaker-waterfall pre-stages for re-runs (mirrors the recording
+      // pipeline): Stage 0 label merge + Stage 1 track anchor. Meetings
+      // recorded before the isolation tracks existed simply skip Stage 1.
+      let rerunWaterfallSegments = meeting.segments || [];
+      let rerunPrecomputedEmbeddings = null;
+      let rerunTrackAnchor = null;
+      if (transcriptionProvider === 'local' && rerunWaterfallSegments.length > 0 && voiceProfileService) {
+        try {
+          const embeddings = await voiceProfileService.embedSpeakers(filePath, rerunWaterfallSegments);
+          rerunPrecomputedEmbeddings = embeddings;
+          if (embeddings.length > 0) {
+            const merged = mergeNearDuplicateLabels(rerunWaterfallSegments, embeddings);
+            rerunWaterfallSegments = merged.segments;
+            rerunPrecomputedEmbeddings = merged.embeddings;
+            if (Object.keys(merged.relabelMap).length > 0) {
+              console.log('[Waterfall:Rerun] Stage 0 merged labels:', merged.relabelMap);
+              meeting.transcript = meeting.transcript.map(u =>
+                merged.relabelMap[u.speaker] ? { ...u, speaker: merged.relabelMap[u.speaker] } : u
+              );
+              meeting.segments = rerunWaterfallSegments;
+            }
+          }
+        } catch (stage0Err) {
+          console.warn('[Waterfall:Rerun] Stage 0 skipped:', stage0Err.message);
+        }
+
+        try {
+          rerunTrackAnchor = await computeTrackAnchor(
+            {
+              micAudioFilePath: meeting.micAudioFilePath,
+              appAudioFilePath: meeting.appAudioFilePath,
+              systemAudioFilePath: meeting.systemAudioFilePath,
+            },
+            rerunWaterfallSegments
+          );
+        } catch (stage1Err) {
+          console.warn('[Waterfall:Rerun] Stage 1 skipped:', stage1Err.message);
+        }
+      }
+
       // Speaker matching: try to map speakers to contacts
       if (speakerMatcher && meeting.transcript.length > 0) {
         backgroundTaskManager.updateTask(taskId, 60, 'Matching speakers...');
@@ -8089,9 +8129,11 @@ ipcMain.handle(
               useWordCount: true,
               participantData: meeting.participants || [],
               audioFilePath: filePath || null,
-              segments: meeting.segments || [],
+              segments: rerunWaterfallSegments,
               meetingId: meeting.id || meetingId,
               calendarAttendees: rerunAttendees,
+              trackAnchor: rerunTrackAnchor,
+              precomputedEmbeddings: rerunPrecomputedEmbeddings,
             }
           );
 

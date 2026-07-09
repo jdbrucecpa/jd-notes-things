@@ -511,7 +511,19 @@ class VoiceProfileService {
           status: 'pending-review',
         });
       } else {
-        // Low confidence or no profiles — needs enrollment
+        // Low confidence or no profiles — needs enrollment. Log the best
+        // candidate's distance so threshold tuning has real numbers to work
+        // with (a near-miss at 0.5 and a total stranger at 0.95 look identical
+        // without this).
+        if (match) {
+          log.info(
+            `${LOG_PREFIX} No confident match for ${speaker.speakerLabel}: ` +
+              `best=${match.profile.contactName} dist=${match.distance.toFixed(4)} ` +
+              `(high ≤ ${DISTANCE_HIGH_CONFIDENCE}, medium ≤ ${DISTANCE_MEDIUM_CONFIDENCE})`
+          );
+        } else {
+          log.info(`${LOG_PREFIX} No stored profiles to match ${speaker.speakerLabel} against`);
+        }
         unmatchedSpeakers.push({ speaker, match });
       }
     }
@@ -557,6 +569,12 @@ class VoiceProfileService {
       });
     } else {
       // Multiple unmatched speakers or ambiguous — mark as unmatched with candidate list
+      if (unmatchedSpeakers.length > 0) {
+        log.info(
+          `${LOG_PREFIX} Auto-enroll skipped: ${unmatchedSpeakers.length} unmatched speaker(s) vs ` +
+            `${unmatchedAttendees.length} unmatched attendee(s) — needs exactly 1 + 1 to pair unambiguously`
+        );
+      }
       for (const { speaker, match } of unmatchedSpeakers) {
         const candidateProfiles = match ? [match.profile] : [];
 
