@@ -2922,8 +2922,12 @@ async function initSDK() {
 
                   if (transcriptionProvider === 'local' && rawSegments.length > 0 && voiceProfileService) {
                     // Stage 0: embed once, merge over-split diarization labels.
+                    backgroundTaskManager.updateTask(recordingTaskId, 72, 'Analyzing voice tracks...');
                     try {
                       const embeddings = await voiceProfileService.embedSpeakers(recordingPath, rawSegments);
+                      // Pass through even when empty — identifySpeakers' contract treats []
+                      // as "provided", so matchSpeakers skips a redundant second GPU embed fetch.
+                      precomputedEmbeddings = embeddings;
                       if (embeddings.length > 0) {
                         const merged = mergeNearDuplicateLabels(rawSegments, embeddings);
                         waterfallSegments = merged.segments;
@@ -2933,11 +2937,16 @@ async function initSDK() {
                           meetingForMatching.transcript = meetingForMatching.transcript.map(u =>
                             merged.relabelMap[u.speaker] ? { ...u, speaker: merged.relabelMap[u.speaker] } : u
                           );
+                          // same object ref — explicit for readability; persistence happens at the later writeData
                           meetingsData.pastMeetings[meetingIndex].transcript = meetingForMatching.transcript;
                           meetingsData.pastMeetings[meetingIndex].segments = waterfallSegments;
                         }
                       }
                     } catch (stage0Err) {
+                      // Intentional retry: when embedSpeakers throws (e.g. AI service still
+                      // cold-loading models, 30s timeout), precomputedEmbeddings stays null so
+                      // matchSpeakers' voice stage retries the embed once — the model may be
+                      // warm by then; worst case is a second bounded timeout before heuristics.
                       console.warn('[Waterfall] Stage 0 skipped:', stage0Err.message);
                     }
 
