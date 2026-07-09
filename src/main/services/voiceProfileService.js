@@ -429,7 +429,7 @@ class VoiceProfileService {
 
   /**
    * Full speaker identification flow:
-   *   1. Get embeddings from AI service
+   *   1. Get embeddings from AI service (or use precomputed embeddings if provided)
    *   2. Match against stored profiles (high confidence → auto-apply + update; medium → flag)
    *   3. Hybrid enrollment: if exactly 1 unmatched attendee, auto-enroll; else mark unmatched
    *
@@ -442,6 +442,7 @@ class VoiceProfileService {
    * @param {Array<{ speaker: string, start: number, end: number }>} segments - Diarization segments in SECONDS
    * @param {Array<{ name: string, email: string, googleContactId?: string }>} calendarAttendees
    * @param {string} meetingId
+   * @param {Array<{ speakerLabel: string, embedding: Float32Array }>} [precomputedEmbeddings=null] - Precomputed speaker embeddings; if provided, skips HTTP call to embed-speakers endpoint
    * @returns {Promise<Array<{
    *   speakerLabel: string,
    *   profileId: number|null,
@@ -453,16 +454,18 @@ class VoiceProfileService {
    *   candidates?: Array<Object>
    * }>>}
    */
-  async identifySpeakers(audioFilePath, segments, calendarAttendees, meetingId) {
+  async identifySpeakers(audioFilePath, segments, calendarAttendees, meetingId, precomputedEmbeddings = null) {
     log.info(`${LOG_PREFIX} identifySpeakers: ${segments.length} segments, ${calendarAttendees.length} attendees`);
 
-    // Step 1: Get embeddings from AI service
-    let speakerEmbeddings;
-    try {
-      speakerEmbeddings = await this.embedSpeakers(audioFilePath, segments);
-    } catch (err) {
-      log.error(`${LOG_PREFIX} embedSpeakers failed:`, err.message);
-      throw err;
+    // Step 1: Get embeddings (precomputed by the waterfall pipeline, or fetch)
+    let speakerEmbeddings = precomputedEmbeddings;
+    if (!speakerEmbeddings) {
+      try {
+        speakerEmbeddings = await this.embedSpeakers(audioFilePath, segments);
+      } catch (err) {
+        log.error(`${LOG_PREFIX} embedSpeakers failed:`, err.message);
+        throw err;
+      }
     }
 
     // Step 2: Match each speaker against stored profiles

@@ -647,7 +647,8 @@ describe('SpeakerMatcher', () => {
         '/tmp/test.wav',
         expect.any(Array),
         expect.any(Array),
-        'mtg-123'
+        'mtg-123',
+        null
       );
     });
 
@@ -848,6 +849,48 @@ describe('SpeakerMatcher', () => {
       // Matching still completes normally for the real labels.
       expect(mapping.SPEAKER_00).toBeDefined();
       expect(mapping.SPEAKER_01).toBeDefined();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // Stage 0 with precomputed embeddings
+  // ─────────────────────────────────────────────────────────────────
+
+  describe('Stage 0 with precomputed embeddings', () => {
+    it('passes precomputed embeddings as 5th argument to identifySpeakers', async () => {
+      const mockVoiceProfileService = {
+        identifySpeakers: vi.fn().mockResolvedValue([]),
+      };
+
+      matcher.setVoiceProfileService(mockVoiceProfileService);
+
+      const transcript = makeTranscript([
+        { speaker: 'SPEAKER_00', text: 'hello', timestamp: 0 },
+      ]);
+
+      const precomputedEmbs = [
+        { speakerLabel: 'SPEAKER_00', embedding: new Float32Array([1, 0]) },
+      ];
+
+      await matcher.matchSpeakers(transcript, ['test@example.com'], {
+        audioFilePath: '/tmp/test.wav',
+        segments: [{ speaker: 'SPEAKER_00', start: 0, end: 10 }],
+        precomputedEmbeddings: precomputedEmbs,
+        calendarAttendees: [{ name: 'Test', email: 'test@example.com' }],
+        meetingId: 'mtg-123',
+        participantData: [
+          { name: 'Test', originalName: 'Test', email: 'test@example.com', isHost: true },
+        ],
+      });
+
+      // Verify 5th argument is the precomputed embeddings
+      expect(mockVoiceProfileService.identifySpeakers).toHaveBeenCalledWith(
+        '/tmp/test.wav',
+        expect.any(Array),
+        expect.any(Array),
+        'mtg-123',
+        precomputedEmbs
+      );
     });
   });
 });

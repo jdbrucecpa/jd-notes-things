@@ -500,3 +500,30 @@ describe('_segmentDuration (seconds-based segments)', () => {
     expect(service._segmentDuration(segments, 'SPEAKER_00')).toBeCloseTo(13.0);
   });
 });
+
+// ============================================================
+// 7. identifySpeakers with precomputed embeddings
+// ============================================================
+
+describe('identifySpeakers with precomputed embeddings', () => {
+  it('skips the embed-speakers HTTP call when embeddings are provided', async () => {
+    const db = {
+      getAllVoiceProfiles: () => [],
+      saveVoiceProfile: vi.fn(() => ({ id: 1 })),
+    };
+    const svc = new VoiceProfileService(db);
+    svc.embedSpeakers = vi.fn();
+
+    const results = await svc.identifySpeakers(
+      'C:/x.mp3',
+      [{ speaker: 'SPEAKER_00', start: 0, end: 10 }],
+      [],
+      'meeting-1',
+      [{ speakerLabel: 'SPEAKER_00', embedding: new Float32Array([1, 0]) }]
+    );
+
+    expect(svc.embedSpeakers).not.toHaveBeenCalled();
+    expect(results).toHaveLength(1);
+    expect(results[0].speakerLabel).toBe('SPEAKER_00');
+  });
+});

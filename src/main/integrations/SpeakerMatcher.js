@@ -224,7 +224,8 @@ class SpeakerMatcher {
           options.audioFilePath,
           options.segments,
           options.calendarAttendees || [],
-          options.meetingId || null
+          options.meetingId || null,
+          options.precomputedEmbeddings || null
         );
 
         for (const result of voiceProfileResults) {
