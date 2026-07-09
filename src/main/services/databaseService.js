@@ -476,8 +476,10 @@ class DatabaseService {
         WHERE id = @id
       `),
       getVoiceProfile: this.db.prepare('SELECT * FROM voice_profiles WHERE id = ?'),
+      // Case-insensitive: covers pre-existing mixed-case rows (new writes are
+      // canonical lowercase via VoiceProfileService.upsertProfileSample).
       getVoiceProfileByEmail: this.db.prepare(
-        'SELECT * FROM voice_profiles WHERE contact_email = ? LIMIT 1'
+        'SELECT * FROM voice_profiles WHERE LOWER(contact_email) = LOWER(?) LIMIT 1'
       ),
       getVoiceProfileByContact: this.db.prepare(
         'SELECT * FROM voice_profiles WHERE google_contact_id = ? LIMIT 1'

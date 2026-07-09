@@ -394,9 +394,13 @@ class VoiceProfileService {
 
   /**
    * Create-or-strengthen a contact's voice profile with one new sample, then
-   * recompute the duration-weighted centroid. The single funnel for all
-   * learning paths: anchor synergy (user), auto-enroll assist, Fix Speakers
-   * corrections, and the historical backfill.
+   * recompute the duration-weighted centroid. The learning funnel for voice
+   * samples. Used today by the manual Fix Speakers assignment; anchor synergy,
+   * corrections, and the historical backfill adopt it in subsequent Phase-2
+   * tasks.
+   *
+   * Email identity is case-insensitive: the email is lowercased for both the
+   * lookup and storage, so casing variants never spawn duplicate profiles.
    *
    * @param {{ contactName: string, contactEmail: string|null, googleContactId?: string|null }} contact
    * @param {Float32Array} embedding
@@ -407,14 +411,15 @@ class VoiceProfileService {
   upsertProfileSample(contact, embedding, durationSec, meetingId) {
     if (!contact?.contactEmail || !embedding || embedding.length === 0) return null;
 
-    let profile = this.getProfileByEmail(contact.contactEmail);
+    const email = contact.contactEmail.toLowerCase();
+    let profile = this.getProfileByEmail(email);
     let created = false;
 
     if (!profile) {
       const { id } = this.saveProfile({
         googleContactId: contact.googleContactId || null,
         contactName: contact.contactName,
-        contactEmail: contact.contactEmail,
+        contactEmail: email,
         embedding,
         sampleCount: 1,
         totalDuration: durationSec ?? 0,
@@ -429,7 +434,7 @@ class VoiceProfileService {
 
     log.info(
       `${LOG_PREFIX} ${created ? 'Created' : 'Strengthened'} profile for ${contact.contactName} ` +
-        `(${contact.contactEmail}) with ${Math.round(durationSec ?? 0)}s sample from ${meetingId || 'n/a'}`
+        `(${email}) with ${Math.round(durationSec ?? 0)}s sample from ${meetingId || 'n/a'}`
     );
     return { profileId: profile.id, created };
   }

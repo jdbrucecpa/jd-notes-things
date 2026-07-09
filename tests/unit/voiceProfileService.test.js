@@ -54,8 +54,11 @@ function makeDb() {
     samples,
     getAllVoiceProfiles: () => [...profiles.values()],
     getVoiceProfile: id => profiles.get(id) || null,
+    // Case-insensitive, mirroring the real SQL: LOWER(contact_email) = LOWER(?)
     getVoiceProfileByEmail: email =>
-      [...profiles.values()].find(p => p.contact_email === email) || null,
+      [...profiles.values()].find(
+        p => (p.contact_email || '').toLowerCase() === (email || '').toLowerCase()
+      ) || null,
     saveVoiceProfile: (p, id) => {
       const pid = id ?? nextId++;
       profiles.set(pid, {
@@ -672,6 +675,16 @@ describe('upsertProfileSample', () => {
     const prof = svc.getProfile(first.profileId);
     expect(prof.sampleCount).toBe(2);
     expect(prof.totalDuration).toBeCloseTo(100);
+  });
+
+  it('matches an existing profile case-insensitively (no duplicate on casing variants)', () => {
+    const svc = new VoiceProfileService(makeDb());
+    const first = svc.upsertProfileSample(
+      { contactName: 'Kurt', contactEmail: 'kurt@x.com' }, new Float32Array([1, 0]), 40, 'm1');
+    const second = svc.upsertProfileSample(
+      { contactName: 'Kurt', contactEmail: 'Kurt@X.com' }, new Float32Array([0.9, 0.1]), 60, 'm2');
+    expect(second.created).toBe(false);
+    expect(second.profileId).toBe(first.profileId);
   });
 
   it('returns null gracefully when no email identity', () => {
