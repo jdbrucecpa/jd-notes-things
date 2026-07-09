@@ -7077,19 +7077,24 @@ ipcMain.handle(
       if (!voiceProfileService) {
         throw new Error('Voice profile service not initialized');
       }
-      // Create a new voice profile for this speaker-contact assignment
+      // Create-or-strengthen the contact's voice profile with this sample
+      // (avoids spawning a duplicate profile on repeat manual assignments).
       const embedding = new Float32Array(data.embedding);
-      const profile = voiceProfileService.saveProfile({
-        googleContactId: data.googleContactId || null,
-        contactName: data.contactName,
-        contactEmail: data.contactEmail,
-        embedding: embedding,
-        sampleCount: 1,
-        totalDuration: 0,
-        confidence: 0.5,
-      });
+      const result = voiceProfileService.upsertProfileSample(
+        {
+          contactName: data.contactName,
+          contactEmail: data.contactEmail,
+          googleContactId: data.googleContactId || null,
+        },
+        embedding,
+        0,
+        data.meetingId
+      );
+      if (!result) {
+        return { success: false, error: 'Contact email required for a voice profile' };
+      }
 
-      return { success: true, profileId: profile.id };
+      return { success: true, profileId: result.profileId, created: result.created };
     } catch (error) {
       console.error('[VoiceProfile] Error assigning profile:', error);
       return { success: false, error: error.message };

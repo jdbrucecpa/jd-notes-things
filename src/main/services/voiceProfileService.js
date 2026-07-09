@@ -392,6 +392,48 @@ class VoiceProfileService {
     };
   }
 
+  /**
+   * Create-or-strengthen a contact's voice profile with one new sample, then
+   * recompute the duration-weighted centroid. The single funnel for all
+   * learning paths: anchor synergy (user), auto-enroll assist, Fix Speakers
+   * corrections, and the historical backfill.
+   *
+   * @param {{ contactName: string, contactEmail: string|null, googleContactId?: string|null }} contact
+   * @param {Float32Array} embedding
+   * @param {number} durationSec - speech duration this sample represents
+   * @param {string|null} meetingId
+   * @returns {{ profileId: number, created: boolean }|null} null when no email identity
+   */
+  upsertProfileSample(contact, embedding, durationSec, meetingId) {
+    if (!contact?.contactEmail || !embedding || embedding.length === 0) return null;
+
+    let profile = this.getProfileByEmail(contact.contactEmail);
+    let created = false;
+
+    if (!profile) {
+      const { id } = this.saveProfile({
+        googleContactId: contact.googleContactId || null,
+        contactName: contact.contactName,
+        contactEmail: contact.contactEmail,
+        embedding,
+        sampleCount: 1,
+        totalDuration: durationSec ?? 0,
+        confidence: 0.5,
+      });
+      profile = { id };
+      created = true;
+    }
+
+    this.addSample(profile.id, meetingId || null, embedding, durationSec ?? 0);
+    this.recomputeProfile(profile.id);
+
+    log.info(
+      `${LOG_PREFIX} ${created ? 'Created' : 'Strengthened'} profile for ${contact.contactName} ` +
+        `(${contact.contactEmail}) with ${Math.round(durationSec ?? 0)}s sample from ${meetingId || 'n/a'}`
+    );
+    return { profileId: profile.id, created };
+  }
+
   // ============================================================
   // AI Service Calls
   // ============================================================

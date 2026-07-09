@@ -505,7 +505,8 @@ function createSpeakerRow(speakerId, suggestion, stats = {}) {
             embedding: suggestion.embedding,
           });
           if (result.success) {
-            notifySuccess(`Voice profile created for ${candidate.name || candidate.email}`);
+            const verb = result.created ? 'created' : 'strengthened';
+            notifySuccess(`Voice profile ${verb} for ${candidate.name || candidate.email}`);
           } else {
             notifyError(`Failed to create voice profile: ${result.error || 'Unknown error'}`);
           }

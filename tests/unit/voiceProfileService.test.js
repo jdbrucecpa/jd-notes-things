@@ -38,6 +38,61 @@ function unitVector(dim, axis) {
   return v;
 }
 
+/**
+ * Build a stateful fake databaseService: an in-memory profiles Map + samples
+ * array, mirroring the real SQLite-backed API surface used by
+ * VoiceProfileService. Stores exactly what it's given (e.g. Buffers from
+ * serializeEmbedding) and returns it unchanged, since the service itself
+ * handles serialize/deserialize at its boundary.
+ */
+function makeDb() {
+  const profiles = new Map();
+  const samples = [];
+  let nextId = 1;
+  return {
+    profiles,
+    samples,
+    getAllVoiceProfiles: () => [...profiles.values()],
+    getVoiceProfile: id => profiles.get(id) || null,
+    getVoiceProfileByEmail: email =>
+      [...profiles.values()].find(p => p.contact_email === email) || null,
+    saveVoiceProfile: (p, id) => {
+      const pid = id ?? nextId++;
+      profiles.set(pid, {
+        id: pid,
+        contact_name: p.contactName,
+        contact_email: p.contactEmail,
+        google_contact_id: p.googleContactId,
+        embedding: p.embedding,
+        sample_count: p.sampleCount,
+        total_duration: p.totalDuration,
+        confidence: p.confidence,
+      });
+      return { id: pid };
+    },
+    addVoiceSample: (profileId, s) => {
+      samples.push({
+        profile_id: profileId,
+        meeting_id: s.meetingId,
+        embedding: s.embedding,
+        duration: s.duration,
+      });
+      return { id: samples.length };
+    },
+    getVoiceSamples: profileId =>
+      samples
+        .filter(s => s.profile_id === profileId)
+        .map((s, i) => ({
+          id: i,
+          profile_id: s.profile_id,
+          meeting_id: s.meeting_id,
+          embedding: s.embedding,
+          duration: s.duration,
+          created_at: '',
+        })),
+  };
+}
+
 // ============================================================
 // 1. Embedding Serialization
 // ============================================================
@@ -585,5 +640,43 @@ describe('findBestMatch margin rule', () => {
     const svc = new VoiceProfileService(db);
     const result = svc.findBestMatch(new Float32Array([1, 0.01, 0]));
     expect(result.confidence).toBe('high');
+  });
+});
+
+// ============================================================
+// 7. upsertProfileSample — create-or-strengthen funnel
+// ============================================================
+
+describe('upsertProfileSample', () => {
+  it('creates a profile + founding sample when none exists', () => {
+    const svc = new VoiceProfileService(makeDb());
+    const r = svc.upsertProfileSample(
+      { contactName: 'Kurt Anderson', contactEmail: 'kurt@x.com', googleContactId: null },
+      new Float32Array([1, 0]), 42, 'meeting-1'
+    );
+    expect(r.created).toBe(true);
+    expect(svc.getProfileByEmail('kurt@x.com')).not.toBeNull();
+    expect(svc.getSamples(r.profileId)).toHaveLength(1);
+  });
+
+  it('adds a sample + recomputes when the profile already exists', () => {
+    const db = makeDb();
+    const svc = new VoiceProfileService(db);
+    const first = svc.upsertProfileSample(
+      { contactName: 'Kurt', contactEmail: 'kurt@x.com' }, new Float32Array([1, 0]), 40, 'm1');
+    const second = svc.upsertProfileSample(
+      { contactName: 'Kurt', contactEmail: 'kurt@x.com' }, new Float32Array([0.9, 0.1]), 60, 'm2');
+    expect(second.created).toBe(false);
+    expect(second.profileId).toBe(first.profileId);
+    expect(svc.getSamples(first.profileId)).toHaveLength(2);
+    const prof = svc.getProfile(first.profileId);
+    expect(prof.sampleCount).toBe(2);
+    expect(prof.totalDuration).toBeCloseTo(100);
+  });
+
+  it('returns null gracefully when no email identity', () => {
+    const svc = new VoiceProfileService(makeDb());
+    const r = svc.upsertProfileSample({ contactName: 'X', contactEmail: null }, new Float32Array([1]), 5, 'm');
+    expect(r).toBeNull();
   });
 });
