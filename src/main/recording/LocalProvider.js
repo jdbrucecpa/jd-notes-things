@@ -4,6 +4,7 @@ const fs = require('fs');
 const { RecordingProvider } = require('./RecordingProvider');
 const { buildFFmpegArgs } = require('./buildFFmpegArgs');
 const { WasapiCapture } = require('./WasapiCapture');
+const { AppLoopbackCapture } = require('./AppLoopbackCapture');
 
 // Prefer electron-log in the app; fall back to console in tests / non-Electron.
 let log;
@@ -96,6 +97,9 @@ class LocalProvider extends RecordingProvider {
     this._audioSources = []; // Populated via setAudioConfig()
     this._audioMixer = { autoBalance: false };
     this._wasapiCaptures = []; // Active WasapiCapture instances during recording
+    this._appCapture = null; // AppLoopbackCapture during recording
+    this._activeTrackPaths = null; // { micAudioFilePath, appAudioFilePath, systemAudioFilePath }
+    this._pendingTrackOutputs = null; // passed to buildFFmpegArgs at spawn time
     // Close-debounce: a meeting window's title can momentarily drop out of the
     // window list between polls (Zoom in particular reshuffles which of its
     // windows is "current"). Require the meeting window to be absent for several
@@ -162,9 +166,60 @@ class LocalProvider extends RecordingProvider {
     this._recording = true;
     this._activeRecording = { recordingId, audioFilePath };
 
+    const trackPaths = this._deriveTrackPaths(audioFilePath);
+
+    // Preferred isolation track: per-process capture of the detected meeting
+    // app (remote voices only — the user's own voice never renders there).
+    // Falls back to a system-only submix inside FFmpeg when unavailable.
+    let appTrackActive = false;
+    const meetingPid = this._activeMeetingPid();
+    if (meetingPid && AppLoopbackCapture.isAvailable()) {
+      try {
+        this._appCapture = new AppLoopbackCapture();
+        this._appCapture.on('error', (err) => {
+          // Capture failure degrades the isolation track only — never the recording.
+          this.emit('error', { type: 'app-loopback-error', message: err.message });
+        });
+        await this._appCapture.start(meetingPid, trackPaths.appTrackPath);
+        appTrackActive = true;
+        log.info(`[LocalProvider] App-loopback capture started (pid=${meetingPid})`);
+      } catch (err) {
+        log.warn(`[LocalProvider] App-loopback capture failed, using system submix: ${err.message}`);
+        this._appCapture = null;
+      }
+    }
+
+    this._pendingTrackOutputs = {
+      micTrackPath: trackPaths.micTrackPath,
+      systemTrackPath: appTrackActive ? null : trackPaths.systemTrackPath,
+    };
+    this._activeTrackPaths = {
+      micAudioFilePath: null, // set in _startFFmpeg once real sources are known
+      appAudioFilePath: appTrackActive ? trackPaths.appTrackPath : null,
+      systemAudioFilePath: null,
+    };
+
     await this._startFFmpeg(audioFilePath);
     this.emit('recording-started', { recordingId, audioFilePath });
     return recordingId;
+  }
+
+  /** Track-file paths derived from the main recording path. */
+  _deriveTrackPaths(audioFilePath) {
+    const base = audioFilePath.replace(/\.mp3$/i, '');
+    return {
+      micTrackPath: `${base}-mic.mp3`,
+      appTrackPath: `${base}-app.wav`,
+      systemTrackPath: `${base}-sys.mp3`,
+    };
+  }
+
+  /** PID of the detected meeting app window, or null. windowId is "<proc>-<pid>". */
+  _activeMeetingPid() {
+    const windowId = this._activeMeeting?.windowId;
+    if (!windowId) return null;
+    const pid = parseInt(windowId.split('-').pop(), 10);
+    return Number.isFinite(pid) ? pid : null;
   }
 
   /**
@@ -189,6 +244,10 @@ class LocalProvider extends RecordingProvider {
       if (this._recording) {
         this._recording = false;
         await this._stopWasapiCaptures();
+        if (this._appCapture) {
+          await this._appCapture.stop().catch(() => {});
+          this._appCapture = null;
+        }
       }
       return;
     }
@@ -238,17 +297,36 @@ class LocalProvider extends RecordingProvider {
     this._recording = false;
     this._ffmpegProcess = null;
     this._stopWasapiCaptures();
+    if (this._appCapture) {
+      this._appCapture.stop().catch(() => {});
+      this._appCapture = null;
+    }
+    const tracks = this._activeTrackPaths || {};
+    this._activeTrackPaths = null;
+    this._pendingTrackOutputs = null;
     // Surface FFmpeg's exit + stderr tail so a failed/empty recording is diagnosable.
     log.info(`[LocalProvider] FFmpeg exited (code=${code}).`);
     if (this._ffmpegStderrTail) {
       log.info(`[LocalProvider] FFmpeg stderr tail:\n${this._ffmpegStderrTail}`);
     }
-    this.emit('recording-ended', { recordingId, audioFilePath, exitCode: code });
+    this.emit('recording-ended', {
+      recordingId,
+      audioFilePath,
+      exitCode: code,
+      micAudioFilePath: tracks.micAudioFilePath || null,
+      appAudioFilePath: tracks.appAudioFilePath || null,
+      systemAudioFilePath: tracks.systemAudioFilePath || null,
+    });
   }
 
   async shutdown() {
     // Stop any active WASAPI captures
     await this._stopWasapiCaptures();
+
+    if (this._appCapture) {
+      await this._appCapture.stop().catch(() => {});
+      this._appCapture = null;
+    }
 
     this._stopPolling();
 
@@ -605,7 +683,16 @@ class LocalProvider extends RecordingProvider {
         }
       }
 
-      ffmpegArgs = buildFFmpegArgs(resolvedSources, this._audioMixer, outputPath);
+      const trackOutputs = this._pendingTrackOutputs || {};
+      ffmpegArgs = buildFFmpegArgs(resolvedSources, this._audioMixer, outputPath, trackOutputs);
+      // Record which solo tracks actually made it into the command.
+      const hasMic = resolvedSources.some(s => s.type !== 'wasapi');
+      const hasWasapi = resolvedSources.some(s => s.type === 'wasapi');
+      if (this._activeTrackPaths) {
+        this._activeTrackPaths.micAudioFilePath = hasMic ? trackOutputs.micTrackPath : null;
+        this._activeTrackPaths.systemAudioFilePath =
+          trackOutputs.systemTrackPath && hasWasapi ? trackOutputs.systemTrackPath : null;
+      }
     } else {
       // Fallback: single loopback device (backward compat)
       const loopbackDevice = await this._findLoopbackDevice();

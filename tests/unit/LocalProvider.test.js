@@ -188,4 +188,40 @@ describe('LocalProvider', () => {
       expect(provider._meetingDetected).toBe(false);
     });
   });
+
+  describe('per-track recording wiring', () => {
+    it('derives track paths from the recording path', () => {
+      const p = provider._deriveTrackPaths('C:\\rec\\recording-X.mp3');
+      expect(p.micTrackPath).toBe('C:\\rec\\recording-X-mic.mp3');
+      expect(p.appTrackPath).toBe('C:\\rec\\recording-X-app.wav');
+      expect(p.systemTrackPath).toBe('C:\\rec\\recording-X-sys.mp3');
+    });
+
+    it('extracts the meeting PID from the active meeting windowId', () => {
+      provider._activeMeeting = { windowId: 'zoom-27736', platform: 'zoom' };
+      expect(provider._activeMeetingPid()).toBe(27736);
+      provider._activeMeeting = null;
+      expect(provider._activeMeetingPid()).toBeNull();
+      provider._activeMeeting = { windowId: 'weird' };
+      expect(provider._activeMeetingPid()).toBeNull();
+    });
+
+    it('recording-ended includes track paths', async () => {
+      const fake = new EventEmitter();
+      fake.stdin = { write: () => {}, end: () => {} };
+      fake.kill = vi.fn(() => fake.emit('close', 0));
+      provider._gracefulQuitMs = 10;
+      provider._recording = true;
+      provider._ffmpegProcess = fake;
+      provider._activeRecording = { recordingId: 'r.mp3', audioFilePath: 'r.mp3' };
+      provider._activeTrackPaths = { micAudioFilePath: 'r-mic.mp3', appAudioFilePath: null, systemAudioFilePath: null };
+      fake.on('close', code => provider._handleFfmpegClose('r.mp3', 'r.mp3', code));
+
+      const ended = new Promise(res => provider.once('recording-ended', res));
+      await provider.stopRecording('r.mp3');
+      const evt = await ended;
+      expect(evt.micAudioFilePath).toBe('r-mic.mp3');
+      expect(evt.appAudioFilePath).toBeNull();
+    });
+  });
 });
