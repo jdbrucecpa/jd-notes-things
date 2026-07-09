@@ -878,6 +878,18 @@ class DatabaseService {
       meeting.transcript = [];
     }
 
+    // Parse the speaker_mapping JSON column once — it serves both as the
+    // zero-rows fallback and as the source of extras merged onto row-built
+    // mappings.
+    let mappingJson = null;
+    if (row.speaker_mapping) {
+      try {
+        mappingJson = JSON.parse(row.speaker_mapping);
+      } catch (err) {
+        log.warn(`[Database] Corrupt speaker_mapping JSON on meeting ${row.id}:`, err.message);
+      }
+    }
+
     // Hydrate speaker mapping (as object keyed by label)
     const mappingRows = this._stmts.getSpeakerMappings.all(row.id);
     if (mappingRows.length > 0) {
@@ -891,28 +903,15 @@ class DatabaseService {
           emailSource: m.email_source || undefined,
         };
       }
-    }
-
-    // Also restore from JSON column as fallback (for complex nested speakerMapping)
-    if (!meeting.speakerMapping && row.speaker_mapping) {
-      try {
-        meeting.speakerMapping = JSON.parse(row.speaker_mapping);
-      } catch (err) {
-        log.warn(`[Database] Corrupt speaker_mapping JSON on meeting ${row.id}:`, err.message);
+      // Merge embedding/status/etc. extras from the JSON column — the
+      // normalized rows only carry identity fields (see speakerMappingExtras.js).
+      if (mappingJson) {
+        meeting.speakerMapping = mergeSpeakerMappingExtras(meeting.speakerMapping, mappingJson);
       }
-    }
-
-    // Merge embedding/status/etc. extras from the JSON column — the normalized
-    // rows only carry identity fields (see speakerMappingExtras.js).
-    if (meeting.speakerMapping && row.speaker_mapping) {
-      try {
-        meeting.speakerMapping = mergeSpeakerMappingExtras(
-          meeting.speakerMapping,
-          JSON.parse(row.speaker_mapping)
-        );
-      } catch {
-        /* invalid JSON — keep row-built mapping */
-      }
+    } else if (mappingJson) {
+      // Fallback: no normalized rows — restore from JSON column
+      // (for complex nested speakerMapping)
+      meeting.speakerMapping = mappingJson;
     }
 
     // Hydrate calendar attendees
