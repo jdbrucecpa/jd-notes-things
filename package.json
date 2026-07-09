@@ -78,6 +78,7 @@
     "@recallai/desktop-sdk": "^2.0.8",
     "@timfish/forge-externals-plugin": "^0.2.1",
     "@types/dompurify": "^3.0.5",
+    "application-loopback": "^1.2.7",
     "archiver": "^8.0.0",
     "axios": "^1.13.5",
     "better-sqlite3": "^12.6.2",
