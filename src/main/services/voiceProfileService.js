@@ -442,7 +442,7 @@ class VoiceProfileService {
    * @param {Array<{ speaker: string, start: number, end: number }>} segments - Diarization segments in SECONDS
    * @param {Array<{ name: string, email: string, googleContactId?: string }>} calendarAttendees
    * @param {string} meetingId
-   * @param {Array<{ speakerLabel: string, embedding: Float32Array }>} [precomputedEmbeddings=null] - Precomputed speaker embeddings; if provided, skips HTTP call to embed-speakers endpoint
+   * @param {Array<{ speakerLabel: string, embedding: Float32Array }>} [precomputedEmbeddings=null] - Precomputed speaker embeddings; if provided, skips HTTP call to embed-speakers endpoint. An EMPTY array counts as provided ([] is truthy) — no fetch, zero speakers matched.
    * @returns {Promise<Array<{
    *   speakerLabel: string,
    *   profileId: number|null,
