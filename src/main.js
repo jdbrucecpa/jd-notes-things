@@ -60,6 +60,7 @@ const databaseService = require('./main/services/databaseService');
 const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
 const { VoiceProfileService } = require('./main/services/voiceProfileService');
+const { CorrectionTelemetry, diffCorrections } = require('./main/services/correctionTelemetry');
 const {
   resolveMeetingClosedTarget,
 } = require('./main/services/recordingAutoStopResolver');
@@ -400,6 +401,9 @@ let speakerMatcher = null;
 
 // Voice profile service (v2.0)
 let voiceProfileService = null;
+
+// Correction telemetry (learning loop, spec §8)
+let correctionTelemetry = null;
 
 // v1.3.0: Gmail integration
 const Gmail = require('./main/integrations/Gmail');
@@ -1683,6 +1687,12 @@ app.whenReady().then(async () => {
     // Initialize speaker mapping service (SM-2)
     await speakerMappingService.initialize();
     console.log('[SpeakerMapping] Speaker mapping service initialized');
+
+    // Correction telemetry (learning loop, spec §8)
+    correctionTelemetry = new CorrectionTelemetry(
+      path.join(app.getPath('userData'), 'config', 'correction-telemetry.json')
+    );
+    console.log('[CorrectionTelemetry] Correction telemetry initialized');
   } catch (error) {
     console.error('[ObsidianExport] Failed to initialize:', error.message);
     console.log('[ObsidianExport] Obsidian export will be disabled');
@@ -5926,6 +5936,10 @@ ipcMain.handle(
       throw new Error(`Meeting ${meetingId} has no transcript`);
     }
 
+    // Snapshot the pipeline's own guess before we overwrite it, so we can
+    // diff against the user's correction after mappings are applied.
+    const prevMapping = meeting.speakerMapping || {};
+
     // Apply mappings to transcript
     console.log(`[SpeakerMapping IPC] Mappings to apply:`, JSON.stringify(mappings, null, 2));
     console.log(
@@ -6108,6 +6122,56 @@ ipcMain.handle(
         updatedContent = updatedContent.replace(regex, mapping.contactName);
       }
       meeting.content = updatedContent;
+    }
+
+    // Learning loop (spec §8): telemetry + enrollment from corrections.
+    try {
+      const corrections = diffCorrections(meetingId, prevMapping, mappings);
+      if (corrections.length > 0 && correctionTelemetry) {
+        correctionTelemetry.record(corrections);
+        console.log(`[CorrectionTelemetry] Recorded ${corrections.length} correction(s):`,
+          corrections.map(c => `${c.speakerLabel}: ${c.fromMethod}(${c.fromName}) -> ${c.toName}`).join('; '));
+      }
+
+      // Correction-driven enrollment: when the corrected label still carries
+      // its match-time embedding (rehydration keeps these across reloads),
+      // the correction becomes a voice sample for the RIGHT person.
+      if (voiceProfileService) {
+        for (const c of corrections) {
+          const entry = prevMapping[c.speakerLabel];
+          if (entry?.embedding?.length > 0 && c.toEmail) {
+            const upsert = voiceProfileService.upsertProfileSample(
+              { contactName: c.toName, contactEmail: c.toEmail, googleContactId: null },
+              new Float32Array(entry.embedding),
+              0,
+              meetingId
+            );
+            if (upsert?.rejected) {
+              console.log(`[CorrectionEnroll] Sample for ${c.toName} rejected by poisoning guard (embedding does not match their established profile)`);
+            } else if (upsert) {
+              console.log(`[CorrectionEnroll] ${c.toName} ${upsert.created ? 'enrolled' : 'strengthened'} from correction of ${c.speakerLabel}`);
+            }
+          } else if (c.toEmail) {
+            console.log(`[CorrectionEnroll] No embedding available for ${c.speakerLabel} — backfill can cover this meeting later`);
+          }
+        }
+      }
+
+      // Keep meeting.speakerMapping in sync with the correction so future
+      // reloads and telemetry diffs see the corrected state.
+      meeting.speakerMapping = meeting.speakerMapping || {};
+      for (const [label, next] of Object.entries(mappings)) {
+        if (!next || typeof next !== 'object') continue;
+        meeting.speakerMapping[label] = {
+          ...(meeting.speakerMapping[label] || {}),
+          email: next.contactEmail || null,
+          name: next.contactName,
+          confidence: 'manual',
+          method: 'user-correction',
+        };
+      }
+    } catch (learnErr) {
+      console.warn('[CorrectionTelemetry] Learning hook failed (correction still applied):', learnErr.message);
     }
 
     // Save updated meeting data
