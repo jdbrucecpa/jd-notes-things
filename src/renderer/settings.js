@@ -1099,20 +1099,20 @@ export function initializeSettingsUI() {
             if (result.success && result.data?.recordingProvider) {
               recordingProviderSelect.value = result.data.recordingProvider;
             } else {
-              recordingProviderSelect.value = 'recall';
+              recordingProviderSelect.value = 'local';
             }
           })
           .catch(() => {
-            recordingProviderSelect.value = 'recall';
+            recordingProviderSelect.value = 'local';
           });
       } else {
-        recordingProviderSelect.value = 'recall';
+        recordingProviderSelect.value = 'local';
       }
     }
 
     // v2.0: Transcription provider — read from localStorage to match renderer.js storage key
     if (transcriptionProviderSelect) {
-      transcriptionProviderSelect.value = localStorage.getItem('transcriptionProvider') || 'assemblyai';
+      transcriptionProviderSelect.value = localStorage.getItem('transcriptionProvider') || 'local';
     }
 
     // v2.0: Service endpoint URLs

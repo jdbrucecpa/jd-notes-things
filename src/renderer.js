@@ -2882,7 +2882,7 @@ async function createNewMeeting(calendarMeeting = null) {
   try {
     console.log('Auto-starting recording for new note');
     // Get transcription provider from localStorage
-    const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'assemblyai';
+    const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'local';
     console.log('[Auto-start] Transcription provider from localStorage:', transcriptionProvider);
     console.log('[Auto-start] localStorage value:', localStorage.getItem('transcriptionProvider'));
     // Start manual recording for the new note
@@ -4709,7 +4709,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           console.log('Found detected meeting, joining...');
           // Get transcription provider from localStorage
           const transcriptionProvider =
-            localStorage.getItem('transcriptionProvider') || 'assemblyai';
+            localStorage.getItem('transcriptionProvider') || 'local';
           console.log('[Join Meeting] Using transcription provider:', transcriptionProvider);
           const joinResult = await window.electronAPI.joinDetectedMeeting(transcriptionProvider);
           // On success we navigate to the new note, so leave the button disabled.
@@ -5269,7 +5269,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (transcriptionProviderSelect) {
     // Load saved provider preference (default to AssemblyAI)
     const savedTranscriptionProvider =
-      localStorage.getItem('transcriptionProvider') || 'assemblyai';
+      localStorage.getItem('transcriptionProvider') || 'local';
     transcriptionProviderSelect.value = savedTranscriptionProvider;
     console.log('Current transcription provider:', savedTranscriptionProvider);
 
@@ -5628,7 +5628,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       stopIcon.style.display = 'block';
 
       // Get transcription provider from localStorage (default to assemblyai)
-      const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'assemblyai';
+      const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'local';
 
       // Call the API to start recording with action
       const result = await window.electronAPI.startManualRecording(
@@ -7097,7 +7097,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Get selected audio provider
     const audioProviderSelect = document.getElementById('audioProviderSelect');
-    const audioProvider = audioProviderSelect?.value || 'assemblyai';
+    const audioProvider = audioProviderSelect?.value || 'local';
 
     // UI-1.6: Get selected platform
     const platformSelect = document.getElementById('importPlatformSelect');

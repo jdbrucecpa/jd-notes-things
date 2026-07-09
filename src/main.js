@@ -449,8 +449,8 @@ let appSettings = {
     stopRecording: 'CommandOrControl+Shift+S',
   },
   windowBounds: null, // Will store {x, y, width, height, displayId}
-  transcriptionProvider: 'assemblyai', // v1.2: Default transcription provider
-  recordingProvider: 'recall', // v2.0: 'recall' (Recall.ai SDK) or 'local' (FFmpeg + Window Monitoring)
+  transcriptionProvider: 'local', // v2.0: Default transcription provider (local-first)
+  recordingProvider: 'local', // v2.0: 'local' (FFmpeg + Window Monitoring, default) or 'recall' (Recall.ai SDK)
   streamDeck: {
     enabled: false, // v1.2: Enable Stream Deck WebSocket integration
   },
@@ -2260,7 +2260,7 @@ async function createDesktopSdkUpload() {
 
 // Initialize recording provider and SDK
 async function initSDK() {
-  const providerSetting = appSettings.recordingProvider || 'recall';
+  const providerSetting = appSettings.recordingProvider || 'local';
   logger.main.info(`[Recording] Initializing with provider: ${providerSetting}`);
 
   // Create provider and manager based on setting
@@ -2543,8 +2543,8 @@ async function initSDK() {
       console.log('Recording processing complete - preparing for transcription');
 
       // Get the meeting ID, transcription provider, and participant emails for vocabulary
-      // Fallback chain: per-meeting override → app setting → default 'assemblyai'
-      let transcriptionProvider = 'assemblyai';
+      // Fallback chain: per-meeting override → app setting → default 'local'
+      let transcriptionProvider = 'local';
       let meetingId = null;
       let participantEmails = [];
       try {
@@ -7366,7 +7366,7 @@ ipcMain.handle(
     }
 
   // Validate provider
-  const validProviders = ['assemblyai', 'deepgram'];
+  const validProviders = ['assemblyai', 'deepgram', 'local'];
   if (!validProviders.includes(provider)) {
     backgroundTaskManager.failTask(taskId, `Invalid provider: ${provider}`);
     return {
@@ -8007,7 +8007,7 @@ ipcMain.handle(
       const transcriptionProvider = provider ||
         meeting.transcriptionProvider ||
         storedProvider ||
-        'assemblyai';
+        'local';
 
       backgroundTaskManager.updateTask(taskId, 10, 'Starting transcription...');
       event.sender.send('import:progress', {
@@ -8614,14 +8614,14 @@ ipcMain.handle('settings:getProviderPreferences', async event => {
           autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-4-5',
           templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5',
           patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-4-5',
-          transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'assemblyai'
+          transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'local'
         };
       } catch (e) {
         return {
           autoSummaryProvider: 'claude-haiku-4-5',
           templateSummaryProvider: 'claude-sonnet-5',
           patternGenerationProvider: 'claude-haiku-4-5',
-          transcriptionProvider: 'assemblyai'
+          transcriptionProvider: 'local'
         };
       }
     })()
@@ -9806,7 +9806,7 @@ ipcMain.handle('widget:start-recording', async (event, meetingId) => {
 
   try {
     // Get transcription provider from settings
-    const transcriptionProvider = appSettings.transcriptionProvider || 'assemblyai';
+    const transcriptionProvider = appSettings.transcriptionProvider || 'local';
 
     // Use the existing manual recording flow
     // First, we need to create a meeting note if meetingId is a calendar event ID
@@ -9860,7 +9860,7 @@ ipcMain.handle('widget:start-recording-with-action', async (event, { meetingId, 
     mainWindow.webContents.send('widget:create-and-record-with-action', {
       meetingId,
       action,
-      transcriptionProvider: appSettings.transcriptionProvider || 'assemblyai',
+      transcriptionProvider: appSettings.transcriptionProvider || 'local',
     });
 
     // Wait for response (remove listener on timeout to prevent stale listeners)
@@ -10304,7 +10304,7 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId, options = {}) 
 // Handle starting a manual desktop recording
 ipcMain.handle(
   'startManualRecording',
-  async (event, meetingId, transcriptionProvider = 'assemblyai', action = 'new') => {
+  async (event, meetingId, transcriptionProvider = 'local', action = 'new') => {
     try {
       // Wait for SDK to be ready (it restarts on startup to detect already-open meetings)
       if (!sdkReady) {
@@ -10951,7 +10951,7 @@ ipcMain.handle('loadMeetingsData', async () => {
 });
 
 // Function to create a new meeting note and start recording
-async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 'assemblyai') {
+async function createMeetingNoteAndRecord(platformName, transcriptionProvider = 'local') {
   console.log('Creating meeting note for platform:', platformName);
   console.log('Using transcription provider:', transcriptionProvider);
   try {
@@ -12119,7 +12119,7 @@ async function getProviderPreferences() {
       autoSummaryProvider: 'claude-haiku-4-5',
       templateSummaryProvider: 'claude-sonnet-5',
       patternGenerationProvider: 'claude-haiku-4-5',
-      transcriptionProvider: 'assemblyai',
+      transcriptionProvider: 'local',
     };
   }
 
@@ -12132,14 +12132,14 @@ async function getProviderPreferences() {
             autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-4-5',
             templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5',
             patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-4-5',
-            transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'assemblyai'
+            transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'local'
           };
         } catch (e) {
           return {
             autoSummaryProvider: 'claude-haiku-4-5',
             templateSummaryProvider: 'claude-sonnet-5',
             patternGenerationProvider: 'claude-haiku-4-5',
-            transcriptionProvider: 'assemblyai'
+            transcriptionProvider: 'local'
           };
         }
       })()
@@ -12151,7 +12151,7 @@ async function getProviderPreferences() {
       autoSummaryProvider: 'claude-haiku-4-5',
       templateSummaryProvider: 'claude-sonnet-5',
       patternGenerationProvider: 'claude-haiku-4-5',
-      transcriptionProvider: 'assemblyai',
+      transcriptionProvider: 'local',
     };
   }
 }
@@ -12558,13 +12558,13 @@ ipcMain.handle('checkForDetectedMeeting', async () => {
 // Function to join the detected meeting
 ipcMain.handle(
   'joinDetectedMeeting',
-  withValidation(transcriptionProviderSchema, async (event, transcriptionProvider = 'assemblyai') => {
+  withValidation(transcriptionProviderSchema, async (event, transcriptionProvider = 'local') => {
     return joinDetectedMeeting(transcriptionProvider);
   })
 );
 
 // Function to handle joining a detected meeting
-async function joinDetectedMeeting(transcriptionProvider = 'assemblyai') {
+async function joinDetectedMeeting(transcriptionProvider = 'local') {
   try {
     console.log('Join detected meeting called');
     console.log('Using transcription provider:', transcriptionProvider);
