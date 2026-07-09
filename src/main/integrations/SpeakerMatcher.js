@@ -182,6 +182,26 @@ class SpeakerMatcher {
     let speakerMapping = {};
     const matchedSpeakers = new Set();
 
+    // Stage 1 (track anchor): Deterministic user identification from mic-track
+    // dominance, computed upstream before diarization runs. When the diarized
+    // label proven to be the user is known, it takes the HIGHEST precedence of
+    // any stage — set it before voice profiles (Stage 0) or heuristics so
+    // nothing downstream can override or reassign it.
+    const trackAnchor = options.trackAnchor;
+    if (trackAnchor?.userLabel && this.userProfile?.name) {
+      console.log(
+        `[SpeakerMatcher] Stage 1: Track anchor identifies ${trackAnchor.userLabel} as user "${this.userProfile.name}" (dominance=${trackAnchor.userDominance})`
+      );
+      speakerMapping[trackAnchor.userLabel] = {
+        email: this.userProfile.email || null,
+        name: this.userProfile.name,
+        confidence: 'high',
+        method: 'track-anchor',
+        dominance: trackAnchor.userDominance,
+      };
+      matchedSpeakers.add(trackAnchor.userLabel);
+    }
+
     // Stage 0: Voice Profile Match (LOCAL MODE — highest confidence)
     if (
       this.voiceProfileService &&
@@ -778,26 +798,43 @@ class SpeakerMatcher {
       }
     }
 
+    // Labels proven NOT to be the user (active on the meeting-app track, per
+    // Stage 1 track anchor). These can never be assigned the user identity —
+    // they can still be positionally paired with non-user participants below.
+    const remoteLabels = new Set(options?.trackAnchor?.remoteLabels || []);
+
     const assignedSpeakers = new Set();
     const assignedParticipantKeys = new Set();
     const participantKey = (p) => p.email?.toLowerCase() || p.name?.toLowerCase();
 
     // Step 2: Assign earliest-appearing speakers to known participants
     if (hostParticipant && speakersByAppearance.length > 0) {
-      const earliest = speakersByAppearance[0];
-      mapping[earliest.label] = {
-        email: hostParticipant.email,
-        name: hostParticipant.name,
-        confidence: 'medium',
-        method: 'identity-first-speaker',
-      };
-      assignedSpeakers.add(earliest.label);
-      assignedParticipantKeys.add(participantKey(hostParticipant));
-      console.log(`[SpeakerMatcher] Assigned earliest speaker ${earliest.label} -> host "${hostParticipant.name}"`);
+      // If the host IS the user (by profile match), a remote-anchored label
+      // (proven not to be the user) can never receive this assignment.
+      const hostIsUser =
+        this.userProfile?.name &&
+        this.nameMatchStrict(this.userProfile.name, hostParticipant.originalName || hostParticipant.name);
+      const earliest = hostIsUser
+        ? speakersByAppearance.find(s => !remoteLabels.has(s.label))
+        : speakersByAppearance[0];
+
+      if (earliest) {
+        mapping[earliest.label] = {
+          email: hostParticipant.email,
+          name: hostParticipant.name,
+          confidence: 'medium',
+          method: 'identity-first-speaker',
+        };
+        assignedSpeakers.add(earliest.label);
+        assignedParticipantKeys.add(participantKey(hostParticipant));
+        console.log(`[SpeakerMatcher] Assigned earliest speaker ${earliest.label} -> host "${hostParticipant.name}"`);
+      }
     }
 
     if (userParticipant) {
-      const nextSpeaker = speakersByAppearance.find(s => !assignedSpeakers.has(s.label));
+      const nextSpeaker = speakersByAppearance.find(
+        s => !assignedSpeakers.has(s.label) && !remoteLabels.has(s.label)
+      );
       if (nextSpeaker) {
         mapping[nextSpeaker.label] = {
           email: userParticipant.email,

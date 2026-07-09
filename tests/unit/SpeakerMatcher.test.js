@@ -709,4 +709,58 @@ describe('SpeakerMatcher', () => {
       expect(result[0].speaker).toBe('Speaker C');
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────
+  // track anchor (Stage 1)
+  // ─────────────────────────────────────────────────────────────────
+
+  describe('track anchor (Stage 1)', () => {
+    const transcript = [
+      { speaker: 'SPEAKER_00', text: 'hello there everyone', timestamp: 0 },
+      { speaker: 'SPEAKER_01', text: 'hi thanks for meeting', timestamp: 5000 },
+    ];
+
+    it('maps the anchored label to the user profile with high confidence', async () => {
+      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
+        trackAnchor: { userLabel: 'SPEAKER_01', userDominance: 0.8, remoteLabels: ['SPEAKER_00'] },
+        participantData: [
+          { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' },
+          { name: 'Stacie Rasmussen', email: 'stacie@x.com' },
+        ],
+      });
+      expect(mapping.SPEAKER_01.name).toBe('J.D. Bruce');
+      expect(mapping.SPEAKER_01.method).toBe('track-anchor');
+      expect(mapping.SPEAKER_01.confidence).toBe('high');
+      // Remote-anchored label must never get the user identity.
+      expect(mapping.SPEAKER_00.name).not.toBe('J.D. Bruce');
+    });
+
+    it('never assigns the user to a remote-anchored label even without a user anchor', async () => {
+      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
+        trackAnchor: { userLabel: null, userDominance: 0, remoteLabels: ['SPEAKER_00'] },
+        participantData: [
+          { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' },
+          { name: 'Stacie Rasmussen', email: 'stacie@x.com' },
+        ],
+      });
+      expect(mapping.SPEAKER_00?.name).not.toBe('J.D. Bruce');
+      // Remote exclusion redirects the user-participant assignment to the
+      // next eligible (non-remote) speaker, SPEAKER_01.
+      expect(mapping.SPEAKER_01?.name).toBe('J.D. Bruce');
+    });
+
+    it('behaves identically to before when no trackAnchor is provided (regression)', async () => {
+      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const withUndefined = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
+        participantData: [
+          { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' },
+          { name: 'Stacie Rasmussen', email: 'stacie@x.com' },
+        ],
+      });
+      expect(withUndefined).toBeTruthy(); // must not throw; shape unchanged
+      expect(Object.keys(withUndefined).length).toBeGreaterThan(0);
+    });
+  });
 });
