@@ -233,6 +233,7 @@ class SpeakerMatcher {
                 user: {
                   name: this.userProfile.name,
                   email: this.userProfile.email,
+                  // userProfile has no googleContactId today — forward-looking; always null until the profile gains a contact link
                   googleContactId: this.userProfile.googleContactId || null,
                 },
               }
@@ -748,10 +749,10 @@ class SpeakerMatcher {
         .filter(p => !alreadyAssignedParticipants.has(p.email) && !alreadyAssignedNames.has(p.name))
         .map(p => {
           // Calendar-only participants often arrive with the email as the name
-          // (e.g. name: 'melissalhenderson@yahoo.com'); prefer the Google Contact
-          // display name when we have one. NOTE: originalName is normally IMMUTABLE
-          // (Zoom SDK identity) — we only substitute here because the raw name IS
-          // an email address, meaning it's calendar-derived, not a Zoom SDK identity.
+          // (e.g. name: 'melissalhenderson@yahoo.com'); the '@' condition gates only
+          // the display `name`, swapping it for the Google Contact display name.
+          // `originalName` stays IMMUTABLE (Zoom SDK identity) — it merely gains a
+          // synthesized fallback when absent, never overwriting an existing SDK value.
           const rawName = p.name || 'Unknown';
           const contact = contacts.get(p.email) || null;
           const displayName = rawName.includes('@') && contact?.name ? contact.name : rawName;
