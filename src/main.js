@@ -1938,7 +1938,57 @@ app.on('window-all-closed', () => {
 });
 
 // Cleanup resources when app quits (Phase 9: Memory Leak Prevention)
-app.on('before-quit', async () => {
+// v2.0: quitting mid-recording used to orphan the audio files mid-write —
+// the guard below defers the quit until active recordings have finalized.
+let recordingsStoppedForQuit = false;
+app.on('before-quit', async event => {
+  const activeRecordingIds = recordingManager
+    ? Object.keys(recordingManager.getActiveRecordings())
+    : [];
+  if (activeRecordingIds.length > 0 && !recordingsStoppedForQuit) {
+    // Defer the quit so FFmpeg can flush its final frames and the app-loopback
+    // WAV header gets patched (both happen before 'recording-ended' fires).
+    event.preventDefault();
+    recordingsStoppedForQuit = true;
+    console.log(
+      `[App] Stopping ${activeRecordingIds.length} active recording(s) before quit...`
+    );
+
+    // Resolves once the manager has no active recordings left ('recording-ended'
+    // fires after the provider fully finishes and the manager removes the entry).
+    const allEnded = new Promise(resolve => {
+      const check = () => {
+        if (Object.keys(recordingManager.getActiveRecordings()).length === 0) {
+          recordingManager.removeListener('recording-ended', check);
+          resolve();
+        }
+      };
+      recordingManager.on('recording-ended', check);
+      check();
+    });
+
+    try {
+      await Promise.race([
+        Promise.all(
+          activeRecordingIds.map(id =>
+            recordingManager.stopRecording(id).catch(err => {
+              console.error(`[App] Failed to stop recording ${id}:`, err.message);
+            })
+          )
+        ).then(() => allEnded),
+        // Safety net: never hang the quit (LocalProvider force-kills FFmpeg
+        // after ~2.5s on its own, so this should never be reached).
+        new Promise(resolve => setTimeout(resolve, 10000)),
+      ]);
+    } catch (err) {
+      console.error('[App] Error stopping recordings before quit:', err.message);
+    }
+
+    console.log('[App] Active recordings stopped, resuming quit');
+    app.quit();
+    return;
+  }
+
   console.log('[App] Cleaning up resources before quit...');
 
   // Destroy tray icon to prevent ghost icon in system tray

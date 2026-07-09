@@ -249,6 +249,17 @@ class LocalProvider extends RecordingProvider {
     return Number.isFinite(pid) ? pid : null;
   }
 
+  /** Whether a process with this PID exists (signal 0 probes without killing). */
+  _isProcessAlive(pid) {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (err) {
+      // EPERM means the process exists but we can't signal it — still alive.
+      return err.code === 'EPERM';
+    }
+  }
+
   /**
    * Stop the active FFmpeg recording. Resolves once FFmpeg has exited.
    * The 'recording-ended' event fires from the process close handler.
@@ -441,6 +452,23 @@ class LocalProvider extends RecordingProvider {
       // Only fire meeting-closed after CLOSE_CONFIRM_POLLS consecutive misses.
       this._missCount += 1;
       if (this._missCount >= CLOSE_CONFIRM_POLLS) {
+        // Zoom HIDES its meeting window entirely during screen share, so window
+        // absence alone is not proof the meeting ended. Zoom runs each meeting
+        // in a dedicated child process that exits when the meeting ends, so
+        // hold the meeting open while that process is alive. Zoom-only: Teams
+        // meetings live inside the long-lived ms-teams.exe process, where
+        // process liveness would hold a closed meeting open indefinitely.
+        if (this._activeMeeting?.platform === 'zoom') {
+          const pid = this._activeMeetingPid();
+          if (pid && this._isProcessAlive(pid)) {
+            if (this._missCount === CLOSE_CONFIRM_POLLS) {
+              log.info(
+                `[LocalProvider] Meeting window hidden but Zoom process alive (pid=${pid}) — holding meeting open (screen share?)`
+              );
+            }
+            return;
+          }
+        }
         const prev = this._activeMeeting;
         this._meetingDetected = false;
         this._activeMeeting = null;

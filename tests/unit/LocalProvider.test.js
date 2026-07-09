@@ -187,6 +187,68 @@ describe('LocalProvider', () => {
       expect(closed).toHaveBeenCalledWith({ windowId: 'zoom-123' });
       expect(provider._meetingDetected).toBe(false);
     });
+
+    // Regression: Zoom HIDES its meeting window during screen share, so the
+    // window vanishing from the poll is not proof the meeting ended. Zoom runs
+    // each meeting in a dedicated child process that exits at meeting end —
+    // hold the meeting open while that process is alive, otherwise a screen
+    // share mid-meeting fires meeting-closed and auto-stops a live recording.
+    it('holds a Zoom meeting open when the window is hidden but the meeting process is alive (screen share)', async () => {
+      const list = vi.spyOn(provider, '_getWindowList');
+      vi.spyOn(provider, '_isProcessAlive').mockReturnValue(true);
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      list.mockResolvedValueOnce(ZOOM); // detected
+      await provider._pollForMeetings();
+      list.mockResolvedValue(NONE); // window hidden by screen share
+      for (let i = 0; i < 5; i++) {
+        await provider._pollForMeetings(); // well past CLOSE_CONFIRM_POLLS
+      }
+
+      expect(closed).not.toHaveBeenCalled();
+      expect(provider._meetingDetected).toBe(true);
+      expect(provider._isProcessAlive).toHaveBeenCalledWith(123);
+    });
+
+    it('closes a held-open Zoom meeting once the meeting process exits', async () => {
+      const list = vi.spyOn(provider, '_getWindowList');
+      const alive = vi.spyOn(provider, '_isProcessAlive').mockReturnValue(true);
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      list.mockResolvedValueOnce(ZOOM); // detected
+      await provider._pollForMeetings();
+      list.mockResolvedValue(NONE);
+      await provider._pollForMeetings(); // miss 1
+      await provider._pollForMeetings(); // miss 2 — held open (process alive)
+      expect(closed).not.toHaveBeenCalled();
+
+      alive.mockReturnValue(false); // meeting process exited
+      await provider._pollForMeetings();
+
+      expect(closed).toHaveBeenCalledTimes(1);
+      expect(closed).toHaveBeenCalledWith({ windowId: 'zoom-123' });
+      expect(provider._meetingDetected).toBe(false);
+    });
+
+    it('closes a Teams meeting on window absence even while ms-teams.exe is alive', async () => {
+      const TEAMS = [{ processName: 'ms-teams', title: 'Standup | Microsoft Teams', pid: 55 }];
+      const list = vi.spyOn(provider, '_getWindowList');
+      vi.spyOn(provider, '_isProcessAlive').mockReturnValue(true);
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      list.mockResolvedValueOnce(TEAMS); // detected
+      await provider._pollForMeetings();
+      list.mockResolvedValue(NONE); // meeting window closed; Teams shell still running
+      await provider._pollForMeetings(); // miss 1
+      await provider._pollForMeetings(); // miss 2 — close (no process-liveness hold for Teams)
+
+      expect(closed).toHaveBeenCalledTimes(1);
+      expect(closed).toHaveBeenCalledWith({ windowId: 'ms-teams-55' });
+      expect(provider._meetingDetected).toBe(false);
+    });
   });
 
   describe('per-track recording wiring', () => {

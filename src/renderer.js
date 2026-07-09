@@ -815,22 +815,32 @@ async function batchDeleteMeetings() {
   toggleBulkSelectionMode();
 }
 
-// Function to check if there's an active recording for the current note
-// Note: Currently unused - kept for future feature
-// eslint-disable-next-line no-unused-vars
+// Re-sync recording state from the main process (the source of truth).
+// window.isRecording/currentRecordingId are renderer globals that any page
+// reload wipes while the main process keeps recording, so this must run on
+// load and whenever a note is opened.
 async function checkActiveRecordingState() {
-  if (!currentEditingMeetingId) return;
-
   try {
-    console.log('Checking active recording state for note:', currentEditingMeetingId);
-    const result = await window.electronAPI.getActiveRecordingId(currentEditingMeetingId);
+    if (currentEditingMeetingId) {
+      const result = await window.electronAPI.getActiveRecordingId(currentEditingMeetingId);
 
-    if (result.success && result.data) {
-      console.log('Found active recording for current note:', result.data);
-      updateRecordingButtonUI(true, result.data.recordingId);
-    } else {
-      console.log('No active recording found for note');
-      updateRecordingButtonUI(false, null);
+      if (result.success && result.data) {
+        console.log('Found active recording for current note:', result.data);
+        updateRecordingButtonUI(true, result.data.recordingId, result.data.startTime);
+      } else {
+        updateRecordingButtonUI(false, null);
+      }
+      return;
+    }
+
+    // No note open (e.g. right after a page reload): restore the globals so the
+    // tray/shortcut stop still targets the recording running in the main process.
+    const result = await window.electronAPI.getActiveRecordingId();
+    const activeIds = result.success && result.data ? Object.keys(result.data) : [];
+    if (activeIds.length > 0) {
+      console.log('Restored active recording state after load:', activeIds[0]);
+      window.isRecording = true;
+      window.currentRecordingId = activeIds[0];
     }
   } catch (error) {
     console.error('Error checking recording state:', error);
@@ -838,7 +848,9 @@ async function checkActiveRecordingState() {
 }
 
 // Function to update the recording button UI
-function updateRecordingButtonUI(isActive, recordingId) {
+// startTime (optional, epoch ms) restores the true elapsed time on the main
+// timer when re-syncing with an already-running recording after a page reload.
+function updateRecordingButtonUI(isActive, recordingId, startTime) {
   const recordButton = document.getElementById('recordButton');
   if (!recordButton) return;
 
@@ -860,7 +872,7 @@ function updateRecordingButtonUI(isActive, recordingId) {
 
     // Start main screen timer if not already running
     if (!mainTimerInterval) {
-      startMainTimer();
+      startMainTimer(startTime);
     }
   } else {
     // No active recording
@@ -2575,6 +2587,10 @@ function showEditorView(meetingId) {
     isSynced: !!(meeting.obsidianLink || meeting.vaultPath),
   });
 
+  // Re-sync the record button with the main process — the renderer's recording
+  // globals do not survive a page reload while a recording is running.
+  checkActiveRecordingState();
+
   // Show floating controls section for meeting detail view
   const floatingControls = document.querySelector('.floating-controls');
   if (floatingControls) {
@@ -4190,6 +4206,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initially show home view
   showHomeView();
+
+  // Restore recording state from the main process in case this page load is a
+  // reload (dev hot-reload, Ctrl+R) that happened while a recording was active.
+  checkActiveRecordingState();
 
   // Listen for meeting detection status updates
   window.electronAPI.onMeetingDetectionStatus(data => {
