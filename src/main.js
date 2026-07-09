@@ -66,6 +66,8 @@ const {
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 const { RecordingManager, RecallProvider, LocalProvider } = require('./main/recording');
 const { AIServiceManager } = require('./main/services/aiServiceManager');
+const { mergeNearDuplicateLabels } = require('./main/services/speakerLabelMerge');
+const { computeTrackAnchor } = require('./main/services/trackAnchorService');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
@@ -2890,6 +2892,70 @@ async function initSDK() {
                     JSON.stringify(participants, null, 2)
                   );
 
+                  // ---- v2.0 speaker-waterfall pre-stages (spec §5) ----
+                  const rawSegments = meetingForMatching.segments || [];
+                  let waterfallSegments = rawSegments;
+                  let precomputedEmbeddings = null;
+                  let trackAnchor = null;
+
+                  // Attendee plumbing fix: calendarAttendees was frequently empty
+                  // ("0 attendees" starvation — observed 2026-07-08). Fall back to
+                  // meeting participants, and always include the user so voice-profile
+                  // auto-enroll can pair the remaining speaker with the remaining attendee.
+                  const attendeesForMatching = [];
+                  const seenAttendeeKeys = new Set();
+                  const pushAttendee = a => {
+                    const key = (a.email || a.name || '').toLowerCase();
+                    if (!key || seenAttendeeKeys.has(key)) return;
+                    seenAttendeeKeys.add(key);
+                    attendeesForMatching.push(a);
+                  };
+                  for (const a of meetingForMatching.calendarAttendees || []) {
+                    pushAttendee({ name: a.name, email: a.email, googleContactId: a.google_contact_resource || null });
+                  }
+                  for (const p of participants) {
+                    pushAttendee({ name: p.originalName || p.name, email: p.email || null, googleContactId: p.googleContactResource || null });
+                  }
+                  if (userProfile?.name) {
+                    pushAttendee({ name: userProfile.name, email: userProfile.email || null, googleContactId: null });
+                  }
+
+                  if (transcriptionProvider === 'local' && rawSegments.length > 0 && voiceProfileService) {
+                    // Stage 0: embed once, merge over-split diarization labels.
+                    try {
+                      const embeddings = await voiceProfileService.embedSpeakers(recordingPath, rawSegments);
+                      if (embeddings.length > 0) {
+                        const merged = mergeNearDuplicateLabels(rawSegments, embeddings);
+                        waterfallSegments = merged.segments;
+                        precomputedEmbeddings = merged.embeddings;
+                        if (Object.keys(merged.relabelMap).length > 0) {
+                          console.log('[Waterfall] Stage 0 merged labels:', merged.relabelMap);
+                          meetingForMatching.transcript = meetingForMatching.transcript.map(u =>
+                            merged.relabelMap[u.speaker] ? { ...u, speaker: merged.relabelMap[u.speaker] } : u
+                          );
+                          meetingsData.pastMeetings[meetingIndex].transcript = meetingForMatching.transcript;
+                          meetingsData.pastMeetings[meetingIndex].segments = waterfallSegments;
+                        }
+                      }
+                    } catch (stage0Err) {
+                      console.warn('[Waterfall] Stage 0 skipped:', stage0Err.message);
+                    }
+
+                    // Stage 1: track anchor (user + remote identification from isolation tracks).
+                    try {
+                      trackAnchor = await computeTrackAnchor(
+                        {
+                          micAudioFilePath: meetingForMatching.micAudioFilePath,
+                          appAudioFilePath: meetingForMatching.appAudioFilePath,
+                          systemAudioFilePath: meetingForMatching.systemAudioFilePath,
+                        },
+                        waterfallSegments
+                      );
+                    } catch (stage1Err) {
+                      console.warn('[Waterfall] Stage 1 skipped:', stage1Err.message);
+                    }
+                  }
+
                   // Get speech timeline if available
                   const speechTimeline = windowId ? getSpeechTimeline(windowId) : null;
                   if (speechTimeline) {
@@ -2918,13 +2984,11 @@ async function initSDK() {
                         speechTimeline,
                         participantData: participants,
                         audioFilePath: recordingPath,
-                        segments: meetingForMatching.segments || [],
+                        segments: waterfallSegments,
                         meetingId: meetingForMatching.id || meetingId,
-                        calendarAttendees: (meetingForMatching.calendarAttendees || []).map(a => ({
-                          email: a.email,
-                          name: a.name,
-                          googleContactId: a.google_contact_resource || null,
-                        })),
+                        calendarAttendees: attendeesForMatching,
+                        trackAnchor,
+                        precomputedEmbeddings,
                       }
                     );
 
