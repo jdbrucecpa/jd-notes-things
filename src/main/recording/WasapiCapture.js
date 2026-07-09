@@ -1,6 +1,7 @@
 // src/main/recording/WasapiCapture.js
 const { EventEmitter } = require('events');
 const net = require('net');
+const { computeSilenceDeficit } = require('./pcmPacing');
 
 let nativeRecorder;
 try {
@@ -155,19 +156,14 @@ class WasapiCapture extends EventEmitter {
 
   /**
    * How many bytes of silence to write to catch the pipe up to real time.
-   * Pure/testable: no I/O. Aligns to whole frames and caps at ~1s of silence
-   * per call so a stalled clock can't emit an unbounded buffer.
+   * Delegates to the shared pcmPacing module. Pure/testable: no I/O.
+   * Aligns to whole frames and caps at ~1s of silence per call so a stalled
+   * clock can't emit an unbounded buffer.
    * @param {number} elapsedMs - ms since the FFmpeg client connected
    * @returns {number} silence bytes to write (0 if already caught up)
    */
   _computeSilenceDeficit(elapsedMs) {
-    if (!this._byteRate || !this._frameBytes) return 0;
-    const expected = Math.floor((elapsedMs / 1000) * this._byteRate);
-    let deficit = expected - this._bytesWritten;
-    if (deficit <= 0) return 0;
-    deficit = Math.min(deficit, this._byteRate); // cap at ~1s
-    deficit -= deficit % this._frameBytes; // whole frames only
-    return deficit > 0 ? deficit : 0;
+    return computeSilenceDeficit(elapsedMs, this._byteRate, this._frameBytes, this._bytesWritten);
   }
 
   /**
