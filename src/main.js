@@ -2978,8 +2978,20 @@ async function initSDK() {
                   }
 
                   // Use emails if available, otherwise use names for matching
-                  const matchIdentifiers =
+                  let matchIdentifiers =
                     participantEmails.length > 0 ? participantEmails : participantNames;
+
+                  // Local-mode meetings created from a detected meeting start with
+                  // participants: [] (no SDK roster). Fall back to the enriched
+                  // attendee list (which always includes the user) so the waterfall
+                  // results aren't silently discarded — matchSpeakers early-returns
+                  // on an empty identifier list.
+                  if (matchIdentifiers.length === 0 && attendeesForMatching.length > 0) {
+                    matchIdentifiers = attendeesForMatching.map(a => a.email || a.name).filter(Boolean);
+                    console.log(
+                      `[Transcription] SM-1: Falling back to ${matchIdentifiers.length} waterfall attendees as match identifiers`
+                    );
+                  }
 
                   if (matchIdentifiers.length > 0) {
                     // Speaker matching: short-circuits via speaker identification if available,
