@@ -692,6 +692,29 @@ describe('upsertProfileSample', () => {
     const r = svc.upsertProfileSample({ contactName: 'X', contactEmail: null }, new Float32Array([1]), 5, 'm');
     expect(r).toBeNull();
   });
+
+  it('rejects a poisoning sample once the profile is established (2+ samples)', () => {
+    const svc = new VoiceProfileService(makeDb());
+    const contact = { contactName: 'Kurt', contactEmail: 'kurt@x.com' };
+    const first = svc.upsertProfileSample(contact, new Float32Array([1, 0]), 40, 'm1');
+    svc.upsertProfileSample(contact, new Float32Array([1, 0]), 50, 'm2');
+    // Established profile (2 samples), centroid [1,0]; a [0,1] sample is distance ~1.0 > 0.6
+    const third = svc.upsertProfileSample(contact, new Float32Array([0, 1]), 60, 'm3');
+    expect(third.rejected).toBe(true);
+    expect(third.profileId).toBe(first.profileId);
+    expect(svc.getSamples(first.profileId)).toHaveLength(2);
+  });
+
+  it('never rejects the second sample (single founding sample is not a reliable centroid)', () => {
+    const svc = new VoiceProfileService(makeDb());
+    const contact = { contactName: 'Kurt', contactEmail: 'kurt@x.com' };
+    const first = svc.upsertProfileSample(contact, new Float32Array([1, 0]), 40, 'm1');
+    // Distance ~1.0 from the founding sample, but the sampleCount >= 2 gate lets it through
+    const second = svc.upsertProfileSample(contact, new Float32Array([0, 1]), 60, 'm2');
+    expect(second.rejected).toBeUndefined();
+    expect(second.created).toBe(false);
+    expect(svc.getSamples(first.profileId)).toHaveLength(2);
+  });
 });
 
 // ============================================================
@@ -746,5 +769,32 @@ describe('identifySpeakers anchor synergy', () => {
       ]
     );
     expect(results.every(r => r.status === 'unmatched')).toBe(true);
+  });
+
+  it('skips auto-enroll when the remaining speaker spoke under the duration floor', async () => {
+    const svc = new VoiceProfileService(makeDb());
+
+    const results = await svc.identifySpeakers(
+      'C:/x.mp3',
+      [
+        { speaker: 'SPEAKER_00', start: 0, end: 100 },
+        { speaker: 'SPEAKER_01', start: 100, end: 130 }, // 30s < MIN_AUTO_ENROLL_SECONDS
+      ],
+      [
+        { name: 'JD Bruce', email: 'jd@x.com', googleContactId: null },
+        { name: 'Melissa H', email: 'melissa@x.com', googleContactId: null },
+      ],
+      'meeting-10',
+      [
+        { speakerLabel: 'SPEAKER_00', embedding: new Float32Array([1, 0]) },
+        { speakerLabel: 'SPEAKER_01', embedding: new Float32Array([0, 1]) },
+      ],
+      { anchoredUserLabel: 'SPEAKER_00', user: { name: 'JD Bruce', email: 'jd@x.com' } }
+    );
+
+    const brief = results.find(r => r.speakerLabel === 'SPEAKER_01');
+    expect(brief.status).toBe('unmatched');
+    expect(brief.profileId).toBeNull();
+    expect(svc.getProfileByEmail('melissa@x.com')).toBeNull();
   });
 });

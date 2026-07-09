@@ -28,6 +28,17 @@ const DISTANCE_MEDIUM_CONFIDENCE = 0.45;
  *  Prevents confident false matches between similar voices as the roster grows. */
 const DISTANCE_MATCH_MARGIN = 0.1;
 
+/** Sample poisoning guard: an established profile rejects a new sample whose
+ *  distance to the current centroid exceeds this. No un-enroll mechanism exists,
+ *  so a bad sample is permanent — the learning funnel must defend itself. */
+const SAMPLE_REJECT_DISTANCE = 0.6;
+
+/** Auto-enroll requires at least this much speech. A real meeting participant
+ *  speaks at least this long; prevents enrolling a brief wrong-voice interjection
+ *  under the attendee's name — matters because anchor synergy makes the 1+1
+ *  auto-enroll fire on nearly every 2-person meeting. */
+const MIN_AUTO_ENROLL_SECONDS = 60;
+
 // ============================================================
 // Pure math functions (exported for direct unit testing)
 // ============================================================
@@ -406,7 +417,8 @@ class VoiceProfileService {
    * @param {Float32Array} embedding
    * @param {number} durationSec - speech duration this sample represents
    * @param {string|null} meetingId
-   * @returns {{ profileId: number, created: boolean }|null} null when no email identity
+   * @returns {{ profileId: number, created: boolean, rejected?: boolean }|null} null when no
+   *   email identity; rejected=true when the poisoning guard refused the sample
    */
   upsertProfileSample(contact, embedding, durationSec, meetingId) {
     if (!contact?.contactEmail || !embedding || embedding.length === 0) return null;
@@ -427,6 +439,21 @@ class VoiceProfileService {
       });
       profile = { id };
       created = true;
+    } else if ((profile.sampleCount ?? 0) >= 2) {
+      // Sample poisoning guard: no un-enroll mechanism exists, so a bad sample
+      // is permanent — an established profile refuses samples that don't match
+      // its centroid. The sampleCount >= 2 gate exists because a single founding
+      // sample (possibly from a different capture stack) isn't a reliable
+      // centroid to reject against — rejection only kicks in once the profile
+      // is corroborated by a second sample.
+      const d = cosineDistance(embedding, profile.embedding);
+      if (d > SAMPLE_REJECT_DISTANCE) {
+        log.warn(
+          `${LOG_PREFIX} Sample rejected for ${contact.contactName} (${email}): ` +
+            `dist=${d.toFixed(4)} > ${SAMPLE_REJECT_DISTANCE} — does not match established profile`
+        );
+        return { profileId: profile.id, created: false, rejected: true };
+      }
     }
 
     this.addSample(profile.id, meetingId || null, embedding, durationSec ?? 0);
@@ -638,10 +665,34 @@ class VoiceProfileService {
     );
 
     if (unmatchedSpeakers.length === 1 && unmatchedAttendees.length === 1) {
-      // Exactly one unmatched speaker + one unmatched attendee → auto-enroll
-      const { speaker } = unmatchedSpeakers[0];
+      // Exactly one unmatched speaker + one unmatched attendee → auto-enroll,
+      // provided the speaker actually spoke long enough to be a real participant.
+      const { speaker, match } = unmatchedSpeakers[0];
       const attendee = unmatchedAttendees[0];
       const duration = this._segmentDuration(segments, speaker.speakerLabel);
+
+      if (duration < MIN_AUTO_ENROLL_SECONDS) {
+        log.info(
+          `${LOG_PREFIX} Auto-enroll skipped for ${speaker.speakerLabel}: only ` +
+            `${duration.toFixed(1)}s of speech (< ${MIN_AUTO_ENROLL_SECONDS}s) — too brief to enroll as ${attendee.name}`
+        );
+        results.push({
+          speakerLabel: speaker.speakerLabel,
+          profileId: null,
+          contactName: null,
+          contactEmail: null,
+          confidence: 'low',
+          distance: match ? match.distance : null,
+          status: 'unmatched',
+          candidates: (match ? [match.profile] : []).map(p => ({
+            profileId: p.id,
+            contactName: p.contactName,
+            contactEmail: p.contactEmail,
+          })),
+          embedding: speaker.embedding,
+        });
+        return results;
+      }
 
       const upsert = this.upsertProfileSample(
         { contactName: attendee.name, contactEmail: attendee.email, googleContactId: attendee.googleContactId || null },
@@ -661,7 +712,7 @@ class VoiceProfileService {
         contactName: attendee.name,
         contactEmail: attendee.email,
         confidence: 'enrolled',
-        distance: unmatchedSpeakers[0].match ? unmatchedSpeakers[0].match.distance : null,
+        distance: match ? match.distance : null,
         status: 'auto-enrolled',
         embedding: speaker.embedding,
       });
@@ -803,4 +854,6 @@ module.exports = {
   DISTANCE_HIGH_CONFIDENCE,
   DISTANCE_MEDIUM_CONFIDENCE,
   DISTANCE_MATCH_MARGIN,
+  SAMPLE_REJECT_DISTANCE,
+  MIN_AUTO_ENROLL_SECONDS,
 };
