@@ -6129,8 +6129,12 @@ ipcMain.handle(
       const corrections = diffCorrections(meetingId, prevMapping, mappings);
       if (corrections.length > 0 && correctionTelemetry) {
         correctionTelemetry.record(corrections);
-        console.log(`[CorrectionTelemetry] Recorded ${corrections.length} correction(s):`,
-          corrections.map(c => `${c.speakerLabel}: ${c.fromMethod}(${c.fromName}) -> ${c.toName}`).join('; '));
+        console.log(
+          `[CorrectionTelemetry] Recorded ${corrections.length} correction(s):`,
+          corrections
+            .map(c => `${c.speakerLabel}: ${c.fromMethod}(${c.fromName}) -> ${c.toName}`)
+            .join('; ')
+        );
       }
 
       // Correction-driven enrollment: when the corrected label still carries
@@ -6140,19 +6144,31 @@ ipcMain.handle(
         for (const c of corrections) {
           const entry = prevMapping[c.speakerLabel];
           if (entry?.embedding?.length > 0 && c.toEmail) {
+            // Weight the correction by how long this speaker actually spoke —
+            // recompute weights samples by duration, so a 0 here would make the
+            // correction essentially weightless against anchor samples.
+            const correctionDuration = (meeting.segments || [])
+              .filter(s => s.speaker === c.speakerLabel)
+              .reduce((sum, s) => sum + Math.max(0, s.end - s.start), 0);
             const upsert = voiceProfileService.upsertProfileSample(
               { contactName: c.toName, contactEmail: c.toEmail, googleContactId: null },
               new Float32Array(entry.embedding),
-              0,
+              correctionDuration,
               meetingId
             );
             if (upsert?.rejected) {
-              console.log(`[CorrectionEnroll] Sample for ${c.toName} rejected by poisoning guard (embedding does not match their established profile)`);
+              console.log(
+                `[CorrectionEnroll] Sample for ${c.toName} rejected by poisoning guard (embedding does not match their established profile)`
+              );
             } else if (upsert) {
-              console.log(`[CorrectionEnroll] ${c.toName} ${upsert.created ? 'enrolled' : 'strengthened'} from correction of ${c.speakerLabel}`);
+              console.log(
+                `[CorrectionEnroll] ${c.toName} ${upsert.created ? 'enrolled' : 'strengthened'} from correction of ${c.speakerLabel}`
+              );
             }
           } else if (c.toEmail) {
-            console.log(`[CorrectionEnroll] No embedding available for ${c.speakerLabel} — backfill can cover this meeting later`);
+            console.log(
+              `[CorrectionEnroll] No embedding available for ${c.speakerLabel} — backfill can cover this meeting later`
+            );
           }
         }
       }
@@ -6171,7 +6187,10 @@ ipcMain.handle(
         };
       }
     } catch (learnErr) {
-      console.warn('[CorrectionTelemetry] Learning hook failed (correction still applied):', learnErr.message);
+      console.warn(
+        '[CorrectionTelemetry] Learning hook failed (correction still applied):',
+        learnErr.message
+      );
     }
 
     // Save updated meeting data
