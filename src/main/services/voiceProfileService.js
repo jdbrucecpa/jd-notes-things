@@ -396,7 +396,7 @@ class VoiceProfileService {
     const body = JSON.stringify({ audioPath: audioFilePath, segments });
     const result = await this._postJson('/embed-speakers', body, 30000);
 
-    // Service contract (EmbedSpeakersResponse): { embeddings: [{ speaker, vector, duration }] }
+    // Service sends vector as number[]; convert to Float32Array for cosine math + BLOB serialization
     return (result.embeddings || []).map(s => ({
       speakerLabel: s.speaker,
       embedding: new Float32Array(s.vector),

@@ -6,6 +6,8 @@
  *   2. Cosine Distance / Similarity — known vector relationships
  *   3. Weighted Average Embedding — single sample, equal weights, duration bias
  *   4. VoiceProfileService CRUD — mock DB, Float32Array→Buffer conversion, findBestMatch
+ *   5. embedSpeakers response mapping — JD Audio Service contract ({embeddings:[{speaker,vector}]})
+ *   6. _segmentDuration — seconds-based {speaker,start,end} segments
  */
 
 const { describe, it, expect, vi, beforeEach } = await import('vitest');
