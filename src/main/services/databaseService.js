@@ -16,6 +16,7 @@ const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
 const log = require('electron-log');
+const { mergeSpeakerMappingExtras } = require('./speakerMappingExtras');
 
 const CURRENT_SCHEMA_VERSION = 4;
 
@@ -901,6 +902,19 @@ class DatabaseService {
       }
     }
 
+    // Merge embedding/status/etc. extras from the JSON column — the normalized
+    // rows only carry identity fields (see speakerMappingExtras.js).
+    if (meeting.speakerMapping && row.speaker_mapping) {
+      try {
+        meeting.speakerMapping = mergeSpeakerMappingExtras(
+          meeting.speakerMapping,
+          JSON.parse(row.speaker_mapping)
+        );
+      } catch {
+        /* invalid JSON — keep row-built mapping */
+      }
+    }
+
     // Hydrate calendar attendees
     const attendeeRows = this._stmts.getCalendarAttendees.all(row.id);
     if (attendeeRows.length > 0) {
@@ -1411,6 +1425,18 @@ class DatabaseService {
    */
   getVoiceSamples(profileId) {
     return this._stmts.getVoiceSamples.all(profileId);
+  }
+
+  /**
+   * Number of voice samples recorded from a given meeting (backfill idempotency).
+   * @param {string} meetingId
+   * @returns {number}
+   */
+  countVoiceSamplesForMeeting(meetingId) {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS n FROM voice_samples WHERE meeting_id = ?')
+      .get(meetingId);
+    return row ? row.n : 0;
   }
 
   /**
