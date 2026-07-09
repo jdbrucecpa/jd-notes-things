@@ -3,8 +3,12 @@
 /**
  * Build FFmpeg command-line arguments for multi-source audio recording.
  *
- * @param {Array<{device: string, volume: number}>} sources - Enabled audio sources.
- *   `device` is the exact dshow device name. `volume` is 0-200 (percentage).
+ * @param {Array<{device: string, volume: number, type?: ('dshow'|'wasapi'),
+ *   sampleRate?: number, channels?: number}>} sources - Enabled audio sources.
+ *   `device` is the exact dshow device name (type 'dshow', the default) OR a WASAPI
+ *   named-pipe path like `\\.\pipe\jdnotes_wasapi_0` (type 'wasapi'). `volume` is
+ *   0-200 (percentage). `sampleRate`/`channels` describe the raw PCM on a wasapi
+ *   pipe (defaults 48000 Hz / 2 channels).
  * @param {{autoBalance: boolean}} mixer - Mixer settings.
  * @param {string} outputPath - Path for the output MP3 file.
  * @param {{micTrackPath?: string, systemTrackPath?: string}} [trackOutputs] - Optional
@@ -89,8 +93,13 @@ function buildFFmpegArgs(sources, mixer = {}, outputPath, trackOutputs = {}) {
         const idx = filterParts.findIndex(p => p.startsWith(`[${i}:a]asplit`));
         filterParts[idx] = `[${i}:a]asplit=2[sys_solo][w_in${i}]`;
       } else {
+        // normalize=0: amix's default (normalize=1) scales each input by 1/N, which
+        // would make the multi-wasapi system track ~1/N quieter than the raw mic solo
+        // and the unattenuated single-wasapi path. The solo tracks feed cross-track
+        // RMS comparison downstream, so this analysis track must preserve absolute
+        // scale. The main-mix amix below is a listening output and keeps its default.
         filterParts.push(
-          `${sysSrcLabels.join('')}amix=inputs=${sysSrcLabels.length}:duration=longest[sys_solo]`
+          `${sysSrcLabels.join('')}amix=inputs=${sysSrcLabels.length}:duration=longest:normalize=0[sys_solo]`
         );
       }
     }
@@ -124,14 +133,15 @@ function buildFFmpegArgs(sources, mixer = {}, outputPath, trackOutputs = {}) {
   args.push('-acodec', 'libmp3lame', '-ab', '128k', '-ar', '44100', outputPath);
 
   // Solo outputs (raw/pre-volume), after the main output.
-  if (needsFilter && wantMicTrack) {
+  // wantMicTrack/wantSystemTrack each imply needsFilter, so the labels always exist.
+  if (wantMicTrack) {
     args.push(
       '-map', '[mic_solo]',
       '-acodec', 'libmp3lame', '-ab', '96k', '-ar', '44100',
       trackOutputs.micTrackPath
     );
   }
-  if (needsFilter && wantSystemTrack) {
+  if (wantSystemTrack) {
     args.push(
       '-map', '[sys_solo]',
       '-acodec', 'libmp3lame', '-ab', '96k', '-ar', '44100',

@@ -252,7 +252,7 @@ describe('buildFFmpegArgs track outputs', () => {
     const fc = args[args.indexOf('-filter_complex') + 1];
     expect(fc).toContain('[1:a]asplit=2[sys_src0][w_in1]');
     expect(fc).toContain('[2:a]asplit=2[sys_src1][w_in2]');
-    expect(fc).toContain('[sys_src0][sys_src1]amix=inputs=2:duration=longest[sys_solo]');
+    expect(fc).toContain('[sys_src0][sys_src1]amix=inputs=2:duration=longest:normalize=0[sys_solo]');
     expect(args).toContain('[sys_solo]');
   });
 
@@ -273,5 +273,53 @@ describe('buildFFmpegArgs track outputs', () => {
   it('micTrackPath with no dshow source is ignored', () => {
     const args = buildFFmpegArgs([W0], {}, 'out.mp3', { micTrackPath: 'mic.mp3' });
     expect(args).not.toContain('mic.mp3');
+  });
+
+  it('both mic and system tracks together (mic + 2 wasapi)', () => {
+    const args = buildFFmpegArgs([MIC, W0, W1], {}, 'out.mp3', {
+      micTrackPath: 'mic.mp3',
+      systemTrackPath: 'sys.mp3',
+    });
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toContain(':normalize=0');
+    const mapIdxs = args.map((a, i) => (a === '-map' ? i : -1)).filter(i => i >= 0);
+    expect(mapIdxs.map(i => args[i + 1])).toEqual(['[out]', '[mic_solo]', '[sys_solo]']);
+    // Output paths appear in order: main, mic, system
+    const outIdx = args.indexOf('out.mp3');
+    const micIdx = args.indexOf('mic.mp3');
+    const sysIdx = args.indexOf('sys.mp3');
+    expect(outIdx).toBeGreaterThan(-1);
+    expect(micIdx).toBeGreaterThan(outIdx);
+    expect(sysIdx).toBeGreaterThan(micIdx);
+  });
+
+  it('mic at non-zero index still gets the mic split', () => {
+    const args = buildFFmpegArgs([W0, MIC], {}, 'out.mp3', { micTrackPath: 'mic.mp3' });
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toContain('[1:a]asplit=2[mic_solo][mic_in]');
+  });
+
+  it('single dshow source + micTrackPath only', () => {
+    const args = buildFFmpegArgs([MIC], {}, 'out.mp3', { micTrackPath: 'mic.mp3' });
+    const fc = args[args.indexOf('-filter_complex') + 1];
+    expect(fc).toBe('[0:a]asplit=2[mic_solo][mic_in];[mic_in]volume=1.0[out]');
+    expect(args).toContain('out.mp3');
+    expect(args).toContain('mic.mp3');
+  });
+
+  it('wasapi-only sources + both paths: mic ignored, system present', () => {
+    const args = buildFFmpegArgs([W0, W1], {}, 'out.mp3', {
+      micTrackPath: 'mic.mp3',
+      systemTrackPath: 'sys.mp3',
+    });
+    expect(args).not.toContain('mic.mp3');
+    expect(args).not.toContain('[mic_solo]');
+    expect(args).toContain('[sys_solo]');
+    expect(args).toContain('sys.mp3');
+  });
+
+  it('systemTrackPath with no wasapi source is ignored', () => {
+    const args = buildFFmpegArgs([MIC], {}, 'out.mp3', { systemTrackPath: 'sys.mp3' });
+    expect(args).not.toContain('sys.mp3');
   });
 });
