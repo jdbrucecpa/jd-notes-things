@@ -18,9 +18,33 @@ class BackgroundTaskManager {
     this.tasks = new Map();
     this.mainWindow = null;
 
+    // Cleanup setTimeout handles, keyed by taskId. Kept OFF the task objects:
+    // tasks are sent to the renderer via webContents.send (structured clone),
+    // and a Node Timeout handle is not cloneable — storing it on the task made
+    // every tasks-list IPC throw "Failed to serialize arguments" as soon as any
+    // task completed, so the renderer never saw completions.
+    this._cleanupTimers = new Map();
+
     // Auto-cleanup intervals
     this.COMPLETED_CLEANUP_DELAY = 30000; // 30 seconds
     this.FAILED_CLEANUP_DELAY = 60000; // 60 seconds
+  }
+
+  /**
+   * Schedule removal of a task after a delay, tracking the timer privately
+   * (never on the task object — see constructor note on serializability).
+   * @param {string} taskId - Task ID
+   * @param {number} delayMs - Cleanup delay
+   */
+  _scheduleCleanup(taskId, delayMs) {
+    const existing = this._cleanupTimers.get(taskId);
+    if (existing) {
+      clearTimeout(existing);
+    }
+    this._cleanupTimers.set(
+      taskId,
+      setTimeout(() => this.removeTask(taskId), delayMs)
+    );
   }
 
   /**
@@ -131,7 +155,7 @@ class BackgroundTaskManager {
     this.emit('background:tasks-list', this.getAllTasks());
 
     // Schedule cleanup
-    task._cleanupTimer = setTimeout(() => this.removeTask(taskId), this.COMPLETED_CLEANUP_DELAY);
+    this._scheduleCleanup(taskId, this.COMPLETED_CLEANUP_DELAY);
   }
 
   /**
@@ -162,7 +186,7 @@ class BackgroundTaskManager {
     this.emit('background:tasks-list', this.getAllTasks());
 
     // Schedule cleanup (longer delay for failed tasks)
-    task._cleanupTimer = setTimeout(() => this.removeTask(taskId), this.FAILED_CLEANUP_DELAY);
+    this._scheduleCleanup(taskId, this.FAILED_CLEANUP_DELAY);
   }
 
   /**
@@ -189,10 +213,10 @@ class BackgroundTaskManager {
    */
   removeTask(taskId) {
     if (this.tasks.has(taskId)) {
-      const task = this.tasks.get(taskId);
-      if (task._cleanupTimer) {
-        clearTimeout(task._cleanupTimer);
-        task._cleanupTimer = null;
+      const timer = this._cleanupTimers.get(taskId);
+      if (timer) {
+        clearTimeout(timer);
+        this._cleanupTimers.delete(taskId);
       }
       this.tasks.delete(taskId);
       console.log(`[BackgroundTask] Removed task: ${taskId}`);

@@ -4408,19 +4408,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (result.success) {
           console.log('[Phase 10.7] Recording stopped successfully');
-          window.currentRecordingId = null;
-          window.isRecording = false;
-
-          // Update UI if the record button exists
+          // Full UI reset (button, isRecording, currentRecordingId, main timer)
+          // — hand-rolled resets here previously left the main timer running.
+          updateRecordingButtonUI(false, null);
           const recordButton = document.getElementById('recordButton');
-          if (recordButton && recordButton.classList.contains('recording')) {
-            recordButton.classList.remove('recording');
-            const recordIcon = recordButton.querySelector('.record-icon');
-            const stopIcon = recordButton.querySelector('.stop-icon');
-            if (recordIcon) recordIcon.style.display = 'block';
-            if (stopIcon) stopIcon.style.display = 'none';
-            recordButton.disabled = false;
-          }
+          if (recordButton) recordButton.disabled = false;
 
           // Show a toast notification
           notifyInfo('Recording stopped');
@@ -4540,8 +4532,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const { windowId, meetingId } = data;
     console.log(`Recording ended for meeting: ${meetingId}, windowId: ${windowId}`);
 
-    // Clear the current recording ID if it matches
-    if (window.currentRecordingId === windowId) {
+    // Clear the current recording ID if it matches. Also reset when
+    // currentRecordingId is already null: the stop-button handler nulls it
+    // before this event arrives, and updateRecordingButtonUI is the only
+    // thing that stops the main screen timer — resetting an already-idle
+    // UI is a harmless no-op, while skipping it leaves the timer counting.
+    if (window.currentRecordingId === windowId || window.currentRecordingId === null) {
       console.log('Clearing currentRecordingId in renderer');
 
       // Update the recording button state (false = inactive, null = no recording)
@@ -5540,10 +5536,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Call the API to stop recording
             const result = await window.electronAPI.stopManualRecording(window.currentRecordingId);
 
-            // Change to record mode
-            recordButton.classList.remove('recording');
-            recordIcon.style.display = 'block';
-            stopIcon.style.display = 'none';
+            // Reset the full recording UI state (button icons, isRecording,
+            // currentRecordingId AND the main screen timer). Previously this
+            // block hand-rolled the icon updates and nulled currentRecordingId,
+            // which meant stopMainTimer() never ran: the later recording-ended
+            // event is guarded by currentRecordingId === windowId, which the
+            // manual null had already broken — so the timer kept counting.
+            updateRecordingButtonUI(false, null);
             recordButton.disabled = false;
 
             if (result.success) {
@@ -5557,9 +5556,6 @@ document.addEventListener('DOMContentLoaded', async () => {
               console.error('Failed to stop recording:', result.error);
               notifyError(result.error, { prefix: 'Failed to stop recording:' });
             }
-
-            // Reset recording ID
-            window.currentRecordingId = null;
           } catch (error) {
             console.error('Error stopping recording:', error);
             notifyError(error, { prefix: 'Error stopping recording:' });
