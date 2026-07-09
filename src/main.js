@@ -2578,7 +2578,7 @@ async function initSDK() {
         );
       }
 
-      // Task 6: Persist isolation-track paths onto the meeting record now, before
+      // v2.0 speaker-waterfall: Persist isolation-track paths onto the meeting record now, before
       // transcription runs. Transcription can take minutes and may fail entirely,
       // so the track paths must be saved immediately to survive regardless of the
       // transcription outcome. Recall provider events won't have these fields.
