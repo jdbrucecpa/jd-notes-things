@@ -50,7 +50,11 @@ function segmentRms(rmsWindows, startSec, endSec) {
   return sum / (requestedTo - from);
 }
 
-/** 95th-percentile of the non-zero values in an RMS array (activity reference). Pure. */
+/**
+ * 95th-percentile of the non-zero values in an RMS array (activity reference). Pure.
+ * For tiny nonzero populations the index degenerates toward max — acceptable for a
+ * floor heuristic.
+ */
 function p95(rmsWindows) {
   const sorted = Array.from(rmsWindows)
     .filter(v => v > 0)
@@ -140,13 +144,23 @@ function computeAnchor(segments, micWindows, appWindows) {
 /** Decode an audio file to per-100ms RMS windows via FFmpeg. Streams; O(windows) memory. */
 function decodeToRmsWindows(audioFilePath) {
   return new Promise((resolve, reject) => {
-    const ff = spawn('ffmpeg', ['-i', audioFilePath, ...DECODE_ARGS, 'pipe:1'], {
-      windowsHide: true,
-    });
+    const ff = spawn(
+      'ffmpeg',
+      // -nostats/-loglevel error: keep stderr quiet; we still DRAIN it below —
+      // an unread piped stderr can fill the OS pipe buffer on long decodes and
+      // block FFmpeg, hanging this Promise.
+      ['-hide_banner', '-loglevel', 'error', '-nostdin', '-nostats', '-i', audioFilePath, ...DECODE_ARGS, 'pipe:1'],
+      { windowsHide: true }
+    );
     const rms = [];
     let sumSquares = 0;
     let count = 0;
     let carry = Buffer.alloc(0);
+    let stderrTail = '';
+
+    ff.stderr.on('data', chunk => {
+      stderrTail = (stderrTail + chunk.toString()).slice(-2000);
+    });
 
     ff.stdout.on('data', chunk => {
       const buf = carry.length ? Buffer.concat([carry, chunk]) : chunk;
@@ -166,7 +180,9 @@ function decodeToRmsWindows(audioFilePath) {
     ff.on('error', reject);
     ff.on('close', code => {
       if (code !== 0 && rms.length === 0) {
-        reject(new Error(`ffmpeg decode failed (code=${code}) for ${audioFilePath}`));
+        reject(
+          new Error(`ffmpeg decode failed (code=${code}) for ${audioFilePath}: ${stderrTail.trim()}`)
+        );
         return;
       }
       if (count > 0) rms.push(Math.sqrt(sumSquares / count));
@@ -190,17 +206,18 @@ async function computeTrackAnchor(trackPaths, segments) {
   const appPath = trackPaths.appAudioFilePath || trackPaths.systemAudioFilePath || null;
   if (!micPath && !appPath) return null; // no isolation tracks → skip Stage 1
 
-  let micWindows = null;
-  let appWindows = null;
-  try {
-    if (micPath) micWindows = await decodeToRmsWindows(micPath);
-  } catch (err) {
-    log.warn(`[TrackAnchor] mic decode failed: ${err.message}`);
+  // Decode both tracks in parallel; each failure degrades independently.
+  const [micResult, appResult] = await Promise.allSettled([
+    micPath ? decodeToRmsWindows(micPath) : Promise.resolve(null),
+    appPath ? decodeToRmsWindows(appPath) : Promise.resolve(null),
+  ]);
+  const micWindows = micResult.status === 'fulfilled' ? micResult.value : null;
+  const appWindows = appResult.status === 'fulfilled' ? appResult.value : null;
+  if (micResult.status === 'rejected') {
+    log.warn(`[TrackAnchor] mic decode failed: ${micResult.reason?.message}`);
   }
-  try {
-    if (appPath) appWindows = await decodeToRmsWindows(appPath);
-  } catch (err) {
-    log.warn(`[TrackAnchor] app/system decode failed: ${err.message}`);
+  if (appResult.status === 'rejected') {
+    log.warn(`[TrackAnchor] app/system decode failed: ${appResult.reason?.message}`);
   }
   if (!micWindows && !appWindows) return null;
 
