@@ -344,6 +344,10 @@ const voiceProfileAssignSchema = z.object({
   embedding: z.array(z.number()).min(1),
 });
 
+const voiceProfileBackfillSchema = z
+  .object({ limit: z.number().int().positive().optional() })
+  .optional();
+
 // ===================================================
 // Backup Schemas (v1.4)
 // ===================================================
@@ -575,6 +579,7 @@ module.exports = {
   // Voice profile schemas
   voiceProfileIdSchema,
   voiceProfileAssignSchema,
+  voiceProfileBackfillSchema,
   // Helpers
   validateIpcInput,
   withValidation,

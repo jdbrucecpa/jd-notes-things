@@ -69,6 +69,7 @@ const { RecordingManager, RecallProvider, LocalProvider } = require('./main/reco
 const { AIServiceManager } = require('./main/services/aiServiceManager');
 const { mergeNearDuplicateLabels } = require('./main/services/speakerLabelMerge');
 const { computeTrackAnchor } = require('./main/services/trackAnchorService');
+const { runBackfill } = require('./main/services/voiceProfileBackfill');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
@@ -193,6 +194,7 @@ const {
   // v2.0: Voice profile schemas
   voiceProfileIdSchema,
   voiceProfileAssignSchema,
+  voiceProfileBackfillSchema,
 } = require('./main/validation/ipcSchemas');
 require('dotenv').config();
 
@@ -2978,6 +2980,25 @@ async function initSDK() {
                   }
                   if (userProfile?.name) {
                     pushAttendee({ name: userProfile.name, email: userProfile.email || null, googleContactId: null });
+                  }
+
+                  // Resolve raw-email display names via Google Contacts so
+                  // auto-enrolled profiles get human names, not addresses.
+                  if (googleContacts) {
+                    try {
+                      const emailsNeedingNames = attendeesForMatching
+                        .filter(a => a.name && a.name.includes('@') && a.email)
+                        .map(a => a.email);
+                      if (emailsNeedingNames.length > 0) {
+                        const contactMap = await googleContacts.findContactsByEmails(emailsNeedingNames);
+                        for (const a of attendeesForMatching) {
+                          const c = a.email ? contactMap.get(a.email) : null;
+                          if (a.name && a.name.includes('@') && c?.name) a.name = c.name;
+                        }
+                      }
+                    } catch (nameErr) {
+                      console.warn('[Waterfall] Attendee name enrichment skipped:', nameErr.message);
+                    }
                   }
 
                   if (transcriptionProvider === 'local' && rawSegments.length > 0 && voiceProfileService) {
@@ -7185,6 +7206,57 @@ ipcMain.handle(
   })
 );
 
+// v2.0 Phase 2: one-shot historical backfill — enroll voice profiles from
+// corrected transcripts of past meetings. Idempotent (skips meetings that
+// already contributed samples). Long-running: an unbounded run embeds up to
+// ~200 meetings sequentially (minutes of GPU time) — progress via
+// backgroundTaskManager; pass { limit } for a staged first run.
+ipcMain.handle(
+  'voiceProfile:backfill',
+  withValidation(voiceProfileBackfillSchema, async (_event, args) => {
+    if (!voiceProfileService) {
+      return { success: false, error: 'Voice profile service not initialized' };
+    }
+    const taskId = backgroundTaskManager.addTask({
+      type: 'voice-backfill',
+      description: 'Backfilling voice profiles from past meetings',
+    });
+    try {
+      const serviceReady = await aiServiceManager.ensureRunning();
+      if (!serviceReady) {
+        backgroundTaskManager.failTask(taskId, 'JD Audio Service failed to start');
+        return { success: false, error: 'JD Audio Service failed to start' };
+      }
+      const summary = await runBackfill(
+        {
+          getAllMeetings: () => databaseService.getAllMeetings(),
+          countVoiceSamplesForMeeting: id => databaseService.countVoiceSamplesForMeeting(id),
+          fileExists: p => fs.existsSync(p),
+          embedSpeakers: (audioPath, segments) =>
+            voiceProfileService.embedSpeakers(audioPath, segments),
+          upsertProfileSample: (contact, embedding, dur, meetingId) =>
+            voiceProfileService.upsertProfileSample(contact, embedding, dur, meetingId),
+          log: msg => console.log(msg),
+        },
+        {
+          limit: args?.limit,
+          onProgress: (done, total) =>
+            backgroundTaskManager.updateTask(
+              taskId,
+              Math.round((done / total) * 100),
+              `Scanning meeting ${done}/${total}`
+            ),
+        }
+      );
+      backgroundTaskManager.completeTask(taskId, summary);
+      return { success: true, summary };
+    } catch (error) {
+      backgroundTaskManager.failTask(taskId, error.message);
+      return { success: false, error: error.message };
+    }
+  })
+);
+
 // ===================================================================
 // v2.0: AI Service Health Check
 // ===================================================================
@@ -8253,6 +8325,25 @@ ipcMain.handle(
           }
           if (userProfile?.name) {
             pushRerunAttendee({ name: userProfile.name, email: userProfile.email || null, googleContactId: null });
+          }
+
+          // Resolve raw-email display names via Google Contacts so
+          // auto-enrolled profiles get human names, not addresses.
+          if (googleContacts) {
+            try {
+              const emailsNeedingNames = rerunAttendees
+                .filter(a => a.name && a.name.includes('@') && a.email)
+                .map(a => a.email);
+              if (emailsNeedingNames.length > 0) {
+                const contactMap = await googleContacts.findContactsByEmails(emailsNeedingNames);
+                for (const a of rerunAttendees) {
+                  const c = a.email ? contactMap.get(a.email) : null;
+                  if (a.name && a.name.includes('@') && c?.name) a.name = c.name;
+                }
+              }
+            } catch (nameErr) {
+              console.warn('[Waterfall] Attendee name enrichment skipped:', nameErr.message);
+            }
           }
 
           const matchIdentifiers = participantEmails.length > 0

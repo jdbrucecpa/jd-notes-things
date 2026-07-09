@@ -1345,6 +1345,13 @@
               </svg>
               <span>Backup & Restore</span>
             </div>
+            <!-- v2.0 Phase 2: Voice Profiles -->
+            <div id="voiceProfilesTab" class="settings-tab" data-tab="voiceProfiles">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" fill="currentColor"/>
+              </svg>
+              <span>Voice Profiles</span>
+            </div>
             <div id="advancedSettingsTab" class="settings-tab" data-tab="advanced">
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z" fill="currentColor"/>
@@ -2391,6 +2398,21 @@
                 <div style="margin-top: 12px;">
                   <button class="btn btn-primary" id="backupRestoreConfirmBtn">Restore Backup</button>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-panel" id="voiceProfilesPanel" style="display: none;">
+            <div class="settings-section">
+              <h3 class="settings-section-title">Voice Profiles</h3>
+              <p class="settings-section-description">
+                Enrolled voices used to identify speakers automatically. Profiles grow
+                from anchored recordings, Fix Speakers corrections, and the backfill below.
+              </p>
+              <div id="voiceProfilesList" class="settings-item" style="display: block;">Loading…</div>
+              <div class="settings-item" style="display: block; margin-top: 16px;">
+                <button class="btn btn-outline" id="voiceBackfillBtn">Backfill from past meetings</button>
+                <span id="voiceBackfillStatus" style="margin-left: 12px; font-size: 13px; color: var(--text-secondary);"></span>
               </div>
             </div>
           </div>

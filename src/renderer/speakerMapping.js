@@ -442,6 +442,7 @@ function createSpeakerRow(speakerId, suggestion, stats = {}) {
       const isHighConfidenceVoice =
         (suggestion.method === 'voice-profile' && suggestion.confidence === 'high') ||
         suggestion.status === 'auto-matched';
+      const isTrackAnchor = suggestion.method === 'track-anchor';
       const needsReview = suggestion.needsVerification === true || suggestion.status === 'pending-review';
 
       if (isAutoEnrolled) {
@@ -453,6 +454,11 @@ function createSpeakerRow(speakerId, suggestion, stats = {}) {
         contactLabelEl.insertAdjacentHTML(
           'beforeend',
           '<span class="voice-profile-badge verified">voice matched</span>'
+        );
+      } else if (isTrackAnchor) {
+        contactLabelEl.insertAdjacentHTML(
+          'beforeend',
+          '<span class="voice-profile-badge verified">mic verified</span>'
         );
       } else if (needsReview) {
         contactLabelEl.insertAdjacentHTML(

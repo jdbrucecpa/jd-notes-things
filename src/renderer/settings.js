@@ -223,6 +223,7 @@ export function initializeSettingsUI() {
       { buttonId: 'logsSettingsTab', contentId: 'logsPanel' },
       { buttonId: 'reportsSettingsTab', contentId: 'reportsPanel' },
       { buttonId: 'backupSettingsTab', contentId: 'backupPanel' },
+      { buttonId: 'voiceProfilesTab', contentId: 'voiceProfilesPanel' },
       { buttonId: 'advancedSettingsTab', contentId: 'advancedPanel' },
       { buttonId: 'aboutSettingsTab', contentId: 'aboutPanel' },
     ],
@@ -234,6 +235,9 @@ export function initializeSettingsUI() {
       } else if (buttonId === 'backupSettingsTab') {
         console.log('[Settings] Backup tab clicked, loading manifest');
         loadBackupManifest();
+      } else if (buttonId === 'voiceProfilesTab') {
+        console.log('[Settings] Voice Profiles tab clicked, loading profiles');
+        loadVoiceProfiles();
       } else if (buttonId === 'profileSettingsTab') {
         console.log('[Settings] Profile tab clicked, loading profile');
         loadUserProfile();
@@ -1688,6 +1692,7 @@ async function refreshStreamDeckStatus() {
 document.addEventListener('DOMContentLoaded', () => {
   initializeBackupUI();
   initializeMcpUI();
+  initializeVoiceProfilesUI();
 });
 
 // ===================================================
@@ -1837,6 +1842,83 @@ function initializeBackupUI() {
       } else {
         notifyError(result.error || 'Restore failed');
         if (restoreStatus) restoreStatus.textContent = `Restore failed: ${result.error}`;
+      }
+    });
+  }
+}
+
+// ===================================================
+// Voice Profiles UI (v2.0 Phase 2)
+// ===================================================
+
+async function loadVoiceProfiles() {
+  const listEl = document.getElementById('voiceProfilesList');
+  if (!listEl) return;
+  try {
+    const result = await window.electronAPI.voiceProfileGetAll();
+    const profiles = result?.profiles || [];
+    listEl.textContent = '';
+    if (!result?.success) {
+      listEl.textContent = `Failed to load profiles: ${result?.error || 'unknown error'}`;
+      return;
+    }
+    if (profiles.length === 0) {
+      listEl.textContent = 'No voice profiles yet — record a meeting or run the backfill.';
+      return;
+    }
+    for (const p of profiles) {
+      const row = document.createElement('div');
+      row.className = 'voice-profile-row';
+      row.style.cssText = 'display:flex; align-items:center; gap:12px; padding:6px 0;';
+
+      const who = document.createElement('span');
+      who.style.flex = '1';
+      who.textContent = p.contactEmail ? `${p.contactName} (${p.contactEmail})` : p.contactName;
+
+      const stats = document.createElement('span');
+      stats.style.cssText = 'color:var(--text-secondary); font-size:12px;';
+      stats.textContent = `${p.sampleCount} sample${p.sampleCount === 1 ? '' : 's'} · ${Math.round(p.totalDuration)}s · conf ${(p.confidence ?? 0).toFixed(2)}`;
+
+      const del = document.createElement('button');
+      del.className = 'btn btn-outline btn-sm';
+      del.textContent = 'Delete';
+      del.addEventListener('click', async () => {
+        await window.electronAPI.voiceProfileDelete(Number(p.id));
+        loadVoiceProfiles();
+      });
+
+      row.append(who, stats, del);
+      listEl.appendChild(row);
+    }
+  } catch (err) {
+    listEl.textContent = `Failed to load profiles: ${err.message}`;
+  }
+}
+
+function initializeVoiceProfilesUI() {
+  const voiceBackfillBtn = document.getElementById('voiceBackfillBtn');
+  if (voiceBackfillBtn) {
+    voiceBackfillBtn.addEventListener('click', async () => {
+      const statusEl = document.getElementById('voiceBackfillStatus');
+      voiceBackfillBtn.disabled = true;
+      if (statusEl) {
+        statusEl.textContent = 'Running… (watch the background tasks panel for progress)';
+      }
+      try {
+        const result = await window.electronAPI.voiceProfileBackfill();
+        if (result.success) {
+          const s = result.summary;
+          if (statusEl) {
+            statusEl.textContent = `Done: ${s.embedded} meetings embedded, ${s.samplesAdded} samples added, ${s.samplesRejected} rejected (${s.skippedAlreadySampled} already sampled, ${s.skippedNoAudio} missing audio, ${s.skippedNoIdentities} unverified).`;
+          }
+        } else if (statusEl) {
+          statusEl.textContent = `Failed: ${result.error}`;
+        }
+      } catch (err) {
+        if (statusEl) statusEl.textContent = `Failed: ${err.message}`;
+      } finally {
+        voiceBackfillBtn.disabled = false;
+        loadVoiceProfiles();
       }
     });
   }
