@@ -643,11 +643,13 @@ describe('SpeakerMatcher', () => {
       expect(result['Speaker B'].method).not.toBe('voice-profile');
 
       // Verify identifySpeakers was called with the right arguments
+      // (6th arg is anchorOptions — null here since no trackAnchor was passed)
       expect(mockVoiceProfileService.identifySpeakers).toHaveBeenCalledWith(
         '/tmp/test.wav',
         expect.any(Array),
         expect.any(Array),
         'mtg-123',
+        null,
         null
       );
     });
@@ -884,13 +886,81 @@ describe('SpeakerMatcher', () => {
       });
 
       // Verify 5th argument is the precomputed embeddings
+      // (6th arg is anchorOptions — null here since no trackAnchor was passed)
       expect(mockVoiceProfileService.identifySpeakers).toHaveBeenCalledWith(
         '/tmp/test.wav',
         expect.any(Array),
         expect.any(Array),
         'mtg-123',
-        precomputedEmbs
+        precomputedEmbs,
+        null
       );
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // anchor synergy threading + display names
+  // ─────────────────────────────────────────────────────────────────
+
+  describe('anchor synergy threading + display names', () => {
+    it('passes anchorOptions to identifySpeakers when a track anchor and user profile exist', async () => {
+      const fakeVps = { identifySpeakers: vi.fn().mockResolvedValue([]) };
+      const m = new SpeakerMatcher(mockContacts, { name: 'JD Bruce', email: 'jd@jdbrucecpa.com' });
+      m.setVoiceProfileService(fakeVps);
+      await m.matchSpeakers(
+        [{ speaker: 'SPEAKER_00', text: 'hi there folks', timestamp: 0 }],
+        ['jd@jdbrucecpa.com'],
+        {
+          trackAnchor: { userLabel: 'SPEAKER_00', userDominance: 0.9, remoteLabels: [] },
+          audioFilePath: 'x.mp3',
+          segments: [{ speaker: 'SPEAKER_00', start: 0, end: 10 }],
+          participantData: [{ name: 'JD Bruce', email: 'jd@jdbrucecpa.com' }],
+        }
+      );
+      const args = fakeVps.identifySpeakers.mock.calls[0];
+      expect(args[5]).toEqual({
+        anchoredUserLabel: 'SPEAKER_00',
+        user: { name: 'JD Bruce', email: 'jd@jdbrucecpa.com', googleContactId: null },
+      });
+    });
+
+    it('passes null anchorOptions when there is no track anchor', async () => {
+      const fakeVps = { identifySpeakers: vi.fn().mockResolvedValue([]) };
+      const m = new SpeakerMatcher(mockContacts, { name: 'JD Bruce', email: 'jd@jdbrucecpa.com' });
+      m.setVoiceProfileService(fakeVps);
+      await m.matchSpeakers(
+        [{ speaker: 'SPEAKER_00', text: 'hi there folks', timestamp: 0 }],
+        ['jd@jdbrucecpa.com'],
+        {
+          audioFilePath: 'x.mp3',
+          segments: [{ speaker: 'SPEAKER_00', start: 0, end: 10 }],
+          participantData: [{ name: 'JD Bruce', email: 'jd@jdbrucecpa.com' }],
+        }
+      );
+      expect(fakeVps.identifySpeakers.mock.calls[0][5]).toBeNull();
+    });
+
+    it('resolves email-as-name participants to contact display names in heuristic assignment', async () => {
+      const contacts = new Map([
+        ['melissa@x.com', { name: 'Melissa Henderson', givenName: 'Melissa', familyName: 'Henderson' }],
+      ]);
+      const contactsStub = { findContactsByEmails: async () => contacts };
+      const m = new SpeakerMatcher(contactsStub, { name: 'JD Bruce', email: 'jd@x.com' });
+      const mapping = await m.matchSpeakers(
+        [
+          { speaker: 'SPEAKER_00', text: 'hello everyone here', timestamp: 0 },
+          { speaker: 'SPEAKER_01', text: 'thanks for joining', timestamp: 5000 },
+        ],
+        ['jd@x.com', 'melissa@x.com'],
+        {
+          trackAnchor: { userLabel: 'SPEAKER_00', userDominance: 0.9, remoteLabels: ['SPEAKER_01'] },
+          participantData: [
+            { name: 'jd@x.com', originalName: 'jd@x.com', email: 'jd@x.com' },
+            { name: 'melissa@x.com', originalName: 'melissa@x.com', email: 'melissa@x.com' },
+          ],
+        }
+      );
+      expect(mapping.SPEAKER_01.name).toBe('Melissa Henderson'); // not the raw email
     });
   });
 });

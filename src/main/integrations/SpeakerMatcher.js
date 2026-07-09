@@ -220,12 +220,30 @@ class SpeakerMatcher {
       try {
         console.log('[SpeakerMatcher] Stage 0: Attempting voice profile matching...');
         const matchedBeforeStage0 = matchedSpeakers.size;
+        // Thread the Stage 1 track anchor into voice-profile matching so it can
+        // enroll/exclude the user's own embedding (anchor synergy). When the anchor
+        // is present, voiceProfileService may return a 'user-anchored' result for
+        // trackAnchor.userLabel, but the `matchedSpeakers.has(...)` guard below
+        // already skips it — Stage 1 wrote that label first, so this is a no-op
+        // for mapping purposes and exists purely to drive enrollment/exclusion.
+        const anchorOptions =
+          trackAnchor?.userLabel && this.userProfile?.email
+            ? {
+                anchoredUserLabel: trackAnchor.userLabel,
+                user: {
+                  name: this.userProfile.name,
+                  email: this.userProfile.email,
+                  googleContactId: this.userProfile.googleContactId || null,
+                },
+              }
+            : null;
         const voiceProfileResults = await this.voiceProfileService.identifySpeakers(
           options.audioFilePath,
           options.segments,
           options.calendarAttendees || [],
           options.meetingId || null,
-          options.precomputedEmbeddings || null
+          options.precomputedEmbeddings || null,
+          anchorOptions
         );
 
         for (const result of voiceProfileResults) {
@@ -728,15 +746,25 @@ class SpeakerMatcher {
       // Use full participant objects directly (preserve isHost and originalName for identity-aware matching)
       participants = options.participantData
         .filter(p => !alreadyAssignedParticipants.has(p.email) && !alreadyAssignedNames.has(p.name))
-        .map(p => ({
-          email: p.email || null,
-          name: p.name || 'Unknown',
-          originalName: p.originalName || p.name || 'Unknown',
-          isHost: p.isHost || false,
-          givenName: p.givenName || '',
-          familyName: p.familyName || '',
-          contact: contacts.get(p.email) || null,
-        }));
+        .map(p => {
+          // Calendar-only participants often arrive with the email as the name
+          // (e.g. name: 'melissalhenderson@yahoo.com'); prefer the Google Contact
+          // display name when we have one. NOTE: originalName is normally IMMUTABLE
+          // (Zoom SDK identity) — we only substitute here because the raw name IS
+          // an email address, meaning it's calendar-derived, not a Zoom SDK identity.
+          const rawName = p.name || 'Unknown';
+          const contact = contacts.get(p.email) || null;
+          const displayName = rawName.includes('@') && contact?.name ? contact.name : rawName;
+          return {
+            email: p.email || null,
+            name: displayName,
+            originalName: p.originalName || displayName,
+            isHost: p.isHost || false,
+            givenName: p.givenName || contact?.givenName || '',
+            familyName: p.familyName || contact?.familyName || '',
+            contact,
+          };
+        });
       console.log(
         `[SpeakerMatcher] Using ${participants.length} participants from participantData`
       );
