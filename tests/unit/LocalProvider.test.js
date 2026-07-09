@@ -223,5 +223,40 @@ describe('LocalProvider', () => {
       expect(evt.micAudioFilePath).toBe('r-mic.mp3');
       expect(evt.appAudioFilePath).toBeNull();
     });
+
+    // Regression: a start failure (FFmpeg spawn error, WasapiCapture rejection,
+    // buildFFmpegArgs throw) must clean up all partial state — otherwise
+    // _recording stays true and every later startRecording throws
+    // 'already recording' until app restart.
+    it('startRecording cleans up and stays startable when FFmpeg spawn fails', async () => {
+      provider._activeMeeting = null; // no app capture path needed
+      vi.spyOn(provider, '_startFFmpeg').mockRejectedValue(new Error('spawn ENOENT'));
+      provider._stopWasapiCaptures = vi.fn().mockResolvedValue();
+
+      await expect(provider.startRecording()).rejects.toThrow('spawn ENOENT');
+      expect(provider._recording).toBe(false);
+      expect(provider._activeRecording).toBeNull();
+      expect(provider._activeTrackPaths).toBeNull();
+      expect(provider._pendingTrackOutputs).toBeNull();
+      expect(provider._stopWasapiCaptures).toHaveBeenCalled();
+
+      // A second attempt must not be blocked by 'already recording'.
+      vi.spyOn(provider, '_startFFmpeg').mockResolvedValue();
+      await expect(provider.startRecording()).resolves.toBeTruthy();
+    });
+
+    // Regression: AppLoopbackCapture patches the WAV RIFF/data sizes inside
+    // stop() — recording-ended must not fire until that finalization completes,
+    // or downstream consumers read a WAV whose header still says 0 data bytes.
+    it('awaits app-capture stop before emitting recording-ended', async () => {
+      let stopResolved = false;
+      provider._appCapture = {
+        stop: vi.fn(() => new Promise(r => setTimeout(() => { stopResolved = true; r(); }, 20))),
+      };
+      const ended = new Promise(res => provider.once('recording-ended', () => res(stopResolved)));
+      await provider._handleFfmpegClose('r.mp3', 'r.mp3', 0);
+      expect(await ended).toBe(true);
+      expect(provider._appCapture).toBeNull();
+    });
   });
 });

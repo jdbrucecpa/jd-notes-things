@@ -168,38 +168,65 @@ class LocalProvider extends RecordingProvider {
 
     const trackPaths = this._deriveTrackPaths(audioFilePath);
 
-    // Preferred isolation track: per-process capture of the detected meeting
-    // app (remote voices only — the user's own voice never renders there).
-    // Falls back to a system-only submix inside FFmpeg when unavailable.
-    let appTrackActive = false;
-    const meetingPid = this._activeMeetingPid();
-    if (meetingPid && AppLoopbackCapture.isAvailable()) {
+    try {
+      // Preferred isolation track: per-process capture of the detected meeting
+      // app (remote voices only — the user's own voice never renders there).
+      // Falls back to a system-only submix inside FFmpeg when unavailable.
+      //
+      // Phase-1 limitation: the capture binds to the meeting app's PID as it is
+      // at record-start and never re-binds. If the meeting app restarts
+      // mid-recording under a new PID, the app track degrades to silence for the
+      // remainder — acceptable, since the system-submix/mixed recordings still
+      // capture the audio. PID re-binding is future work.
+      let appTrackActive = false;
+      const meetingPid = this._activeMeetingPid();
+      if (meetingPid && AppLoopbackCapture.isAvailable()) {
+        try {
+          this._appCapture = new AppLoopbackCapture();
+          this._appCapture.on('error', (err) => {
+            // Capture failure degrades the isolation track only — never the recording.
+            this.emit('error', { type: 'app-loopback-error', message: err.message });
+          });
+          await this._appCapture.start(meetingPid, trackPaths.appTrackPath);
+          appTrackActive = true;
+          log.info(`[LocalProvider] App-loopback capture started (pid=${meetingPid})`);
+        } catch (err) {
+          log.warn(`[LocalProvider] App-loopback capture failed, using system submix: ${err.message}`);
+          this._appCapture = null;
+        }
+      }
+
+      this._pendingTrackOutputs = {
+        micTrackPath: trackPaths.micTrackPath,
+        systemTrackPath: appTrackActive ? null : trackPaths.systemTrackPath,
+      };
+      this._activeTrackPaths = {
+        micAudioFilePath: null, // set in _startFFmpeg once real sources are known
+        appAudioFilePath: appTrackActive ? trackPaths.appTrackPath : null,
+        systemAudioFilePath: null,
+      };
+
+      await this._startFFmpeg(audioFilePath);
+    } catch (err) {
+      // Start failed (WasapiCapture rejection, buildFFmpegArgs throw, spawn
+      // failure, ...). Tear down anything partially started and reset state so
+      // the next startRecording isn't blocked by a stale 'already recording'.
       try {
-        this._appCapture = new AppLoopbackCapture();
-        this._appCapture.on('error', (err) => {
-          // Capture failure degrades the isolation track only — never the recording.
-          this.emit('error', { type: 'app-loopback-error', message: err.message });
-        });
-        await this._appCapture.start(meetingPid, trackPaths.appTrackPath);
-        appTrackActive = true;
-        log.info(`[LocalProvider] App-loopback capture started (pid=${meetingPid})`);
-      } catch (err) {
-        log.warn(`[LocalProvider] App-loopback capture failed, using system submix: ${err.message}`);
+        await this._stopWasapiCaptures();
+      } catch {
+        /* best effort */
+      }
+      if (this._appCapture) {
+        await this._appCapture.stop().catch(() => {});
         this._appCapture = null;
       }
+      this._recording = false;
+      this._activeRecording = null;
+      this._activeTrackPaths = null;
+      this._pendingTrackOutputs = null;
+      throw err;
     }
 
-    this._pendingTrackOutputs = {
-      micTrackPath: trackPaths.micTrackPath,
-      systemTrackPath: appTrackActive ? null : trackPaths.systemTrackPath,
-    };
-    this._activeTrackPaths = {
-      micAudioFilePath: null, // set in _startFFmpeg once real sources are known
-      appAudioFilePath: appTrackActive ? trackPaths.appTrackPath : null,
-      systemAudioFilePath: null,
-    };
-
-    await this._startFFmpeg(audioFilePath);
     this.emit('recording-started', { recordingId, audioFilePath });
     return recordingId;
   }
@@ -293,13 +320,21 @@ class LocalProvider extends RecordingProvider {
    * Cleanup when the FFmpeg process exits (graceful quit OR force-kill).
    * Single source of truth for tearing down recording state.
    */
-  _handleFfmpegClose(recordingId, audioFilePath, code) {
+  async _handleFfmpegClose(recordingId, audioFilePath, code) {
     this._recording = false;
     this._ffmpegProcess = null;
     this._stopWasapiCaptures();
     if (this._appCapture) {
-      this._appCapture.stop().catch(() => {});
+      const appCapture = this._appCapture;
       this._appCapture = null;
+      // Await the stop: it patches the WAV RIFF/data sizes, so the app track is
+      // only well-formed once stop() resolves. Emitting recording-ended earlier
+      // would hand downstream consumers a WAV whose header still says 0 bytes.
+      try {
+        await appCapture.stop(); // never throws by design; belt-and-braces
+      } catch {
+        /* best effort */
+      }
     }
     const tracks = this._activeTrackPaths || {};
     this._activeTrackPaths = null;
