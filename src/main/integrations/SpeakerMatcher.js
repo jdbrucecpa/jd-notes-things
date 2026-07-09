@@ -189,17 +189,25 @@ class SpeakerMatcher {
     // nothing downstream can override or reassign it.
     const trackAnchor = options.trackAnchor;
     if (trackAnchor?.userLabel && this.userProfile?.name) {
-      console.log(
-        `[SpeakerMatcher] Stage 1: Track anchor identifies ${trackAnchor.userLabel} as user "${this.userProfile.name}" (dominance=${trackAnchor.userDominance})`
-      );
-      speakerMapping[trackAnchor.userLabel] = {
-        email: this.userProfile.email || null,
-        name: this.userProfile.name,
-        confidence: 'high',
-        method: 'track-anchor',
-        dominance: trackAnchor.userDominance,
-      };
-      matchedSpeakers.add(trackAnchor.userLabel);
+      if (!speakerStats.has(trackAnchor.userLabel)) {
+        // Stale anchor: the anchored label does not appear in this transcript's
+        // diarized speakers — skip rather than create a phantom mapping entry.
+        console.warn(
+          `[SpeakerMatcher] Stage 1: Track anchor label "${trackAnchor.userLabel}" not found in transcript — ignoring stale anchor`
+        );
+      } else {
+        console.log(
+          `[SpeakerMatcher] Stage 1: Track anchor identifies ${trackAnchor.userLabel} as user "${this.userProfile.name}" (dominance=${trackAnchor.userDominance})`
+        );
+        speakerMapping[trackAnchor.userLabel] = {
+          email: this.userProfile.email || null,
+          name: this.userProfile.name,
+          confidence: 'high',
+          method: 'track-anchor',
+          dominance: trackAnchor.userDominance,
+        };
+        matchedSpeakers.add(trackAnchor.userLabel);
+      }
     }
 
     // Stage 0: Voice Profile Match (LOCAL MODE — highest confidence)
@@ -211,6 +219,7 @@ class SpeakerMatcher {
     ) {
       try {
         console.log('[SpeakerMatcher] Stage 0: Attempting voice profile matching...');
+        const matchedBeforeStage0 = matchedSpeakers.size;
         const voiceProfileResults = await this.voiceProfileService.identifySpeakers(
           options.audioFilePath,
           options.segments,
@@ -241,7 +250,7 @@ class SpeakerMatcher {
           }
         }
         console.log(
-          `[SpeakerMatcher] Stage 0: Matched ${matchedSpeakers.size} speakers via voice profiles`
+          `[SpeakerMatcher] Stage 0: Matched ${matchedSpeakers.size - matchedBeforeStage0} speakers via voice profiles`
         );
       } catch (error) {
         console.error('[SpeakerMatcher] Stage 0 voice profile matching failed:', error.message);
@@ -857,10 +866,33 @@ class SpeakerMatcher {
       .filter(p => !assignedParticipantKeys.has(participantKey(p)))
       .sort((a, b) => (a.name || '').localeCompare(b.name || '')); // alphabetical for determinism
 
-    for (let i = 0; i < Math.min(remainingSpeakers.length, remainingParticipants.length); i++) {
-      mapping[remainingSpeakers[i].label] = {
-        email: remainingParticipants[i].email,
-        name: remainingParticipants[i].name,
+    // INVARIANT: a participant who is the user (matched against this.userProfile
+    // by email or strict name) must NEVER be paired with a remote-anchored label
+    // (proven not to be the user). If the user participant is the candidate for
+    // a remote label, skip them for that label — they stay available for a later
+    // non-remote label. Pairing stays deterministic (alphabetical pool + findIndex).
+    const isUserByProfile = (p) => {
+      if (!this.userProfile) return false;
+      if (this.userProfile.email && p.email) {
+        return p.email.toLowerCase() === this.userProfile.email.toLowerCase();
+      }
+      if (this.userProfile.name) {
+        return this.nameMatchStrict(this.userProfile.name, p.originalName || p.name);
+      }
+      return false;
+    };
+
+    const participantPool = [...remainingParticipants];
+    for (const speaker of remainingSpeakers) {
+      if (participantPool.length === 0) break;
+      const idx = participantPool.findIndex(
+        p => !(remoteLabels.has(speaker.label) && isUserByProfile(p))
+      );
+      if (idx === -1) continue; // only the user remains and this label is remote — leave for Step 4
+      const participant = participantPool.splice(idx, 1)[0];
+      mapping[speaker.label] = {
+        email: participant.email,
+        name: participant.name,
         confidence: 'low',
         method: 'unverified-positional',
         needsVerification: true,

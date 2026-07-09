@@ -785,14 +785,69 @@ describe('SpeakerMatcher', () => {
 
     it('behaves identically to before when no trackAnchor is provided (regression)', async () => {
       const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
-      const withUndefined = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
+      const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
         participantData: [
           { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' },
           { name: 'Stacie Rasmussen', email: 'stacie@x.com' },
         ],
       });
-      expect(withUndefined).toBeTruthy(); // must not throw; shape unchanged
-      expect(Object.keys(withUndefined).length).toBeGreaterThan(0);
+      // Identity-first heuristic: earliest speaker goes to the user participant,
+      // the remaining speaker pairs positionally with the remaining participant.
+      expect(mapping.SPEAKER_00.name).toBe('J.D. Bruce');
+      expect(mapping.SPEAKER_00.method).toBe('identity-first-speaker');
+      expect(mapping.SPEAKER_01.name).toBe('Stacie Rasmussen');
+      expect(mapping.SPEAKER_01.method).toBe('unverified-positional');
+    });
+
+    it('never pairs the user positionally with a remote label when ALL labels are remote', async () => {
+      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
+        trackAnchor: { userLabel: null, userDominance: 0, remoteLabels: ['SPEAKER_00', 'SPEAKER_01'] },
+        participantData: [
+          { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' },
+          { name: 'Stacie Rasmussen', email: 'stacie@x.com' },
+        ],
+      });
+      // Neither remote-proven label may receive the user identity — not even
+      // via Step 3 positional pairing when Step 2 found no eligible speaker.
+      expect(mapping.SPEAKER_00?.name).not.toBe('J.D. Bruce');
+      expect(mapping.SPEAKER_01?.name).not.toBe('J.D. Bruce');
+      // The non-user participant may still pair with a remote label.
+      expect(mapping.SPEAKER_00.name).toBe('Stacie Rasmussen');
+      // With only the user left in the pool, the second remote label stays Unknown.
+      expect(mapping.SPEAKER_01.method).toBe('unmatched');
+    });
+
+    it('skips remote labels when the host IS the user (hostIsUser branch)', async () => {
+      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
+        trackAnchor: { userLabel: null, userDominance: 0, remoteLabels: ['SPEAKER_00'] },
+        participantData: [
+          { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com', isHost: true },
+          { name: 'Stacie Rasmussen', email: 'stacie@x.com' },
+        ],
+      });
+      // Host == user, so the earliest-speaker pick must skip the remote label
+      // and land on SPEAKER_01.
+      expect(mapping.SPEAKER_01.name).toBe('J.D. Bruce');
+      expect(mapping.SPEAKER_01.method).toBe('identity-first-speaker');
+      expect(mapping.SPEAKER_00.name).not.toBe('J.D. Bruce');
+    });
+
+    it('ignores a stale anchor label that is not in the transcript', async () => {
+      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
+        trackAnchor: { userLabel: 'SPEAKER_99', userDominance: 0.9, remoteLabels: [] },
+        participantData: [
+          { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' },
+          { name: 'Stacie Rasmussen', email: 'stacie@x.com' },
+        ],
+      });
+      // No phantom mapping entry for a label that never appears in the transcript.
+      expect(mapping.SPEAKER_99).toBeUndefined();
+      // Matching still completes normally for the real labels.
+      expect(mapping.SPEAKER_00).toBeDefined();
+      expect(mapping.SPEAKER_01).toBeDefined();
     });
   });
 });
