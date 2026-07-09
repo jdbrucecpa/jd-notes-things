@@ -96,12 +96,15 @@ function synthesizeSegments(transcript, identities) {
  * @param {Function} deps.countVoiceSamplesForMeeting - (meetingId) => number
  * @param {Function} deps.fileExists - (path) => boolean
  * @param {Function} deps.embedSpeakers - (audioPath, segments) => Promise<Array<{speakerLabel, embedding}>>
- * @param {Function} deps.upsertProfileSample - (contact, embedding, durationSec, meetingId) => {profileId, created}|null
+ * @param {Function} deps.upsertProfileSample - (contact, embedding, durationSec, meetingId) => {profileId, created, rejected?}|null
  * @param {Function} deps.log
  * @param {Object} [opts]
  * @param {Function} [opts.onProgress] - (done, total, summary) => void
  * @param {number} [opts.limit] - max meetings to embed (for staged rollout)
- * @returns {Promise<Object>} summary counts
+ * @returns {Promise<{scanned: number, embedded: number, samplesAdded: number,
+ *   samplesRejected: number, skippedAlreadySampled: number, skippedNoAudio: number,
+ *   skippedNoIdentities: number, errors: number}>} summary counts — samplesRejected
+ *   tracks samples the profile poisoning guard refused (not persisted)
  */
 async function runBackfill(deps, opts = {}) {
   const { onProgress = () => {}, limit = Infinity } = opts;
@@ -112,6 +115,7 @@ async function runBackfill(deps, opts = {}) {
     scanned: 0,
     embedded: 0,
     samplesAdded: 0,
+    samplesRejected: 0,
     skippedAlreadySampled: 0,
     skippedNoAudio: 0,
     skippedNoIdentities: 0,
@@ -159,7 +163,15 @@ async function runBackfill(deps, opts = {}) {
           dur,
           meeting.id
         );
-        if (r) summary.samplesAdded++;
+        if (r?.rejected) {
+          // Poisoning guard refused the sample — nothing was persisted.
+          summary.samplesRejected++;
+          deps.log(
+            `[Backfill] Sample rejected for ${identity.name} in ${meeting.id} (poisoning guard)`
+          );
+        } else if (r) {
+          summary.samplesAdded++;
+        }
       }
       deps.log(
         `[Backfill] ${meeting.id}: ${Object.keys(identities).length} identities, +${embeddings.length} embeddings`

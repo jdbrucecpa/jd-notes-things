@@ -85,9 +85,44 @@ describe('runBackfill', () => {
       scanned: 4,
       embedded: 1,
       samplesAdded: 2,
+      samplesRejected: 0,
       skippedAlreadySampled: 1,
       skippedNoAudio: 1,
       skippedNoIdentities: 1,
     });
+  });
+
+  it('counts poisoning-guard rejections separately from added samples', async () => {
+    const meetings = [
+      {
+        id: 'm-mixed',
+        videoFile: 'C:/audio/mixed.mp3',
+        transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000), T('S1', 'Kurt', 'kurt@x.com', 60000, 120000)],
+      },
+    ];
+    const deps = {
+      getAllMeetings: () => ({ upcomingMeetings: [], pastMeetings: meetings }),
+      countVoiceSamplesForMeeting: () => 0,
+      fileExists: () => true,
+      embedSpeakers: vi.fn().mockImplementation(async (_path, segments) =>
+        [...new Set(segments.map(s => s.speaker))].map(label => ({
+          speakerLabel: label,
+          embedding: new Float32Array([1, 0]),
+        }))
+      ),
+      upsertProfileSample: vi
+        .fn()
+        .mockImplementation(contact =>
+          contact.contactEmail === 'jd@x.com'
+            ? { profileId: 1, created: false, rejected: true }
+            : { profileId: 2, created: true }
+        ),
+      log: () => {},
+    };
+
+    const summary = await runBackfill(deps);
+
+    expect(deps.upsertProfileSample).toHaveBeenCalledTimes(2);
+    expect(summary).toMatchObject({ embedded: 1, samplesAdded: 1, samplesRejected: 1 });
   });
 });
