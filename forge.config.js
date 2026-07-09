@@ -88,7 +88,7 @@ module.exports = {
     {
       name: '@timfish/forge-externals-plugin',
       config: {
-        externals: ['@recallai/desktop-sdk', 'better-sqlite3'],
+        externals: ['@recallai/desktop-sdk', 'better-sqlite3', 'application-loopback'],
         includeDeps: true,
       },
     },

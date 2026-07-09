@@ -15,6 +15,9 @@ const externals = {
   '@aws-sdk/client-s3': 'commonjs @aws-sdk/client-s3',
   // Native N-API module for WASAPI loopback audio capture (v2.0 mixer)
   'native-recorder-nodejs': 'commonjs native-recorder-nodejs',
+  // Per-process loopback capture — resolves its helper exe via __dirname,
+  // which breaks under webpack bundling (.webpack/main/), so keep external
+  'application-loopback': 'commonjs application-loopback',
 };
 
 // Only externalize the real SDK when NOT in mock mode.

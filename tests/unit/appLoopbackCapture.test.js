@@ -80,4 +80,48 @@ describe('AppLoopbackCapture', () => {
     AppLoopbackCapture._setNativeModule(null);
     await expect(new AppLoopbackCapture().start(1, wavPath)).rejects.toThrow(/not available/);
   });
+
+  it('is an EventEmitter (error surface for LocalProvider wiring)', () => {
+    expect(typeof cap.on).toBe('function');
+    expect(typeof cap.emit).toBe('function');
+  });
+
+  it('isolates write failures: emits error and stops capturing, stop() still safe', async () => {
+    await cap.start(1234, wavPath);
+    expect(cap.isCapturing).toBe(true);
+
+    const errorSpy = vi.fn();
+    cap.on('error', errorSpy);
+
+    const writeSpy = vi.spyOn(fs, 'writeSync').mockImplementation(() => {
+      throw new Error('ENOSPC: no space left on device');
+    });
+    try {
+      native._emit('1234', new Uint8Array([1, 2, 3, 4]));
+    } finally {
+      writeSpy.mockRestore();
+    }
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0][0].message).toMatch(/ENOSPC/);
+    expect(cap.isCapturing).toBe(false);
+    // native capture was torn down as part of the failure
+    expect(native.stopAudioCapture).toHaveBeenCalledWith('1234');
+
+    // stop() after a failure must never throw
+    await expect(cap.stop()).resolves.toBeUndefined();
+  });
+
+  it('start cleans up the fd when native startAudioCapture throws', async () => {
+    native.startAudioCapture.mockImplementation(() => {
+      throw new Error('spawn failed');
+    });
+
+    await expect(cap.start(1234, wavPath)).rejects.toThrow(/spawn failed/);
+    expect(cap.isCapturing).toBe(false);
+
+    // fd was released — stop() resolves cleanly, and the file is removable
+    await expect(cap.stop()).resolves.toBeUndefined();
+    expect(() => fs.rmSync(wavPath, { force: true })).not.toThrow();
+  });
 });
