@@ -511,9 +511,13 @@ class VoiceProfileService {
           status: 'auto-matched',
         });
       } else if (match && match.confidence === 'medium') {
-        // Flag for human verification
+        // Flag for human verification. A distance in the high band means the
+        // margin rule demoted this match — mark it so threshold tuning can
+        // tell genuinely-medium distances from margin demotions.
+        const marginText = Number.isFinite(match.margin) ? match.margin.toFixed(4) : 'inf';
+        const demotedMarker = match.distance <= DISTANCE_HIGH_CONFIDENCE ? ' [margin-demoted]' : '';
         log.info(
-          `${LOG_PREFIX} Medium-confidence match for ${speaker.speakerLabel} → ${match.profile.contactName} (dist=${match.distance.toFixed(4)})`
+          `${LOG_PREFIX} Medium-confidence match for ${speaker.speakerLabel} → ${match.profile.contactName} (dist=${match.distance.toFixed(4)}, margin=${marginText})${demotedMarker}`
         );
 
         results.push({
