@@ -16,6 +16,13 @@ describe('computeSilenceDeficit', () => {
     expect(d % frameBytes).toBe(0);
   });
 
+  it('rounds a non-aligned deficit down to a whole frame', () => {
+    // 1 byte already written → raw deficit 191999, not divisible by 4
+    const d = computeSilenceDeficit(1000, byteRate, frameBytes, 1);
+    expect(d).toBe(191996); // 191999 - (191999 % 4)
+    expect(d % frameBytes).toBe(0);
+  });
+
   it('caps at ~1s of bytes', () => {
     expect(computeSilenceDeficit(60000, byteRate, frameBytes, 0)).toBe(byteRate);
   });
