@@ -505,6 +505,10 @@ class VoiceProfileService {
    * @param {Array<{ name: string, email: string, googleContactId?: string }>} calendarAttendees
    * @param {string} meetingId
    * @param {Array<{ speakerLabel: string, embedding: Float32Array }>} [precomputedEmbeddings=null] - Precomputed speaker embeddings; if provided, skips HTTP call to embed-speakers endpoint. An EMPTY array counts as provided ([] is truthy) — no fetch, zero speakers matched.
+   * @param {{ anchoredUserLabel: string, user: { name: string, email: string, googleContactId?: string } }|null} [anchorOptions=null] -
+   *   Track-anchor from waterfall Stage 1: the diarized label that IS the meeting's user (proven independently
+   *   of voice matching). When present, that label is enrolled/strengthened as the user's own profile,
+   *   excluded from client matching, and removed from the attendee pool before the 1+1 auto-enroll check.
    * @returns {Promise<Array<{
    *   speakerLabel: string,
    *   profileId: number|null,
@@ -512,11 +516,11 @@ class VoiceProfileService {
    *   contactEmail: string|null,
    *   confidence: string,
    *   distance: number,
-   *   status: 'auto-matched' | 'pending-review' | 'auto-enrolled' | 'unmatched',
+   *   status: 'auto-matched' | 'pending-review' | 'auto-enrolled' | 'unmatched' | 'user-anchored',
    *   candidates?: Array<Object>
    * }>>}
    */
-  async identifySpeakers(audioFilePath, segments, calendarAttendees, meetingId, precomputedEmbeddings = null) {
+  async identifySpeakers(audioFilePath, segments, calendarAttendees, meetingId, precomputedEmbeddings = null, anchorOptions = null) {
     log.info(`${LOG_PREFIX} identifySpeakers: ${segments.length} segments, ${calendarAttendees.length} attendees`);
 
     // Step 1: Get embeddings (precomputed by the waterfall pipeline, or fetch)
@@ -530,11 +534,45 @@ class VoiceProfileService {
       }
     }
 
-    // Step 2: Match each speaker against stored profiles
+    // Anchor synergy (spec §5 Stage 2): the track-anchored label IS the user.
+    // Enroll/strengthen the user's own profile from it, exclude it from client
+    // matching, and remove the user from the attendee pool so the remaining
+    // speakers/attendees can pair 1+1 for auto-enroll.
     const results = [];
     const unmatchedSpeakers = [];
+    let matchableEmbeddings = speakerEmbeddings;
+    let attendeePool = calendarAttendees;
 
-    for (const speaker of speakerEmbeddings) {
+    const anchoredLabel = anchorOptions?.anchoredUserLabel || null;
+    const anchorUser = anchorOptions?.user || null;
+    if (anchoredLabel && anchorUser?.email) {
+      const anchored = speakerEmbeddings.find(e => e.speakerLabel === anchoredLabel);
+      if (anchored) {
+        const duration = this._segmentDuration(segments, anchoredLabel);
+        const upsert = this.upsertProfileSample(
+          { contactName: anchorUser.name, contactEmail: anchorUser.email, googleContactId: anchorUser.googleContactId || null },
+          anchored.embedding,
+          duration,
+          meetingId
+        );
+        results.push({
+          speakerLabel: anchoredLabel,
+          profileId: upsert?.profileId ?? null,
+          contactName: anchorUser.name,
+          contactEmail: anchorUser.email,
+          confidence: 'high',
+          distance: 0,
+          status: 'user-anchored',
+        });
+        matchableEmbeddings = speakerEmbeddings.filter(e => e.speakerLabel !== anchoredLabel);
+        attendeePool = calendarAttendees.filter(
+          a => (a.email || '').toLowerCase() !== anchorUser.email.toLowerCase()
+        );
+      }
+    }
+
+    // Step 2: Match each speaker against stored profiles
+    for (const speaker of matchableEmbeddings) {
       const match = this.findBestMatch(speaker.embedding);
 
       if (match && match.confidence === 'high') {
@@ -595,7 +633,7 @@ class VoiceProfileService {
     }
 
     // Step 3: Hybrid enrollment for unmatched speakers
-    const unmatchedAttendees = calendarAttendees.filter(
+    const unmatchedAttendees = attendeePool.filter(
       a => !results.some(r => r.contactEmail === a.email && r.status === 'auto-matched')
     );
 
@@ -605,22 +643,16 @@ class VoiceProfileService {
       const attendee = unmatchedAttendees[0];
       const duration = this._segmentDuration(segments, speaker.speakerLabel);
 
-      const { id: newProfileId } = this.saveProfile({
-        googleContactId: attendee.googleContactId || null,
-        contactName: attendee.name,
-        contactEmail: attendee.email,
-        embedding: speaker.embedding,
-        sampleCount: 1,
-        totalDuration: duration,
-        confidence: 0.5,
-      });
-
-      // No addSample here — the embedding is already stored in the profile row created above.
-      // (addSample is used in the high-confidence match branch to add a NEW sample from
-      // a subsequent meeting to an existing profile.)
+      const upsert = this.upsertProfileSample(
+        { contactName: attendee.name, contactEmail: attendee.email, googleContactId: attendee.googleContactId || null },
+        speaker.embedding,
+        duration,
+        meetingId
+      );
+      const newProfileId = upsert?.profileId ?? null;
 
       log.info(
-        `${LOG_PREFIX} Auto-enrolled ${speaker.speakerLabel} as ${attendee.name} (new profile ${newProfileId})`
+        `${LOG_PREFIX} Auto-enrolled ${speaker.speakerLabel} as ${attendee.name} (profile ${newProfileId})`
       );
 
       results.push({

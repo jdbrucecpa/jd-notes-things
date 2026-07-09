@@ -693,3 +693,58 @@ describe('upsertProfileSample', () => {
     expect(r).toBeNull();
   });
 });
+
+// ============================================================
+// 9. identifySpeakers anchor synergy
+// ============================================================
+
+describe('identifySpeakers anchor synergy', () => {
+  it('enrolls the user from the anchored label, excludes it from matching, and auto-enrolls the 1+1 remainder', async () => {
+    const svc = new VoiceProfileService(makeDb());
+
+    const results = await svc.identifySpeakers(
+      'C:/x.mp3',
+      [
+        { speaker: 'SPEAKER_00', start: 0, end: 100 },
+        { speaker: 'SPEAKER_01', start: 100, end: 200 },
+      ],
+      [
+        { name: 'JD Bruce', email: 'jd@x.com', googleContactId: null },
+        { name: 'Melissa H', email: 'melissa@x.com', googleContactId: null },
+      ],
+      'meeting-9',
+      [
+        { speakerLabel: 'SPEAKER_00', embedding: new Float32Array([1, 0]) },
+        { speakerLabel: 'SPEAKER_01', embedding: new Float32Array([0, 1]) },
+      ],
+      { anchoredUserLabel: 'SPEAKER_00', user: { name: 'JD Bruce', email: 'jd@x.com' } }
+    );
+
+    // User profile created from the anchored label's embedding
+    expect(svc.getProfileByEmail('jd@x.com')).not.toBeNull();
+    // Anchored label reported as user-anchored, not run through matching
+    const anchored = results.find(r => r.speakerLabel === 'SPEAKER_00');
+    expect(anchored.status).toBe('user-anchored');
+    expect(anchored.contactEmail).toBe('jd@x.com');
+    // Remaining 1 speaker + 1 non-user attendee → auto-enroll fires
+    const melissa = results.find(r => r.speakerLabel === 'SPEAKER_01');
+    expect(melissa.status).toBe('auto-enrolled');
+    expect(melissa.contactEmail).toBe('melissa@x.com');
+    expect(svc.getProfileByEmail('melissa@x.com')).not.toBeNull();
+  });
+
+  it('without anchorOptions behaves exactly as before (2v2 → no auto-enroll)', async () => {
+    const svc = new VoiceProfileService(makeDb());
+    const results = await svc.identifySpeakers(
+      'C:/x.mp3',
+      [{ speaker: 'SPEAKER_00', start: 0, end: 10 }, { speaker: 'SPEAKER_01', start: 10, end: 20 }],
+      [{ name: 'A', email: 'a@x.com' }, { name: 'B', email: 'b@x.com' }],
+      'm',
+      [
+        { speakerLabel: 'SPEAKER_00', embedding: new Float32Array([1, 0]) },
+        { speakerLabel: 'SPEAKER_01', embedding: new Float32Array([0, 1]) },
+      ]
+    );
+    expect(results.every(r => r.status === 'unmatched')).toBe(true);
+  });
+});
