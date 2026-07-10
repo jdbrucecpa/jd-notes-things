@@ -8430,21 +8430,15 @@ ipcMain.handle(
         }
       }
 
-      // Re-generate summary if the meeting had one
-      if (meeting.summary) {
-        backgroundTaskManager.updateTask(taskId, 80, 'Regenerating summary...');
-        try {
-          const summaryResult = await generateMeetingSummary(meeting);
-          if (summaryResult) {
-            meeting.summary = summaryResult;
-          }
-        } catch (summaryError) {
-          console.warn('[Transcription Rerun] Summary regeneration failed:', summaryError.message);
-        }
-      }
-
-      // Save updated meeting
+      // Save updated transcript/mapping first — the auto-summary path below
+      // reloads the meeting from the database.
       databaseService.saveMeeting(meeting, 'past');
+
+      // Always regenerate the exec (auto) summary after a rerun. This also runs
+      // the Stage 3 content pass (speaker review + meeting renaming) and
+      // persists summary/title/mapping/transcript itself.
+      backgroundTaskManager.updateTask(taskId, 80, 'Regenerating summary...');
+      await generateAndSaveAutoSummary(meeting.id || meetingId, '[Transcription Rerun]');
 
       backgroundTaskManager.completeTask(taskId, {
         utterances: meeting.transcript.length,
