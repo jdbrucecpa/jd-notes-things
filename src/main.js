@@ -12556,6 +12556,14 @@ async function generateAndSaveAutoSummary(meetingId, logPrefix = '[Auto-Summary]
           data.pastMeetings[idx].content = `# ${meeting.title}\n\n${summary}`;
           data.pastMeetings[idx].title = meeting.title; // May have been updated by generateMeetingSummary
           data.pastMeetings[idx].summaryGenerated = true;
+          // Stage 3 (content pass) may have reassigned speakers during summary
+          // generation — persist those alongside the title/content.
+          if (meeting.speakerMapping) {
+            data.pastMeetings[idx].speakerMapping = meeting.speakerMapping;
+          }
+          if (meeting.transcript) {
+            data.pastMeetings[idx].transcript = meeting.transcript;
+          }
           console.log(`${logPrefix} ✓ Summary and title saved`);
           console.log(`${logPrefix} ✓ Title: "${data.pastMeetings[idx].title}"`);
         }
