@@ -7,6 +7,7 @@
 
 const path = require('path');
 const databaseService = require('../services/databaseService');
+const slugify = require('../utils/slugify');
 
 class RoutingEngine {
   constructor(settingsProvider = null) {
@@ -45,7 +46,7 @@ class RoutingEngine {
 
     const date = meetingDate ? new Date(meetingDate) : new Date();
     const dateStr = this._formatDate(date);
-    const titleSlug = this._slugify(meetingTitle || 'untitled-meeting');
+    const titleSlug = this._slugify(meetingTitle);
     const folderName = `${dateStr}-${titleSlug}`;
 
     const routes = [];
@@ -137,17 +138,12 @@ class RoutingEngine {
   }
 
   /**
-   * Convert string to URL-friendly slug
+   * Convert string to URL-friendly slug (delegates to the shared helper so
+   * folder and file names always agree).
    * @private
    */
   _slugify(text) {
-    return text
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .substring(0, 50);
+    return slugify(text);
   }
 
   /**

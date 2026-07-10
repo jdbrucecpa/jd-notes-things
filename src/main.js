@@ -43,6 +43,7 @@ const SpeakerMatcher = require('./main/integrations/SpeakerMatcher');
 const TemplateManager = require('./main/templates/TemplateManager');
 const VaultStructure = require('./main/storage/VaultStructure');
 const RoutingEngine = require('./main/routing/RoutingEngine');
+const slugify = require('./main/utils/slugify');
 const ImportManager = require('./main/import/ImportManager');
 const TranscriptParser = require('./main/import/TranscriptParser');
 const PatternConfigLoader = require('./main/import/PatternConfigLoader');
@@ -3789,12 +3790,7 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
       // Build fullPath matching routing engine convention: vault_path/date-title-slug
       const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
       const dateStr = meetingDate.toISOString().split('T')[0];
-      const titleSlug = meeting.title
-        ? meeting.title
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-|-$/g, '')
-        : 'meeting';
+      const titleSlug = slugify(meeting.title);
       const folderName = `${dateStr}-${titleSlug}`;
       const fullPath = path.join(routingOverride.path, folderName);
 
@@ -3847,12 +3843,7 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
       // Generate file slug from title and date
       const meetingDate = meeting.date ? new Date(meeting.date) : new Date();
       const dateStr = meetingDate.toISOString().split('T')[0]; // YYYY-MM-DD
-      const titleSlug = meeting.title
-        ? meeting.title
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-|-$/g, '')
-        : 'meeting';
+      const titleSlug = slugify(meeting.title);
       let baseFilename = `${dateStr}-${titleSlug}`;
 
       // Create meeting folder path — use absolute path directly if route provides one,
