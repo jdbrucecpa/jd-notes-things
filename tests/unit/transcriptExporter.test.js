@@ -110,11 +110,11 @@ describe('generateExportFilename', () => {
     expect(filename).toBe('2025-06-15-weekly-standup-transcript.txt');
   });
 
-  it('uses "untitled-meeting" when title is missing', () => {
+  it('uses "meeting" when title is missing (shared slugify default)', () => {
     // Use midday UTC to avoid date-shift in any timezone
     const meeting = { date: '2025-01-15T12:00:00Z' };
     const filename = generateExportFilename(meeting);
-    expect(filename).toBe('2025-01-15-untitled-meeting-transcript.txt');
+    expect(filename).toBe('2025-01-15-meeting-transcript.txt');
   });
 
   it('strips special characters from title', () => {
@@ -123,22 +123,24 @@ describe('generateExportFilename', () => {
     expect(filename).toBe('2025-03-10-q1-review-final-corp-transcript.txt');
   });
 
-  it('truncates long titles to 50 characters', () => {
+  it('truncates long titles to 80 characters (shared slugify cap)', () => {
     const meeting = {
       date: '2025-02-20T09:00:00Z',
-      title: 'A very long meeting title that should be truncated to prevent filesystem issues',
+      title:
+        'A very long meeting title that should be truncated to prevent filesystem issues and more words to exceed the cap',
     };
     const filename = generateExportFilename(meeting);
-    // Slug portion should be max 50 chars
+    // Slug portion should be max 80 chars, no trailing dash
     const slug = filename.replace(/^\d{4}-\d{2}-\d{2}-/, '').replace(/-transcript\.txt$/, '');
-    expect(slug.length).toBeLessThanOrEqual(50);
+    expect(slug.length).toBeLessThanOrEqual(80);
+    expect(slug.endsWith('-')).toBe(false);
   });
 
   it('handles title with only special characters', () => {
     const meeting = { date: '2025-04-01T12:00:00Z', title: '!!!' };
     const filename = generateExportFilename(meeting);
-    // Slugify strips all special chars, leaving empty → falls back to empty slug
-    expect(filename).toBe('2025-04-01--transcript.txt');
+    // Slugify strips all special chars, leaving empty → falls back to 'meeting'
+    expect(filename).toBe('2025-04-01-meeting-transcript.txt');
   });
 
   it('uses current date when date is missing', () => {

@@ -1,5 +1,7 @@
 'use strict';
 
+const slugify = require('../utils/slugify');
+
 /**
  * Transcript Exporter — converts DB transcript entries to importable text files.
  *
@@ -52,24 +54,9 @@ function generateExportFilename(meeting) {
   const dd = String(date.getDate()).padStart(2, '0');
   const dateStr = `${yyyy}-${mm}-${dd}`;
 
-  const titleSlug = slugify(meeting.title || 'untitled-meeting');
+  const titleSlug = slugify(meeting.title);
 
   return `${dateStr}-${titleSlug}-transcript.txt`;
-}
-
-/**
- * Convert a string to a URL/filesystem-friendly slug.
- * Mirrors RoutingEngine._slugify() for consistency.
- * @private
- */
-function slugify(text) {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .substring(0, 50);
 }
 
 module.exports = { formatTranscriptForExport, generateExportFilename };
