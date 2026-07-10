@@ -32,6 +32,13 @@ describe('composeTitle', () => {
       .toBe('Kurt Anderson - Trust Fund Next Steps');
     expect(composeTitle(null, null, 'anything')).toBeNull();
   });
+  it('sanitizes model-supplied topic: strips control chars, caps at 6 words, normalizes case', () => {
+    expect(composeTitle(null, 'Kurt', 'INJECTED\nGARBAGE topic with way too many words here'))
+      .toBe('Kurt - Injected Garbage Topic With Way Too');
+  });
+  it('returns null when the topic is only whitespace/control chars', () => {
+    expect(composeTitle(null, 'Kurt', '\n\n')).toBeNull();
+  });
 });
 
 describe('applyReassignments (permission rules in code)', () => {

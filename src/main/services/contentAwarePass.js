@@ -29,12 +29,22 @@ function computeMainParticipant(transcript, user) {
   return best ? { name: best.name, email: best.email } : null;
 }
 
-/** Title Case the topic phrase; assemble "Company - Name - Topic". */
+/** Title Case the topic phrase; assemble "Company - Name - Topic".
+ *  The topic is model-supplied: sanitize (strip control chars/newlines,
+ *  collapse whitespace), cap at 6 words, and normalize case — the title
+ *  lands in filenames and YAML frontmatter downstream. */
 function composeTitle(company, participantName, topic) {
   if (!participantName || !topic) return null;
-  const titledTopic = topic
-    .split(/\s+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+  const cleaned = topic
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\x00-\x1f\x7f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return null;
+  const titledTopic = cleaned
+    .split(' ')
+    .slice(0, 6)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(' ');
   return [company, participantName, titledTopic].filter(Boolean).join(' - ');
 }
