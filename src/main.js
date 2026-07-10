@@ -12674,11 +12674,14 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
 
     // Format the transcript into a single text for the AI to process
     // Use mapped speaker name if available (v1.1), fall back to original speaker
-    const transcriptText = meeting.transcript
-      .map(
-        entry => `${entry.speakerName || entry.speakerDisplayName || entry.speaker}: ${entry.text}`
-      )
-      .join('\n');
+    const buildTranscriptText = () =>
+      meeting.transcript
+        .map(
+          entry =>
+            `${entry.speakerName || entry.speakerDisplayName || entry.speaker}: ${entry.text}`
+        )
+        .join('\n');
+    let transcriptText = buildTranscriptText();
 
     // Format detected participants if available
     let participantsText = '';
@@ -12709,18 +12712,22 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
 
     // Build cacheable content: participants + user context + transcript
     // This entire block will be cached across multiple LLM calls (90% cost savings)
-    const cacheableParts = [];
-    if (participantsText) {
-      cacheableParts.push(participantsText);
-    }
-    if (userContextText) {
-      cacheableParts.push(userContextText);
-    }
-    cacheableParts.push(transcriptText);
-    const cacheableContent = cacheableParts.join('\n\n');
+    const buildCacheableContent = () => {
+      const cacheableParts = [];
+      if (participantsText) {
+        cacheableParts.push(participantsText);
+      }
+      if (userContextText) {
+        cacheableParts.push(userContextText);
+      }
+      cacheableParts.push(transcriptText);
+      return cacheableParts.join('\n\n');
+    };
+    let cacheableContent = buildCacheableContent();
 
     // ---- Waterfall Stage 3 (spec §5): content-aware review + naming ----
     // Shares cacheableContent with the summary call below → prompt-cache hit.
+    let renamedByContentPass = false;
     try {
       const roster = (meeting.participants || []).map(p => ({
         name: p.name, email: p.email || null, organization: p.organization || null,
@@ -12743,6 +12750,10 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
         if (speakerMatcher) {
           meeting.transcript = speakerMatcher.applyMappingToTranscript(meeting.transcript, pass.updatedMapping);
         }
+        // Rare path — accepts a prompt-cache miss so the summary prose
+        // matches the corrected transcript (speaker names changed).
+        transcriptText = buildTranscriptText();
+        cacheableContent = buildCacheableContent();
       }
       // Rename only meetings not yet synced to Obsidian: renaming a synced
       // meeting creates a DUPLICATE vault file on next export (filenames are
@@ -12750,6 +12761,7 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       if (pass.title && !meeting.obsidianLink) {
         console.log(`[ContentPass] Renaming meeting: "${meeting.title}" -> "${pass.title}"`);
         meeting.title = pass.title;
+        renamedByContentPass = true;
       }
     } catch (stage3Err) {
       console.warn('[ContentPass] Stage 3 skipped:', stage3Err.message);
@@ -12773,15 +12785,19 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       'video',
     ];
     const currentTitle = (meeting.title || '').toLowerCase().trim();
-    const needsTitleSuggestion = genericTitles.some(generic => {
-      // Match if title IS the generic word, starts with it (including numbered variants like "transcript2"), or contains it as a word
-      return (
-        currentTitle === generic ||
-        currentTitle.startsWith(generic) || // Matches "transcript", "transcript2", "transcript-foo", etc.
-        currentTitle.includes(' ' + generic) ||
-        currentTitle.includes(generic + ' ')
-      );
-    });
+    // A structured Stage 3 title ("Company - Name - Topic") may contain a
+    // generic word (e.g. "Call") — don't let the legacy suggestion clobber it.
+    const needsTitleSuggestion =
+      !renamedByContentPass &&
+      genericTitles.some(generic => {
+        // Match if title IS the generic word, starts with it (including numbered variants like "transcript2"), or contains it as a word
+        return (
+          currentTitle === generic ||
+          currentTitle.startsWith(generic) || // Matches "transcript", "transcript2", "transcript-foo", etc.
+          currentTitle.includes(' ' + generic) ||
+          currentTitle.includes(generic + ' ')
+        );
+      });
 
     if (needsTitleSuggestion) {
       console.log(
