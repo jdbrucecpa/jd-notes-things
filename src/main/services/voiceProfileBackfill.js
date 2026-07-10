@@ -61,20 +61,45 @@ function extractSpeakerIdentities(transcript) {
 }
 
 /**
+ * When a legacy utterance has no endTimestamp, its end is derived from the
+ * next utterance's start — capped so a long silence between utterances
+ * doesn't get counted as speech.
+ */
+const DERIVED_SPAN_MAX_SECONDS = 15;
+
+/**
  * Build {speaker, start, end} SECOND segments from utterance timestamps (ms),
  * restricted to labels with verified identities; per-speaker duration capped.
  *
- * @param {Array<Object>} transcript
+ * Legacy transcripts (pre-v2.0, AssemblyAI era) store ONLY the start
+ * timestamp — verified against the live DB 2026-07-10: 0 of 39k production
+ * entries carry end_timestamp. For those, the end is derived from the next
+ * utterance's start (capped at DERIVED_SPAN_MAX_SECONDS); the final
+ * utterance's length is unknowable and is skipped.
+ *
+ * @param {Array<Object>} transcript - chronologically ordered utterances
  * @param {Object<string, {name: string, email: string}>} identities
  * @returns {Array<{speaker: string, start: number, end: number}>}
  */
 function synthesizeSegments(transcript, identities) {
+  const list = transcript || [];
   const budget = new Map(); // label -> seconds used
   const segments = [];
-  for (const u of transcript || []) {
+  for (let i = 0; i < list.length; i++) {
+    const u = list[i];
     if (!identities[u.speaker]) continue;
-    const startSec = (u.timestamp ?? 0) / 1000;
-    const endSec = (u.endTimestamp ?? 0) / 1000;
+    if (u.timestamp == null) continue; // imported/legacy rows can lack timestamps entirely
+    const startSec = u.timestamp / 1000;
+
+    let endSec;
+    if (u.endTimestamp != null) {
+      endSec = u.endTimestamp / 1000;
+    } else {
+      const next = list[i + 1];
+      if (!next || next.timestamp == null) continue; // last entry: length unknowable
+      endSec = Math.min(next.timestamp / 1000, startSec + DERIVED_SPAN_MAX_SECONDS);
+    }
+
     let span = endSec - startSec;
     if (span < MIN_UTTERANCE_SECONDS) continue;
     const used = budget.get(u.speaker) || 0;

@@ -7,6 +7,30 @@ import {
   MAX_SECONDS_PER_SPEAKER,
 } from '../../src/main/services/voiceProfileBackfill.js';
 
+describe('synthesizeSegments — legacy transcripts without endTimestamp', () => {
+  const ids = { S0: { name: 'JD', email: 'jd@x.com' } };
+  const L = (speaker, startMs) => ({ speaker, speakerName: 'JD', speakerEmail: 'jd@x.com', timestamp: startMs, endTimestamp: null });
+
+  it('derives the end from the next utterance start', () => {
+    const segs = synthesizeSegments([L('S0', 0), L('S0', 5000), L('S0', 9000)], ids);
+    // last entry unknowable → skipped; first two derive from successors
+    expect(segs).toEqual([
+      { speaker: 'S0', start: 0, end: 5 },
+      { speaker: 'S0', start: 5, end: 9 },
+    ]);
+  });
+
+  it('caps derived spans so silences are not counted as speech', () => {
+    const segs = synthesizeSegments([L('S0', 0), L('S0', 120000)], ids);
+    expect(segs).toEqual([{ speaker: 'S0', start: 0, end: 15 }]); // DERIVED_SPAN_MAX_SECONDS
+  });
+
+  it('skips entries with null timestamps entirely', () => {
+    const nullTs = { speaker: 'S0', speakerName: 'JD', speakerEmail: 'jd@x.com', timestamp: null, endTimestamp: null };
+    expect(synthesizeSegments([nullTs, nullTs], ids)).toEqual([]);
+  });
+});
+
 describe('resolveAudioPath', () => {
   const deps = {
     fileExists: p =>
