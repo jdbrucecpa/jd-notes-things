@@ -7,6 +7,35 @@ import {
   MAX_SECONDS_PER_SPEAKER,
 } from '../../src/main/services/voiceProfileBackfill.js';
 
+describe('runBackfill — contact-name resolution', () => {
+  it('resolves email display names via the optional resolver, falling back to the email', async () => {
+    const meetings = [
+      { id: 'm1', videoFile: 'C:/audio/a.mp3',
+        transcript: [T('S0', 'melissa@x.com', 'melissa@x.com', 0, 120000)] },
+      { id: 'm2', videoFile: 'C:/audio/b.mp3',
+        transcript: [T('S0', 'ghost@x.com', 'ghost@x.com', 0, 120000)] },
+    ];
+    const deps = {
+      getAllMeetings: () => ({ upcomingMeetings: [], pastMeetings: meetings }),
+      countVoiceSamplesForMeeting: () => 0,
+      fileExists: () => true,
+      embedSpeakers: vi.fn().mockResolvedValue([{ speakerLabel: 'S0', embedding: new Float32Array([1]) }]),
+      upsertProfileSample: vi.fn().mockReturnValue({ profileId: 1, created: true }),
+      resolveContactName: vi.fn(async email => (email === 'melissa@x.com' ? 'Melissa Henderson' : null)),
+      log: () => {},
+    };
+    await runBackfill(deps, {});
+    expect(deps.upsertProfileSample).toHaveBeenCalledWith(
+      expect.objectContaining({ contactName: 'Melissa Henderson', contactEmail: 'melissa@x.com' }),
+      expect.anything(), expect.anything(), 'm1'
+    );
+    expect(deps.upsertProfileSample).toHaveBeenCalledWith(
+      expect.objectContaining({ contactName: 'ghost@x.com' }), // resolver returned null → keep email
+      expect.anything(), expect.anything(), 'm2'
+    );
+  });
+});
+
 describe('synthesizeSegments — legacy transcripts without endTimestamp', () => {
   const ids = { S0: { name: 'JD', email: 'jd@x.com' } };
   const L = (speaker, startMs) => ({ speaker, speakerName: 'JD', speakerEmail: 'jd@x.com', timestamp: startMs, endTimestamp: null });

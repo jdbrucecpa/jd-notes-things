@@ -1916,7 +1916,8 @@ function initializeVoiceProfilesUI() {
         if (result.success) {
           const s = result.summary;
           if (statusEl) {
-            statusEl.textContent = `Done: ${s.embedded} meetings embedded, ${s.samplesAdded} samples added, ${s.samplesRejected} rejected (${s.skippedAlreadySampled} already sampled, ${s.skippedNoAudio} missing audio, ${s.skippedNoIdentities} unverified).`;
+            const repaired = s.namesRepaired ? ` ${s.namesRepaired} profile name${s.namesRepaired === 1 ? '' : 's'} repaired.` : '';
+            statusEl.textContent = `Done: ${s.embedded} meetings embedded, ${s.samplesAdded} samples added, ${s.samplesRejected} rejected (${s.skippedAlreadySampled} already sampled, ${s.skippedNoAudio} missing audio, ${s.skippedNoIdentities} unverified).${repaired}`;
           }
         } else if (statusEl) {
           statusEl.textContent = `Failed: ${result.error}`;

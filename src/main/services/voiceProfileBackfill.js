@@ -123,6 +123,9 @@ function synthesizeSegments(transcript, identities) {
  * @param {string[]} [deps.recordingsDirs] - directories to probe for
  *   convention-named audio (`windows-desktop-<recordingId>.mp3`) — most
  *   Recall-era meetings never set videoFile, only recordingId
+ * @param {Function} [deps.resolveContactName] - async (email) => string|null;
+ *   resolves a human display name when a historical transcript carried the
+ *   email as the speaker name (matching is email-keyed either way)
  * @param {Function} deps.embedSpeakers - (audioPath, segments) => Promise<Array<{speakerLabel, embedding}>>
  * @param {Function} deps.upsertProfileSample - (contact, embedding, durationSec, meetingId) => {profileId, created, rejected?}|null
  * @param {Function} deps.log
@@ -219,8 +222,19 @@ async function runBackfill(deps, opts = {}) {
         const dur = segments
           .filter(s => s.speaker === emb.speakerLabel)
           .reduce((sum, s) => sum + (s.end - s.start), 0);
+        // Historical transcripts often carry the EMAIL as the speaker name;
+        // resolve a human display name via contacts when the caller provides
+        // a resolver (identity/matching is keyed by email either way).
+        let displayName = identity.name;
+        if (displayName.includes('@') && deps.resolveContactName) {
+          try {
+            displayName = (await deps.resolveContactName(identity.email)) || displayName;
+          } catch {
+            /* contacts unavailable — keep the email as the name */
+          }
+        }
         const r = deps.upsertProfileSample(
-          { contactName: identity.name, contactEmail: identity.email, googleContactId: null },
+          { contactName: displayName, contactEmail: identity.email, googleContactId: null },
           emb.embedding,
           dur,
           meeting.id

@@ -7232,6 +7232,34 @@ ipcMain.handle(
         backgroundTaskManager.failTask(taskId, 'JD Audio Service failed to start');
         return { success: false, error: 'JD Audio Service failed to start' };
       }
+
+      // Repair pass: profiles created from email-named historical transcripts
+      // show the email as their display name — resolve via Google Contacts.
+      // Runs on every backfill click (cheap; no-ops once names are fixed).
+      let namesRepaired = 0;
+      if (googleContacts) {
+        try {
+          const emailNamed = voiceProfileService
+            .getAllProfiles()
+            .filter(p => p.contactName && p.contactName.includes('@') && p.contactEmail);
+          if (emailNamed.length > 0) {
+            const contactMap = await googleContacts.findContactsByEmails(
+              emailNamed.map(p => p.contactEmail)
+            );
+            for (const p of emailNamed) {
+              const contact = contactMap.get(p.contactEmail);
+              if (contact?.name && !contact.name.includes('@')) {
+                voiceProfileService.saveProfile({ ...p, contactName: contact.name });
+                namesRepaired++;
+                console.log(`[Backfill] Renamed profile ${p.id}: ${p.contactEmail} -> ${contact.name}`);
+              }
+            }
+          }
+        } catch (repairErr) {
+          console.warn('[Backfill] Profile name repair skipped:', repairErr.message);
+        }
+      }
+
       const summary = await runBackfill(
         {
           getAllMeetings: () => databaseService.getAllMeetings(),
@@ -7249,6 +7277,12 @@ ipcMain.handle(
             voiceProfileService.embedSpeakers(audioPath, segments),
           upsertProfileSample: (contact, embedding, dur, meetingId) =>
             voiceProfileService.upsertProfileSample(contact, embedding, dur, meetingId),
+          resolveContactName: async email => {
+            if (!googleContacts) return null;
+            const map = await googleContacts.findContactsByEmails([email]);
+            const contact = map.get(email);
+            return contact?.name && !contact.name.includes('@') ? contact.name : null;
+          },
           log: msg => console.log(msg),
         },
         {
@@ -7261,6 +7295,7 @@ ipcMain.handle(
             ),
         }
       );
+      summary.namesRepaired = namesRepaired;
       backgroundTaskManager.completeTask(taskId, summary);
       return { success: true, summary };
     } catch (error) {
