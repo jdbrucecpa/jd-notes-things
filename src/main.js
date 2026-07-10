@@ -70,6 +70,7 @@ const { AIServiceManager } = require('./main/services/aiServiceManager');
 const { mergeNearDuplicateLabels } = require('./main/services/speakerLabelMerge');
 const { computeTrackAnchor } = require('./main/services/trackAnchorService');
 const { runBackfill } = require('./main/services/voiceProfileBackfill');
+const { runContentAwarePass } = require('./main/services/contentAwarePass');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
 transcriptionService.setKeyManagementService(keyManagementService);
@@ -12663,40 +12664,6 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
 
     console.log(`Generating AI summary for meeting: ${meeting.id}`);
 
-    // Check if title is generic and needs suggestion
-    const genericTitles = [
-      'transcript',
-      'meeting',
-      'imported',
-      'untitled',
-      'new meeting',
-      'new note',
-      'call',
-      'zoom',
-      'teams',
-      'google meet',
-      'krisp',
-      'recording',
-      'audio',
-      'video',
-    ];
-    const currentTitle = (meeting.title || '').toLowerCase().trim();
-    const needsTitleSuggestion = genericTitles.some(generic => {
-      // Match if title IS the generic word, starts with it (including numbered variants like "transcript2"), or contains it as a word
-      return (
-        currentTitle === generic ||
-        currentTitle.startsWith(generic) || // Matches "transcript", "transcript2", "transcript-foo", etc.
-        currentTitle.includes(' ' + generic) ||
-        currentTitle.includes(generic + ' ')
-      );
-    });
-
-    if (needsTitleSuggestion) {
-      console.log(
-        `[AutoSummary] Generic title detected: "${meeting.title}" - will suggest better title`
-      );
-    }
-
     // Format the transcript into a single text for the AI to process
     // Use mapped speaker name if available (v1.1), fall back to original speaker
     const transcriptText = meeting.transcript
@@ -12732,9 +12699,6 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       logger.main.debug('[AutoSummary] Including user profile context:', userContextText);
     }
 
-    // Load system prompt from template file or use hardcoded fallback (Phase 10.3)
-    const systemMessage = loadAutoSummaryPrompt(needsTitleSuggestion);
-
     // Build cacheable content: participants + user context + transcript
     // This entire block will be cached across multiple LLM calls (90% cost savings)
     const cacheableParts = [];
@@ -12746,6 +12710,79 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
     }
     cacheableParts.push(transcriptText);
     const cacheableContent = cacheableParts.join('\n\n');
+
+    // ---- Waterfall Stage 3 (spec §5): content-aware review + naming ----
+    // Shares cacheableContent with the summary call below → prompt-cache hit.
+    try {
+      const roster = (meeting.participants || []).map(p => ({
+        name: p.name, email: p.email || null, organization: p.organization || null,
+      }));
+      if (userProfile?.name) {
+        roster.push({ name: userProfile.name, email: userProfile.email || null, organization: null });
+      }
+      const pass = await runContentAwarePass(
+        { generateCompletion: opts => llmService.generateCompletion(opts), log: msg => console.log(msg) },
+        {
+          transcript: meeting.transcript,
+          speakerMapping: meeting.speakerMapping || {},
+          roster,
+          user: { name: userProfile?.name, email: userProfile?.email },
+          cacheableContext: cacheableContent,
+        }
+      );
+      if (pass.changed.length > 0) {
+        meeting.speakerMapping = pass.updatedMapping;
+        if (speakerMatcher) {
+          meeting.transcript = speakerMatcher.applyMappingToTranscript(meeting.transcript, pass.updatedMapping);
+        }
+      }
+      // Rename only meetings not yet synced to Obsidian: renaming a synced
+      // meeting creates a DUPLICATE vault file on next export (filenames are
+      // recomputed from the title; old files are never removed).
+      if (pass.title && !meeting.obsidianLink) {
+        console.log(`[ContentPass] Renaming meeting: "${meeting.title}" -> "${pass.title}"`);
+        meeting.title = pass.title;
+      }
+    } catch (stage3Err) {
+      console.warn('[ContentPass] Stage 3 skipped:', stage3Err.message);
+    }
+
+    // Check if title is generic and needs suggestion
+    const genericTitles = [
+      'transcript',
+      'meeting',
+      'imported',
+      'untitled',
+      'new meeting',
+      'new note',
+      'call',
+      'zoom',
+      'teams',
+      'google meet',
+      'krisp',
+      'recording',
+      'audio',
+      'video',
+    ];
+    const currentTitle = (meeting.title || '').toLowerCase().trim();
+    const needsTitleSuggestion = genericTitles.some(generic => {
+      // Match if title IS the generic word, starts with it (including numbered variants like "transcript2"), or contains it as a word
+      return (
+        currentTitle === generic ||
+        currentTitle.startsWith(generic) || // Matches "transcript", "transcript2", "transcript-foo", etc.
+        currentTitle.includes(' ' + generic) ||
+        currentTitle.includes(generic + ' ')
+      );
+    });
+
+    if (needsTitleSuggestion) {
+      console.log(
+        `[AutoSummary] Generic title detected: "${meeting.title}" - will suggest better title`
+      );
+    }
+
+    // Load system prompt from template file or use hardcoded fallback (Phase 10.3)
+    const systemMessage = loadAutoSummaryPrompt(needsTitleSuggestion);
 
     // Dynamic user prompt - only the instruction (changes per call type)
     const userPrompt = 'Summarize the following meeting transcript with the EXACT format specified in your instructions.';
