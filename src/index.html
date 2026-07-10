@@ -265,7 +265,7 @@
                 <label class="filter-label">Sync Status</label>
                 <select class="filter-select" id="filterSyncStatus">
                   <option value="">All</option>
-                  <option value="synced">Synced to Obsidian</option>
+                  <option value="synced">Synced to Vault</option>
                   <option value="not-synced">Not Synced</option>
                 </select>
               </div>
@@ -500,7 +500,7 @@
                   <label for="editMeetingVaultPath">Vault Path</label>
                   <div class="vault-path-edit-row">
                     <input type="text" id="editMeetingVaultPath" placeholder="clients/acme-corp/meetings/..." />
-                    <button class="btn btn-danger btn-sm" id="unlinkMeetingBtn" title="Remove Obsidian sync">Unlink</button>
+                    <button class="btn btn-danger btn-sm" id="unlinkMeetingBtn" title="Remove vault sync">Unlink</button>
                   </div>
                 </div>
               </div>
@@ -1074,7 +1074,7 @@
               <h4 style="margin: 0 0 8px 0; font-size: 14px; color: var(--text-secondary);">Export</h4>
               <label class="checkbox-label">
                 <input type="checkbox" id="autoExportCheck" />
-                <span>Auto-export to Obsidian vault</span>
+                <span>Auto-export to vault</span>
               </label>
             </div>
 
@@ -1448,7 +1448,7 @@
               <div class="settings-item">
                 <div class="settings-item-info">
                   <div class="settings-item-label">Vault Path</div>
-                  <div class="settings-item-description">Location of your Obsidian vault</div>
+                  <div class="settings-item-description">Location of your vault</div>
                 </div>
                 <div class="settings-item-control" style="display: flex; gap: 8px; align-items: center;">
                   <input type="text" class="settings-input" id="vaultPathInput" placeholder="C:\Users\...\vault" readonly style="flex: 1;" />
@@ -2222,11 +2222,11 @@
             <!-- RS-2: Data Maintenance Section -->
             <div class="settings-section">
               <h3 class="settings-section-title">Data Maintenance</h3>
-              <p class="settings-section-description">Tools for maintaining sync between the app and your Obsidian vault.</p>
+              <p class="settings-section-description">Tools for maintaining sync between the app and your vault.</p>
 
               <div class="settings-item">
                 <div class="settings-item-info">
-                  <div class="settings-item-label">Refresh Obsidian Links</div>
+                  <div class="settings-item-label">Refresh Vault Links</div>
                   <div class="settings-item-description">Scan vault for moved/renamed notes and update internal links. Run this after reorganizing your vault.</div>
                 </div>
                 <div class="settings-item-control" style="display: flex; gap: 8px; align-items: center;">

@@ -1196,7 +1196,7 @@ async function syncAllUnsyncedMeetings() {
 
   if (
     !confirm(
-      `Sync ${unsyncedMeetings.length} meeting${unsyncedMeetings.length !== 1 ? 's' : ''} to Obsidian?`
+      `Sync ${unsyncedMeetings.length} meeting${unsyncedMeetings.length !== 1 ? 's' : ''} to Vault?`
     )
   ) {
     return;
@@ -1237,7 +1237,7 @@ async function syncAllUnsyncedMeetings() {
   // Show summary
   if (failCount === 0) {
     notifySuccess(
-      `Successfully synced ${successCount} meeting${successCount !== 1 ? 's' : ''} to Obsidian!`
+      `Successfully synced ${successCount} meeting${successCount !== 1 ? 's' : ''} to Vault!`
     );
   } else if (successCount > 0) {
     notifyWarning(
@@ -1312,7 +1312,7 @@ function createMeetingCard(meeting) {
 
   // RS-1.6: Add sync button for unsynced meetings
   const syncButtonHtml = !isSynced
-    ? `<button class="sync-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Sync to Obsidian"></button>`
+    ? `<button class="sync-meeting-btn" data-id="${escapeHtml(meeting.id)}" title="Sync to Vault"></button>`
     : '';
 
   // Set card HTML (without checkbox or icon - we'll add them programmatically)
@@ -3448,7 +3448,7 @@ function updateViewsDropdown() {
   addOption(viewsSelect, '', 'All Meetings');
 
   // Add predefined views
-  addOption(viewsSelect, '__not-synced__', 'Not Synced to Obsidian');
+  addOption(viewsSelect, '__not-synced__', 'Not Synced to Vault');
 
   // Add separator and custom views if there are any
   if (savedViews.views.length > 0) {
@@ -3804,7 +3804,7 @@ function updateFilterCount() {
   const filterBtn = document.getElementById('notSyncedFilterBtn');
   if (filterBtn) {
     if (unsyncedCount > 0) {
-      filterBtn.title = `Filter: ${unsyncedCount} meeting${unsyncedCount !== 1 ? 's' : ''} not synced to Obsidian`;
+      filterBtn.title = `Filter: ${unsyncedCount} meeting${unsyncedCount !== 1 ? 's' : ''} not synced to Vault`;
     } else {
       filterBtn.title = 'Filter meetings';
     }
@@ -3951,7 +3951,7 @@ function renderMeetings() {
 
   // RS-1.7: Sync All button HTML (only shown when notSynced filter is active)
   const syncAllButtonHtml = searchState.filters.notSynced
-    ? `<button class="btn btn-accent btn-icon-text" id="syncAllBtn" title="Sync all unsynced meetings to Obsidian">
+    ? `<button class="btn btn-accent btn-icon-text" id="syncAllBtn" title="Sync all unsynced meetings to Vault">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z" fill="currentColor"/>
           </svg>
@@ -4018,7 +4018,7 @@ function renderMeetings() {
     searchInfo.className = 'search-info';
     // RS-1: Show appropriate message for not synced filter
     if (searchState.filters.notSynced) {
-      searchInfo.textContent = `${filteredMeetings.length} meeting${filteredMeetings.length !== 1 ? 's' : ''} not synced to Obsidian`;
+      searchInfo.textContent = `${filteredMeetings.length} meeting${filteredMeetings.length !== 1 ? 's' : ''} not synced to Vault`;
     } else {
       searchInfo.textContent = `Found ${filteredMeetings.length} meeting${filteredMeetings.length !== 1 ? 's' : ''}`;
     }
@@ -4052,7 +4052,7 @@ function renderMeetings() {
       // RS-1: Show appropriate message for not synced filter
       if (searchState.filters.notSynced) {
         emptyState.innerHTML = `
-          <p>All meetings are synced to Obsidian!</p>
+          <p>All meetings are synced to Vault!</p>
           <button class="btn" onclick="clearNotSyncedFilter()">Clear Filter</button>
         `;
       } else {
@@ -5027,7 +5027,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (result.success) {
           console.log('Meeting synced to Obsidian successfully');
-          notifySuccess('Meeting synced to Obsidian!');
+          notifySuccess('Meeting synced to Vault!');
 
           // Update local meeting data
           const meeting = [...pastMeetings, ...meetingsData.pastMeetings].find(
@@ -7300,7 +7300,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (isRepublish) {
         // Confirm republish
-        if (!confirm('This will overwrite the existing files in Obsidian. Continue?')) {
+        if (!confirm('This will overwrite the existing files in the vault. Continue?')) {
           return;
         }
       }

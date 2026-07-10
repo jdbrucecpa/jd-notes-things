@@ -18,22 +18,6 @@ class VaultStructure {
   }
 
   /**
-   * Get the path for people/contacts
-   * @returns {string} Relative path for contacts
-   */
-  getPeoplePath() {
-    return VAULT_PATHS.people;
-  }
-
-  /**
-   * Get the path for companies
-   * @returns {string} Relative path for companies
-   */
-  getCompaniesPath() {
-    return VAULT_PATHS.companies;
-  }
-
-  /**
    * Set the vault base path (e.g., when user changes settings)
    * @param {string} newPath - New vault base path
    */

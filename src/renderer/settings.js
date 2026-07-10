@@ -395,7 +395,7 @@ export function initializeSettingsUI() {
           refreshLinksStatus.textContent = 'Error';
           refreshLinksStatus.style.color = 'var(--status-error)';
         }
-        notifyError(error, { prefix: 'Failed to refresh Obsidian links:' });
+        notifyError(error, { prefix: 'Failed to refresh vault links:' });
       } finally {
         // Re-enable button
         refreshObsidianLinksBtn.disabled = false;

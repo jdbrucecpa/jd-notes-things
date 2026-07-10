@@ -1042,7 +1042,7 @@ function setupModalEventListeners(onComplete) {
 
         // SM-3.6: Show appropriate message based on whether Obsidian files were updated
         const mappingCount = Object.keys(allMappings).length;
-        const obsidianMsg = result.obsidianUpdated ? ' (Obsidian files updated)' : '';
+        const obsidianMsg = result.obsidianUpdated ? ' (Vault files updated)' : '';
         notifySuccess(`Applied ${mappingCount} speaker mappings${obsidianMsg}`);
 
         // Call completion callback and wait for it

@@ -1849,7 +1849,7 @@ async function unlinkFromObsidian(onUpdate) {
 
   // Show confirmation toast
   if (window.showToast) {
-    window.showToast('Obsidian link removed', 'success');
+    window.showToast('Vault link removed', 'success');
   }
 
   console.log(`[MeetingDetail] Meeting unlinked from Obsidian: ${currentMeetingId}`);
@@ -2018,7 +2018,7 @@ async function exportToObsidian() {
 
     if (result.success) {
       console.log('[MeetingDetail] Export successful');
-      alert('Meeting exported to Obsidian successfully!');
+      alert('Meeting exported to Vault successfully!');
 
       // Update obsidianLink if returned (the IPC handler returns obsidianLink directly, not wrapped in data)
       if (result.obsidianLink) {
@@ -2051,7 +2051,7 @@ async function exportToObsidian() {
       }
     } else {
       console.error('[MeetingDetail] Export failed:', result.error);
-      alert(`Failed to export to Obsidian: ${result.error}`);
+      alert(`Failed to export to Vault: ${result.error}`);
     }
   });
 }
