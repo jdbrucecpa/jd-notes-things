@@ -3640,8 +3640,22 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
       console.log(`[ObsidianExport] Using manual override path: ${meeting.obsidianLink}`);
     }
 
-    // Extract participant emails for routing
-    const participantEmails = meeting.participantEmails || [];
+    // Extract participant emails for routing. Local recordings have no SDK
+    // participant roster, so also draw identities from the speaker mapping
+    // (voice profiles / user corrections) — but skip low-confidence positional
+    // guesses so a wrong guess can't route a meeting to the wrong client.
+    const participantEmails = [...(meeting.participantEmails || [])];
+    for (const entry of Object.values(meeting.speakerMapping || {})) {
+      if (
+        entry &&
+        entry.email &&
+        entry.confidence !== 'low' &&
+        entry.confidence !== 'none' &&
+        !participantEmails.includes(entry.email)
+      ) {
+        participantEmails.push(entry.email);
+      }
+    }
     if (participantEmails.length === 0 && !meeting.obsidianLink) {
       console.warn('[ObsidianExport] No participant emails found - routing to unfiled');
     }
