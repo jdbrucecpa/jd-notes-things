@@ -742,7 +742,7 @@ async function batchExportToObsidian() {
   renderMeetings();
 
   // Show success message
-  alert(`Exported ${successCount} of ${selectedIds.length} meetings to Obsidian`);
+  alert(`Exported ${successCount} of ${selectedIds.length} meetings to Vault`);
 
   // Clear selection and exit bulk mode
   toggleBulkSelectionMode();
@@ -2515,10 +2515,10 @@ function updateObsidianButton(meeting) {
 
     // Update button text and style based on publish status
     if (meeting.obsidianLink) {
-      obsidianButtonText.textContent = 'Republish to Obsidian';
+      obsidianButtonText.textContent = 'Republish to Vault';
       obsidianButton.classList.add('published');
     } else {
-      obsidianButtonText.textContent = 'Publish to Obsidian';
+      obsidianButtonText.textContent = 'Publish to Vault';
       obsidianButton.classList.remove('published');
     }
   } else {
@@ -6522,7 +6522,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Generated', result.summaries.length, 'summaries');
 
         // Show success toast with export status
-        const exportStatus = result.exported ? ' and exported to Obsidian' : '';
+        const exportStatus = result.exported ? ' and exported to Vault' : '';
         const message = `Generated ${result.summaries.length} summaries successfully${exportStatus}!`;
         notifySuccess(message);
 
@@ -7328,7 +7328,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           await loadMeetingsDataFromFile();
 
           // Show success message
-          const message = isRepublish ? 'Republished to Obsidian!' : 'Published to Obsidian!';
+          const message = isRepublish ? 'Republished to Vault!' : 'Published to Vault!';
           notifySuccess(message);
 
           // Update button to show "Republish"
