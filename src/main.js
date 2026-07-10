@@ -7237,6 +7237,14 @@ ipcMain.handle(
           getAllMeetings: () => databaseService.getAllMeetings(),
           countVoiceSamplesForMeeting: id => databaseService.countVoiceSamplesForMeeting(id),
           fileExists: p => fs.existsSync(p),
+          // Recall-era meetings only store recordingId; their audio lives as
+          // windows-desktop-<id>.mp3 under the recordings dir. Probe the
+          // current userData dir first, then the production app's dir (data
+          // copied from production keeps working even if recordings weren't).
+          recordingsDirs: [
+            path.join(app.getPath('userData'), 'recordings'),
+            path.join(app.getPath('appData'), 'jd-notes-things', 'recordings'),
+          ],
           embedSpeakers: (audioPath, segments) =>
             voiceProfileService.embedSpeakers(audioPath, segments),
           upsertProfileSample: (contact, embedding, dur, meetingId) =>

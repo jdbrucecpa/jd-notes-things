@@ -3,8 +3,44 @@ import {
   extractSpeakerIdentities,
   synthesizeSegments,
   runBackfill,
+  resolveAudioPath,
   MAX_SECONDS_PER_SPEAKER,
 } from '../../src/main/services/voiceProfileBackfill.js';
+
+describe('resolveAudioPath', () => {
+  const deps = {
+    fileExists: p =>
+      [
+        'C:\\vids\\explicit.mp3',
+        'C:\\dev\\recordings\\windows-desktop-abc-123.mp3',
+        'C:\\local\\recordings\\recording-2026.mp3',
+      ].includes(p),
+    recordingsDirs: ['C:\\dev\\recordings', 'C:\\prod\\recordings'],
+  };
+
+  it('prefers an existing videoFile', () => {
+    expect(resolveAudioPath({ videoFile: 'C:\\vids\\explicit.mp3', recordingId: 'abc-123' }, deps)).toBe(
+      'C:\\vids\\explicit.mp3'
+    );
+  });
+
+  it('falls back to the windows-desktop convention for GUID recordingIds', () => {
+    expect(resolveAudioPath({ recordingId: 'abc-123' }, deps)).toBe(
+      'C:\\dev\\recordings\\windows-desktop-abc-123.mp3'
+    );
+  });
+
+  it('treats path-like recordingIds (local era) as the file itself', () => {
+    expect(resolveAudioPath({ recordingId: 'C:\\local\\recordings\\recording-2026.mp3' }, deps)).toBe(
+      'C:\\local\\recordings\\recording-2026.mp3'
+    );
+  });
+
+  it('returns null when nothing exists', () => {
+    expect(resolveAudioPath({ recordingId: 'nope' }, deps)).toBeNull();
+    expect(resolveAudioPath({}, deps)).toBeNull();
+  });
+});
 
 const T = (speaker, name, email, startMs, endMs) => ({
   speaker,

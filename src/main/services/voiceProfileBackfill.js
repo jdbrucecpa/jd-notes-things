@@ -95,6 +95,9 @@ function synthesizeSegments(transcript, identities) {
  * @param {Function} deps.getAllMeetings - () => { upcomingMeetings, pastMeetings }
  * @param {Function} deps.countVoiceSamplesForMeeting - (meetingId) => number
  * @param {Function} deps.fileExists - (path) => boolean
+ * @param {string[]} [deps.recordingsDirs] - directories to probe for
+ *   convention-named audio (`windows-desktop-<recordingId>.mp3`) — most
+ *   Recall-era meetings never set videoFile, only recordingId
  * @param {Function} deps.embedSpeakers - (audioPath, segments) => Promise<Array<{speakerLabel, embedding}>>
  * @param {Function} deps.upsertProfileSample - (contact, embedding, durationSec, meetingId) => {profileId, created, rejected?}|null
  * @param {Function} deps.log
@@ -106,6 +109,40 @@ function synthesizeSegments(transcript, identities) {
  *   skippedNoIdentities: number, errors: number}>} summary counts — samplesRejected
  *   tracks samples the profile poisoning guard refused (not persisted)
  */
+/**
+ * Find the meeting's audio file on disk. Meetings store audio in three
+ * historical shapes (verified against the live DB, 2026-07-10):
+ *   1. `videoFile` — set only by re-transcription/import flows (~10 of 202)
+ *   2. Recall-era: `recordingId` is a GUID; the file is
+ *      `<recordingsDir>/windows-desktop-<recordingId>.mp3` (the vast majority)
+ *   3. Local-era (v2.0): `recordingId` IS the absolute mp3 path
+ * Returns the first candidate that exists, else null.
+ *
+ * @param {{videoFile?: string, recordingId?: string}} meeting
+ * @param {{fileExists: Function, recordingsDirs?: string[]}} deps
+ * @returns {string|null}
+ */
+function resolveAudioPath(meeting, deps) {
+  const candidates = [];
+  if (meeting.videoFile) candidates.push(meeting.videoFile);
+  if (meeting.recordingId) {
+    if (/[\\/]/.test(meeting.recordingId)) {
+      // Local-era: recordingId is itself a file path.
+      candidates.push(meeting.recordingId);
+    } else {
+      for (const dir of deps.recordingsDirs || []) {
+        // String concat instead of path.join keeps this module dependency-free;
+        // recordingsDirs are absolute paths supplied by the caller.
+        candidates.push(`${dir}\\windows-desktop-${meeting.recordingId}.mp3`);
+      }
+    }
+  }
+  for (const candidate of candidates) {
+    if (deps.fileExists(candidate)) return candidate;
+  }
+  return null;
+}
+
 async function runBackfill(deps, opts = {}) {
   const { onProgress = () => {}, limit = Infinity } = opts;
   const all = deps.getAllMeetings();
@@ -128,8 +165,8 @@ async function runBackfill(deps, opts = {}) {
     onProgress(summary.scanned, meetings.length, summary);
 
     try {
-      const audioPath = meeting.videoFile || null;
-      if (!audioPath || !deps.fileExists(audioPath)) {
+      const audioPath = resolveAudioPath(meeting, deps);
+      if (!audioPath) {
         summary.skippedNoAudio++;
         continue;
       }
@@ -188,6 +225,7 @@ module.exports = {
   runBackfill,
   extractSpeakerIdentities,
   synthesizeSegments,
+  resolveAudioPath,
   MAX_SECONDS_PER_SPEAKER,
   MIN_UTTERANCE_SECONDS,
 };
