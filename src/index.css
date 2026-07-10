@@ -4495,50 +4495,6 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   font-weight: 500;
 }
 
-/* CS-3: Obsidian contact page actions */
-.contact-obsidian-actions {
-  padding: 4px 0;
-}
-
-.contact-create-page-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  font-size: 14px;
-}
-
-.contact-create-page-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
-.contact-create-page-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.obsidian-page-exists {
-  color: var(--color-success, #22c55e);
-}
-
-.obsidian-page-exists svg {
-  color: var(--color-success, #22c55e);
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.spinning {
-  animation: spin 1s linear infinite;
-}
-
 .contacts-btn {
   background: transparent;
   border: none;
@@ -6318,16 +6274,6 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   color: var(--text-secondary);
   flex-shrink: 0;
   white-space: nowrap;
-}
-
-/* Obsidian vault link checks */
-.obsidian-link-check {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.obsidian-exists {
-  color: var(--color-success, #4CAF50);
 }
 
 /* External links (Google Contacts, Gmail) */

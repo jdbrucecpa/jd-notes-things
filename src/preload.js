@@ -174,15 +174,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('contacts:getAllContacts', forceRefresh),
   contactsGetMeetingsForContact: email =>
     ipcRenderer.invoke('contacts:getMeetingsForContact', email),
-  // CS-3: Contact/Company Page Management
-  contactsCreateContactPage: (contact, options) =>
-    ipcRenderer.invoke('contacts:createContactPage', contact, options),
-  contactsContactPageExists: contactName =>
-    ipcRenderer.invoke('contacts:contactPageExists', contactName),
-  contactsCreateCompanyPage: (company, options) =>
-    ipcRenderer.invoke('contacts:createCompanyPage', company, options),
-  contactsCompanyPageExists: companyName =>
-    ipcRenderer.invoke('contacts:companyPageExists', companyName),
   contactsRematchParticipants: meetingId =>
     ipcRenderer.invoke('contacts:rematchParticipants', meetingId),
   contactsGetByEmail: email => ipcRenderer.invoke('contacts:getByEmail', email),

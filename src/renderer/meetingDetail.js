@@ -748,9 +748,6 @@ async function loadExpandedContent(index, meeting) {
   // Recent Emails Section (async)
   sections.push(await renderRecentEmailsSection(participant));
 
-  // Obsidian Links Section
-  sections.push(renderObsidianLinksSection(participant));
-
   container.innerHTML = sections.filter(Boolean).join('');
 
   // Set up click handlers for external links
@@ -874,69 +871,6 @@ async function renderRecentEmailsSection(participant) {
     console.error('[ParticipantCard] Error loading email threads:', error);
     return '';
   }
-}
-
-/**
- * Render Obsidian links section (contact page, company page).
- */
-function renderObsidianLinksSection(participant) {
-  const items = [];
-  const name = participant.name || participant.originalName;
-  const company = participant.organization || participant.company;
-
-  if (name) {
-    items.push(`<div class="detail-row"><span class="obsidian-link-check" data-type="contact" data-name="${escapeHtml(name)}">Contact page: checking...</span></div>`);
-  }
-  if (company) {
-    items.push(`<div class="detail-row"><span class="obsidian-link-check" data-type="company" data-name="${escapeHtml(company)}">Company page: checking...</span></div>`);
-  }
-
-  if (items.length === 0) return '';
-
-  // Check page existence asynchronously after render
-  setTimeout(async () => {
-    for (const el of document.querySelectorAll('.obsidian-link-check')) {
-      const type = el.dataset.type;
-      const checkName = el.dataset.name;
-      try {
-        const exists = type === 'contact'
-          ? await window.electronAPI.contactsContactPageExists(checkName)
-          : await window.electronAPI.contactsCompanyPageExists(checkName);
-
-        if (exists?.exists) {
-          el.innerHTML = `${type === 'contact' ? 'Contact' : 'Company'} page exists`;
-          el.classList.add('obsidian-exists');
-        } else {
-          const btnLabel = type === 'contact' ? 'Create Contact Page' : 'Create Company Page';
-          el.innerHTML = `<button class="btn btn-outline btn-xs create-obsidian-page-btn" data-type="${type}" data-name="${escapeHtml(checkName)}">${btnLabel}</button>`;
-
-          // Set up click handler
-          el.querySelector('.create-obsidian-page-btn')?.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const btn = e.target;
-            btn.disabled = true;
-            btn.textContent = 'Creating...';
-            try {
-              if (type === 'contact') {
-                await window.electronAPI.contactsCreateContactPage({ name: checkName }, {});
-              } else {
-                await window.electronAPI.contactsCreateCompanyPage({ name: checkName }, {});
-              }
-              el.innerHTML = `${type === 'contact' ? 'Contact' : 'Company'} page created`;
-              el.classList.add('obsidian-exists');
-            } catch (_err) {
-              btn.disabled = false;
-              btn.textContent = 'Failed - retry';
-            }
-          });
-        }
-      } catch {
-        el.textContent = `${type === 'contact' ? 'Contact' : 'Company'} page: unknown`;
-      }
-    }
-  }, 100);
-
-  return `<div class="expanded-section-group"><div class="expanded-section-title">Obsidian Vault</div>${items.join('')}</div>`;
 }
 
 /**

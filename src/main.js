@@ -166,8 +166,6 @@ const {
   optionalStringSchema,
   optionalBooleanSchema,
   hoursAheadSchema,
-  // Contact schemas
-  contactSchema,
   // Settings/config schemas
   userProfileSchema,
   appSettingsSchema,
@@ -5406,82 +5404,6 @@ ipcMain.handle(
     } catch (error) {
       console.error('[Contacts IPC] Failed to get meetings for contact:', error);
       return { success: false, error: error.message };
-    }
-  })
-);
-
-// CS-3: Create contact page in Obsidian
-ipcMain.handle(
-  'contacts:createContactPage',
-  withValidation(contactSchema, async (event, contact) => {
-    try {
-      console.log('[Contacts IPC] Creating contact page for:', contact.name);
-
-      if (!vaultStructure || !vaultStructure.vaultBasePath) {
-        return { success: false, error: 'Vault path not configured' };
-      }
-
-      const result = vaultStructure.createContactPage(contact, {});
-      return result;
-    } catch (error) {
-      console.error('[Contacts IPC] Failed to create contact page:', error);
-      return { success: false, error: error.message };
-    }
-  })
-);
-
-// CS-3: Check if contact page exists
-ipcMain.handle(
-  'contacts:contactPageExists',
-  withValidation(stringIdSchema, async (event, contactName) => {
-    try {
-      if (!vaultStructure || !vaultStructure.vaultBasePath) {
-        return { success: false, exists: false, error: 'Vault path not configured' };
-      }
-
-      const exists = vaultStructure.contactPageExists(contactName);
-      return { success: true, exists };
-    } catch (error) {
-      console.error('[Contacts IPC] Failed to check contact page:', error);
-      return { success: false, exists: false, error: error.message };
-    }
-  })
-);
-
-// CS-3: Create company page in Obsidian
-ipcMain.handle(
-  'contacts:createCompanyPage',
-  withValidation(contactSchema, async (event, company) => {
-    try {
-      console.log('[Contacts IPC] Creating company page for:', company.name);
-
-      if (!vaultStructure || !vaultStructure.vaultBasePath) {
-        return { success: false, error: 'Vault path not configured' };
-      }
-
-      const result = vaultStructure.createCompanyPage(company, {});
-      return result;
-    } catch (error) {
-      console.error('[Contacts IPC] Failed to create company page:', error);
-      return { success: false, error: error.message };
-    }
-  })
-);
-
-// CS-3: Check if company page exists
-ipcMain.handle(
-  'contacts:companyPageExists',
-  withValidation(stringIdSchema, async (event, companyName) => {
-    try {
-      if (!vaultStructure || !vaultStructure.vaultBasePath) {
-        return { success: false, exists: false, error: 'Vault path not configured' };
-      }
-
-      const exists = vaultStructure.companyPageExists(companyName);
-      return { success: true, exists };
-    } catch (error) {
-      console.error('[Contacts IPC] Failed to check company page:', error);
-      return { success: false, exists: false, error: error.message };
     }
   })
 );

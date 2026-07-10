@@ -272,18 +272,6 @@ const booleanSchema = z.boolean();
 const optionalBooleanSchema = z.boolean().optional();
 const hoursAheadSchema = z.number().int().min(1).max(168).optional();
 
-// Contact-related schemas
-const contactSchema = z.object({
-  name: z.string().optional(),
-  email: z.string().optional(),
-  company: z.string().optional(),
-  phone: z.string().optional(),
-});
-
-const contactPageOptionsSchema = z.object({
-  createCompanyPage: z.boolean().optional(),
-}).optional();
-
 // Settings/config schemas
 const userProfileSchema = z.object({
   name: z.string().optional(),
@@ -545,9 +533,6 @@ module.exports = {
   booleanSchema,
   optionalBooleanSchema,
   hoursAheadSchema,
-  // Contact schemas
-  contactSchema,
-  contactPageOptionsSchema,
   // Settings/config schemas
   userProfileSchema,
   appSettingsSchema,

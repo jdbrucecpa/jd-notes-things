@@ -496,73 +496,6 @@ async function renderContactDetail(contact) {
   `
     : '';
 
-  // Check if Obsidian pages exist
-  let contactPageExists = false;
-  let companyPageExists = false;
-
-  try {
-    const contactResult = await window.electronAPI.contactsContactPageExists(contact.name);
-    contactPageExists = contactResult.success && contactResult.exists;
-  } catch (error) {
-    console.warn('[Contacts] Could not check Obsidian contact page status:', error);
-  }
-
-  // Check company page if organization exists
-  if (contact.organization) {
-    try {
-      const companyResult = await window.electronAPI.contactsCompanyPageExists(
-        contact.organization
-      );
-      companyPageExists = companyResult.success && companyResult.exists;
-    } catch (error) {
-      console.warn('[Contacts] Could not check Obsidian company page status:', error);
-    }
-  }
-
-  // Build contact page status/button
-  const contactPageHtml = contactPageExists
-    ? `<div class="contact-detail-item obsidian-page-exists">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/>
-        </svg>
-        <span>Contact page: [[${escapeHtml(contact.name)}]]</span>
-      </div>`
-    : `<button class="btn btn-secondary contact-create-page-btn" id="createObsidianPageBtn">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/>
-        </svg>
-        Create Contact Page
-      </button>`;
-
-  // Build company page status/button (only if organization exists)
-  let companyPageHtml = '';
-  if (contact.organization) {
-    companyPageHtml = companyPageExists
-      ? `<div class="contact-detail-item obsidian-page-exists">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/>
-          </svg>
-          <span>Company page: [[${escapeHtml(contact.organization)}]]</span>
-        </div>`
-      : `<button class="btn btn-secondary contact-create-page-btn" id="createCompanyPageBtn">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z" fill="currentColor"/>
-          </svg>
-          Create Company Page
-        </button>`;
-  }
-
-  // Build Obsidian actions section
-  const obsidianActionsHtml = `
-    <div class="contact-detail-section">
-      <h4>Obsidian</h4>
-      <div class="contact-obsidian-actions">
-        ${contactPageHtml}
-        ${companyPageHtml}
-      </div>
-    </div>
-  `;
-
   // v1.4: Organization is clickable to open company detail
   const orgHtml = contact.organization
     ? `<div class="contact-detail-org">
@@ -591,8 +524,6 @@ async function renderContactDetail(contact) {
       ${googleLinkHtml}
     </div>
 
-    ${obsidianActionsHtml}
-
     <div class="contact-detail-section" id="contactMeetingsSection">
       <h4>Meeting History</h4>
       <div class="contact-meetings-list" id="contactMeetingsList">
@@ -600,18 +531,6 @@ async function renderContactDetail(contact) {
       </div>
     </div>
   `;
-
-  // Add click handler for create contact page button
-  const createPageBtn = document.getElementById('createObsidianPageBtn');
-  if (createPageBtn) {
-    createPageBtn.addEventListener('click', () => createContactObsidianPage(contact));
-  }
-
-  // Add click handler for create company page button
-  const createCompanyBtn = document.getElementById('createCompanyPageBtn');
-  if (createCompanyBtn) {
-    createCompanyBtn.addEventListener('click', () => createCompanyObsidianPage(contact));
-  }
 
   // v1.4: Edit contact button
   const editBtn = document.getElementById('editContactBtn');
@@ -791,127 +710,6 @@ async function loadContactMeetings(email) {
     console.error('[Contacts] Error loading meetings:', error);
     meetingsList.innerHTML =
       '<div class="contact-detail-item" style="color: var(--color-error);">Error loading meetings</div>';
-  }
-}
-
-/**
- * Create an Obsidian contact page for the given contact
- */
-async function createContactObsidianPage(contact) {
-  const btn = document.getElementById('createObsidianPageBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="spinning">
-        <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/>
-      </svg>
-      Creating...
-    `;
-  }
-
-  try {
-    const result = await window.electronAPI.contactsCreateContactPage(contact);
-
-    if (result.success && result.created) {
-      console.log('[Contacts] Created Obsidian page:', result.path);
-      // Re-render to show "page exists" state
-      renderContactDetail(contact);
-    } else if (result.success && !result.created) {
-      console.log('[Contacts] Page already exists:', result.path);
-      renderContactDetail(contact);
-    } else {
-      console.error('[Contacts] Failed to create page:', result.error);
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/>
-          </svg>
-          Create Contact Page (Failed)
-        `;
-      }
-    }
-  } catch (error) {
-    console.error('[Contacts] Error creating Obsidian page:', error);
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/>
-        </svg>
-        Create Contact Page (Error)
-      `;
-    }
-  }
-}
-
-/**
- * Create an Obsidian company page for the contact's organization
- */
-async function createCompanyObsidianPage(contact) {
-  if (!contact.organization) {
-    console.warn('[Contacts] Cannot create company page - no organization');
-    return;
-  }
-
-  const btn = document.getElementById('createCompanyPageBtn');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="spinning">
-        <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/>
-      </svg>
-      Creating...
-    `;
-  }
-
-  try {
-    // Build company data from contact
-    const companyData = {
-      name: contact.organization,
-      contacts: [contact.name],
-    };
-
-    // Try to extract domain from contact's email
-    if (contact.emails && contact.emails.length > 0) {
-      const emailParts = contact.emails[0].split('@');
-      if (emailParts.length === 2) {
-        companyData.domain = emailParts[1];
-      }
-    }
-
-    const result = await window.electronAPI.contactsCreateCompanyPage(companyData);
-
-    if (result.success && result.created) {
-      console.log('[Contacts] Created Obsidian company page:', result.path);
-      // Re-render to show "page exists" state
-      renderContactDetail(contact);
-    } else if (result.success && !result.created) {
-      console.log('[Contacts] Company page already exists:', result.path);
-      renderContactDetail(contact);
-    } else {
-      console.error('[Contacts] Failed to create company page:', result.error);
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 7V3H2v18h20V7H12z" fill="currentColor"/>
-          </svg>
-          Create Company Page (Failed)
-        `;
-      }
-    }
-  } catch (error) {
-    console.error('[Contacts] Error creating Obsidian company page:', error);
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 7V3H2v18h20V7H12z" fill="currentColor"/>
-        </svg>
-        Create Company Page (Error)
-      `;
-    }
   }
 }
 
