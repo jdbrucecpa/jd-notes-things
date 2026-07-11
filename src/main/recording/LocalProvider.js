@@ -512,7 +512,36 @@ class LocalProvider extends RecordingProvider {
             return;
           }
         }
+
         const prev = this._activeMeeting;
+
+        // Immediate re-probe (all platforms). The debounce above can still be
+        // fooled: a Meet tab-switch or a Zoom window reshuffle can drop the title
+        // for exactly CLOSE_CONFIRM_POLLS polls and then bring it back. Enumerate
+        // ONE more time synchronously before declaring the meeting closed; if the
+        // tracked meeting window reappeared, reset the debounce and hold it open
+        // rather than firing a spurious meeting-closed (which would prompt the
+        // stop-confirmation dialog for a meeting that never ended).
+        let reprobe = null;
+        try {
+          reprobe = await this._getWindowList();
+        } catch (_err) {
+          reprobe = null; // a failed re-probe is not evidence the meeting returned
+        }
+        if (reprobe) {
+          const stillPresent = reprobe.some(win => {
+            const match = this._parseMeetingFromTitle(win.title, win.processName);
+            return match && `${win.processName}-${win.pid}` === prev?.windowId;
+          });
+          if (stillPresent) {
+            this._missCount = 0;
+            log.info(
+              `[LocalProvider] Meeting window reappeared on immediate re-probe (${prev?.windowId}) — holding meeting open`
+            );
+            return;
+          }
+        }
+
         this._meetingDetected = false;
         this._activeMeeting = null;
         this._missCount = 0;

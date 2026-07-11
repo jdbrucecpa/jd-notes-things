@@ -293,6 +293,29 @@ describe('LocalProvider', () => {
       expect(closed).toHaveBeenCalledWith({ windowId: 'ms-teams-55' });
       expect(provider._meetingDetected).toBe(false);
     });
+
+    // Immediate re-probe: after the close-debounce misses, LocalProvider does one
+    // extra synchronous enumeration. If the tracked meeting window reappeared (a
+    // flicker that outlasted the debounce, or a Meet tab-switch that came back),
+    // hold the meeting open and do NOT emit meeting-closed.
+    it('holds the meeting open when the window reappears on the immediate re-probe', async () => {
+      const TEAMS = [{ processName: 'ms-teams', title: 'Standup | Microsoft Teams', pid: 55 }];
+      const list = vi.spyOn(provider, '_getWindowList');
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      list.mockResolvedValueOnce(TEAMS); // poll 1: detected
+      await provider._pollForMeetings();
+      list.mockResolvedValueOnce(NONE); // poll 2: miss 1
+      await provider._pollForMeetings();
+      list.mockResolvedValueOnce(NONE); // poll 3 main scan: miss 2 (reaches threshold)
+      list.mockResolvedValueOnce(TEAMS); // poll 3 re-probe: window reappeared
+      await provider._pollForMeetings();
+
+      expect(closed).not.toHaveBeenCalled();
+      expect(provider._meetingDetected).toBe(true);
+      expect(provider._missCount).toBe(0);
+    });
   });
 
   describe('Google Meet browser-exit backstop', () => {
