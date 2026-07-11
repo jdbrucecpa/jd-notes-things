@@ -1435,7 +1435,7 @@ function showStopConfirmWindow(seconds) {
   const w = 340;
   const h = 176;
 
-  stopConfirmWindow = new BrowserWindow({
+  const thisWindow = new BrowserWindow({
     width: w,
     height: h,
     x: Math.round((screenWidth - w) / 2),
@@ -1455,19 +1455,26 @@ function showStopConfirmWindow(seconds) {
       nodeIntegration: false,
     },
   });
+  stopConfirmWindow = thisWindow;
 
   // 'screen-saver' level keeps the dialog above a full-screen meeting window.
-  stopConfirmWindow.setAlwaysOnTop(true, 'screen-saver');
-  stopConfirmWindow.loadURL(STOP_CONFIRM_WEBPACK_ENTRY);
+  thisWindow.setAlwaysOnTop(true, 'screen-saver');
+  thisWindow.loadURL(STOP_CONFIRM_WEBPACK_ENTRY);
 
-  stopConfirmWindow.once('ready-to-show', () => {
-    if (stopConfirmWindow && !stopConfirmWindow.isDestroyed()) {
-      stopConfirmWindow.show();
-      stopConfirmWindow.webContents.send('confirm:tick', { remaining: seconds });
+  thisWindow.once('ready-to-show', () => {
+    if (!thisWindow.isDestroyed()) {
+      thisWindow.show();
+      thisWindow.webContents.send('confirm:tick', { remaining: seconds });
     }
   });
 
-  stopConfirmWindow.on('closed', () => {
+  thisWindow.on('closed', () => {
+    // Stale-handler guard: if a NEW dialog was opened before this (now-closed)
+    // window's 'closed' event fired, stopConfirmWindow no longer points at
+    // thisWindow — do nothing, or we would clobber the new window's reference
+    // and cancel the new countdown.
+    if (stopConfirmWindow !== thisWindow) return;
+
     stopConfirmWindow = null;
     // If the window was destroyed WITHOUT a button/timeout resolution (the user
     // or the OS closed it, or the app is quitting), a resolution via
@@ -1551,6 +1558,29 @@ function finishStopConfirmation(shouldStop) {
     }
   } else {
     console.log(`[stop-confirm] User chose Keep Recording — ${recordingId} continues`);
+  }
+}
+
+/**
+ * Dismiss a pending stop-confirmation because its recording already ended by
+ * another path (manual stop, provider error, etc.). Keep-style cancellation:
+ * clear the timer and slot and close the dialog immediately, rather than letting
+ * the countdown run out to a no-op with a dialog for a recording that no longer
+ * exists. Does nothing if no confirmation is pending or it is for a different
+ * recording.
+ * @param {string} recordingId - recording that just ended
+ */
+function dismissStopConfirmationForRecording(recordingId) {
+  if (!pendingStopConfirmation || pendingStopConfirmation.recordingId !== recordingId) return;
+
+  clearInterval(pendingStopConfirmation.timer);
+  pendingStopConfirmation = null;
+  console.log(
+    `[stop-confirm] Recording ${recordingId} ended by another path — dismissing pending confirmation dialog`
+  );
+
+  if (stopConfirmWindow && !stopConfirmWindow.isDestroyed()) {
+    stopConfirmWindow.close();
   }
 }
 
@@ -2753,6 +2783,11 @@ async function initSDK() {
     console.log('Recording ended:', data);
 
     const windowId = data.recordingId;
+
+    // If a stop-confirmation countdown is pending for this recording, the
+    // recording just ended by another path (manual stop, provider error) —
+    // dismiss the dialog immediately instead of letting it count down to a no-op.
+    dismissStopConfirmationForRecording(windowId);
 
     // Log the SDK recording-ended event
     sdkLogger.logEvent('recording-ended', {
