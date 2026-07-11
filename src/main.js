@@ -8161,9 +8161,14 @@ ipcMain.handle('transcription:selectAudioFile', async () => {
   return { success: true, filePath: result.filePaths[0] };
 });
 
-ipcMain.handle(
-  'transcription:rerun',
-  withValidation(transcriptionRerunSchema, async (event, { meetingId, provider, audioPath }) => {
+/**
+ * Shared transcription pipeline: (re)transcribe a meeting's audio, run the v2.0
+ * speaker waterfall, and regenerate the exec summary. Used by the
+ * transcription:rerun IPC handler AND the youtube:import flow (Task 13).
+ * @param {{meetingId:string, provider?:?string, audioPath?:?string, sender:object}} args
+ *   sender = a webContents used for import:progress events.
+ */
+async function rerunTranscriptionForMeeting({ meetingId, provider = null, audioPath = null, sender }) {
     const meeting = databaseService.getMeeting(meetingId);
     if (!meeting) {
       return { success: false, error: 'Meeting not found' };
@@ -8223,7 +8228,7 @@ ipcMain.handle(
       }
 
       backgroundTaskManager.updateTask(taskId, 10, 'Starting transcription...');
-      event.sender.send('import:progress', {
+      sender.send('import:progress', {
         step: 'transcribing',
         file: path.basename(filePath),
         provider: transcriptionProvider,
@@ -8400,7 +8405,13 @@ ipcMain.handle(
       console.error('[Transcription Rerun] Failed:', error);
       return { success: false, error: error.message };
     }
-  })
+}
+
+ipcMain.handle(
+  'transcription:rerun',
+  withValidation(transcriptionRerunSchema, async (event, { meetingId, provider, audioPath }) =>
+    rerunTranscriptionForMeeting({ meetingId, provider, audioPath, sender: event.sender })
+  )
 );
 
 // ===================================================================
