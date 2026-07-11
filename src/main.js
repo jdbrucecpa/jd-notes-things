@@ -71,6 +71,7 @@ const { AIServiceManager } = require('./main/services/aiServiceManager');
 const { mergeNearDuplicateLabels } = require('./main/services/speakerLabelMerge');
 const { computeTrackAnchor } = require('./main/services/trackAnchorService');
 const { runBackfill } = require('./main/services/voiceProfileBackfill');
+const { reembedCorrections } = require('./main/services/correctionReembed');
 const { runContentAwarePass } = require('./main/services/contentAwarePass');
 
 // Wire up keyManagementService to transcriptionService for API key retrieval in packaged builds
@@ -5881,6 +5882,7 @@ ipcMain.handle(
       // its match-time embedding (rehydration keeps these across reloads),
       // the correction becomes a voice sample for the RIGHT person.
       if (voiceProfileService) {
+        const reembedTargets = [];
         for (const c of corrections) {
           const entry = prevMapping[c.speakerLabel];
           if (entry?.embedding?.length > 0 && c.toEmail) {
@@ -5906,10 +5908,31 @@ ipcMain.handle(
               );
             }
           } else if (c.toEmail) {
-            console.log(
-              `[CorrectionEnroll] No embedding available for ${c.speakerLabel} — backfill can cover this meeting later`
-            );
+            // F1: no persisted embedding for this label. Re-embed the meeting
+            // audio for the corrected label so the correction still teaches the
+            // right person's profile. Collected here, run fire-and-forget below.
+            reembedTargets.push({ speakerLabel: c.speakerLabel, name: c.toName, email: c.toEmail });
           }
+        }
+
+        // Fire-and-forget re-embed (spec F1): the correction is already applied
+        // and about to be saved — embedding work must never block or fail it.
+        if (reembedTargets.length > 0) {
+          const reembedDeps = {
+            fileExists: p => fs.existsSync(p),
+            recordingsDirs: [
+              path.join(app.getPath('userData'), 'recordings'),
+              path.join(app.getPath('appData'), 'jd-notes-things', 'recordings'),
+            ],
+            embedSpeakers: (audioPath, segments) => voiceProfileService.embedSpeakers(audioPath, segments),
+            upsertProfileSample: (contact, embedding, dur, mid) =>
+              voiceProfileService.upsertProfileSample(contact, embedding, dur, mid),
+            log: msg => console.log(msg),
+            warn: msg => console.warn(msg),
+          };
+          reembedCorrections(reembedDeps, meeting, reembedTargets, meetingId).catch(err =>
+            console.warn('[CorrectionReembed] Unexpected re-embed failure (correction still applied):', err.message)
+          );
         }
       }
 
@@ -6982,7 +7005,8 @@ ipcMain.handle(
       const summary = await runBackfill(
         {
           getAllMeetings: () => databaseService.getAllMeetings(),
-          countVoiceSamplesForMeeting: id => databaseService.countVoiceSamplesForMeeting(id),
+          getSampledProfileIdsForMeeting: id => databaseService.getSampledProfileIdsForMeeting(id),
+          getProfileIdByEmail: email => voiceProfileService.getProfileByEmail(email)?.id ?? null,
           fileExists: p => fs.existsSync(p),
           // Recall-era meetings only store recordingId; their audio lives as
           // windows-desktop-<id>.mp3 under the recordings dir. Probe the
