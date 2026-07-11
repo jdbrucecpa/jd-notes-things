@@ -52,8 +52,9 @@ Responsibilities:
 - Zod-validated handler `youtube:import { url }`.
 - Flow: binary check → metadata → download → ONLY THEN create the meeting
   record: `platform: 'youtube'`, `title` = video title, `date` = upload date,
-  `videoFile`/`recordingId` = the MP3 path, `type: 'past'`, empty
-  participants. Failures before this point persist nothing (no orphans).
+  `videoFile`/`recordingId` = the MP3 path, `type: 'document'` (the schema's
+  imported-content type; 'past' is the save-list argument, not a meeting
+  type), empty participants. Failures before this point persist nothing.
 - Then invoke the existing rerun-transcription flow for the new meeting id —
   local transcription + diarization, waterfall speaker ID (single speaker
   auto-labels as the user and strengthens his voice profile; guests go
@@ -64,9 +65,12 @@ Responsibilities:
 
 Stage 3 (content-aware pass) must NOT rename `platform === 'youtube'`
 meetings — the YouTube title is authoritative, and a guest on a video must
-not convert it to the "Company - Person - Topic" meeting format. Gate the
-rename branch (and only the rename — reassignment verdicts still apply) on
-platform.
+not convert it to the "Company - Person - Topic" meeting format. Gate BOTH
+title-mutation paths on platform: the Stage 3 rename branch AND the legacy
+generic-title suggestion (`needsTitleSuggestion`) — otherwise a video title
+containing a generic word (e.g. "My recording of Q3") would still be
+clobbered by the suggested-title extraction. Speaker reassignment verdicts
+still apply to youtube meetings.
 
 ### 5. Routing
 
