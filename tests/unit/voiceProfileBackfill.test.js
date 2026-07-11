@@ -17,7 +17,8 @@ describe('runBackfill — contact-name resolution', () => {
     ];
     const deps = {
       getAllMeetings: () => ({ upcomingMeetings: [], pastMeetings: meetings }),
-      countVoiceSamplesForMeeting: () => 0,
+      getSampledProfileIdsForMeeting: () => [],
+      getProfileIdByEmail: () => null,
       fileExists: () => true,
       embedSpeakers: vi.fn().mockResolvedValue([{ speakerLabel: 'S0', embedding: new Float32Array([1]) }]),
       upsertProfileSample: vi.fn().mockReturnValue({ profileId: 1, created: true }),
@@ -133,28 +134,22 @@ describe('synthesizeSegments (pure)', () => {
 });
 
 describe('runBackfill', () => {
-  it('embeds qualifying meetings, upserts per identity, skips already-sampled and missing-audio meetings', async () => {
+  it('embeds qualifying meetings, upserts per identity, skips fully-sampled and missing-audio meetings', async () => {
     const meetings = [
       {
         id: 'm-good',
         videoFile: 'C:/audio/good.mp3',
         transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000), T('S1', 'Kurt', 'kurt@x.com', 60000, 120000)],
       },
-      {
-        id: 'm-sampled',
-        videoFile: 'C:/audio/sampled.mp3',
-        transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000)],
-      },
-      {
-        id: 'm-noaudio',
-        videoFile: 'C:/audio/missing.mp3',
-        transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000)],
-      },
+      { id: 'm-sampled', videoFile: 'C:/audio/sampled.mp3', transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000)] },
+      { id: 'm-noaudio', videoFile: 'C:/audio/missing.mp3', transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000)] },
       { id: 'm-unverified', videoFile: 'C:/audio/good2.mp3', transcript: [T('S0', 'Speaker A', null, 0, 60000)] },
     ];
+    const profileIdByEmail = { 'jd@x.com': 1, 'kurt@x.com': 2 };
     const deps = {
       getAllMeetings: () => ({ upcomingMeetings: [], pastMeetings: meetings }),
-      countVoiceSamplesForMeeting: id => (id === 'm-sampled' ? 2 : 0),
+      getSampledProfileIdsForMeeting: id => (id === 'm-sampled' ? [1] : []),
+      getProfileIdByEmail: email => profileIdByEmail[email] ?? null,
       fileExists: p => p !== 'C:/audio/missing.mp3',
       embedSpeakers: vi.fn().mockImplementation(async (_path, segments) =>
         [...new Set(segments.map(s => s.speaker))].map(label => ({
@@ -181,6 +176,44 @@ describe('runBackfill', () => {
     });
   });
 
+  it('revisits a meeting for identities that have not yet contributed a sample', async () => {
+    // m1 already has a sample from A (profile 1) but NOT from B (profile 2).
+    // Per-identity skip: embed again, but only for B — A is skipped.
+    const meetings = [
+      { id: 'm1', videoFile: 'C:/audio/m1.mp3',
+        transcript: [T('A', 'Alice', 'a@x.com', 0, 60000), T('B', 'Bob', 'b@x.com', 60000, 120000)] },
+    ];
+    const profileIdByEmail = { 'a@x.com': 1, 'b@x.com': 2 };
+    const deps = {
+      getAllMeetings: () => ({ upcomingMeetings: [], pastMeetings: meetings }),
+      getSampledProfileIdsForMeeting: () => [1], // A already sampled from m1
+      getProfileIdByEmail: email => profileIdByEmail[email] ?? null,
+      fileExists: () => true,
+      embedSpeakers: vi.fn().mockImplementation(async (_path, segments) =>
+        [...new Set(segments.map(s => s.speaker))].map(label => ({
+          speakerLabel: label,
+          embedding: new Float32Array([1, 0]),
+        }))
+      ),
+      upsertProfileSample: vi.fn().mockReturnValue({ profileId: 2, created: true }),
+      log: () => {},
+    };
+
+    const summary = await runBackfill(deps);
+
+    expect(deps.embedSpeakers).toHaveBeenCalledTimes(1);
+    const sentSegments = deps.embedSpeakers.mock.calls[0][1];
+    expect([...new Set(sentSegments.map(s => s.speaker))]).toEqual(['B']);
+    expect(deps.upsertProfileSample).toHaveBeenCalledTimes(1);
+    expect(deps.upsertProfileSample).toHaveBeenCalledWith(
+      expect.objectContaining({ contactEmail: 'b@x.com' }),
+      expect.anything(),
+      expect.anything(),
+      'm1'
+    );
+    expect(summary).toMatchObject({ embedded: 1, samplesAdded: 1 });
+  });
+
   it('counts poisoning-guard rejections separately from added samples', async () => {
     const meetings = [
       {
@@ -191,7 +224,8 @@ describe('runBackfill', () => {
     ];
     const deps = {
       getAllMeetings: () => ({ upcomingMeetings: [], pastMeetings: meetings }),
-      countVoiceSamplesForMeeting: () => 0,
+      getSampledProfileIdsForMeeting: () => [],
+      getProfileIdByEmail: () => null,
       fileExists: () => true,
       embedSpeakers: vi.fn().mockImplementation(async (_path, segments) =>
         [...new Set(segments.map(s => s.speaker))].map(label => ({

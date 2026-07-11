@@ -8,9 +8,10 @@
  * once per meeting via the injected embedSpeakers, and upserts one voice
  * profile sample per verified speaker via upsertProfileSample.
  *
- * Idempotent via countVoiceSamplesForMeeting — a meeting that already has
- * voice samples (e.g. from a prior backfill run or manual Fix Speakers
- * assignment) is skipped.
+ * Idempotent per-identity — an identity is skipped for a meeting only if its
+ * profile already contributed a sample from it (e.g. from a prior backfill run
+ * or manual Fix Speakers assignment). Meetings sampled for OTHER speakers are
+ * revisited for the missing ones.
  *
  * Dependency-injected (no direct service imports) so it's fully unit
  * testable; IPC wiring is a later Phase-2 task.
@@ -118,7 +119,10 @@ function synthesizeSegments(transcript, identities) {
  *
  * @param {Object} deps
  * @param {Function} deps.getAllMeetings - () => { upcomingMeetings, pastMeetings }
- * @param {Function} deps.countVoiceSamplesForMeeting - (meetingId) => number
+ * @param {Function} deps.getSampledProfileIdsForMeeting - (meetingId) => number[];
+ *   profile ids that already have a sample from the meeting (per-identity skip)
+ * @param {Function} deps.getProfileIdByEmail - (email) => number|null; resolves a
+ *   verified identity's existing profile id, or null if not yet enrolled
  * @param {Function} deps.fileExists - (path) => boolean
  * @param {string[]} [deps.recordingsDirs] - directories to probe for
  *   convention-named audio (`windows-desktop-<recordingId>.mp3`) — most
@@ -198,16 +202,30 @@ async function runBackfill(deps, opts = {}) {
         summary.skippedNoAudio++;
         continue;
       }
-      if (deps.countVoiceSamplesForMeeting(meeting.id) > 0) {
-        summary.skippedAlreadySampled++;
-        continue;
-      }
       const identities = extractSpeakerIdentities(meeting.transcript || []);
       if (Object.keys(identities).length === 0) {
         summary.skippedNoIdentities++;
         continue;
       }
-      const segments = synthesizeSegments(meeting.transcript, identities);
+
+      // Per-identity skip: an identity is skipped for this meeting only if its
+      // profile already contributed a sample from it. Meetings previously
+      // sampled for OTHER speakers are revisited for the missing ones. An
+      // identity with no profile yet (getProfileIdByEmail -> null) is never
+      // "already sampled", so it is always pending.
+      const sampledProfileIds = new Set(deps.getSampledProfileIdsForMeeting(meeting.id));
+      const pendingIdentities = {};
+      for (const [label, identity] of Object.entries(identities)) {
+        const pid = deps.getProfileIdByEmail(identity.email);
+        if (pid != null && sampledProfileIds.has(pid)) continue;
+        pendingIdentities[label] = identity;
+      }
+      if (Object.keys(pendingIdentities).length === 0) {
+        summary.skippedAlreadySampled++;
+        continue;
+      }
+
+      const segments = synthesizeSegments(meeting.transcript, pendingIdentities);
       if (segments.length === 0) {
         summary.skippedNoIdentities++;
         continue;
@@ -217,7 +235,7 @@ async function runBackfill(deps, opts = {}) {
       summary.embedded++;
 
       for (const emb of embeddings) {
-        const identity = identities[emb.speakerLabel];
+        const identity = pendingIdentities[emb.speakerLabel];
         if (!identity) continue;
         const dur = segments
           .filter(s => s.speaker === emb.speakerLabel)
@@ -250,7 +268,7 @@ async function runBackfill(deps, opts = {}) {
         }
       }
       deps.log(
-        `[Backfill] ${meeting.id}: ${Object.keys(identities).length} identities, +${embeddings.length} embeddings`
+        `[Backfill] ${meeting.id}: ${Object.keys(pendingIdentities).length} pending identities, +${embeddings.length} embeddings`
       );
     } catch (err) {
       summary.errors++;
