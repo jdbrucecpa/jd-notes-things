@@ -24,7 +24,11 @@ module.exports = {
       NSUserNotificationAlertStyle: 'alert',
     },
   },
-  rebuildConfig: {},
+  // Only better-sqlite3 needs an Electron-ABI native rebuild. native-recorder-nodejs
+  // ships an ABI-stable N-API prebuild that loads under Electron as-is, and its
+  // cmake-js source build is broken upstream (fails to link node.lib), so it must
+  // NOT be rebuilt here. Restrict the rebuild to better-sqlite3 to avoid touching it.
+  rebuildConfig: { onlyModules: ['better-sqlite3'] },
   makers: [
     {
       name: '@electron-forge/maker-squirrel',
@@ -96,7 +100,12 @@ module.exports = {
     {
       name: '@timfish/forge-externals-plugin',
       config: {
-        externals: ['@recallai/desktop-sdk', 'better-sqlite3', 'application-loopback'],
+        externals: [
+          '@recallai/desktop-sdk',
+          'better-sqlite3',
+          'application-loopback',
+          'native-recorder-nodejs',
+        ],
         includeDeps: true,
       },
     },

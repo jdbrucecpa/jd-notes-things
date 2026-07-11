@@ -27,8 +27,22 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      # Install without lifecycle scripts to skip native-recorder-nodejs's broken
+      # source build (prebuild-install misses its bundled N-API prebuild, then the
+      # cmake-js fallback fails to link node.lib). Its prebuild is extracted from the
+      # tarball and loads under Electron as-is. Then run only the postinstalls that
+      # are actually required for the build: electron's binary download, the Recall
+      # SDK setup, and electron-winstaller's 7z arch selection (Squirrel maker).
+      # better-sqlite3 is rebuilt for Electron by electron-forge (rebuildConfig).
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Run required native postinstall steps
+        shell: bash
+        run: |
+          node node_modules/electron/install.js
+          node node_modules/@recallai/desktop-sdk/setup.js
+          node node_modules/electron-winstaller/script/select-7z-arch.js
 
       - name: Build and package
         run: npm run make
