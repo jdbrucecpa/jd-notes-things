@@ -42,8 +42,11 @@
  *   `Object.keys(activeRecordings.getAll())` — recording keys currently
  *   tracked by the recording registry.
  * @param {string|undefined} [args.platform]
- *   `detectedMeeting?.window?.platform`. When `'google-meet'`, window absence
- *   is a tab switch, not a meeting end, so no recording is auto-stopped.
+ *   `detectedMeeting?.window?.platform`. Currently informational only — the
+ *   resolver no longer branches on it. Window-absent stops apply uniformly to
+ *   all platforms (Zoom/Teams/Meet) and are gated by the caller via
+ *   `requiresConfirmation`; only a `reason` of `'browser-exit'` stops
+ *   immediately without confirmation.
  * @param {string|undefined} [args.reason]
  *   Provider-supplied close reason. LocalProvider sets `'browser-exit'` when the
  *   browser process hosting a Meet recording fully exits (the one automatic end
