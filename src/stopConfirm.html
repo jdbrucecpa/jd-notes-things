@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <!-- CSP is applied globally to local content via session.defaultSession in main.js -->
+    <title>End the recording?</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #1f2430;
+        color: #f5f7fa;
+        user-select: none;
+      }
+      .card {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        height: 100%;
+        padding: 16px 18px;
+      }
+      .headline {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .sub {
+        margin-top: 6px;
+        font-size: 12.5px;
+        line-height: 1.4;
+        color: #b7c0cf;
+      }
+      .countdown {
+        font-variant-numeric: tabular-nums;
+        font-weight: 700;
+      }
+      .buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      button {
+        flex: 1;
+        padding: 9px 10px;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #end-btn {
+        background: #e5484d;
+        color: #fff;
+      }
+      #keep-btn {
+        background: #3a4152;
+        color: #f5f7fa;
+      }
+      button:focus-visible {
+        outline: 2px solid #7aa2ff;
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div>
+        <div class="headline">End the recording?</div>
+        <div class="sub">
+          The meeting window closed. Ending automatically in
+          <span id="countdown" class="countdown">10</span>s.
+        </div>
+      </div>
+      <div class="buttons">
+        <button id="end-btn" type="button">End Recording</button>
+        <button id="keep-btn" type="button">Keep Recording</button>
+      </div>
+    </div>
+  </body>
+</html>

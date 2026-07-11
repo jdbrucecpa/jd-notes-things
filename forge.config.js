@@ -81,6 +81,14 @@ module.exports = {
                 js: './src/widgetPreload.js',
               },
             },
+            {
+              html: './src/stopConfirm.html',
+              js: './src/stopConfirm.js',
+              name: 'stop_confirm',
+              preload: {
+                js: './src/stopConfirmPreload.js',
+              },
+            },
           ],
         },
       },

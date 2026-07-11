@@ -55,6 +55,9 @@ module.exports = [
         // v1.2: Recording widget entry points
         RECORDING_WIDGET_WEBPACK_ENTRY: 'readonly',
         RECORDING_WIDGET_PRELOAD_WEBPACK_ENTRY: 'readonly',
+        // Stop-confirmation countdown dialog entry points
+        STOP_CONFIRM_WEBPACK_ENTRY: 'readonly',
+        STOP_CONFIRM_PRELOAD_WEBPACK_ENTRY: 'readonly',
       },
     },
   },
