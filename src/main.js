@@ -44,6 +44,7 @@ const TemplateManager = require('./main/templates/TemplateManager');
 const VaultStructure = require('./main/storage/VaultStructure');
 const RoutingEngine = require('./main/routing/RoutingEngine');
 const slugify = require('./main/utils/slugify');
+const { buildYoutubeRoute } = require('./main/routing/youtubeRoute');
 const ImportManager = require('./main/import/ImportManager');
 const TranscriptParser = require('./main/import/TranscriptParser');
 const PatternConfigLoader = require('./main/import/PatternConfigLoader');
@@ -4014,6 +4015,12 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
         },
       ];
       console.log(`[ObsidianExport] Using manual override path: ${meeting.obsidianLink}`);
+    } else if (meeting.platform === 'youtube') {
+      // spec §5: channel content routes to a fixed content/youtube/ folder
+      // (vault-relative — resolved by vaultStructure.getAbsolutePath in the loop
+      // below, same as _unfiled).
+      routes = [buildYoutubeRoute(meeting)];
+      console.log(`[ObsidianExport] YouTube content route: ${routes[0].fullPath}`);
     } else {
       // Use routing engine
       const routingDecision = routingEngine.route({
