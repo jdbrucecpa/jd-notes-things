@@ -37,12 +37,16 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      # Run these via `npm rebuild` (not bare `node <script>`): npm sets the CWD to
+      # each package's own directory, which @recallai/desktop-sdk's setup.js requires
+      # (it reads "./package.json" for its commit_sha; from the repo root that resolves
+      # to the wrong file and it downloads an "undefined" tarball). electron's
+      # install.js is CWD-independent, so it stays an explicit call.
       - name: Run required native postinstall steps
         shell: bash
         run: |
           node node_modules/electron/install.js
-          node node_modules/@recallai/desktop-sdk/setup.js
-          node node_modules/electron-winstaller/script/select-7z-arch.js
+          npm rebuild @recallai/desktop-sdk electron-winstaller
 
       - name: Build and package
         run: npm run make
