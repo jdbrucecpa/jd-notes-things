@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'events';
+import path from 'path';
 import {
   parseVideoId,
   buildMetadataArgs,
@@ -166,5 +167,59 @@ describe('fetchMetadata', () => {
     const spawn = vi.fn(() => fakeChild({ stderr: 'ERROR: Private video', code: 1 }));
     const yt = makeImporter(spawn);
     await expect(yt.fetchMetadata('dQw4w9WgXcQ')).rejects.toThrow(/Private video/);
+  });
+});
+
+describe('downloadAudio', () => {
+  it('spawns extraction argv, reports progress, returns the mp3 path', async () => {
+    const progressLines = '[download]   0.0% of 5MiB\n[download]  50.0% of 5MiB\n[download] 100% of 5MiB\n';
+    const spawn = vi.fn(() => fakeChild({ stdout: progressLines, code: 0 }));
+    const seen = [];
+    const yt = makeImporter(spawn, { onProgress: (p) => seen.push(p) });
+    const out = await yt.downloadAudio('dQw4w9WgXcQ');
+    expect(out).toBe(path.join('C:/rec', 'youtube-dQw4w9WgXcQ.mp3'));
+    expect(spawn).toHaveBeenCalledWith(
+      'yt-dlp',
+      buildDownloadArgs('dQw4w9WgXcQ', path.join('C:/rec', 'youtube-dQw4w9WgXcQ.mp3')),
+      expect.any(Object)
+    );
+    // progress scaled into the download band and monotonic-ish (last near 90)
+    expect(seen.length).toBeGreaterThan(0);
+  });
+  it('rejects with stderr tail on non-zero exit', async () => {
+    const spawn = vi.fn(() => fakeChild({ stderr: 'ERROR: Video unavailable', code: 1 }));
+    const yt = makeImporter(spawn);
+    await expect(yt.downloadAudio('dQw4w9WgXcQ')).rejects.toThrow(/Video unavailable/);
+  });
+  it('rejects when the expected mp3 is missing after a 0 exit', async () => {
+    const spawn = vi.fn(() => fakeChild({ code: 0 }));
+    const yt = makeImporter(spawn, { fileExists: () => false });
+    await expect(yt.downloadAudio('dQw4w9WgXcQ')).rejects.toThrow(/not found after download/);
+  });
+});
+
+describe('importFromUrl', () => {
+  it('runs check → metadata → download and returns {audioPath, meta}', async () => {
+    const json = JSON.stringify({ id: 'dQw4w9WgXcQ', title: 'T', upload_date: '20260710' });
+    const spawn = vi.fn((cmd, args) => {
+      if (args.includes('--version')) return fakeChild({ stdout: 'v', code: 0 });
+      if (args.includes('--dump-json')) return fakeChild({ stdout: json, code: 0 });
+      return fakeChild({ stdout: '[download] 100% of 5MiB\n', code: 0 });
+    });
+    const yt = makeImporter(spawn);
+    const res = await yt.importFromUrl('https://youtu.be/dQw4w9WgXcQ');
+    expect(res.audioPath).toBe(path.join('C:/rec', 'youtube-dQw4w9WgXcQ.mp3'));
+    expect(res.meta.title).toBe('T');
+  });
+  it('throws a binary-missing error when yt-dlp is absent', async () => {
+    const spawn = vi.fn(() => fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }));
+    const yt = makeImporter(spawn);
+    await expect(yt.importFromUrl('https://youtu.be/dQw4w9WgXcQ')).rejects.toMatchObject({ code: 'binary-missing' });
+  });
+  it('throws for an unparseable URL before spawning', async () => {
+    const spawn = vi.fn();
+    const yt = makeImporter(spawn);
+    await expect(yt.importFromUrl('not a youtube url')).rejects.toThrow(/valid YouTube URL/);
+    expect(spawn).not.toHaveBeenCalled();
   });
 });

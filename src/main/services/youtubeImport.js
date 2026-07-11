@@ -11,6 +11,8 @@
  * extra flags or shell metacharacters.
  */
 
+const path = require('path');
+
 // YouTube ids are exactly 11 chars of [A-Za-z0-9_-].
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
 
@@ -152,6 +154,8 @@ function stderrTail(stderr) {
  */
 function createYoutubeImporter(deps) {
   const spawn = deps.spawn;
+  const log = deps.log || (() => {});
+  const onProgress = deps.onProgress || (() => {});
 
   async function checkBinary() {
     try {
@@ -176,7 +180,53 @@ function createYoutubeImporter(deps) {
     return mapMetadataToMeetingFields(json);
   }
 
-  return { checkBinary, fetchMetadata };
+  function outputPathFor(videoId) {
+    return path.join(deps.recordingsDir, `youtube-${videoId}.mp3`);
+  }
+
+  async function downloadAudio(videoId) {
+    const outPath = outputPathFor(videoId);
+    // Download progress occupies the 15–90% band of the overall task.
+    const onLine = line => {
+      const p = parseDownloadProgress(line);
+      if (p) onProgress(15 + Math.round((p.percent / 100) * 75), `Downloading audio ${Math.round(p.percent)}%`);
+    };
+    const { stderr, code } = await runYtDlp(spawn, buildDownloadArgs(videoId, outPath), { onLine });
+    if (code !== 0) {
+      throw new Error(`yt-dlp download failed: ${stderrTail(stderr) || 'unknown error'}`);
+    }
+    if (!deps.fileExists(outPath)) {
+      throw new Error(`Downloaded audio not found after download: ${outPath}`);
+    }
+    return outPath;
+  }
+
+  /**
+   * Full flow: validate URL → binary check → metadata → download.
+   * @returns {Promise<{audioPath:string, meta:object}>}
+   */
+  async function importFromUrl(url) {
+    const videoId = parseVideoId(url);
+    if (!videoId) {
+      throw new Error('Not a valid YouTube URL');
+    }
+    onProgress(5, 'Checking yt-dlp...');
+    const hasBinary = await checkBinary();
+    if (!hasBinary) {
+      const err = new Error('yt-dlp not found — install with `winget install yt-dlp`');
+      err.code = 'binary-missing';
+      throw err;
+    }
+    onProgress(10, 'Fetching video info...');
+    const meta = await fetchMetadata(videoId);
+    onProgress(15, `Downloading: ${meta.title}`);
+    log(`[YouTubeImport] Downloading "${meta.title}" (${videoId})`);
+    const audioPath = await downloadAudio(videoId);
+    onProgress(90, 'Download complete');
+    return { audioPath, meta };
+  }
+
+  return { checkBinary, fetchMetadata, downloadAudio, importFromUrl };
 }
 
 module.exports = {
