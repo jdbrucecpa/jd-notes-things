@@ -74,10 +74,38 @@ function parseDownloadProgress(line) {
   return m ? { percent: parseFloat(m[1]) } : null;
 }
 
+/**
+ * Convert a yt-dlp --dump-json object into the subset of meeting fields we use.
+ * upload_date is `YYYYMMDD` (no time) → midnight-UTC ISO string, matching the
+ * ISO-string convention meeting.date uses elsewhere.
+ * @param {object} json
+ * @returns {{title:string, date:string, durationSec:number|null, videoId:string, channel:string|null}}
+ */
+function mapMetadataToMeetingFields(json = {}) {
+  let date;
+  const ud = typeof json.upload_date === 'string' ? json.upload_date : null;
+  if (ud && /^\d{8}$/.test(ud)) {
+    const y = Number(ud.slice(0, 4));
+    const m = Number(ud.slice(4, 6));
+    const d = Number(ud.slice(6, 8));
+    date = new Date(Date.UTC(y, m - 1, d)).toISOString();
+  } else {
+    date = new Date().toISOString();
+  }
+  return {
+    title: json.title || 'YouTube Video',
+    date,
+    durationSec: typeof json.duration === 'number' ? json.duration : null,
+    videoId: json.id,
+    channel: json.channel || json.uploader || null,
+  };
+}
+
 module.exports = {
   parseVideoId,
   canonicalUrl,
   buildMetadataArgs,
   buildDownloadArgs,
   parseDownloadProgress,
+  mapMetadataToMeetingFields,
 };

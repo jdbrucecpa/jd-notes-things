@@ -4,6 +4,7 @@ import {
   buildMetadataArgs,
   buildDownloadArgs,
   parseDownloadProgress,
+  mapMetadataToMeetingFields,
 } from '../../src/main/services/youtubeImport.js';
 
 describe('parseVideoId', () => {
@@ -76,5 +77,32 @@ describe('parseDownloadProgress', () => {
     expect(parseDownloadProgress('[youtube] Extracting URL')).toBeNull();
     expect(parseDownloadProgress('')).toBeNull();
     expect(parseDownloadProgress(null)).toBeNull();
+  });
+});
+
+describe('mapMetadataToMeetingFields', () => {
+  it('maps upload_date YYYYMMDD to an ISO date and passes title through', () => {
+    const out = mapMetadataToMeetingFields({
+      id: 'dQw4w9WgXcQ',
+      title: 'My Channel Update',
+      upload_date: '20260710',
+      duration: 634,
+      channel: 'JD Bruce CPA',
+    });
+    expect(out.title).toBe('My Channel Update');
+    expect(out.date).toBe('2026-07-10T00:00:00.000Z');
+    expect(out.durationSec).toBe(634);
+    expect(out.videoId).toBe('dQw4w9WgXcQ');
+    expect(out.channel).toBe('JD Bruce CPA');
+  });
+  it('falls back to uploader when channel missing', () => {
+    const out = mapMetadataToMeetingFields({ id: 'x'.repeat(11), title: 'T', uploader: 'JD' });
+    expect(out.channel).toBe('JD');
+  });
+  it('uses a placeholder title and a valid ISO date when fields are absent', () => {
+    const out = mapMetadataToMeetingFields({ id: 'x'.repeat(11) });
+    expect(out.title).toBe('YouTube Video');
+    expect(Number.isNaN(Date.parse(out.date))).toBe(false);
+    expect(out.durationSec).toBeNull();
   });
 });
