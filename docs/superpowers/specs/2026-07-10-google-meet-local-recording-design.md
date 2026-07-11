@@ -21,9 +21,43 @@ Two structural differences from Zoom/Teams drive the design:
 ## Decisions (JD)
 
 - Chrome tab workflow stays; no Meet PWA.
-- Lifecycle: **auto-detect, manual stop.** Detection shows the widget and
-  recording starts the same way as Zoom/Teams; the app never auto-stops a Meet
-  recording based on the window, except the browser-exit backstop below.
+- Lifecycle (REVISED 2026-07-10 evening after live testing + Chromium
+  research): **auto-detect, auto-stop via countdown confirmation.**
+
+  Live tests + Chromium source research established the real title mechanics:
+  Chrome's Document Picture-in-Picture window carries the OPENER tab's title
+  as its native HWND title (`window_metadata_controller.cc`,
+  `is_type_picture_in_picture()` branch), and auto-PiP is default-on for Meet
+  since Aug 2024 — so during a call the "Meet - <code>" title survives
+  tab-switching via the PiP window, and survives hang-up via the post-leave
+  screen's unreset document.title. But the title can lie BOTH ways: closing
+  the PiP (or having auto-PiP disabled / being fully muted with camera off,
+  which suppresses auto-PiP) removes it mid-call, and the "You left" screen
+  keeps it after the call ends. Title absence is therefore a good PROMPT, not
+  a reliable verdict — so the app asks instead of deciding:
+
+  1. **Immediate re-probe:** when the 2-poll close debounce concludes
+     "window gone", LocalProvider runs one extra enumeration immediately;
+     `meeting-closed` emits only if the title is still absent. (All
+     platforms.)
+  2. **Countdown confirmation dialog (all platforms):** when the resolver
+     decides a window-absent close should stop an active recording (Zoom,
+     Teams, AND google-meet — the never-auto-stop rule for Meet is replaced),
+     the app shows a small always-on-top window: "End the recording?" with
+     **End Recording** / **Keep Recording** buttons and a visible 10-second
+     countdown. Timeout → recording stops and processes normally. Keep
+     Recording → recording continues until manual stop or a later close
+     signal re-fires the dialog. No sound. A wrong auto-end is recoverable
+     (restart recording + append), which is why 10s suffices.
+  3. **Immediate-stop exceptions (no dialog):** the user's manual stop, and
+     the browser-exit / process-death backstop (the meeting app is gone;
+     nothing left to record).
+  4. Zoom's screen-share PID-liveness grace stays ahead of all of this.
+
+  Future refinement (noted, not built): audio-liveness cross-check — if the
+  Meet title persists but the app-loopback track has been silent for minutes,
+  nudge the dialog even without a close signal (covers the you-left-screen
+  false negative without waiting for tab close).
 
 ## Design
 
