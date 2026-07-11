@@ -60,6 +60,50 @@ describe('LocalProvider', () => {
     expect(result).toBeNull();
   });
 
+  describe('Google Meet detection', () => {
+    it('detects an in-call Chrome Meet tab (hyphen)', () => {
+      const r = provider._parseMeetingFromTitle('Meet - abc-defg-hij - Google Chrome', 'chrome');
+      expect(r).not.toBeNull();
+      expect(r.platform).toBe('google-meet');
+      expect(r.title).toBe('Meet - abc-defg-hij - Google Chrome');
+      expect(r.processName).toBe('chrome');
+    });
+
+    it('detects a named Chrome Meet tab with an en-dash', () => {
+      const r = provider._parseMeetingFromTitle('Meet – Weekly Sync - Google Chrome', 'chrome');
+      expect(r).not.toBeNull();
+      expect(r.platform).toBe('google-meet');
+    });
+
+    it('detects a Meet tab in Edge (msedge)', () => {
+      const r = provider._parseMeetingFromTitle('Meet - xyz-abcd-efg - Work - Microsoft​ Edge', 'msedge');
+      expect(r).not.toBeNull();
+      expect(r.platform).toBe('google-meet');
+    });
+
+    it('returns null for the bare Google Meet landing page', () => {
+      const r = provider._parseMeetingFromTitle('Google Meet - Google Chrome', 'chrome');
+      expect(r).toBeNull();
+    });
+
+    it('returns null for an unrelated "Meet notes" document tab', () => {
+      const r = provider._parseMeetingFromTitle('Meet notes - Google Docs - Google Chrome', 'chrome');
+      expect(r).toBeNull();
+    });
+
+    it('returns null for a Meet title in a non-Chrome/Edge browser (firefox)', () => {
+      const r = provider._parseMeetingFromTitle('Meet - abc-defg-hij — Mozilla Firefox', 'firefox');
+      expect(r).toBeNull();
+    });
+
+    it('does not regress Zoom/Teams parsing', () => {
+      expect(provider._parseMeetingFromTitle('Zoom Meeting', 'zoom.exe').platform).toBe('zoom');
+      expect(
+        provider._parseMeetingFromTitle('Standup | Microsoft Teams', 'ms-teams.exe').platform
+      ).toBe('teams');
+    });
+  });
+
   // v2.0 mixer: setAudioConfig
   it('setAudioConfig stores sources and mixer settings', () => {
     const sources = [

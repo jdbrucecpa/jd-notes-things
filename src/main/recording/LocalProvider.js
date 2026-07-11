@@ -24,6 +24,16 @@ const ZOOM_TITLES = ['Zoom Meeting', 'Zoom Webinar'];
 const TEAMS_TITLE_SUFFIX = '| Microsoft Teams';
 const TEAMS_PROCESS_NAMES = ['ms-teams', 'teams'];
 
+// Google Meet runs in a browser tab, so detection keys on the browser process
+// plus the active tab title. Meet's in-call AND pre-join tab title is
+// "Meet - <code or meeting name>" (hyphen or en-dash), to which the browser
+// appends its own suffix (" - Google Chrome" / " - … Edge"). The anchored
+// pattern deliberately excludes the bare landing page titled "Google Meet"
+// (starts with "Google", not "Meet ") and unrelated tabs like a doc named
+// "Meet notes" (no dash immediately after "Meet ").
+const BROWSER_PROCESS_NAMES = ['chrome', 'msedge'];
+const MEET_TITLE_PATTERN = /^Meet [-–] /;
+
 // Robust window enumeration. `Get-Process | Where MainWindowTitle` only sees each
 // process's *main* window — but Zoom's meeting window is frequently NOT its main
 // window, so its "Zoom Meeting" title drops in and out between polls, causing the
@@ -558,6 +568,17 @@ class LocalProvider extends RecordingProvider {
       if (hasTeamsSuffix && title.trim().toLowerCase() !== 'microsoft teams') {
         return { platform: 'teams', title, processName };
       }
+    }
+
+    // --- Google Meet (Chrome / Edge tab) ---
+    // Process: chrome / msedge (matched as a substring so a ".exe" suffix, if
+    // any, still matches). Title: the active tab is a "Meet - …" call. The
+    // anchored MEET_TITLE_PATTERN rejects the "Google Meet" landing page and
+    // "Meet notes …" documents. Pre-join lobby shares the in-call title, which
+    // is fine — recording only starts when the user clicks the widget button.
+    const isBrowserProcess = BROWSER_PROCESS_NAMES.some(name => lowerProcess.includes(name));
+    if (isBrowserProcess && MEET_TITLE_PATTERN.test(title)) {
+      return { platform: 'google-meet', title, processName };
     }
 
     return null;

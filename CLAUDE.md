@@ -212,7 +212,7 @@ Voice profiles are linked to Google Contacts and stored in the `voice_profiles` 
 
 v2.0 adds fully local alternatives to every cloud dependency while keeping all cloud providers functional. Any layer (recording, transcription, summarization) can independently use local or cloud providers.
 
-- **Local Recording:** FFmpeg WASAPI audio capture + window monitoring (Zoom/Teams only, not Google Meet)
+- **Local Recording:** FFmpeg WASAPI audio capture + window monitoring (Zoom, Teams, and Google Meet in a Chrome/Edge tab)
 - **Local Transcription:** JD Audio Service — Whisper large-v3-turbo (faster-whisper / CTranslate2) + wav2vec2 alignment + PyAnnote diarization (separate Python app at `C:\Users\brigh\Documents\code\jd-audio-service`)
 - **Local LLM:** Ollama or LM Studio via LocalLLMAdapter
 - **Voice Profiles:** PyAnnote speaker embeddings stored in SQLite (dimension-agnostic storage), linked to Google Contacts
