@@ -22,6 +22,7 @@ const {
   DISTANCE_HIGH_CONFIDENCE,
   DISTANCE_MEDIUM_CONFIDENCE,
   DISTANCE_MATCH_MARGIN,
+  MAX_CENTROID_SAMPLES,
 } = require('../../src/main/services/voiceProfileService.js');
 
 // ============================================================
@@ -796,5 +797,43 @@ describe('identifySpeakers anchor synergy', () => {
     expect(brief.status).toBe('unmatched');
     expect(brief.profileId).toBeNull();
     expect(svc.getProfileByEmail('melissa@x.com')).toBeNull();
+  });
+});
+
+describe('recomputeProfile — centroid recency window', () => {
+  it('averages only the newest MAX_CENTROID_SAMPLES samples, excluding older ones', () => {
+    const db = makeDb();
+    const svc = new VoiceProfileService(db);
+
+    // Found the profile with one sample so recompute has something to load.
+    const { id } = svc.saveProfile({
+      contactName: 'JD',
+      contactEmail: 'jd@x.com',
+      embedding: new Float32Array([0, 1]),
+      sampleCount: 1,
+      totalDuration: 1,
+      confidence: 0.5,
+    });
+
+    // 10 OLD samples pointing at +Y, then 50 NEW samples pointing at +X.
+    // With a 50-sample window the centroid must be pure +X (old +Y excluded).
+    for (let i = 0; i < 10; i++) svc.addSample(id, `old-${i}`, new Float32Array([0, 1]), 1);
+    for (let i = 0; i < MAX_CENTROID_SAMPLES; i++) {
+      svc.addSample(id, `new-${i}`, new Float32Array([1, 0]), 1);
+    }
+
+    svc.recomputeProfile(id);
+    const profile = svc.getProfile(id);
+
+    // Newest 50 are all +X -> centroid ~[1, 0]. If old +Y samples leaked in,
+    // the Y component would be non-trivially positive.
+    expect(profile.embedding[0]).toBeCloseTo(1, 5);
+    expect(profile.embedding[1]).toBeCloseTo(0, 5);
+
+    // Confidence still reflects the TOTAL sample count (60 sample rows; the
+    // founding saveProfile records profile metadata but inserts no sample row),
+    // capped at 0.95.
+    expect(profile.sampleCount).toBe(60);
+    expect(profile.confidence).toBeCloseTo(0.95, 5);
   });
 });

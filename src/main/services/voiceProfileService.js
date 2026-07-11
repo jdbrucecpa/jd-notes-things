@@ -33,6 +33,12 @@ const DISTANCE_MATCH_MARGIN = 0.1;
  *  so a bad sample is permanent — the learning funnel must defend itself. */
 const SAMPLE_REJECT_DISTANCE = 0.6;
 
+/** Centroid recency window: recomputeProfile averages only the most recent
+ *  samples so drift (new mic, new room) is absorbed instead of being diluted by
+ *  a large history. Older samples stay in the table for audit/count but stop
+ *  moving the centroid. Confidence still uses the TOTAL sample count. */
+const MAX_CENTROID_SAMPLES = 50;
+
 /** Auto-enroll requires at least this much speech. A real meeting participant
  *  speaks at least this long; prevents enrolling a brief wrong-voice interjection
  *  under the attendee's name — matters because anchor synergy makes the 1+1
@@ -326,7 +332,15 @@ class VoiceProfileService {
       return false;
     }
 
-    const avgEmbedding = weightedAverageEmbedding(samples);
+    // Recency window: the centroid is the duration-weighted average of only the
+    // newest MAX_CENTROID_SAMPLES samples (getSamples returns oldest->newest, so
+    // the newest window is the tail). Sample count, total duration, and
+    // confidence still reflect the FULL history — the window only bounds which
+    // samples move the embedding, so drift is absorbed quickly.
+    const centroidSamples =
+      samples.length > MAX_CENTROID_SAMPLES ? samples.slice(-MAX_CENTROID_SAMPLES) : samples;
+
+    const avgEmbedding = weightedAverageEmbedding(centroidSamples);
     const sampleCount = samples.length;
     const totalDuration = samples.reduce((sum, s) => sum + (s.duration ?? 0), 0);
     const confidence = Math.min(0.5 + 0.05 * sampleCount, 0.95);
@@ -345,7 +359,9 @@ class VoiceProfileService {
       confidence,
     });
 
-    log.info(`${LOG_PREFIX} Recomputed profile ${profileId}: ${sampleCount} samples, confidence=${confidence.toFixed(3)}`);
+    log.info(
+      `${LOG_PREFIX} Recomputed profile ${profileId}: centroid from ${centroidSamples.length}/${sampleCount} samples, confidence=${confidence.toFixed(3)}`
+    );
     return true;
   }
 
@@ -855,5 +871,6 @@ module.exports = {
   DISTANCE_MEDIUM_CONFIDENCE,
   DISTANCE_MATCH_MARGIN,
   SAMPLE_REJECT_DISTANCE,
+  MAX_CENTROID_SAMPLES,
   MIN_AUTO_ENROLL_SECONDS,
 };
