@@ -62,6 +62,7 @@ const {
   shouldRenameFromContentPass,
   shouldSuggestTitle,
 } = require('./main/services/contentPassGate');
+const { createYoutubeImporter } = require('./main/services/youtubeImport');
 const databaseService = require('./main/services/databaseService');
 const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
@@ -163,6 +164,7 @@ const {
   importBatchSchema,
   importTranscribeAudioSchema,
   importAudioFileSchema,
+  youtubeImportSchema,
   // v1.2: Widget schemas
   widgetStartRecordingSchema,
   widgetToggleAlwaysOnTopSchema,
@@ -8412,6 +8414,81 @@ ipcMain.handle(
   withValidation(transcriptionRerunSchema, async (event, { meetingId, provider, audioPath }) =>
     rerunTranscriptionForMeeting({ meetingId, provider, audioPath, sender: event.sender })
   )
+);
+
+// ===================================================================
+// YouTube Import IPC Handler (spec 2026-07-10-youtube-import-design.md)
+// ===================================================================
+ipcMain.handle(
+  'youtube:import',
+  withValidation(youtubeImportSchema, async (event, { url }) => {
+    const fsMod = require('fs');
+    const taskId = backgroundTaskManager.addTask({
+      type: 'youtube-import',
+      description: 'Importing YouTube video...',
+    });
+    try {
+      const importer = createYoutubeImporter({
+        spawn: require('child_process').spawn,
+        fileExists: p => fsMod.existsSync(p),
+        recordingsDir: RECORDING_PATH,
+        log: msg => console.log(msg),
+        onProgress: (percent, message) => backgroundTaskManager.updateTask(taskId, percent, message),
+      });
+
+      // Ensure the recordings dir exists (first-run safety).
+      if (!fsMod.existsSync(RECORDING_PATH)) {
+        fsMod.mkdirSync(RECORDING_PATH, { recursive: true });
+      }
+
+      // Download first — nothing is persisted until this succeeds (spec §3: no orphans).
+      const { audioPath, meta } = await importer.importFromUrl(url);
+
+      // Create the meeting record now that we have real audio + metadata.
+      const meetingId = 'meeting-' + Date.now();
+      const meeting = {
+        id: meetingId,
+        type: 'document', // schema enum: profile|calendar|document|imported ('past' is the saveMeeting list arg)
+        title: meta.title,
+        date: meta.date,
+        platform: 'youtube',
+        participants: [],
+        transcript: [],
+        videoFile: audioPath,
+        recordingId: audioPath, // rerun resolves audio via videoFile; recordingId kept for parity
+        content: `# ${meta.title}\nSource: YouTube (${meta.channel || 'unknown channel'})`,
+        source: 'youtube',
+        importedFrom: url,
+        importedAt: new Date().toISOString(),
+      };
+      databaseService.saveMeeting(meeting, 'past');
+      backgroundTaskManager.completeTask(taskId, { meetingId, title: meta.title });
+
+      // Hand off to the shared transcription pipeline (transcription + waterfall
+      // speaker ID + exec summary). It creates its own background task.
+      await rerunTranscriptionForMeeting({
+        meetingId,
+        provider: null,
+        audioPath,
+        sender: event.sender,
+      });
+
+      // Refresh the renderer's meeting list so the new note appears.
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('meeting-updated', meetingId);
+      }
+
+      return { success: true, meetingId, title: meta.title };
+    } catch (error) {
+      const message =
+        error.code === 'binary-missing'
+          ? 'yt-dlp not found — install with `winget install yt-dlp`, then retry.'
+          : `${error.message} (try \`yt-dlp -U\` to update yt-dlp)`;
+      backgroundTaskManager.failTask(taskId, message);
+      console.error('[YouTubeImport] Failed:', error);
+      return { success: false, error: message };
+    }
+  })
 );
 
 // ===================================================================
