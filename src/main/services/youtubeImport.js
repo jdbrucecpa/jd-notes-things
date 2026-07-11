@@ -40,7 +40,30 @@ function canonicalUrl(videoId) {
   return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
+/**
+ * Argv for `yt-dlp --dump-json --no-download` against the canonical URL.
+ * @param {string} videoId
+ * @returns {string[]}
+ */
+function buildMetadataArgs(videoId) {
+  return ['--dump-json', '--no-download', '--no-playlist', canonicalUrl(videoId)];
+}
+
+/**
+ * Argv for mp3 extraction. `outPath` is the FINAL `.mp3` path; we pass an
+ * `%(ext)s` output template so the post-processor names the file deterministically.
+ * @param {string} videoId
+ * @param {string} outPath - absolute path ending in `.mp3`
+ * @returns {string[]}
+ */
+function buildDownloadArgs(videoId, outPath) {
+  const template = outPath.replace(/\.mp3$/i, '.%(ext)s');
+  return ['-x', '--audio-format', 'mp3', '--no-playlist', '-o', template, canonicalUrl(videoId)];
+}
+
 module.exports = {
   parseVideoId,
   canonicalUrl,
+  buildMetadataArgs,
+  buildDownloadArgs,
 };

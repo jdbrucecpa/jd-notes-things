@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   parseVideoId,
+  buildMetadataArgs,
+  buildDownloadArgs,
 } from '../../src/main/services/youtubeImport.js';
 
 describe('parseVideoId', () => {
@@ -29,5 +31,31 @@ describe('parseVideoId', () => {
   });
   it('rejects an id of the wrong length (no over-capture)', () => {
     expect(parseVideoId('https://youtu.be/short')).toBeNull();
+  });
+});
+
+describe('buildMetadataArgs', () => {
+  it('builds dump-json argv against the canonical URL', () => {
+    expect(buildMetadataArgs('dQw4w9WgXcQ')).toEqual([
+      '--dump-json',
+      '--no-download',
+      '--no-playlist',
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    ]);
+  });
+});
+
+describe('buildDownloadArgs', () => {
+  it('builds mp3 extraction argv with an %(ext)s output template', () => {
+    const out = 'C:/rec/youtube-dQw4w9WgXcQ.mp3';
+    expect(buildDownloadArgs('dQw4w9WgXcQ', out)).toEqual([
+      '-x',
+      '--audio-format',
+      'mp3',
+      '--no-playlist',
+      '-o',
+      'C:/rec/youtube-dQw4w9WgXcQ.%(ext)s',
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    ]);
   });
 });
