@@ -18,7 +18,7 @@ const { app } = require('electron');
 const log = require('electron-log');
 const { mergeSpeakerMappingExtras } = require('./speakerMappingExtras');
 
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 
 class DatabaseService {
   constructor() {
@@ -230,6 +230,9 @@ class DatabaseService {
       CREATE INDEX IF NOT EXISTS idx_voice_profiles_email ON voice_profiles(contact_email);
       CREATE INDEX IF NOT EXISTS idx_voice_profiles_contact ON voice_profiles(google_contact_id);
       CREATE INDEX IF NOT EXISTS idx_voice_samples_profile ON voice_samples(profile_id);
+      -- v5: one sample per profile per meeting (NULL meeting_id rows stay distinct).
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_samples_profile_meeting
+        ON voice_samples(profile_id, meeting_id);
     `);
   }
 
@@ -344,6 +347,32 @@ class DatabaseService {
       });
       migratev4();
       log.info('[Database] v3 → v4 migration complete');
+    }
+
+    if (oldVersion < 5) {
+      log.info('[Database] Running v4 → v5 migration: dedupe voice_samples + unique (profile_id, meeting_id) index');
+      const migratev5 = this.db.transaction(() => {
+        // Pre-migration cleanup: an established DB has duplicate (profile_id,
+        // meeting_id) rows (verified 2026-07-10: 15 groups). CREATE UNIQUE INDEX
+        // would fail on them, so delete duplicates first, keeping the newest row
+        // per pair (highest id — id is monotonic with insert order). NULL
+        // meeting_id rows are left alone: the unique index treats them as
+        // distinct, so they never conflict.
+        this.db.exec(`
+          DELETE FROM voice_samples
+          WHERE meeting_id IS NOT NULL
+            AND id NOT IN (
+              SELECT MAX(id) FROM voice_samples
+              WHERE meeting_id IS NOT NULL
+              GROUP BY profile_id, meeting_id
+            );
+
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_samples_profile_meeting
+            ON voice_samples(profile_id, meeting_id);
+        `);
+      });
+      migratev5();
+      log.info('[Database] v4 → v5 migration complete');
     }
   }
 
@@ -487,12 +516,25 @@ class DatabaseService {
       getAllVoiceProfiles: this.db.prepare('SELECT * FROM voice_profiles ORDER BY contact_name'),
       deleteVoiceProfile: this.db.prepare('DELETE FROM voice_profiles WHERE id = ?'),
 
-      // Voice samples
+      // Voice samples. Upsert on the v5 unique (profile_id, meeting_id) index so
+      // re-corrections replace rather than duplicate. NULL meeting_id rows never
+      // conflict (SQLite treats NULLs as distinct), so they always insert.
       insertVoiceSample: this.db.prepare(`
         INSERT INTO voice_samples (profile_id, meeting_id, embedding, duration)
         VALUES (@profile_id, @meeting_id, @embedding, @duration)
+        ON CONFLICT(profile_id, meeting_id) DO UPDATE SET
+          embedding = excluded.embedding,
+          duration = excluded.duration,
+          created_at = datetime('now')
       `),
-      getVoiceSamples: this.db.prepare('SELECT * FROM voice_samples WHERE profile_id = ?'),
+      // Ascending by insert order (created_at is 1s-resolution TEXT; id is the
+      // monotonic tiebreaker) so recomputeProfile can slice the newest N.
+      getVoiceSamples: this.db.prepare(
+        'SELECT * FROM voice_samples WHERE profile_id = ? ORDER BY created_at ASC, id ASC'
+      ),
+      getSampledProfileIds: this.db.prepare(
+        'SELECT DISTINCT profile_id FROM voice_samples WHERE meeting_id = ?'
+      ),
       deleteVoiceSamples: this.db.prepare('DELETE FROM voice_samples WHERE profile_id = ?'),
     };
   }
@@ -1438,6 +1480,17 @@ class DatabaseService {
       .prepare('SELECT COUNT(*) AS n FROM voice_samples WHERE meeting_id = ?')
       .get(meetingId);
     return row ? row.n : 0;
+  }
+
+  /**
+   * Distinct profile ids that already have a voice sample from a given meeting.
+   * Backs the backfill / re-embed per-identity skip: an identity is only
+   * skipped for meetings its profile already contributed to.
+   * @param {string} meetingId
+   * @returns {number[]}
+   */
+  getSampledProfileIdsForMeeting(meetingId) {
+    return this._stmts.getSampledProfileIds.all(meetingId).map(r => r.profile_id);
   }
 
   /**
