@@ -57,6 +57,10 @@ const keyManagementService = require('./main/services/keyManagementService');
 const speakerMappingService = require('./main/services/speakerMappingService');
 const vocabularyService = require('./main/services/vocabularyService');
 const backgroundTaskManager = require('./main/services/backgroundTaskManager');
+const {
+  shouldRenameFromContentPass,
+  shouldSuggestTitle,
+} = require('./main/services/contentPassGate');
 const databaseService = require('./main/services/databaseService');
 const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
@@ -12693,7 +12697,7 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       // Rename only meetings not yet synced to Obsidian: renaming a synced
       // meeting creates a DUPLICATE vault file on next export (filenames are
       // recomputed from the title; old files are never removed).
-      if (pass.title && !meeting.obsidianLink) {
+      if (shouldRenameFromContentPass({ passTitle: pass.title, obsidianLink: meeting.obsidianLink, platform: meeting.platform })) {
         console.log(`[ContentPass] Renaming meeting: "${meeting.title}" -> "${pass.title}"`);
         meeting.title = pass.title;
         renamedByContentPass = true;
@@ -12702,37 +12706,15 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       console.warn('[ContentPass] Stage 3 skipped:', stage3Err.message);
     }
 
-    // Check if title is generic and needs suggestion
-    const genericTitles = [
-      'transcript',
-      'meeting',
-      'imported',
-      'untitled',
-      'new meeting',
-      'new note',
-      'call',
-      'zoom',
-      'teams',
-      'google meet',
-      'krisp',
-      'recording',
-      'audio',
-      'video',
-    ];
-    const currentTitle = (meeting.title || '').toLowerCase().trim();
-    // A structured Stage 3 title ("Company - Name - Topic") may contain a
-    // generic word (e.g. "Call") — don't let the legacy suggestion clobber it.
-    const needsTitleSuggestion =
-      !renamedByContentPass &&
-      genericTitles.some(generic => {
-        // Match if title IS the generic word, starts with it (including numbered variants like "transcript2"), or contains it as a word
-        return (
-          currentTitle === generic ||
-          currentTitle.startsWith(generic) || // Matches "transcript", "transcript2", "transcript-foo", etc.
-          currentTitle.includes(' ' + generic) ||
-          currentTitle.includes(generic + ' ')
-        );
-      });
+    // Check if title is generic and needs suggestion. A structured Stage 3 title
+    // ("Company - Name - Topic") may contain a generic word (e.g. "Call") — the
+    // renamedByContentPass guard prevents the legacy suggestion from clobbering
+    // it, and youtube meetings keep their authoritative video title (spec §4).
+    const needsTitleSuggestion = shouldSuggestTitle({
+      title: meeting.title,
+      platform: meeting.platform,
+      renamedByContentPass,
+    });
 
     if (needsTitleSuggestion) {
       console.log(
