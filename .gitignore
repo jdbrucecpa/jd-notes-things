@@ -109,3 +109,5 @@ tests/fixtures/audio/*.mp3
 
 # Test files and Git Bash artifacts
 nul
+# Claude Code local worktrees
+.claude/worktrees/

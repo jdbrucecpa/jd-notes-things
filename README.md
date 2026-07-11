@@ -6,8 +6,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://www.microsoft.com/windows)
-[![Electron](https://img.shields.io/badge/Electron-40.x-47848F?logo=electron)](https://www.electronjs.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?logo=node.js)](https://nodejs.org/)
+[![Electron](https://img.shields.io/badge/Electron-43.x-47848F?logo=electron)](https://www.electronjs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?logo=node.js)](https://nodejs.org/)
 
 [Features](#features) • [Installation](#installation) • [Configuration](#configuration) • [Usage](#usage) • [Contributing](#contributing)
 
@@ -19,6 +19,8 @@
 
 JD Notes Things is a Windows desktop app that automatically records your Zoom, Teams, and Google Meet calls, transcribes them, generates AI summaries, and saves everything to your Obsidian vault—organized by client, project, or team.
 
+**v2.0 is fully local-first:** every layer (recording, transcription, summarization) can run entirely on your machine with zero cloud dependencies, or use cloud providers, or any mix of the two. One button switches the whole stack to local.
+
 **The problem:** Meeting notes are scattered, incomplete, or never written at all.
 
 **The solution:** Hit record, forget about it, and find perfectly organized notes waiting for you.
@@ -29,17 +31,19 @@ JD Notes Things is a Windows desktop app that automatically records your Zoom, T
 
 ### Core Functionality
 
-- **One-click recording** — Capture system audio from Zoom, Teams, or Google Meet
-- **Dual recording providers** — Recall.ai SDK or fully local (FFmpeg WASAPI + window monitoring)
+- **One-click recording** — Capture system audio from Zoom, Teams, or Google Meet (Meet captured from a Chrome/Edge tab)
+- **Dual recording providers** — Recall.ai SDK or fully local (FFmpeg WASAPI loopback + window monitoring), hot-swappable without restart
 - **Multi-provider transcription** — AssemblyAI ($0.37/hr), Deepgram ($0.43/hr), or fully local (free, GPU required)
 - **AI summaries** — OpenAI, Claude, Gemini, or local LLM (Ollama/LM Studio)
-- **Voice profiles** — Speaker identification via voice fingerprints linked to Google Contacts
+- **Voice profiles** — Speaker identification via voice fingerprints linked to Google Contacts, with a learning loop that improves from your "Fix Speakers" corrections
+- **YouTube import** — Paste a YouTube URL to download, transcribe, and file the audio like any meeting
 - **Smart organization** — Auto-route meetings to the right folder based on who's in the call
+- **Smart stop** — A countdown-confirmation dialog prevents a window flicker or screen-share transition from ending a live recording early
 
 ### Integrations
 
 - **Google Calendar** — See upcoming meetings and auto-detect when they start
-- **Google Contacts** — Match speakers to real names, create contact/company pages
+- **Google Contacts** — Match speakers to real names for accurate transcript labeling
 - **Obsidian** — Native markdown output with proper linking between summary and transcript
 
 ### Developer-Friendly
@@ -221,13 +225,13 @@ The app uses auto-updates via GitHub Releases. To create a new release:
 2. **Commit the version bump**:
    ```bash
    git add package.json
-   git commit -m "chore: bump version to v1.2.0"
+   git commit -m "chore: bump version to v2.0.0"
    ```
 3. **Create and push a version tag**:
    ```bash
-   git tag v1.2.0
+   git tag v2.0.0
    git push origin main
-   git push origin v1.2.0
+   git push origin v2.0.0
    ```
 
 The GitHub Actions workflow will automatically:
@@ -296,9 +300,11 @@ Contributions are welcome! Please:
 
 ## Roadmap
 
+- [x] Fully local recording, transcription, and summarization (**shipped in v2.0**)
+- [x] Voice-profile speaker identification with a learning loop (**shipped in v2.0**)
 - [ ] Real-time streaming transcription during meetings
+- [ ] Per-app audio isolation to remove system noise from meeting audio
 - [ ] macOS support
-- [ ] Additional local model support (Whisper, etc.)
 
 ---
 
@@ -312,8 +318,9 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - [Recall.ai](https://recall.ai) for the desktop recording SDK
 - [AssemblyAI](https://assemblyai.com) and [Deepgram](https://deepgram.com) for cloud transcription
-- [NVIDIA NeMo Parakeet](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2) for local transcription
+- [OpenAI Whisper large-v3-turbo](https://github.com/openai/whisper) via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) for local transcription
 - [PyAnnote](https://github.com/pyannote/pyannote-audio) for speaker diarization and voice embeddings
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) for YouTube audio import
 - [Obsidian](https://obsidian.md) for being an amazing knowledge base
 
 ---

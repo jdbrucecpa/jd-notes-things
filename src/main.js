@@ -4474,7 +4474,13 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
               // Use mapped speaker name if available (v1.1), fall back to original speaker
               const speakerName =
                 segment.speakerName || segment.speakerDisplayName || segment.speaker || 'Speaker';
-              return `${speakerName}: ${segment.text}`;
+              // Prefix a real timecode so timestamp-oriented templates (clip
+              // finder, content mining) can cite where a moment occurs instead
+              // of fabricating times. Omitted when a segment has no timestamp.
+              const timecode = formatSegmentTimecode(segment.timestamp);
+              return timecode
+                ? `[${timecode}] ${speakerName}: ${segment.text}`
+                : `${speakerName}: ${segment.text}`;
             }
             return String(segment);
           })
@@ -7892,6 +7898,29 @@ function formatTimestamp(seconds) {
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
+  return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Format a transcript segment's `timestamp` field into an HH:MM:SS timecode for
+ * LLM input. Segments from the transcription service store `timestamp` as
+ * milliseconds (a number); the audio-file import path pre-formats it to an
+ * HH:MM:SS string. Handle both so timestamp-oriented templates (clip finder,
+ * content mining) always see a real clock value instead of hallucinating times.
+ * @param {number|string|null|undefined} ts
+ * @returns {string} HH:MM:SS, or '' when there is no usable timestamp
+ */
+function formatSegmentTimecode(ts) {
+  if (ts == null || ts === '') return '';
+  // Already an HH:MM:SS / MM:SS string (audio-import path) — pass through.
+  if (typeof ts === 'string' && ts.includes(':')) return ts;
+  // Numeric (or numeric-string) milliseconds from the transcription service.
+  const ms = typeof ts === 'number' ? ts : Number(ts);
+  if (!Number.isFinite(ms)) return '';
+  const totalSeconds = Math.floor(ms / 1000);
+  const hrs = Math.floor(totalSeconds / 3600);
+  const mins = Math.floor((totalSeconds % 3600) / 60);
+  const secs = totalSeconds % 60;
   return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 

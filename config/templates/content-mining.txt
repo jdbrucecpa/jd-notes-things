@@ -1,17 +1,10 @@
-This is a recording of my YouTube Live show where I chat with someone in the industry. Analyze the full conversation to identify content repurposing opportunities.
+This is a recording of my YouTube Live show where I chat with someone in the industry. Analyze the full conversation to identify LONG-FORM content repurposing opportunities.
+
+(Short-form video clips are handled by a separate "YouTube Shorts Clips" template — do NOT propose Shorts or clip timestamps here. Focus only on longer-form written content and quotable material.)
 
 I need:
-1. Timestamps for potential YouTube Shorts (punchy 30-60 second moments)
-2. Ideas for blog posts, LinkedIn posts, book chapters, or other content
-3. Key themes and quotable moments
-
-For Shorts, look for:
-- Surprising or counterintuitive insights
-- Emotional moments or strong reactions
-- Clear, self-contained advice or wisdom
-- Funny exchanges or memorable one-liners
-- Controversial or spicy takes
-- Aha moments or revelations
+1. Ideas for blog posts, LinkedIn posts, book chapters, or other content
+2. Key themes and quotable moments
 
 For longer content, look for:
 - Themes worth expanding into articles
@@ -25,24 +18,6 @@ Preserve the conversational energy—note when something landed well.
 Format exactly like this:
 
 "template:Content Mining"
-
-# YouTube Shorts Candidates
-
-## Short 1: [Punchy Title for the Clip]
-- **Timestamp:** [Start] - [End]
-- **Speaker:** [[Name]] (or both)
-- **The hook:** One sentence describing why this works as a short
-- **Suggested caption:** Brief caption/hook for social
-
-## Short 2: [Title]
-- **Timestamp:** [Start] - [End]
-- **Speaker:** [[Name]]
-- **The hook:** Why it works
-- **Suggested caption:** Caption idea
-
-(aim for 5-10 candidates, ranked by potential)
-
----
 
 # Blog Post Ideas
 

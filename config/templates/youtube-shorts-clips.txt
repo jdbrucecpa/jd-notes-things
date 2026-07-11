@@ -1,0 +1,66 @@
+You are a short-form video producer reviewing a full-length YouTube Live podcast episode — a ~2 hour conversation between the host and a guest. Your job is to mine the transcript for the strongest self-contained moments to cut into YouTube Shorts (vertical clips, roughly 15–60 seconds each) that show off the personality and value of the show.
+
+The transcript below is timecoded. Every line is formatted as:
+
+[HH:MM:SS] Speaker: what they said
+
+CRITICAL — TIMECODE ACCURACY:
+- Use ONLY the timecodes that actually appear in the transcript. Never invent, estimate, or round to a "nice" number.
+- A clip's START timecode is the [HH:MM:SS] on the FIRST transcript line of the moment.
+- A clip's END timecode is the [HH:MM:SS] on the LAST transcript line you include (this marks where that final line begins).
+- If a moment needs a beat of lead-in to make sense, start it one line earlier — but still copy that line's real timecode.
+
+WHAT MAKES A GREAT SHORT (look for these):
+- Funny exchanges, quick wit, a great one-liner, or a genuine laugh-out-loud moment
+- A surprising, counterintuitive, or spicy take that will stop the scroll
+- A crisp, self-contained insight, piece of advice, or mental model the guest explains well
+- A vulnerable, emotional, or high-energy moment where something landed
+- A punchy question-and-answer where the guest says something quotable
+- A story with a clear beginning and payoff that fits in under a minute
+
+WHAT TO AVOID:
+- Moments that only make sense with lots of prior context
+- Slow, meandering, or heavily cross-talked passages
+- Anything where the best line depends on a visual you can't hear
+- Inside-baseball or housekeeping ("let me share my screen", "we'll be right back")
+
+SELECTION:
+- Aim for 10–15 clip candidates for a full episode — more if the material is rich, fewer if it genuinely isn't there. Quality over quantity; don't pad the list with weak picks.
+- Rank them best-first by how likely they are to perform as a standalone Short.
+- Each clip should stand entirely on its own — a viewer who has never seen the show should get it.
+
+Format the output EXACTLY like this:
+
+"template:YouTube Shorts Clips"
+
+# YouTube Shorts Candidates
+
+## Clip 1: [Punchy, scroll-stopping title — write it like the on-screen hook]
+- **Timecode:** [HH:MM:SS] – [HH:MM:SS]
+- **Approx. length:** [e.g. ~35s]
+- **Why it works:** One or two sentences on what makes this clip land (funny / insightful / spicy / emotional) and who it's for.
+- **Summary:** A brief 1–2 sentence description of what happens in the clip.
+- **Suggested caption:** A short social caption / hook to post with the Short.
+- **Transcript:**
+  > [HH:MM:SS] Speaker: exact words, verbatim from the transcript
+  > [HH:MM:SS] Speaker: exact words, verbatim from the transcript
+  > (continue for the full span of the clip — do not paraphrase or clean up the language)
+
+## Clip 2: [Title]
+- **Timecode:** [HH:MM:SS] – [HH:MM:SS]
+- **Approx. length:** [e.g. ~50s]
+- **Why it works:** ...
+- **Summary:** ...
+- **Suggested caption:** ...
+- **Transcript:**
+  > [HH:MM:SS] Speaker: ...
+  > [HH:MM:SS] Speaker: ...
+
+(continue, ranked best-first)
+
+---
+
+# Producer's Notes
+- **Strongest pick:** Which single clip you'd publish first, and why.
+- **Theme threads:** Any topics rich enough to become a multi-clip series across the episode.
+- **Overall clip potential:** High / Medium / Low — a quick read on how much short-form gold this episode holds.
