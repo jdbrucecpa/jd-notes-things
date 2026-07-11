@@ -122,6 +122,11 @@ class LocalProvider extends RecordingProvider {
     // force-kills if 'q' doesn't terminate FFmpeg within the grace window.
     this._gracefulQuitMs = 2500;
     this._forceKillMs = 1500;
+    // Browser PID for the active Google Meet recording, captured at start. Meet
+    // has no window-based end signal (tabs switch, the browser outlives tabs),
+    // so _pollForMeetings watches this PID and auto-stops only when the browser
+    // process fully exits. Null for non-Meet recordings and when not recording.
+    this._recordingBrowserPid = null;
     this._recordingPath = path.join(
       process.env.APPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Roaming'),
       'jd-notes-things',
@@ -190,6 +195,12 @@ class LocalProvider extends RecordingProvider {
       // capture the audio. PID re-binding is future work.
       let appTrackActive = false;
       const meetingPid = this._activeMeetingPid();
+      // Google Meet browser-exit backstop: remember the browser PID for this
+      // recording so _pollForMeetings can auto-stop when the browser process
+      // exits. Only Meet needs this — Zoom/Teams end via their own window/PID
+      // signals. Cleared in _handleFfmpegClose when the recording ends.
+      this._recordingBrowserPid =
+        this._activeMeeting?.platform === 'google-meet' ? meetingPid : null;
       if (meetingPid && AppLoopbackCapture.isAvailable()) {
         try {
           this._appCapture = new AppLoopbackCapture();
@@ -343,6 +354,7 @@ class LocalProvider extends RecordingProvider {
    */
   async _handleFfmpegClose(recordingId, audioFilePath, code) {
     this._recording = false;
+    this._recordingBrowserPid = null;
     this._ffmpegProcess = null;
     this._stopWasapiCaptures();
     if (this._appCapture) {
@@ -418,6 +430,27 @@ class LocalProvider extends RecordingProvider {
    * Poll the running processes for meeting windows and emit events on changes.
    */
   async _pollForMeetings() {
+    // Google Meet browser-exit backstop. A Meet recording is never auto-stopped
+    // by window/title absence (switching tabs hides the "Meet - …" title while
+    // the call continues), so the only automatic end signal is the host browser
+    // process fully exiting. Closing a single tab does NOT exit the process, so
+    // this fires only on a full browser close/crash. Runs before the window scan
+    // because _activeMeeting may already be null (an earlier tab-switch close
+    // cleared it) while the recording — and its captured browser PID — live on.
+    if (
+      this._recording &&
+      this._recordingBrowserPid &&
+      !this._isProcessAlive(this._recordingBrowserPid)
+    ) {
+      const windowId = this._activeMeeting?.windowId || `browser-${this._recordingBrowserPid}`;
+      log.info(
+        `[LocalProvider] Browser process exited (pid=${this._recordingBrowserPid}) during Google Meet recording — auto-stopping`
+      );
+      this._recordingBrowserPid = null;
+      this.emit('meeting-closed', { windowId, reason: 'browser-exit' });
+      return;
+    }
+
     let windows;
     try {
       windows = await this._getWindowList();

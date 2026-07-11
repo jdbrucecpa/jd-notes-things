@@ -295,6 +295,72 @@ describe('LocalProvider', () => {
     });
   });
 
+  describe('Google Meet browser-exit backstop', () => {
+    it('emits meeting-closed with reason "browser-exit" when the recording browser PID dies', async () => {
+      // Avoid a real PowerShell spawn if the poll continues past the backstop.
+      vi.spyOn(provider, '_getWindowList').mockResolvedValue([]);
+      vi.spyOn(provider, '_isProcessAlive').mockReturnValue(false);
+      provider._recording = true;
+      provider._recordingBrowserPid = 4321;
+      provider._activeMeeting = { windowId: 'chrome-4321', platform: 'google-meet' };
+
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      await provider._pollForMeetings();
+
+      expect(closed).toHaveBeenCalledTimes(1);
+      expect(closed).toHaveBeenCalledWith({ windowId: 'chrome-4321', reason: 'browser-exit' });
+      expect(provider._recordingBrowserPid).toBeNull();
+    });
+
+    it('does not fire the backstop while the browser PID is still alive', async () => {
+      vi.spyOn(provider, '_getWindowList').mockResolvedValue([]);
+      vi.spyOn(provider, '_isProcessAlive').mockReturnValue(true);
+      provider._recording = true;
+      provider._recordingBrowserPid = 4321;
+      provider._activeMeeting = { windowId: 'chrome-4321', platform: 'google-meet' };
+
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      await provider._pollForMeetings();
+
+      expect(closed).not.toHaveBeenCalled();
+      expect(provider._recordingBrowserPid).toBe(4321);
+    });
+
+    it('falls back to a synthetic browser-<pid> windowId when _activeMeeting was already cleared', async () => {
+      vi.spyOn(provider, '_getWindowList').mockResolvedValue([]);
+      vi.spyOn(provider, '_isProcessAlive').mockReturnValue(false);
+      provider._recording = true;
+      provider._recordingBrowserPid = 4321;
+      provider._activeMeeting = null; // an earlier window-absence close cleared it
+
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      await provider._pollForMeetings();
+
+      expect(closed).toHaveBeenCalledWith({ windowId: 'browser-4321', reason: 'browser-exit' });
+    });
+
+    it('does not run the backstop when not recording', async () => {
+      vi.spyOn(provider, '_getWindowList').mockResolvedValue([]);
+      const alive = vi.spyOn(provider, '_isProcessAlive');
+      provider._recording = false;
+      provider._recordingBrowserPid = 4321;
+
+      const closed = vi.fn();
+      provider.on('meeting-closed', closed);
+
+      await provider._pollForMeetings();
+
+      expect(closed).not.toHaveBeenCalled();
+      expect(alive).not.toHaveBeenCalled();
+    });
+  });
+
   describe('per-track recording wiring', () => {
     it('derives track paths from the recording path', () => {
       const p = provider._deriveTrackPaths('C:\\rec\\recording-X.mp3');
