@@ -21,6 +21,7 @@
 
 const { spawn } = require('child_process');
 const log = require('electron-log');
+const { getFfmpegPath } = require('../recording/ffmpegPath');
 
 const WINDOW_MS = 100; // RMS window size
 const DECODE_ARGS = ['-f', 's16le', '-ar', '8000', '-ac', '1']; // 8kHz mono s16le
@@ -145,7 +146,7 @@ function computeAnchor(segments, micWindows, appWindows) {
 function decodeToRmsWindows(audioFilePath) {
   return new Promise((resolve, reject) => {
     const ff = spawn(
-      'ffmpeg',
+      getFfmpegPath(),
       // -nostats/-loglevel error: keep stderr quiet; we still DRAIN it below —
       // an unread piped stderr can fill the OS pipe buffer on long decodes and
       // block FFmpeg, hanging this Promise.

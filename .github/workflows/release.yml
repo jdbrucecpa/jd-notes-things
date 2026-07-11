@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           node node_modules/electron/install.js
-          npm rebuild @recallai/desktop-sdk electron-winstaller
+          npm rebuild @recallai/desktop-sdk electron-winstaller ffmpeg-static
 
       - name: Build and package
         run: npm run make

@@ -5,6 +5,7 @@ const { RecordingProvider } = require('./RecordingProvider');
 const { buildFFmpegArgs } = require('./buildFFmpegArgs');
 const { WasapiCapture } = require('./WasapiCapture');
 const { AppLoopbackCapture } = require('./AppLoopbackCapture');
+const { getFfmpegPath } = require('./ffmpegPath');
 
 // Prefer electron-log in the app; fall back to console in tests / non-Electron.
 let log;
@@ -665,9 +666,43 @@ class LocalProvider extends RecordingProvider {
    * Enumerate all dshow audio devices by parsing FFmpeg output.
    * @returns {Promise<Array<{name: string, isLoopback: boolean, isMicrophone: boolean}>>}
    */
-  _enumerateDevices() {
+  async _enumerateDevices() {
+    // dshow (input/mic) devices via FFmpeg, and WASAPI (output/system) devices
+    // via the native module, are enumerated INDEPENDENTLY. Previously the WASAPI
+    // merge lived inside FFmpeg's 'close' handler, so a missing/erroring ffmpeg
+    // (e.g. not on PATH) resolved [] before 'close' fired and silently dropped
+    // System Audio devices too. Keep them decoupled so each degrades on its own.
+    const devices = await this._enumerateDshowDevices();
+
+    if (WasapiCapture.isAvailable()) {
+      try {
+        const outputDevices = await WasapiCapture.getOutputDevices();
+        for (const od of outputDevices) {
+          devices.push({
+            name: od.name,
+            type: 'wasapi',
+            deviceId: od.deviceId,
+            isLoopback: false,
+            isMicrophone: false,
+            isDefault: od.isDefault,
+          });
+        }
+      } catch {
+        // WASAPI enumeration failed — continue with dshow-only devices
+      }
+    }
+
+    return devices;
+  }
+
+  /**
+   * Enumerate dshow (input/microphone) audio devices by parsing FFmpeg output.
+   * Resolves to [] if ffmpeg cannot be spawned, so WASAPI enumeration can proceed.
+   * @returns {Promise<Array<{name: string, isLoopback: boolean, isMicrophone: boolean}>>}
+   */
+  _enumerateDshowDevices() {
     return new Promise((resolve) => {
-      const ff = spawn('ffmpeg', [
+      const ff = spawn(getFfmpegPath(), [
         '-list_devices', 'true',
         '-f', 'dshow',
         '-i', 'dummy',
@@ -676,7 +711,7 @@ class LocalProvider extends RecordingProvider {
       let stderr = '';
       ff.stderr.on('data', chunk => { stderr += chunk; });
 
-      ff.on('close', async () => {
+      ff.on('close', () => {
         const devices = [];
         const lines = stderr.split('\n');
 
@@ -739,25 +774,6 @@ class LocalProvider extends RecordingProvider {
               nameLower.includes('microphone') || nameLower.includes('mic');
 
             devices.push({ name, isLoopback, isMicrophone });
-          }
-        }
-
-        // Merge WASAPI output devices if available
-        if (WasapiCapture.isAvailable()) {
-          try {
-            const outputDevices = await WasapiCapture.getOutputDevices();
-            for (const od of outputDevices) {
-              devices.push({
-                name: od.name,
-                type: 'wasapi',
-                deviceId: od.deviceId,
-                isLoopback: false,
-                isMicrophone: false,
-                isDefault: od.isDefault,
-              });
-            }
-          } catch {
-            // WASAPI enumeration failed — continue with dshow-only devices
           }
         }
 
@@ -857,9 +873,10 @@ class LocalProvider extends RecordingProvider {
       ];
     }
 
-    log.info('[LocalProvider] Spawning FFmpeg:', ['ffmpeg', ...ffmpegArgs].join(' '));
+    const ffmpegBin = getFfmpegPath();
+    log.info('[LocalProvider] Spawning FFmpeg:', [ffmpegBin, ...ffmpegArgs].join(' '));
     this._ffmpegStderrTail = '';
-    this._ffmpegProcess = spawn('ffmpeg', ffmpegArgs, { windowsHide: true });
+    this._ffmpegProcess = spawn(ffmpegBin, ffmpegArgs, { windowsHide: true });
 
     const { recordingId, audioFilePath } = this._activeRecording;
 

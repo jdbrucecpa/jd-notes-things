@@ -1,5 +1,9 @@
 const { FusesPlugin } = require('@electron-forge/plugin-fuses');
 const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+// Bundle ffmpeg with the app so recording/enumeration never depends on a
+// system ffmpeg being on PATH. This path is copied into resources/ at package
+// time and resolved at runtime via process.resourcesPath (see ffmpegPath.js).
+const ffmpegStatic = require('ffmpeg-static');
 
 module.exports = {
   packagerConfig: {
@@ -7,7 +11,7 @@ module.exports = {
     asar: {
       unpack: '**/{@recallai,better-sqlite3}/**',
     },
-    extraResource: ['./config'],
+    extraResource: ['./config', ffmpegStatic].filter(Boolean),
     osxSign: {
       continueOnError: false,
       optionsForFile: _ => {

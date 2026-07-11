@@ -9312,8 +9312,9 @@ ipcMain.handle('audioDevices:test', async () => {
     const insertIdx = lastInputIdx + 2;
     ffmpegArgs.splice(insertIdx, 0, '-t', '3');
 
+    const { getFfmpegPath } = require('./main/recording/ffmpegPath');
     return new Promise((resolve) => {
-      const ff = spawn('ffmpeg', ffmpegArgs, { windowsHide: true });
+      const ff = spawn(getFfmpegPath(), ffmpegArgs, { windowsHide: true });
       let ffmpegStderr = '';
       ff.stderr.on('data', (chunk) => { ffmpegStderr += chunk; });
 
