@@ -414,6 +414,13 @@ let gmail = null;
 
 let mainWindow;
 let recordingWidget = null; // Floating recording widget window (v1.2)
+let stopConfirmWindow = null; // "End the recording?" countdown dialog window
+// Exactly one auto-stop confirmation may be pending at a time. Shape when active:
+//   { recordingId: string, timer: NodeJS.Timeout }
+// The 10s countdown timer is authoritative in the MAIN process; the renderer only
+// displays the remaining seconds it is told.
+let pendingStopConfirmation = null;
+const STOP_CONFIRM_SECONDS = 10;
 let tray = null; // System tray icon (Phase 10.7)
 let sdkReady = false; // Track when SDK is fully initialized (after restart workaround)
 let currentViewedMeetingId = null; // Track which meeting is currently open in the app (v1.2 fix)
@@ -1385,6 +1392,165 @@ function updateWidgetRecordingState(recording, meetingTitle = null, meetingId = 
         type: 'recording-stopped',
       });
     }
+  }
+}
+
+/**
+ * Stop a recording via the active provider and notify the renderer. This is the
+ * single stop path shared by the immediate auto-stop (browser-exit/no-window-id)
+ * and the confirmed/timed-out countdown stop. Errors from the provider are
+ * expected when the meeting already closed and are downgraded to a warning.
+ * @param {string} recordingToStop - active recording key to stop
+ */
+function executeAutoStop(recordingToStop) {
+  console.log(`Stopping recording for window: ${recordingToStop}`);
+  try {
+    recordingProvider.stopRecording(recordingToStop);
+    recordingManager.updateState(recordingToStop, 'stopping');
+    console.log(`✓ Stop recording command sent successfully`);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('recording-state-change', {
+        windowId: recordingToStop,
+        state: 'stopping',
+      });
+    }
+  } catch (error) {
+    // The provider may throw if the meeting already closed; the recording still
+    // stops. Expected, not critical.
+    console.warn(
+      `Warning: provider reported error when stopping recording (recording may have already stopped):`,
+      error.message
+    );
+    recordingManager.updateState(recordingToStop, 'stopping');
+  }
+}
+
+/**
+ * Create and show the always-on-top "End the recording?" countdown dialog.
+ * @param {number} seconds - initial remaining seconds to display
+ */
+function showStopConfirmWindow(seconds) {
+  const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+  const w = 340;
+  const h = 176;
+
+  stopConfirmWindow = new BrowserWindow({
+    width: w,
+    height: h,
+    x: Math.round((screenWidth - w) / 2),
+    y: Math.round(screenHeight * 0.22),
+    frame: false,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    show: false,
+    webPreferences: {
+      preload: STOP_CONFIRM_PRELOAD_WEBPACK_ENTRY,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  // 'screen-saver' level keeps the dialog above a full-screen meeting window.
+  stopConfirmWindow.setAlwaysOnTop(true, 'screen-saver');
+  stopConfirmWindow.loadURL(STOP_CONFIRM_WEBPACK_ENTRY);
+
+  stopConfirmWindow.once('ready-to-show', () => {
+    if (stopConfirmWindow && !stopConfirmWindow.isDestroyed()) {
+      stopConfirmWindow.show();
+      stopConfirmWindow.webContents.send('confirm:tick', { remaining: seconds });
+    }
+  });
+
+  stopConfirmWindow.on('closed', () => {
+    stopConfirmWindow = null;
+    // If the window was destroyed WITHOUT a button/timeout resolution (the user
+    // or the OS closed it, or the app is quitting), a resolution via
+    // finishStopConfirmation has already nulled pendingStopConfirmation before
+    // calling close(). A still-set slot here means the dialog vanished on its
+    // own — cancel the orphaned countdown so it never fires a stop for a dialog
+    // that is already gone.
+    if (pendingStopConfirmation) {
+      clearInterval(pendingStopConfirmation.timer);
+      pendingStopConfirmation = null;
+      console.log(
+        '[stop-confirm] Dialog closed without resolution — countdown cancelled, recording continues'
+      );
+    }
+  });
+}
+
+/**
+ * Begin a stop-confirmation countdown for an auto-stop that requires user
+ * confirmation (window-absent close for Zoom/Teams/Meet). The 10s timer lives
+ * here in the main process; on timeout the recording is stopped exactly like an
+ * immediate auto-stop. Only one confirmation may be pending at a time — a second
+ * close signal while one is pending is ignored (guards against double dialogs).
+ * @param {string} recordingId - active recording key that would be stopped
+ */
+function beginStopConfirmation(recordingId) {
+  if (pendingStopConfirmation) {
+    console.log(
+      `[stop-confirm] A confirmation is already pending (${pendingStopConfirmation.recordingId}); ignoring new close signal for ${recordingId}`
+    );
+    return;
+  }
+
+  let remaining = STOP_CONFIRM_SECONDS;
+  console.log(`[stop-confirm] Prompting End-the-recording? for ${recordingId} (${remaining}s)`);
+  showStopConfirmWindow(remaining);
+
+  const timer = setInterval(() => {
+    remaining -= 1;
+    if (remaining <= 0) {
+      console.log('[stop-confirm] Countdown expired — stopping recording');
+      finishStopConfirmation(true);
+      return;
+    }
+    if (stopConfirmWindow && !stopConfirmWindow.isDestroyed()) {
+      stopConfirmWindow.webContents.send('confirm:tick', { remaining });
+    }
+  }, 1000);
+
+  pendingStopConfirmation = { recordingId, timer };
+}
+
+/**
+ * Resolve the pending stop-confirmation: clear the timer, close the dialog, and
+ * either stop the recording (timeout or "End Recording") or leave it running
+ * ("Keep Recording"). A later meeting-closed for the same/new window can re-open
+ * the dialog — there is no permanent suppression.
+ * @param {boolean} shouldStop - true to stop now, false to keep recording
+ */
+function finishStopConfirmation(shouldStop) {
+  if (!pendingStopConfirmation) return;
+
+  const { recordingId, timer } = pendingStopConfirmation;
+  clearInterval(timer);
+  pendingStopConfirmation = null;
+
+  if (stopConfirmWindow && !stopConfirmWindow.isDestroyed()) {
+    stopConfirmWindow.close();
+  }
+
+  if (shouldStop) {
+    // The countdown can outlive the recording: the user may have stopped it
+    // manually, or the app may be quitting, during the 10s window. Only stop if
+    // the recording is still active — otherwise this resolution is a no-op.
+    if (recordingManager.hasActiveRecording(recordingId)) {
+      executeAutoStop(recordingId);
+    } else {
+      console.log(
+        `[stop-confirm] Recording ${recordingId} already inactive — nothing to stop`
+      );
+    }
+  } else {
+    console.log(`[stop-confirm] User chose Keep Recording — ${recordingId} continues`);
   }
 }
 
@@ -2546,31 +2712,17 @@ async function initSDK() {
     const recordingToStop = decision.recordingToStop;
 
     if (recordingToStop) {
-      console.log(`Stopping recording for window: ${recordingToStop}`);
-
-      try {
-        // Stop the recording via active provider
-        recordingProvider.stopRecording(recordingToStop);
-        recordingManager.updateState(recordingToStop, 'stopping');
-        console.log(`✓ Stop recording command sent successfully`);
-
-        // Notify renderer
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('recording-state-change', {
-            windowId: recordingToStop,
-            state: 'stopping',
-          });
-        }
-      } catch (error) {
-        // SDK may throw errors if the meeting is already closed, but recording will still stop
-        // This is expected behavior, not a critical error
-        console.warn(
-          `Warning: SDK reported error when stopping recording (recording may have already stopped):`,
-          error.message
-        );
-
-        // Still update our internal state
-        recordingManager.updateState(recordingToStop, 'stopping');
+      if (decision.requiresConfirmation) {
+        // Window-absent auto-stop (Zoom/Teams/Meet): the title can lie both ways
+        // (a Meet PiP close or a "You left" screen), so ask before stopping.
+        // The main process owns the 10s countdown; timeout or "End" stops,
+        // "Keep" cancels. Manual stop and the browser-exit backstop set
+        // requiresConfirmation=false and never reach this branch.
+        beginStopConfirmation(recordingToStop);
+      } else {
+        // Immediate auto-stop: browser-exit / process-death backstop — the
+        // meeting app is gone, nothing left to record.
+        executeAutoStop(recordingToStop);
       }
     }
 
@@ -9821,6 +9973,18 @@ ipcMain.handle(
 // ===================================================================
 // Recording Widget IPC Handlers (v1.2)
 // ===================================================================
+
+// Stop-confirmation dialog buttons. The main process owns the countdown; these
+// only tell it which way the user resolved it.
+ipcMain.on('confirm:end', () => {
+  console.log('[stop-confirm] User clicked End Recording');
+  finishStopConfirmation(true);
+});
+
+ipcMain.on('confirm:keep', () => {
+  console.log('[stop-confirm] User clicked Keep Recording');
+  finishStopConfirmation(false);
+});
 
 // Hide the recording widget
 ipcMain.on('widget:hide', () => {
