@@ -61,9 +61,23 @@ function buildDownloadArgs(videoId, outPath) {
   return ['-x', '--audio-format', 'mp3', '--no-playlist', '-o', template, canonicalUrl(videoId)];
 }
 
+const DOWNLOAD_PROGRESS_RE = /^\[download\]\s+(\d{1,3}(?:\.\d+)?)%/;
+
+/**
+ * Parse a `[download]  NN.N% ...` yt-dlp stdout line.
+ * @param {string} line
+ * @returns {{percent:number}|null}
+ */
+function parseDownloadProgress(line) {
+  if (typeof line !== 'string') return null;
+  const m = line.match(DOWNLOAD_PROGRESS_RE);
+  return m ? { percent: parseFloat(m[1]) } : null;
+}
+
 module.exports = {
   parseVideoId,
   canonicalUrl,
   buildMetadataArgs,
   buildDownloadArgs,
+  parseDownloadProgress,
 };

@@ -3,6 +3,7 @@ import {
   parseVideoId,
   buildMetadataArgs,
   buildDownloadArgs,
+  parseDownloadProgress,
 } from '../../src/main/services/youtubeImport.js';
 
 describe('parseVideoId', () => {
@@ -57,5 +58,23 @@ describe('buildDownloadArgs', () => {
       'C:/rec/youtube-dQw4w9WgXcQ.%(ext)s',
       'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     ]);
+  });
+});
+
+describe('parseDownloadProgress', () => {
+  it('parses a fractional percentage', () => {
+    expect(parseDownloadProgress('[download]  42.3% of  10.50MiB at 1.20MiB/s ETA 00:05'))
+      .toEqual({ percent: 42.3 });
+  });
+  it('parses 100%', () => {
+    expect(parseDownloadProgress('[download] 100% of 10.50MiB in 00:08')).toEqual({ percent: 100 });
+  });
+  it('parses an integer percentage', () => {
+    expect(parseDownloadProgress('[download]   0.0% of ~5.00MiB')).toEqual({ percent: 0 });
+  });
+  it('returns null for a non-progress line', () => {
+    expect(parseDownloadProgress('[youtube] Extracting URL')).toBeNull();
+    expect(parseDownloadProgress('')).toBeNull();
+    expect(parseDownloadProgress(null)).toBeNull();
   });
 });
