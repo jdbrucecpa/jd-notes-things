@@ -52,11 +52,18 @@
  * @returns {{
  *   recordingToStop: string|null,
  *   shouldClearDetectedMeeting: boolean,
+ *   requiresConfirmation: boolean,
  *   reason: string,
  * }}
  *   - `recordingToStop`: key to stop, or null if nothing should stop
  *   - `shouldClearDetectedMeeting`: true when the user's known active
  *     meeting actually closed (so detection state should reset)
+ *   - `requiresConfirmation`: true when the stop was triggered by window
+ *     absence (Zoom/Teams/Meet) and the caller must gate it behind the
+ *     "End the recording?" countdown dialog. false for the browser-exit /
+ *     process-death backstop (nothing left to record — stop immediately) and
+ *     for every no-op (recordingToStop === null). The user's manual stop never
+ *     reaches this resolver, so it is never gated.
  *   - `reason`: short tag for diagnostic logging
  */
 function resolveMeetingClosedTarget({
@@ -79,29 +86,18 @@ function resolveMeetingClosedTarget({
       return {
         recordingToStop: activeRecordingKeys[0],
         shouldClearDetectedMeeting: true,
+        requiresConfirmation: false,
         reason: 'browser-exit',
       };
     }
     return {
       recordingToStop: null,
       shouldClearDetectedMeeting: true,
+      requiresConfirmation: false,
       reason:
         activeRecordingKeys.length === 0
           ? 'browser-exit-no-active-recordings'
           : 'browser-exit-multiple-active-recordings',
-    };
-  }
-
-  // 0b. Google Meet window-absence (LocalProvider). The user switched tabs — the
-  //     "Meet - …" title dropped out of the window list but the call continues.
-  //     Never auto-stop a Meet recording on window absence; only a browser exit
-  //     (0a) or a manual stop ends it. Detection state still clears so the widget
-  //     hides when the Meet tab goes away.
-  if (platform === 'google-meet') {
-    return {
-      recordingToStop: null,
-      shouldClearDetectedMeeting: true,
-      reason: 'google-meet-window-absent',
     };
   }
 
@@ -111,6 +107,7 @@ function resolveMeetingClosedTarget({
     return {
       recordingToStop: sdkWindowId,
       shouldClearDetectedMeeting: detectedWindowId === sdkWindowId,
+      requiresConfirmation: true,
       reason: 'direct-match',
     };
   }
@@ -133,6 +130,7 @@ function resolveMeetingClosedTarget({
       return {
         recordingToStop: activeRecordingKeys[0],
         shouldClearDetectedMeeting: true,
+        requiresConfirmation: true,
         reason: baseReason,
       };
     }
@@ -142,6 +140,7 @@ function resolveMeetingClosedTarget({
     return {
       recordingToStop: null,
       shouldClearDetectedMeeting: true,
+      requiresConfirmation: false,
       reason:
         activeRecordingKeys.length === 0
           ? `${baseReason}-no-active-recordings`
@@ -152,9 +151,16 @@ function resolveMeetingClosedTarget({
   // 3. SDK gave us a windowId, it doesn't match any recording, and it isn't
   //    our detected meeting. It's an unrelated window (Quirk B) — leave
   //    recordings AND detection state alone.
+  // `platform` is intentionally accepted but no longer consulted (the google-meet
+  // window-absent special case was removed — Meet now stops-with-confirmation like
+  // Zoom/Teams). Reference it in a no-op so the destructured param does not trip
+  // no-unused-vars, and keep it in the signature for call-site stability.
+  void platform;
+
   return {
     recordingToStop: null,
     shouldClearDetectedMeeting: false,
+    requiresConfirmation: false,
     reason: 'unrelated-window-closed',
   };
 }

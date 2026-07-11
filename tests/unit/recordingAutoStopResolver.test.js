@@ -11,6 +11,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBe('win-1');
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(true);
       expect(result.reason).toBe('direct-match');
     });
 
@@ -22,6 +23,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBe('win-1');
       expect(result.shouldClearDetectedMeeting).toBe(false);
+      expect(result.requiresConfirmation).toBe(true);
     });
 
     it('still matches even if other recordings are active', () => {
@@ -31,6 +33,7 @@ describe('resolveMeetingClosedTarget', () => {
         activeRecordingKeys: ['win-1', 'win-2'],
       });
       expect(result.recordingToStop).toBe('win-1');
+      expect(result.requiresConfirmation).toBe(true);
     });
   });
 
@@ -43,6 +46,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBe('desk-key-abc');
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(true);
       expect(result.reason).toBe('sdk-no-window-id');
     });
 
@@ -54,6 +58,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBeNull();
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(false);
       expect(result.reason).toBe('sdk-no-window-id-no-active-recordings');
     });
 
@@ -65,6 +70,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBeNull();
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(false);
       expect(result.reason).toBe('sdk-no-window-id-multiple-active-recordings');
     });
 
@@ -75,6 +81,7 @@ describe('resolveMeetingClosedTarget', () => {
         activeRecordingKeys: ['desk-key-abc'],
       });
       expect(result.recordingToStop).toBe('desk-key-abc');
+      expect(result.requiresConfirmation).toBe(true);
       expect(result.reason).toBe('sdk-no-window-id');
     });
   });
@@ -88,6 +95,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBe('desk-key-abc');
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(true);
       expect(result.reason).toBe('closed-was-detected');
     });
 
@@ -99,6 +107,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBeNull();
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(false);
       expect(result.reason).toBe('closed-was-detected-no-active-recordings');
     });
 
@@ -110,16 +119,12 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBeNull();
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(false);
       expect(result.reason).toBe('closed-was-detected-multiple-active-recordings');
     });
   });
 
   describe('Quirk B / v1.4.6 regression: unrelated window closes', () => {
-    // These tests pin down the specific bug v1.4.6 introduced: a Teams lobby /
-    // preview window closing fires meeting-closed with a windowId that does
-    // NOT match the recording and is NOT the detected meeting. v1.4.6 stopped
-    // the sole active recording anyway. v1.4.7 must NOT.
-
     it('does not stop the SDK-keyed recording when an unrelated Teams lobby closes', () => {
       const result = resolveMeetingClosedTarget({
         sdkWindowId: 'teams-lobby-XYZ',
@@ -128,6 +133,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBeNull();
       expect(result.shouldClearDetectedMeeting).toBe(false);
+      expect(result.requiresConfirmation).toBe(false);
       expect(result.reason).toBe('unrelated-window-closed');
     });
 
@@ -139,6 +145,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBeNull();
       expect(result.shouldClearDetectedMeeting).toBe(false);
+      expect(result.requiresConfirmation).toBe(false);
       expect(result.reason).toBe('unrelated-window-closed');
     });
 
@@ -150,12 +157,16 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBeNull();
       expect(result.shouldClearDetectedMeeting).toBe(false);
+      expect(result.requiresConfirmation).toBe(false);
       expect(result.reason).toBe('unrelated-window-closed');
     });
   });
 
   describe('Google Meet lifecycle', () => {
-    it('never stops a Meet recording on window absence (tab switch), but clears detection', () => {
+    it('resolves a Meet recording to stop on window absence WITH confirmation required', () => {
+      // REVISED 2026-07-10: Meet window-absence no longer means "never stop".
+      // It now resolves a recordingToStop exactly like Zoom/Teams, but the
+      // main-process handler must gate the stop behind the countdown dialog.
       const result = resolveMeetingClosedTarget({
         sdkWindowId: 'chrome-1234',
         detectedWindowId: 'chrome-1234',
@@ -163,9 +174,10 @@ describe('resolveMeetingClosedTarget', () => {
         platform: 'google-meet',
         reason: undefined,
       });
-      expect(result.recordingToStop).toBeNull();
+      expect(result.recordingToStop).toBe('C:\\rec\\recording-x.mp3');
       expect(result.shouldClearDetectedMeeting).toBe(true);
-      expect(result.reason).toBe('google-meet-window-absent');
+      expect(result.requiresConfirmation).toBe(true);
+      expect(result.reason).toBe('closed-was-detected');
     });
 
     it('stops the sole recording on a browser-exit backstop even if detection was already cleared', () => {
@@ -178,6 +190,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBe('C:\\rec\\recording-x.mp3');
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(false); // browser-exit = immediate, no dialog
       expect(result.reason).toBe('browser-exit');
     });
 
@@ -191,6 +204,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBeNull();
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(false);
       expect(result.reason).toBe('browser-exit-no-active-recordings');
     });
 
@@ -204,6 +218,7 @@ describe('resolveMeetingClosedTarget', () => {
       });
       expect(result.recordingToStop).toBeNull();
       expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.requiresConfirmation).toBe(false);
       expect(result.reason).toBe('browser-exit-multiple-active-recordings');
     });
 
@@ -216,6 +231,7 @@ describe('resolveMeetingClosedTarget', () => {
         reason: undefined,
       });
       expect(result.recordingToStop).toBe('zoom-99');
+      expect(result.requiresConfirmation).toBe(true);
       expect(result.reason).toBe('direct-match');
     });
   });
