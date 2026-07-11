@@ -211,6 +211,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   transcriptExportBatch: meetingIds => ipcRenderer.invoke('transcript:exportBatch', meetingIds),
   // Import Transcripts (Phase 8)
   importFile: (filePath, options) => ipcRenderer.invoke('import:importFile', { filePath, options }),
+  youtubeImport: url => ipcRenderer.invoke('youtube:import', { url }),
   importBatch: (filePaths, options) =>
     ipcRenderer.invoke('import:importBatch', { filePaths, options }),
   importGetStatus: () => ipcRenderer.invoke('import:getStatus'),

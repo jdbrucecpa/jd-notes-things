@@ -297,6 +297,9 @@ function initializeTitleBar() {
       const importBtn = document.getElementById('importBtn');
       if (importBtn) importBtn.click();
     },
+    menuImportYouTube: () => {
+      openYoutubeImportModal();
+    },
     menuExportTranscript: async () => {
       if (!currentEditingMeetingId) {
         showToast('Select a meeting first', 'warning');
@@ -3537,6 +3540,93 @@ function applyView(viewId) {
 
   updateFilterCountBadge();
   renderMeetings();
+}
+
+/**
+ * Client-side YouTube id extraction (mirrors main/services/youtubeImport
+ * parseVideoId) so an invalid URL shows an inline error and never hits IPC.
+ */
+function extractYoutubeVideoId(url) {
+  if (typeof url !== 'string' || url.length === 0) return null;
+  const idRe = /^[A-Za-z0-9_-]{11}$/;
+  const watch = url.match(/[?&]v=([^&#]+)/);
+  let candidate = watch ? watch[1] : null;
+  if (!candidate) {
+    const pathMatch = url.match(/(?:youtu\.be\/|\/shorts\/)([^/?&#]+)/);
+    if (pathMatch) candidate = pathMatch[1];
+  }
+  return candidate && idRe.test(candidate) ? candidate : null;
+}
+
+/** Open the Import-from-YouTube modal and run the import on confirm. */
+function openYoutubeImportModal() {
+  const modal = document.getElementById('youtubeImportModal');
+  const input = document.getElementById('youtubeUrlInput');
+  const errorEl = document.getElementById('youtubeUrlError');
+  const confirmBtn = document.getElementById('confirmYoutubeImportBtn');
+  const cancelBtn = document.getElementById('cancelYoutubeImportBtn');
+  const closeBtn = document.getElementById('closeYoutubeImportModal');
+  if (!modal || !input) {
+    showToast('Could not open YouTube import', 'error');
+    return;
+  }
+
+  input.value = '';
+  errorEl.style.display = 'none';
+  errorEl.textContent = '';
+  modal.style.display = 'flex';
+  input.focus();
+
+  const cleanup = () => {
+    modal.style.display = 'none';
+    confirmBtn?.removeEventListener('click', handleConfirm);
+    cancelBtn?.removeEventListener('click', cleanup);
+    closeBtn?.removeEventListener('click', cleanup);
+    input?.removeEventListener('keydown', handleKeydown);
+    modal?.removeEventListener('click', handleOverlayClick);
+  };
+
+  const showError = message => {
+    errorEl.textContent = message;
+    errorEl.style.display = 'block';
+  };
+
+  const handleConfirm = async () => {
+    const url = input.value.trim();
+    if (!extractYoutubeVideoId(url)) {
+      showError('Enter a valid YouTube URL (watch, youtu.be, or shorts).');
+      input.focus();
+      return;
+    }
+    cleanup();
+    showToast('Starting YouTube import — see background tasks for progress', 'info');
+    try {
+      const result = await window.electronAPI.youtubeImport(url);
+      if (result.success) {
+        showToast(`Imported "${result.title}"`, 'success');
+        await loadMeetingsDataFromFile();
+        renderMeetings();
+      } else {
+        showToast(result.error || 'YouTube import failed', 'error');
+      }
+    } catch (error) {
+      showToast('YouTube import failed: ' + error.message, 'error');
+    }
+  };
+
+  const handleKeydown = e => {
+    if (e.key === 'Enter') handleConfirm();
+    else if (e.key === 'Escape') cleanup();
+  };
+  const handleOverlayClick = e => {
+    if (e.target === modal) cleanup();
+  };
+
+  confirmBtn?.addEventListener('click', handleConfirm);
+  cancelBtn?.addEventListener('click', cleanup);
+  closeBtn?.addEventListener('click', cleanup);
+  input?.addEventListener('keydown', handleKeydown);
+  modal?.addEventListener('click', handleOverlayClick);
 }
 
 /**
@@ -6878,6 +6968,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Import button click handler
   document.getElementById('importBtn').addEventListener('click', openImportModal);
+
+  const youtubeImportBtn = document.getElementById('youtubeImportBtn');
+  if (youtubeImportBtn) {
+    youtubeImportBtn.addEventListener('click', openYoutubeImportModal);
+  }
 
   // Close modal buttons
   document.getElementById('closeImportModal').addEventListener('click', closeImportModal);

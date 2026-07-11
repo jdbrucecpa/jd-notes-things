@@ -103,6 +103,7 @@
         <div class="titlebar-submenu" id="submenu-file">
           <button class="titlebar-dropdown-item" id="menuNewMeeting">New Meeting</button>
           <button class="titlebar-dropdown-item" id="menuImport">Import Transcript...</button>
+          <button class="titlebar-dropdown-item" id="menuImportYouTube">Import from YouTube...</button>
           <button class="titlebar-dropdown-item" id="menuExportTranscript">Export Transcript...</button>
           <div class="titlebar-dropdown-divider"></div>
           <button class="titlebar-dropdown-item" id="menuSettings">Settings</button>
@@ -342,6 +343,14 @@
         <button class="toolbar-icon-btn" id="importBtn" title="Import Transcripts">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </svg>
+        </button>
+
+        <!-- Import from YouTube Button -->
+        <button class="toolbar-icon-btn" id="youtubeImportBtn" title="Import from YouTube">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M23 12s0-3.5-.45-5.17a2.6 2.6 0 00-1.83-1.84C19.05 4.55 12 4.55 12 4.55s-7.05 0-8.72.44a2.6 2.6 0 00-1.83 1.84C1 8.5 1 12 1 12s0 3.5.45 5.17a2.6 2.6 0 001.83 1.84c1.67.44 8.72.44 8.72.44s7.05 0 8.72-.44a2.6 2.6 0 001.83-1.84C23 15.5 23 12 23 12z" stroke="currentColor" stroke-width="2" fill="none"/>
+            <path d="M9.75 15.5l6-3.5-6-3.5v7z" fill="currentColor"/>
           </svg>
         </button>
 
@@ -792,6 +801,29 @@
         <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px;">
           <button class="btn-secondary" id="cancelSaveViewBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Cancel</button>
           <button class="btn-primary" id="confirmSaveViewBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import from YouTube Modal -->
+    <div class="modal-overlay" id="youtubeImportModal" style="display: none;">
+      <div class="modal-content" style="max-width: 480px;">
+        <div class="modal-header">
+          <h2>Import from YouTube</h2>
+          <button class="modal-close" id="closeYoutubeImportModal">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom: 12px;">Paste a YouTube video URL. The audio is downloaded, transcribed, and summarized like a recorded meeting.</p>
+          <input type="text" id="youtubeUrlInput" class="modal-input" placeholder="https://www.youtube.com/watch?v=..." style="width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 14px; background: var(--bg-primary); color: var(--text-primary);">
+          <div id="youtubeUrlError" style="display: none; color: var(--danger-color, #d33); font-size: 13px; margin-top: 8px;"></div>
+        </div>
+        <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px;">
+          <button class="btn-secondary" id="cancelYoutubeImportBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Cancel</button>
+          <button class="btn-primary" id="confirmYoutubeImportBtn" style="padding: 8px 16px; border-radius: 6px; cursor: pointer;">Import</button>
         </div>
       </div>
     </div>
