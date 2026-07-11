@@ -195,6 +195,14 @@ const importAudioFileSchema = z.object({
   options: z.object({}).passthrough().optional(),
 });
 
+const youtubeImportSchema = z.object({
+  url: z
+    .string()
+    .min(1, 'URL cannot be empty')
+    .max(2048, 'URL is too long')
+    .regex(/youtu\.?be/i, 'Must be a YouTube URL'),
+});
+
 // ===================================================
 // Google Auth Schemas
 // ===================================================
@@ -523,6 +531,7 @@ module.exports = {
   importBatchSchema,
   importTranscribeAudioSchema,
   importAudioFileSchema,
+  youtubeImportSchema,
   // Widget schemas
   widgetStartRecordingSchema,
   widgetToggleAlwaysOnTopSchema,
