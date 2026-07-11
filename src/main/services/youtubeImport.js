@@ -101,6 +101,84 @@ function mapMetadataToMeetingFields(json = {}) {
   };
 }
 
+/**
+ * Run yt-dlp with the injected spawn, buffering stdout/stderr.
+ * Resolves { stdout, stderr, code }; rejects on spawn 'error' (ENOENT etc).
+ * onLine (optional) is called per stdout line for progress parsing.
+ */
+function runYtDlp(spawn, args, { onLine } = {}) {
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawn('yt-dlp', args, { windowsHide: true });
+    } catch (err) {
+      reject(err);
+      return;
+    }
+    let stdout = '';
+    let stderr = '';
+    let buffer = '';
+    child.on('error', reject); // ENOENT → binary missing
+    child.stdout.on('data', chunk => {
+      const s = chunk.toString();
+      stdout += s;
+      if (onLine) {
+        buffer += s;
+        let idx;
+        while ((idx = buffer.indexOf('\n')) !== -1) {
+          onLine(buffer.slice(0, idx));
+          buffer = buffer.slice(idx + 1);
+        }
+      }
+    });
+    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    child.on('close', code => resolve({ stdout, stderr, code }));
+  });
+}
+
+/** Keep the last ~500 chars of stderr for a readable toast. */
+function stderrTail(stderr) {
+  const t = (stderr || '').trim();
+  return t.length > 500 ? t.slice(-500) : t;
+}
+
+/**
+ * @param {Object} deps
+ * @param {Function} deps.spawn - child_process.spawn
+ * @param {Function} deps.fileExists - (path) => boolean
+ * @param {string} deps.recordingsDir
+ * @param {Function} [deps.log] - (msg) => void
+ * @param {Function} [deps.onProgress] - (percent:number, message:string) => void
+ */
+function createYoutubeImporter(deps) {
+  const spawn = deps.spawn;
+
+  async function checkBinary() {
+    try {
+      const { code } = await runYtDlp(spawn, ['--version']);
+      return code === 0;
+    } catch {
+      return false; // ENOENT — not installed / not on PATH
+    }
+  }
+
+  async function fetchMetadata(videoId) {
+    const { stdout, stderr, code } = await runYtDlp(spawn, buildMetadataArgs(videoId));
+    if (code !== 0) {
+      throw new Error(`yt-dlp metadata failed: ${stderrTail(stderr) || 'unknown error'}`);
+    }
+    let json;
+    try {
+      json = JSON.parse(stdout.trim().split('\n')[0]);
+    } catch {
+      throw new Error('yt-dlp returned unparseable metadata JSON');
+    }
+    return mapMetadataToMeetingFields(json);
+  }
+
+  return { checkBinary, fetchMetadata };
+}
+
 module.exports = {
   parseVideoId,
   canonicalUrl,
@@ -108,4 +186,5 @@ module.exports = {
   buildDownloadArgs,
   parseDownloadProgress,
   mapMetadataToMeetingFields,
+  createYoutubeImporter,
 };

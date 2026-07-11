@@ -1,11 +1,38 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { EventEmitter } from 'events';
 import {
   parseVideoId,
   buildMetadataArgs,
   buildDownloadArgs,
   parseDownloadProgress,
   mapMetadataToMeetingFields,
+  createYoutubeImporter,
 } from '../../src/main/services/youtubeImport.js';
+
+// Minimal fake child: stdout/stderr are EventEmitters, plus a close event.
+function fakeChild({ stdout = '', stderr = '', code = 0, error = null } = {}) {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  process.nextTick(() => {
+    if (error) { child.emit('error', error); return; }
+    if (stdout) child.stdout.emit('data', Buffer.from(stdout));
+    if (stderr) child.stderr.emit('data', Buffer.from(stderr));
+    child.emit('close', code);
+  });
+  return child;
+}
+
+function makeImporter(spawnImpl, overrides = {}) {
+  return createYoutubeImporter({
+    spawn: spawnImpl,
+    fileExists: () => true,
+    recordingsDir: 'C:/rec',
+    log: () => {},
+    onProgress: () => {},
+    ...overrides,
+  });
+}
 
 describe('parseVideoId', () => {
   it('parses watch?v= URLs', () => {
@@ -104,5 +131,40 @@ describe('mapMetadataToMeetingFields', () => {
     expect(out.title).toBe('YouTube Video');
     expect(Number.isNaN(Date.parse(out.date))).toBe(false);
     expect(out.durationSec).toBeNull();
+  });
+});
+
+describe('checkBinary', () => {
+  it('resolves true when yt-dlp --version exits 0', async () => {
+    const spawn = vi.fn(() => fakeChild({ stdout: '2026.07.01\n', code: 0 }));
+    const yt = makeImporter(spawn);
+    await expect(yt.checkBinary()).resolves.toBe(true);
+    expect(spawn).toHaveBeenCalledWith('yt-dlp', ['--version'], expect.any(Object));
+  });
+  it('resolves false when spawn errors (binary missing)', async () => {
+    const spawn = vi.fn(() => fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }));
+    const yt = makeImporter(spawn);
+    await expect(yt.checkBinary()).resolves.toBe(false);
+  });
+});
+
+describe('fetchMetadata', () => {
+  it('spawns dump-json and returns mapped fields', async () => {
+    const json = JSON.stringify({ id: 'dQw4w9WgXcQ', title: 'T', upload_date: '20260710', duration: 5 });
+    const spawn = vi.fn(() => fakeChild({ stdout: json, code: 0 }));
+    const yt = makeImporter(spawn);
+    const meta = await yt.fetchMetadata('dQw4w9WgXcQ');
+    expect(spawn).toHaveBeenCalledWith(
+      'yt-dlp',
+      ['--dump-json', '--no-download', '--no-playlist', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'],
+      expect.any(Object)
+    );
+    expect(meta.title).toBe('T');
+    expect(meta.date).toBe('2026-07-10T00:00:00.000Z');
+  });
+  it('rejects with the stderr tail on non-zero exit', async () => {
+    const spawn = vi.fn(() => fakeChild({ stderr: 'ERROR: Private video', code: 1 }));
+    const yt = makeImporter(spawn);
+    await expect(yt.fetchMetadata('dQw4w9WgXcQ')).rejects.toThrow(/Private video/);
   });
 });
