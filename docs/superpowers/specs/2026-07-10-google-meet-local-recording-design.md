@@ -80,10 +80,12 @@ recording starts only when JD clicks the widget button.
 
 ### 2. Lifecycle rules for `google-meet`
 
-- `meeting-closed` (2 consecutive missed polls) still fires and still clears
-  detection state / hides the widget — but the main.js handler must NOT
-  auto-stop an active recording when the meeting's platform is `google-meet`.
-  Tab-switching makes title absence meaningless for Meet.
+- `meeting-closed` (2 consecutive missed polls + immediate re-probe) still
+  fires and still clears detection state / hides the widget. SUPERSEDED by the
+  REVISED decision block above: window-absent closes now resolve a stop for
+  ALL platforms including google-meet, gated by the 10s countdown
+  confirmation dialog (`requiresConfirmation: true` from the resolver) rather
+  than being suppressed.
 - While a recording is active, re-detection of the same `windowId` must not
   spam the widget (existing `_meetingDetected` flag semantics; verify the
   hide/re-show path keeps the recording UI state coherent when the title
