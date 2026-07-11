@@ -2522,11 +2522,18 @@ async function initSDK() {
     // window), which the v1.4.6 logic conflated and would wrongly stop.
     const sdkWindowId = data.windowId;
     const detectedWindowId = detectedMeeting?.window?.id;
+    // Google Meet lifecycle: LocalProvider tags a browser-exit backstop close
+    // with reason 'browser-exit'; a plain window-absence close (tab switch) has
+    // no reason. The resolver uses platform + reason to keep a Meet recording
+    // running across tab switches and stop it only on a full browser exit.
+    const detectedPlatform = detectedMeeting?.window?.platform;
 
     const decision = resolveMeetingClosedTarget({
       sdkWindowId,
       detectedWindowId,
       activeRecordingKeys: Object.keys(recordingManager.getActiveRecordings()),
+      platform: detectedPlatform,
+      reason: data.reason,
     });
 
     console.log(

@@ -41,6 +41,13 @@
  * @param {string[]} args.activeRecordingKeys
  *   `Object.keys(activeRecordings.getAll())` — recording keys currently
  *   tracked by the recording registry.
+ * @param {string|undefined} [args.platform]
+ *   `detectedMeeting?.window?.platform`. When `'google-meet'`, window absence
+ *   is a tab switch, not a meeting end, so no recording is auto-stopped.
+ * @param {string|undefined} [args.reason]
+ *   Provider-supplied close reason. LocalProvider sets `'browser-exit'` when the
+ *   browser process hosting a Meet recording fully exits (the one automatic end
+ *   signal for Meet). Absent for ordinary window-absence closes.
  *
  * @returns {{
  *   recordingToStop: string|null,
@@ -52,7 +59,52 @@
  *     meeting actually closed (so detection state should reset)
  *   - `reason`: short tag for diagnostic logging
  */
-function resolveMeetingClosedTarget({ sdkWindowId, detectedWindowId, activeRecordingKeys }) {
+function resolveMeetingClosedTarget({
+  sdkWindowId,
+  detectedWindowId,
+  activeRecordingKeys,
+  platform,
+  reason,
+}) {
+  // 0a. Google Meet browser-exit backstop (LocalProvider). Meet runs in a
+  //     browser tab whose title vanishes on a tab switch, so window absence can
+  //     never mean "meeting ended". The sole automatic end signal is the host
+  //     browser process fully exiting, which LocalProvider reports as
+  //     reason === 'browser-exit'. Stop the sole active recording even if
+  //     detection state was already cleared by an earlier window-absence close
+  //     (a tab switch before the browser closed) — which would otherwise leave
+  //     detectedWindowId null and fall through to 'unrelated-window-closed'.
+  if (reason === 'browser-exit') {
+    if (activeRecordingKeys.length === 1) {
+      return {
+        recordingToStop: activeRecordingKeys[0],
+        shouldClearDetectedMeeting: true,
+        reason: 'browser-exit',
+      };
+    }
+    return {
+      recordingToStop: null,
+      shouldClearDetectedMeeting: true,
+      reason:
+        activeRecordingKeys.length === 0
+          ? 'browser-exit-no-active-recordings'
+          : 'browser-exit-multiple-active-recordings',
+    };
+  }
+
+  // 0b. Google Meet window-absence (LocalProvider). The user switched tabs — the
+  //     "Meet - …" title dropped out of the window list but the call continues.
+  //     Never auto-stop a Meet recording on window absence; only a browser exit
+  //     (0a) or a manual stop ends it. Detection state still clears so the widget
+  //     hides when the Meet tab goes away.
+  if (platform === 'google-meet') {
+    return {
+      recordingToStop: null,
+      shouldClearDetectedMeeting: true,
+      reason: 'google-meet-window-absent',
+    };
+  }
+
   // 1. Direct match: the SDK windowId is itself a tracked recording key.
   //    Auto-detect / createMeetingNoteAndRecord path.
   if (sdkWindowId && activeRecordingKeys.includes(sdkWindowId)) {

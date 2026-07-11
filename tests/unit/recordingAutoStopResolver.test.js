@@ -153,4 +153,70 @@ describe('resolveMeetingClosedTarget', () => {
       expect(result.reason).toBe('unrelated-window-closed');
     });
   });
+
+  describe('Google Meet lifecycle', () => {
+    it('never stops a Meet recording on window absence (tab switch), but clears detection', () => {
+      const result = resolveMeetingClosedTarget({
+        sdkWindowId: 'chrome-1234',
+        detectedWindowId: 'chrome-1234',
+        activeRecordingKeys: ['C:\\rec\\recording-x.mp3'],
+        platform: 'google-meet',
+        reason: undefined,
+      });
+      expect(result.recordingToStop).toBeNull();
+      expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.reason).toBe('google-meet-window-absent');
+    });
+
+    it('stops the sole recording on a browser-exit backstop even if detection was already cleared', () => {
+      const result = resolveMeetingClosedTarget({
+        sdkWindowId: 'browser-1234',
+        detectedWindowId: undefined, // an earlier tab-switch close already cleared detection
+        activeRecordingKeys: ['C:\\rec\\recording-x.mp3'],
+        platform: undefined,
+        reason: 'browser-exit',
+      });
+      expect(result.recordingToStop).toBe('C:\\rec\\recording-x.mp3');
+      expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.reason).toBe('browser-exit');
+    });
+
+    it('browser-exit with no active recordings clears detection but stops nothing', () => {
+      const result = resolveMeetingClosedTarget({
+        sdkWindowId: 'browser-1234',
+        detectedWindowId: undefined,
+        activeRecordingKeys: [],
+        platform: undefined,
+        reason: 'browser-exit',
+      });
+      expect(result.recordingToStop).toBeNull();
+      expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.reason).toBe('browser-exit-no-active-recordings');
+    });
+
+    it('browser-exit with multiple active recordings does not risk stopping the wrong one', () => {
+      const result = resolveMeetingClosedTarget({
+        sdkWindowId: 'browser-1234',
+        detectedWindowId: undefined,
+        activeRecordingKeys: ['a.mp3', 'b.mp3'],
+        platform: undefined,
+        reason: 'browser-exit',
+      });
+      expect(result.recordingToStop).toBeNull();
+      expect(result.shouldClearDetectedMeeting).toBe(true);
+      expect(result.reason).toBe('browser-exit-multiple-active-recordings');
+    });
+
+    it('does not affect Zoom/Teams: a direct match still stops with platform passed through', () => {
+      const result = resolveMeetingClosedTarget({
+        sdkWindowId: 'zoom-99',
+        detectedWindowId: 'zoom-99',
+        activeRecordingKeys: ['zoom-99'],
+        platform: 'zoom',
+        reason: undefined,
+      });
+      expect(result.recordingToStop).toBe('zoom-99');
+      expect(result.reason).toBe('direct-match');
+    });
+  });
 });
