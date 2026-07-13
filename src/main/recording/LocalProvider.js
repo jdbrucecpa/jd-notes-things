@@ -85,6 +85,31 @@ Get-Process | ForEach-Object { $procs[[int]$_.Id] = $_.ProcessName }
 `;
 
 /**
+ * Parse the window-enumeration script's stdout into window descriptors.
+ *
+ * Windows PowerShell 5.1's ConvertTo-Json emits C0 control characters other
+ * than \b \f \n \r \t RAW inside JSON string literals (seen in the wild: a
+ * BEL U+0007 in a Chrome tab title), which JSON.parse rejects with "Bad
+ * control character in string literal". Strip those before parsing — \n \r \t
+ * are kept because any raw occurrence is JSON structural whitespace (string
+ * values have them escaped).
+ *
+ * @param {string} stdout - raw stdout from the PowerShell window enum script
+ * @returns {Array<{processName: string, title: string, pid: number}>}
+ */
+function parseWindowEnumOutput(stdout) {
+  // eslint-disable-next-line no-control-regex
+  const raw = JSON.parse(stdout.trim().replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, ''));
+  // PowerShell returns an object (not array) when there is exactly one result
+  const items = Array.isArray(raw) ? raw : [raw];
+  return items.map(item => ({
+    processName: (item.ProcessName || '').toLowerCase(),
+    title: item.MainWindowTitle || '',
+    pid: item.Id || 0,
+  }));
+}
+
+/**
  * LocalProvider — meeting detection via PowerShell window polling + audio
  * capture via FFmpeg WASAPI loopback.
  *
@@ -575,15 +600,7 @@ class LocalProvider extends RecordingProvider {
         }
 
         try {
-          const raw = JSON.parse(stdout.trim());
-          // PowerShell returns an object (not array) when there is exactly one result
-          const items = Array.isArray(raw) ? raw : [raw];
-          const windows = items.map(item => ({
-            processName: (item.ProcessName || '').toLowerCase(),
-            title: item.MainWindowTitle || '',
-            pid: item.Id || 0,
-          }));
-          resolve(windows);
+          resolve(parseWindowEnumOutput(stdout));
         } catch (parseErr) {
           reject(new Error(`PowerShell JSON parse failed: ${parseErr.message}`));
         }
@@ -911,4 +928,4 @@ class LocalProvider extends RecordingProvider {
   }
 }
 
-module.exports = { LocalProvider };
+module.exports = { LocalProvider, parseWindowEnumOutput };

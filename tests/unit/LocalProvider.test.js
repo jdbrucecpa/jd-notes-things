@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'events';
-import { LocalProvider } from '../../src/main/recording/LocalProvider.js';
+import { LocalProvider, parseWindowEnumOutput } from '../../src/main/recording/LocalProvider.js';
 
 describe('LocalProvider', () => {
   let provider;
@@ -101,6 +101,63 @@ describe('LocalProvider', () => {
       expect(
         provider._parseMeetingFromTitle('Standup | Microsoft Teams', 'ms-teams.exe').platform
       ).toBe('teams');
+    });
+  });
+
+  // Regression: Windows PowerShell 5.1's ConvertTo-Json emits C0 control
+  // characters other than \b \f \n \r \t RAW into JSON string literals (seen
+  // in the wild: a BEL U+0007 in a Chrome tab title), which JSON.parse rejects
+  // ("Bad control character in string literal"). parseWindowEnumOutput must
+  // tolerate that instead of failing every poll.
+  describe('parseWindowEnumOutput', () => {
+    it('parses a clean multi-window JSON array', () => {
+      const out = JSON.stringify([
+        { ProcessName: 'zoom', MainWindowTitle: 'Zoom Meeting', Id: 9864 },
+        { ProcessName: 'chrome', MainWindowTitle: 'Inbox - Gmail', Id: 8580 },
+      ]);
+      expect(parseWindowEnumOutput(out)).toEqual([
+        { processName: 'zoom', title: 'Zoom Meeting', pid: 9864 },
+        { processName: 'chrome', title: 'Inbox - Gmail', pid: 8580 },
+      ]);
+    });
+
+    it('wraps the single-object form PowerShell emits for exactly one result', () => {
+      const out = JSON.stringify({ ProcessName: 'zoom', MainWindowTitle: 'Zoom Meeting', Id: 1 });
+      expect(parseWindowEnumOutput(out)).toEqual([
+        { processName: 'zoom', title: 'Zoom Meeting', pid: 1 },
+      ]);
+    });
+
+    it('survives a raw BEL control character inside a title string', () => {
+      // Mimics real ConvertTo-Json pretty-printed output with the unescaped BEL
+      const out = [
+        '[',
+        '    {',
+        '        "ProcessName":  "chrome",',
+        '        "MainWindowTitle":  "Sign In \u0007 Max. your best interest. - Google Chrome",',
+        '        "Id":  8580',
+        '    },',
+        '    {',
+        '        "ProcessName":  "zoom",',
+        '        "MainWindowTitle":  "Zoom Meeting",',
+        '        "Id":  9864',
+        '    }',
+        ']',
+      ].join('\r\n');
+      const windows = parseWindowEnumOutput(out);
+      expect(windows).toHaveLength(2);
+      expect(windows[0].title).toBe('Sign In  Max. your best interest. - Google Chrome');
+      expect(windows[1]).toEqual({ processName: 'zoom', title: 'Zoom Meeting', pid: 9864 });
+    });
+
+    it('strips other raw C0 controls but preserves escaped ones and structure', () => {
+      const out = '[{"ProcessName":"app","MainWindowTitle":"a\u0001b\\tc","Id":5}]';
+      expect(parseWindowEnumOutput(out)).toEqual([{ processName: 'app', title: 'ab\tc', pid: 5 }]);
+    });
+
+    it('defaults missing fields (null ProcessName from a dead pid)', () => {
+      const out = JSON.stringify([{ ProcessName: null, MainWindowTitle: null, Id: null }]);
+      expect(parseWindowEnumOutput(out)).toEqual([{ processName: '', title: '', pid: 0 }]);
     });
   });
 
