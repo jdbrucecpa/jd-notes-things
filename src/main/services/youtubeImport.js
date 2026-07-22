@@ -2,7 +2,10 @@
  * YouTube import service (spec docs/superpowers/specs/2026-07-10-youtube-import-design.md).
  *
  * Dependency-injected + unit-testable (same pattern as correctionReembed.js).
- * Shells out to `yt-dlp` from PATH (same convention as ffmpeg — no bundling).
+ * Shells out to `yt-dlp`, resolved once per importer: PATH first, then WinGet
+ * install locations. The packaged (Squirrel) app can inherit a stale PATH that
+ * predates a winget install — same failure class that forced bundling FFmpeg in
+ * v2.0.1 — so PATH alone is not trusted.
  *
  * SECURITY: the raw user URL is NEVER handed to yt-dlp. parseVideoId extracts an
  * 11-char id; every yt-dlp invocation is built from a canonical
@@ -12,6 +15,7 @@
  */
 
 const path = require('path');
+const fs = require('fs');
 
 // YouTube ids are exactly 11 chars of [A-Za-z0-9_-].
 const VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
@@ -104,15 +108,47 @@ function mapMetadataToMeetingFields(json = {}) {
 }
 
 /**
- * Run yt-dlp with the injected spawn, buffering stdout/stderr.
+ * Enumerate WinGet-installed yt-dlp locations, in preference order:
+ *   1. %LOCALAPPDATA%\Microsoft\WinGet\Links\yt-dlp.exe (stable shim)
+ *   2. %LOCALAPPDATA%\Microsoft\WinGet\Packages\yt-dlp.yt-dlp_*\yt-dlp.exe
+ * Only paths whose exe actually exists are returned.
+ * @param {Object} env - process.env (or a test stand-in)
+ * @param {{fileExists:Function, listDir:Function}} io
+ * @returns {string[]}
+ */
+function winGetCandidates(env, { fileExists, listDir }) {
+  const candidates = [];
+  const localAppData = env && env.LOCALAPPDATA;
+  if (!localAppData) return candidates;
+  const wingetRoot = path.join(localAppData, 'Microsoft', 'WinGet');
+  const linksExe = path.join(wingetRoot, 'Links', 'yt-dlp.exe');
+  if (fileExists(linksExe)) candidates.push(linksExe);
+  const packagesDir = path.join(wingetRoot, 'Packages');
+  let entries;
+  try {
+    entries = listDir(packagesDir) || [];
+  } catch {
+    entries = [];
+  }
+  for (const entry of entries) {
+    if (entry.startsWith('yt-dlp.yt-dlp_')) {
+      const exe = path.join(packagesDir, entry, 'yt-dlp.exe');
+      if (fileExists(exe)) candidates.push(exe);
+    }
+  }
+  return candidates;
+}
+
+/**
+ * Run yt-dlp (at `binary`) with the injected spawn, buffering stdout/stderr.
  * Resolves { stdout, stderr, code }; rejects on spawn 'error' (ENOENT etc).
  * onLine (optional) is called per stdout line for progress parsing.
  */
-function runYtDlp(spawn, args, { onLine } = {}) {
+function runYtDlp(spawn, binary, args, { onLine } = {}) {
   return new Promise((resolve, reject) => {
     let child;
     try {
-      child = spawn('yt-dlp', args, { windowsHide: true });
+      child = spawn(binary, args, { windowsHide: true });
     } catch (err) {
       reject(err);
       return;
@@ -149,25 +185,62 @@ function stderrTail(stderr) {
  * @param {Function} deps.spawn - child_process.spawn
  * @param {Function} deps.fileExists - (path) => boolean
  * @param {string} deps.recordingsDir
+ * @param {Object} [deps.env] - process.env stand-in (default: process.env)
+ * @param {Function} [deps.listDir] - (dir) => string[] (default: fs.readdirSync)
  * @param {Function} [deps.log] - (msg) => void
  * @param {Function} [deps.onProgress] - (percent:number, message:string) => void
  */
 function createYoutubeImporter(deps) {
   const spawn = deps.spawn;
+  const fileExists = deps.fileExists;
+  const env = deps.env || process.env;
+  const listDir = deps.listDir || (dir => fs.readdirSync(dir));
   const log = deps.log || (() => {});
   const onProgress = deps.onProgress || (() => {});
 
-  async function checkBinary() {
+  // Resolved yt-dlp invocation target. Bare name until resolveBinary() runs;
+  // undefined sentinel in `resolvedBinary` = not yet probed, null = not found.
+  let binaryPath = 'yt-dlp';
+  let resolvedBinary;
+
+  async function probeVersion(binary) {
     try {
-      const { code } = await runYtDlp(spawn, ['--version']);
+      const { code } = await runYtDlp(spawn, binary, ['--version']);
       return code === 0;
     } catch {
-      return false; // ENOENT — not installed / not on PATH
+      return false; // ENOENT — that candidate doesn't exist / isn't runnable
     }
   }
 
+  /**
+   * Find a working yt-dlp: bare name from PATH first, then WinGet locations.
+   * The packaged app can inherit a stale PATH missing WinGet entries, so a
+   * PATH miss falls through to the known install paths. Cached per importer.
+   * @returns {Promise<string|null>} the binary to spawn, or null if none work
+   */
+  async function resolveBinary() {
+    if (resolvedBinary !== undefined) return resolvedBinary;
+    const candidates = ['yt-dlp', ...winGetCandidates(env, { fileExists, listDir })];
+    for (const candidate of candidates) {
+      if (await probeVersion(candidate)) {
+        resolvedBinary = candidate;
+        binaryPath = candidate;
+        if (candidate !== 'yt-dlp') {
+          log(`[YouTubeImport] yt-dlp not on PATH; using ${candidate}`);
+        }
+        return resolvedBinary;
+      }
+    }
+    resolvedBinary = null;
+    return null;
+  }
+
+  async function checkBinary() {
+    return (await resolveBinary()) !== null;
+  }
+
   async function fetchMetadata(videoId) {
-    const { stdout, stderr, code } = await runYtDlp(spawn, buildMetadataArgs(videoId));
+    const { stdout, stderr, code } = await runYtDlp(spawn, binaryPath, buildMetadataArgs(videoId));
     if (code !== 0) {
       throw new Error(`yt-dlp metadata failed: ${stderrTail(stderr) || 'unknown error'}`);
     }
@@ -191,7 +264,7 @@ function createYoutubeImporter(deps) {
       const p = parseDownloadProgress(line);
       if (p) onProgress(15 + Math.round((p.percent / 100) * 75), `Downloading audio ${Math.round(p.percent)}%`);
     };
-    const { stderr, code } = await runYtDlp(spawn, buildDownloadArgs(videoId, outPath), { onLine });
+    const { stderr, code } = await runYtDlp(spawn, binaryPath, buildDownloadArgs(videoId, outPath), { onLine });
     if (code !== 0) {
       throw new Error(`yt-dlp download failed: ${stderrTail(stderr) || 'unknown error'}`);
     }
@@ -236,5 +309,6 @@ module.exports = {
   buildDownloadArgs,
   parseDownloadProgress,
   mapMetadataToMeetingFields,
+  winGetCandidates,
   createYoutubeImporter,
 };

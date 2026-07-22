@@ -7,6 +7,7 @@ import {
   buildDownloadArgs,
   parseDownloadProgress,
   mapMetadataToMeetingFields,
+  winGetCandidates,
   createYoutubeImporter,
 } from '../../src/main/services/youtubeImport.js';
 
@@ -31,9 +32,18 @@ function makeImporter(spawnImpl, overrides = {}) {
     recordingsDir: 'C:/rec',
     log: () => {},
     onProgress: () => {},
+    // Hermetic defaults: no WinGet fallback candidates unless a test opts in.
+    env: {},
+    listDir: () => [],
     ...overrides,
   });
 }
+
+const LOCALAPPDATA = 'C:\\Users\\jd\\AppData\\Local';
+const WINGET_LINKS_EXE = path.join(LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'yt-dlp.exe');
+const WINGET_PACKAGES_DIR = path.join(LOCALAPPDATA, 'Microsoft', 'WinGet', 'Packages');
+const WINGET_PKG_ENTRY = 'yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe';
+const WINGET_PKG_EXE = path.join(WINGET_PACKAGES_DIR, WINGET_PKG_ENTRY, 'yt-dlp.exe');
 
 describe('parseVideoId', () => {
   it('parses watch?v= URLs', () => {
@@ -132,6 +142,112 @@ describe('mapMetadataToMeetingFields', () => {
     expect(out.title).toBe('YouTube Video');
     expect(Number.isNaN(Date.parse(out.date))).toBe(false);
     expect(out.durationSec).toBeNull();
+  });
+});
+
+describe('winGetCandidates', () => {
+  it('returns the Links shim then Packages exes, in order', () => {
+    const out = winGetCandidates(
+      { LOCALAPPDATA },
+      {
+        fileExists: () => true,
+        listDir: (dir) => (dir === WINGET_PACKAGES_DIR ? [WINGET_PKG_ENTRY, 'Some.Other_Package'] : []),
+      }
+    );
+    expect(out).toEqual([WINGET_LINKS_EXE, WINGET_PKG_EXE]);
+  });
+  it('skips the Links shim when the file does not exist', () => {
+    const out = winGetCandidates(
+      { LOCALAPPDATA },
+      {
+        fileExists: (p) => p !== WINGET_LINKS_EXE,
+        listDir: () => [WINGET_PKG_ENTRY],
+      }
+    );
+    expect(out).toEqual([WINGET_PKG_EXE]);
+  });
+  it('only globs directories matching yt-dlp.yt-dlp_*', () => {
+    const out = winGetCandidates(
+      { LOCALAPPDATA },
+      {
+        fileExists: (p) => p !== WINGET_LINKS_EXE,
+        listDir: () => ['Gyan.FFmpeg_abc', 'yt-dlp.yt-dlp-nightly_xyz', WINGET_PKG_ENTRY],
+      }
+    );
+    expect(out).toEqual([WINGET_PKG_EXE]);
+  });
+  it('returns [] when LOCALAPPDATA is unset', () => {
+    expect(winGetCandidates({}, { fileExists: () => true, listDir: () => [WINGET_PKG_ENTRY] })).toEqual([]);
+  });
+  it('tolerates a listDir that throws', () => {
+    const out = winGetCandidates(
+      { LOCALAPPDATA },
+      { fileExists: (p) => p === WINGET_LINKS_EXE, listDir: () => { throw new Error('EPERM'); } }
+    );
+    expect(out).toEqual([WINGET_LINKS_EXE]);
+  });
+});
+
+describe('binary resolution fallback', () => {
+  // spawn that ENOENTs for the bare PATH name but works for a given absolute path.
+  function pathBrokenSpawn(workingBinary, behavior = {}) {
+    return vi.fn((cmd, args) => {
+      if (cmd !== workingBinary) {
+        return fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) });
+      }
+      const by = behavior[args[0]];
+      return fakeChild(by || { stdout: '2026.07.01\n', code: 0 });
+    });
+  }
+  const wingetOverrides = {
+    env: { LOCALAPPDATA },
+    fileExists: () => true,
+    listDir: (dir) => (dir === WINGET_PACKAGES_DIR ? [WINGET_PKG_ENTRY] : []),
+  };
+
+  it('checkBinary falls back to the WinGet Links exe when PATH spawn ENOENTs', async () => {
+    const spawn = pathBrokenSpawn(WINGET_LINKS_EXE);
+    const yt = makeImporter(spawn, wingetOverrides);
+    await expect(yt.checkBinary()).resolves.toBe(true);
+    // Tried PATH first, then the Links shim.
+    expect(spawn).toHaveBeenNthCalledWith(1, 'yt-dlp', ['--version'], expect.any(Object));
+    expect(spawn).toHaveBeenNthCalledWith(2, WINGET_LINKS_EXE, ['--version'], expect.any(Object));
+  });
+  it('falls through to the Packages glob when Links is absent', async () => {
+    const spawn = pathBrokenSpawn(WINGET_PKG_EXE);
+    const yt = makeImporter(spawn, {
+      ...wingetOverrides,
+      fileExists: (p) => p !== WINGET_LINKS_EXE,
+    });
+    await expect(yt.checkBinary()).resolves.toBe(true);
+    expect(spawn).toHaveBeenLastCalledWith(WINGET_PKG_EXE, ['--version'], expect.any(Object));
+  });
+  it('checkBinary is false when no candidate spawns', async () => {
+    const spawn = vi.fn(() => fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }));
+    const yt = makeImporter(spawn, wingetOverrides);
+    await expect(yt.checkBinary()).resolves.toBe(false);
+  });
+  it('caches resolution — repeated checks probe only once', async () => {
+    const spawn = vi.fn(() => fakeChild({ stdout: 'v\n', code: 0 }));
+    const yt = makeImporter(spawn);
+    await yt.checkBinary();
+    await yt.checkBinary();
+    expect(spawn).toHaveBeenCalledTimes(1);
+  });
+  it('importFromUrl completes end-to-end using the fallback binary', async () => {
+    const json = JSON.stringify({ id: 'dQw4w9WgXcQ', title: 'T', upload_date: '20260710' });
+    const spawn = pathBrokenSpawn(WINGET_LINKS_EXE, {
+      '--version': { stdout: 'v\n', code: 0 },
+      '--dump-json': { stdout: json, code: 0 },
+      '-x': { stdout: '[download] 100% of 5MiB\n', code: 0 },
+    });
+    const yt = makeImporter(spawn, wingetOverrides);
+    const res = await yt.importFromUrl('https://youtu.be/dQw4w9WgXcQ');
+    expect(res.meta.title).toBe('T');
+    // Every post-resolution invocation used the fallback path, never the bare name again.
+    const cmdsAfterProbe = spawn.mock.calls.slice(2).map(c => c[0]);
+    expect(cmdsAfterProbe.length).toBeGreaterThan(0);
+    expect(cmdsAfterProbe.every(c => c === WINGET_LINKS_EXE)).toBe(true);
   });
 });
 

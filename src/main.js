@@ -8460,6 +8460,8 @@ ipcMain.handle(
       const importer = createYoutubeImporter({
         spawn: require('child_process').spawn,
         fileExists: p => fsMod.existsSync(p),
+        env: process.env,
+        listDir: dir => fsMod.readdirSync(dir),
         recordingsDir: RECORDING_PATH,
         log: msg => console.log(msg),
         onProgress: (percent, message) => backgroundTaskManager.updateTask(taskId, percent, message),
