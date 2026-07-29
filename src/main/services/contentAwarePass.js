@@ -7,6 +7,10 @@
 const PROTECTED_METHODS = new Set(['track-anchor', 'user-correction', 'content-llm']);
 const REASSIGNABLE_CONFIDENCE = new Set(['low', 'none']);
 
+/** Placeholder identities from unmatched diarization ("Unknown Speaker (SPEAKER_01)",
+ *  raw "SPEAKER_01" labels) — never usable as the title's main participant. */
+const PLACEHOLDER_SPEAKER = /^(?:unknown speaker\b|speaker_\d+$)/i;
+
 /** Most-talkative speaker (by word count) who isn't the user. */
 function computeMainParticipant(transcript, user) {
   const counts = new Map(); // key = email||name → {name, email, words}
@@ -15,7 +19,7 @@ function computeMainParticipant(transcript, user) {
   for (const u of transcript || []) {
     const name = u.speakerName || null;
     const email = (u.speakerEmail || '').toLowerCase() || null;
-    if (!name) continue;
+    if (!name || PLACEHOLDER_SPEAKER.test(name)) continue;
     if (email && email === userEmail) continue;
     if (!email && name.toLowerCase() === userName) continue;
     const key = email || name.toLowerCase();
@@ -44,7 +48,11 @@ function composeTitle(company, participantName, topic) {
   const titledTopic = cleaned
     .split(' ')
     .slice(0, 6)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    // Short all-caps tokens (M&A, RIA, CPA) are acronyms — keep them; everything
+    // else is normalized to Title Case.
+    .map((w) =>
+      /^[A-Z][A-Z0-9&./-]{0,4}$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+    )
     .join(' ');
   return [company, participantName, titledTopic].filter(Boolean).join(' - ');
 }

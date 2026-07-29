@@ -264,8 +264,17 @@ class SpeakerMatcher {
             embedding: result.embedding ? Array.from(result.embedding) : undefined,
           };
 
-          // Only mark high/medium as "matched" — others can still be re-matched by later stages
-          if (result.confidence === 'high' || result.confidence === 'medium') {
+          // Only mark high/medium as "matched" — others can still be re-matched by later
+          // stages. Auto-enrolled counts too: the 1-unmatched-speaker + 1-unmatched-attendee
+          // pairing is trusted enough to create a permanent voice profile, so it must also
+          // hold the name for this meeting — otherwise the heuristic fallback sees the label
+          // as unmatched, finds the enrollee's email already assigned (empty pool), and
+          // overwrites the correct name with "Unknown Speaker (...)".
+          if (
+            result.confidence === 'high' ||
+            result.confidence === 'medium' ||
+            result.status === 'auto-enrolled'
+          ) {
             matchedSpeakers.add(result.speakerLabel);
           }
         }

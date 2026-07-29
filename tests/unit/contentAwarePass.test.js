@@ -22,6 +22,23 @@ describe('computeMainParticipant', () => {
     expect(computeMainParticipant([U('S0', 'JD Bruce', 'jd@x.com', 50)], { email: 'jd@x.com', name: 'JD Bruce' })).toBeNull();
     expect(computeMainParticipant([{ speaker: 'S0', text: 'hi', timestamp: 0 }], { email: 'jd@x.com', name: 'JD' })).toBeNull();
   });
+  it('skips placeholder names (Unknown Speaker, raw diarization labels)', () => {
+    const t = [
+      U('S0', 'JD Bruce', 'jd@x.com', 100),
+      U('S1', 'Unknown Speaker (SPEAKER_01)', null, 900),
+      U('S2', 'SPEAKER_02', null, 400),
+      U('S3', 'Kurt Anderson', 'kurt@x.com', 50),
+    ];
+    expect(computeMainParticipant(t, { email: 'jd@x.com', name: 'JD Bruce' }))
+      .toEqual({ name: 'Kurt Anderson', email: 'kurt@x.com' });
+  });
+  it('returns null when only placeholders and the user spoke (no rename with a fake name)', () => {
+    const t = [
+      U('S0', 'JD Bruce', 'jd@x.com', 100),
+      U('S1', 'Unknown Speaker (SPEAKER_01)', null, 900),
+    ];
+    expect(computeMainParticipant(t, { email: 'jd@x.com', name: 'JD Bruce' })).toBeNull();
+  });
 });
 
 describe('composeTitle', () => {
@@ -38,6 +55,12 @@ describe('composeTitle', () => {
   });
   it('returns null when the topic is only whitespace/control chars', () => {
     expect(composeTitle(null, 'Kurt', '\n\n')).toBeNull();
+  });
+  it('preserves short all-caps acronyms (M&A, RIA) instead of lowercasing them', () => {
+    expect(composeTitle(null, 'Paul Shepherd', 'M&A integration and leadership succession'))
+      .toBe('Paul Shepherd - M&A Integration And Leadership Succession');
+    expect(composeTitle(null, 'Kurt', 'starting an RIA practice'))
+      .toBe('Kurt - Starting An RIA Practice');
   });
 });
 

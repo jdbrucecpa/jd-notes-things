@@ -654,6 +654,67 @@ describe('SpeakerMatcher', () => {
       );
     });
 
+    it('auto-enrolled results survive the heuristic fallback (not clobbered as Unknown)', async () => {
+      // Regression: 'enrolled' confidence was not counted as matched, so the
+      // Step 5 heuristic saw the label as unmatched, found an empty participant
+      // pool (the enrollee's email was already assigned), and overwrote the
+      // correct name with "Unknown Speaker (...)".
+      const mockVoiceProfileService = {
+        identifySpeakers: vi.fn(async () => [
+          {
+            speakerLabel: 'SPEAKER_00',
+            profileId: 2,
+            contactName: 'JD Bruce',
+            contactEmail: 'jd@example.com',
+            confidence: 'high',
+            distance: 0.1,
+            status: 'auto-matched',
+          },
+          {
+            speakerLabel: 'SPEAKER_01',
+            profileId: 25,
+            contactName: 'Paul Shepherd',
+            contactEmail: 'paul@alman.com.au',
+            confidence: 'enrolled',
+            distance: 0.59,
+            status: 'auto-enrolled',
+          },
+        ]),
+      };
+
+      matcher.setVoiceProfileService(mockVoiceProfileService);
+
+      const transcript = makeTranscript([
+        { speaker: 'SPEAKER_00', text: 'Hello', timestamp: 1000 },
+        { speaker: 'SPEAKER_01', text: 'Hi there', timestamp: 5000 },
+      ]);
+
+      const result = await matcher.matchSpeakers(
+        transcript,
+        ['jd@example.com', 'paul@alman.com.au'],
+        {
+          audioFilePath: '/tmp/test.wav',
+          segments: [
+            { speakerLabel: 'SPEAKER_00', startMs: 0, endMs: 4000 },
+            { speakerLabel: 'SPEAKER_01', startMs: 4000, endMs: 8000 },
+          ],
+          meetingId: 'mtg-456',
+          calendarAttendees: [
+            { name: 'jd@example.com', email: 'jd@example.com' },
+            { name: 'paul@alman.com.au', email: 'paul@alman.com.au' },
+          ],
+          participantData: [
+            { name: 'jd@example.com', originalName: 'jd@example.com', email: 'jd@example.com', isHost: true },
+            { name: 'paul@alman.com.au', originalName: 'paul@alman.com.au', email: 'paul@alman.com.au' },
+          ],
+        }
+      );
+
+      expect(result['SPEAKER_01'].name).toBe('Paul Shepherd');
+      expect(result['SPEAKER_01'].email).toBe('paul@alman.com.au');
+      expect(result['SPEAKER_01'].method).toBe('voice-profile-auto-enrolled');
+    });
+
     it('gracefully skips when no voiceProfileService is set', async () => {
       // matcher does NOT have setVoiceProfileService called
       const transcript = makeTranscript([
