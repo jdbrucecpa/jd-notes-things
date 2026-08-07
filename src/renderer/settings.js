@@ -30,7 +30,7 @@ const DEFAULT_SETTINGS = {
   // Note: transcriptionProvider is stored in its own localStorage key, NOT here.
   // See renderer.js transcriptionProviderSelect handler.
   aiServiceUrl: 'http://localhost:8374', // v2.0: JD Audio Service endpoint
-  aiServicePath: 'C:\\Users\\brigh\\Documents\\code\\jd-audio-service', // v2.0: JD Audio Service directory
+  aiServicePath: '', // v2.0: JD Audio Service directory — empty until the user configures their install location
   localLLMUrl: 'http://localhost:11434', // v2.0: Local LLM server (Ollama or compatible)
 };
 
@@ -483,6 +483,7 @@ export function initializeSettingsUI() {
   if (aiServicePathInput) {
     aiServicePathInput.addEventListener('change', e => {
       const newPath = e.target.value.trim();
+      updateSetting('aiServicePath', newPath);
       if (window.electronAPI?.appUpdateSettings) {
         window.electronAPI.appUpdateSettings({ aiServicePath: newPath });
       }
@@ -1124,7 +1125,7 @@ export function initializeSettingsUI() {
       aiServiceUrlInput.value = currentSettings.aiServiceUrl || 'http://localhost:8374';
     }
     if (aiServicePathInput) {
-      aiServicePathInput.value = currentSettings.aiServicePath || 'C:\\Users\\brigh\\Documents\\code\\jd-audio-service';
+      aiServicePathInput.value = currentSettings.aiServicePath || '';
     }
     if (localLLMUrlInput) {
       localLLMUrlInput.value = currentSettings.localLLMUrl || 'http://localhost:11434';

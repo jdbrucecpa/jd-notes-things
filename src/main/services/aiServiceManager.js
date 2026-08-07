@@ -3,14 +3,15 @@ const path = require('path');
 const fs = require('fs');
 const log = require('electron-log');
 
-const DEFAULT_SERVICE_PATH = 'C:\\Users\\brigh\\Documents\\code\\jd-audio-service';
 const DEFAULT_SERVICE_URL = 'http://localhost:8374';
 const HEALTH_POLL_INTERVAL_MS = 500;
 const HEALTH_POLL_TIMEOUT_MS = 30000;
 
 class AIServiceManager {
   constructor() {
-    this.servicePath = DEFAULT_SERVICE_PATH;
+    // No default — auto-launch requires the user to configure the install
+    // location in Settings. A service already running at serviceUrl still works.
+    this.servicePath = null;
     this.serviceUrl = DEFAULT_SERVICE_URL;
     this._process = null;
   }
@@ -59,9 +60,18 @@ class AIServiceManager {
       return this._pollHealth();
     }
 
+    if (!this.servicePath) {
+      log.error(
+        '[AIService] No service path configured — set the JD Audio Service folder in Settings (AI Services tab), or switch to a cloud transcription provider'
+      );
+      return false;
+    }
+
     const batPath = path.join(this.servicePath, 'run-jd-audio-service.bat');
     if (!fs.existsSync(batPath)) {
-      log.error(`[AIService] Launch script not found: ${batPath}`);
+      log.error(
+        `[AIService] Launch script not found: ${batPath} — check the JD Audio Service path in Settings`
+      );
       return false;
     }
 

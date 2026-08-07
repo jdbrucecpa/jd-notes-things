@@ -30,6 +30,24 @@ describe('AIServiceManager', () => {
     expect(manager.getProcess()).toBeNull();
   });
 
+  it('starts with no service path configured', () => {
+    expect(manager.servicePath).toBeNull();
+  });
+
+  it('ensureRunning fails without spawning when no path is configured', async () => {
+    const { spawn } = await import('child_process');
+    manager.checkHealth = vi.fn(async () => false);
+    const result = await manager.ensureRunning();
+    expect(result).toBe(false);
+    expect(spawn).not.toHaveBeenCalled();
+  });
+
+  it('ensureRunning succeeds via health check even with no path configured', async () => {
+    manager.checkHealth = vi.fn(async () => true);
+    const result = await manager.ensureRunning();
+    expect(result).toBe(true);
+  });
+
   it('isRunning returns false when no process', () => {
     expect(manager.isRunning()).toBe(false);
   });

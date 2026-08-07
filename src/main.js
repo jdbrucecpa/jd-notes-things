@@ -9214,6 +9214,7 @@ ipcMain.handle(
 
     // v2.0: AI service URL for voice profile service
     if (updates.aiServiceUrl) {
+      appSettings.aiServiceUrl = updates.aiServiceUrl;
       if (voiceProfileService) {
         voiceProfileService.setAIServiceUrl(updates.aiServiceUrl);
       }
@@ -9221,6 +9222,7 @@ ipcMain.handle(
     }
 
     if (updates.aiServicePath) {
+      appSettings.aiServicePath = updates.aiServicePath;
       aiServiceManager.setServicePath(updates.aiServicePath);
     }
 
