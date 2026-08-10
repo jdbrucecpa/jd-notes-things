@@ -16,11 +16,17 @@ try {
  * Manages named pipes to stream PCM data to FFmpeg.
  */
 class WasapiCapture extends EventEmitter {
-  constructor() {
+  /**
+   * @param {object} [options]
+   * @param {string} [options.pipePrefix] — named-pipe name prefix. Tests pass a
+   *   unique prefix so they never collide with a live recording's pipes.
+   */
+  constructor({ pipePrefix = 'jdnotes_wasapi' } = {}) {
     super();
     this._recorder = null;
     this._pipeServer = null;
     this._pipeClient = null;
+    this._pipePrefix = pipePrefix;
     this.isCapturing = false;
 
     // Silence pacing. WASAPI output-loopback emits NO data while the device is
@@ -88,7 +94,7 @@ class WasapiCapture extends EventEmitter {
    * @returns {string}
    */
   _pipePath(index) {
-    return `\\\\.\\pipe\\jdnotes_wasapi_${index}`;
+    return `\\\\.\\pipe\\${this._pipePrefix}_${index}`;
   }
 
   /**

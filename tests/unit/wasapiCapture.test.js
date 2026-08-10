@@ -34,6 +34,11 @@ MockAudioRecorder.getDeviceFormat = vi.fn(() => ({
 
 const mockNativeModule = { AudioRecorder: MockAudioRecorder };
 
+// Unique pipe prefix so the suite never binds the production pipe names
+// (jdnotes_wasapi_N) — those are held by the real app while it's recording,
+// and colliding with them fails the test with EADDRINUSE.
+const TEST_PIPE_PREFIX = `jdnotes_test_${process.pid}`;
+
 describe('WasapiCapture', () => {
   beforeEach(() => {
     WasapiCapture._setNativeModule(mockNativeModule);
@@ -70,10 +75,15 @@ describe('WasapiCapture', () => {
   });
 
   describe('pipe path generation', () => {
-    it('generates deterministic pipe paths', () => {
+    it('generates deterministic pipe paths with the production prefix by default', () => {
       const capture = new WasapiCapture();
       expect(capture._pipePath(0)).toBe('\\\\.\\pipe\\jdnotes_wasapi_0');
       expect(capture._pipePath(1)).toBe('\\\\.\\pipe\\jdnotes_wasapi_1');
+    });
+
+    it('uses an injected pipe prefix', () => {
+      const capture = new WasapiCapture({ pipePrefix: TEST_PIPE_PREFIX });
+      expect(capture._pipePath(0)).toBe(`\\\\.\\pipe\\${TEST_PIPE_PREFIX}_0`);
     });
   });
 
@@ -81,7 +91,7 @@ describe('WasapiCapture', () => {
     let capture;
 
     beforeEach(() => {
-      capture = new WasapiCapture();
+      capture = new WasapiCapture({ pipePrefix: TEST_PIPE_PREFIX });
     });
 
     it('starts in stopped state', () => {
@@ -91,7 +101,7 @@ describe('WasapiCapture', () => {
     it('reports capturing after start', async () => {
       const result = await capture.start('device-1', 0);
 
-      expect(result.pipePath).toBe('\\\\.\\pipe\\jdnotes_wasapi_0');
+      expect(result.pipePath).toBe(`\\\\.\\pipe\\${TEST_PIPE_PREFIX}_0`);
       expect(result.sampleRate).toBe(48000);
       expect(result.channels).toBe(2);
       expect(capture.isCapturing).toBe(true);
