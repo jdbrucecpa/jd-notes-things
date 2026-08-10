@@ -72,4 +72,45 @@ describe('AIServiceManager', () => {
   it('shutdown is safe to call with no process', () => {
     expect(() => manager.shutdown()).not.toThrow();
   });
+
+  describe('lastError', () => {
+    it('starts with no error', () => {
+      expect(manager.lastError).toBeNull();
+    });
+
+    it('is set when no service path is configured', async () => {
+      manager.checkHealth = vi.fn(async () => false);
+      await manager.ensureRunning();
+      expect(manager.lastError).toMatch(/No service path configured/);
+    });
+
+    it('is set when the launch script does not exist', async () => {
+      manager.checkHealth = vi.fn(async () => false);
+      manager.setServicePath('C:\\definitely\\not\\a\\real\\dir');
+      await manager.ensureRunning();
+      expect(manager.lastError).toMatch(/Launch script not found/);
+    });
+
+    it('is cleared when the service is already healthy', async () => {
+      manager.lastError = 'stale error from a previous attempt';
+      manager.checkHealth = vi.fn(async () => true);
+      const result = await manager.ensureRunning();
+      expect(result).toBe(true);
+      expect(manager.lastError).toBeNull();
+    });
+
+    it('is set when health polling times out', async () => {
+      vi.useFakeTimers();
+      try {
+        manager.checkHealth = vi.fn(async () => false);
+        const promise = manager._pollHealth();
+        await vi.advanceTimersByTimeAsync(31000);
+        const result = await promise;
+        expect(result).toBe(false);
+        expect(manager.lastError).toMatch(/Timed out/);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
 });

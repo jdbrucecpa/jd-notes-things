@@ -15,6 +15,7 @@ import {
 } from './components/PatternTestingPanel.js';
 import { initializeTabs } from './utils/tabHelper.js';
 import { notifySuccess, notifyError, notifyInfo } from './utils/notificationHelper.js';
+import { reconcileAiServicePath } from './servicePathSync.js';
 
 
 // Default settings
@@ -469,7 +470,7 @@ export function initializeSettingsUI() {
           notifySuccess('JD Audio Service started');
           await checkAIServiceStatus();
         } else {
-          notifyError('Failed to start JD Audio Service: ' + (result.error || 'timeout'));
+          notifyError('Failed to start JD Audio Service: ' + (result.error || 'unknown error'));
         }
       } catch {
         notifyError('Failed to start JD Audio Service');
@@ -1126,6 +1127,27 @@ export function initializeSettingsUI() {
     }
     if (aiServicePathInput) {
       aiServicePathInput.value = currentSettings.aiServicePath || '';
+      // Reconcile with main process settings — pre-2.0.3 installs have the
+      // path in renderer localStorage only, but ensureRunning() reads main's
+      // app-settings.json. Main is the source of truth once it has a value.
+      if (window.electronAPI?.appGetSettings) {
+        window.electronAPI
+          .appGetSettings()
+          .then(result => {
+            if (!result.success) return;
+            const { action, path } = reconcileAiServicePath(
+              result.data?.aiServicePath,
+              currentSettings.aiServicePath
+            );
+            if (action === 'push' && window.electronAPI?.appUpdateSettings) {
+              window.electronAPI.appUpdateSettings({ aiServicePath: path });
+            } else if (action === 'pull') {
+              aiServicePathInput.value = path;
+              updateSetting('aiServicePath', path);
+            }
+          })
+          .catch(() => {});
+      }
     }
     if (localLLMUrlInput) {
       localLLMUrlInput.value = currentSettings.localLLMUrl || 'http://localhost:11434';

@@ -7286,7 +7286,11 @@ ipcMain.handle('aiService:health', async () => {
 ipcMain.handle('aiService:start', async () => {
   try {
     const healthy = await aiServiceManager.ensureRunning();
-    return { success: healthy, status: healthy ? 'connected' : 'failed' };
+    return {
+      success: healthy,
+      status: healthy ? 'connected' : 'failed',
+      error: healthy ? undefined : aiServiceManager.lastError || undefined,
+    };
   } catch (error) {
     return { success: false, error: error.message };
   }

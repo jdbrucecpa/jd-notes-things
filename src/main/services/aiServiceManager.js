@@ -14,6 +14,10 @@ class AIServiceManager {
     this.servicePath = null;
     this.serviceUrl = DEFAULT_SERVICE_URL;
     this._process = null;
+    // Why the most recent ensureRunning() failed — surfaced to the UI so the
+    // renderer doesn't have to invent a reason (it used to say "timeout" for
+    // every failure, including a missing service path).
+    this.lastError = null;
   }
 
   setServicePath(servicePath) {
@@ -52,6 +56,7 @@ class AIServiceManager {
   async ensureRunning() {
     if (await this.checkHealth()) {
       log.info('[AIService] Already running');
+      this.lastError = null;
       return true;
     }
 
@@ -61,17 +66,16 @@ class AIServiceManager {
     }
 
     if (!this.servicePath) {
-      log.error(
-        '[AIService] No service path configured — set the JD Audio Service folder in Settings (AI Services tab), or switch to a cloud transcription provider'
-      );
+      this.lastError =
+        'No service path configured — set the JD Audio Service folder in Settings (AI Services tab), or switch to a cloud transcription provider';
+      log.error(`[AIService] ${this.lastError}`);
       return false;
     }
 
     const batPath = path.join(this.servicePath, 'run-jd-audio-service.bat');
     if (!fs.existsSync(batPath)) {
-      log.error(
-        `[AIService] Launch script not found: ${batPath} — check the JD Audio Service path in Settings`
-      );
+      this.lastError = `Launch script not found: ${batPath} — check the JD Audio Service path in Settings`;
+      log.error(`[AIService] ${this.lastError}`);
       return false;
     }
 
@@ -106,6 +110,7 @@ class AIServiceManager {
       const interval = setInterval(async () => {
         if (Date.now() - start > HEALTH_POLL_TIMEOUT_MS) {
           clearInterval(interval);
+          this.lastError = 'Timed out waiting for the service to become healthy';
           log.error('[AIService] Timed out waiting for service to start');
           resolve(false);
           return;
@@ -113,6 +118,7 @@ class AIServiceManager {
         if (await this.checkHealth()) {
           clearInterval(interval);
           log.info('[AIService] Service is healthy');
+          this.lastError = null;
           resolve(true);
         }
       }, HEALTH_POLL_INTERVAL_MS);
