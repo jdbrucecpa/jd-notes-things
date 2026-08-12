@@ -2079,7 +2079,7 @@ app.whenReady().then(async () => {
 
       autoUpdater.on('error', error => {
         logger.main.error('[AutoUpdater] Error:', error);
-        sendUpdateState('error', { message: error?.message || 'Update failed' });
+        sendUpdateState('error', { message: friendlyUpdateErrorMessage(error) });
       });
 
       logger.main.info('[AutoUpdater] Auto-updater initialized successfully');
@@ -8876,6 +8876,24 @@ ipcMain.handle('settings:getAppVersion', async () => {
   };
 });
 
+/**
+ * Map raw autoUpdater errors to a short user-facing message. Squirrel.Windows
+ * errors are often full .NET stack traces (e.g. "Command failed: 4294967295
+ * System.AggregateException ... Remote release File is empty or corrupted"),
+ * which happens when update.electronjs.org serves a transiently poisoned
+ * cache — it resolves on its own, and update-electron-app retries hourly.
+ * Callers must still log the full error via logger.main.error.
+ */
+function friendlyUpdateErrorMessage(error) {
+  const raw = error?.message || '';
+  const isTransientServerError =
+    raw.includes('4294967295') || /remote release file is empty or corrupted/i.test(raw);
+  if (isTransientServerError) {
+    return 'Update check failed — will retry automatically. (The update server may be temporarily unavailable.)';
+  }
+  return 'Update check failed — will retry automatically.';
+}
+
 // Check for updates manually
 ipcMain.handle('settings:checkForUpdates', async () => {
   logger.main.info('[AutoUpdater] Manual update check requested');
@@ -8916,7 +8934,8 @@ ipcMain.handle('settings:checkForUpdates', async () => {
 
       const onError = error => {
         cleanup();
-        resolve({ success: false, message: error?.message || 'Update check failed' });
+        logger.main.error('[AutoUpdater] Manual update check error:', error);
+        resolve({ success: false, message: friendlyUpdateErrorMessage(error) });
       };
 
       const cleanup = () => {
