@@ -1,6 +1,6 @@
 // Downloads a pinned uv.exe into vendor/uv/ for bundling as an Electron
 // extra resource. Idempotent: skips when the pinned version is present.
-import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 
@@ -22,5 +22,13 @@ await pipeline(res.body, createWriteStream(zipPath));
 // Extract with PowerShell (no unzip dep on Windows)
 const { execSync } = await import('node:child_process');
 execSync(`powershell -NoProfile -Command "Expand-Archive -Force '${zipPath}' '${DIR}'"`);
+// Clean up archive and extra binaries; keep only uv.exe + VERSION
+unlinkSync(zipPath);
+const files = readdirSync(DIR);
+for (const f of files) {
+  if (f !== 'uv.exe' && f !== 'VERSION') {
+    unlinkSync(path.join(DIR, f));
+  }
+}
 writeFileSync(STAMP, UV_VERSION);
 console.log(`Fetched uv ${UV_VERSION} -> ${EXE}`);
