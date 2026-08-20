@@ -7,8 +7,9 @@
   "scripts": {
     "start": "electron-forge start",
     "start:trace": "cross-env ELECTRON_ENABLE_LOGGING=1 electron-forge start --trace-deprecation",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
+    "fetch:uv": "node scripts/fetch-uv.mjs",
+    "package": "npm run fetch:uv && electron-forge package",
+    "make": "npm run fetch:uv && electron-forge make",
     "publish": "electron-forge publish",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

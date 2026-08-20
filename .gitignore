@@ -94,6 +94,9 @@ typings/
 # Vite
 .vite/
 
+# Vendored binaries
+vendor/
+
 # Electron-Forge
 out/
 
