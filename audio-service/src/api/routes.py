@@ -78,13 +78,24 @@ def warmup(request: Request):
     mgr = get_model_manager(request)
 
     def _load_all():
-        from models.transcriber import Transcriber
-        from models.diarizer import Diarizer
-        from models.embedder import Embedder
         with _gpu_lock:
-            mgr.get_or_load("transcriber", lambda: Transcriber())
-            mgr.get_or_load("diarizer", lambda: Diarizer())
-            mgr.get_or_load("embedder", lambda: Embedder())
+            try:
+                from models.transcriber import Transcriber
+                mgr.get_or_load("transcriber", lambda: Transcriber())
+            except Exception:
+                logger.exception("Warmup failed loading transcriber")
+
+            try:
+                from models.diarizer import Diarizer
+                mgr.get_or_load("diarizer", lambda: Diarizer())
+            except Exception:
+                logger.exception("Warmup failed loading diarizer")
+
+            try:
+                from models.embedder import Embedder
+                mgr.get_or_load("embedder", lambda: Embedder())
+            except Exception:
+                logger.exception("Warmup failed loading embedder")
 
     threading.Thread(target=_load_all, daemon=True).start()
     return WarmupResponse(loading=["transcriber", "diarizer", "embedder"])
