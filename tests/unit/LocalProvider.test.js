@@ -511,4 +511,60 @@ describe('LocalProvider', () => {
       expect(provider._appCapture).toBeNull();
     });
   });
+  describe('_healWasapiDeviceIds', () => {
+    const present = [
+      { deviceId: 'new-gaming-id', name: 'Sonar - Gaming (Virtual)', isDefault: true },
+      { deviceId: 'mic-out-id', name: 'Sonar - Microphone (Virtual)', isDefault: false },
+    ];
+
+    beforeEach(() => {
+      provider._enumerateOutputDevices = vi.fn(async () => present);
+    });
+
+    it('re-resolves a stale deviceId by name, mirrors it into config, and emits', async () => {
+      provider.setAudioConfig([
+        { label: 'Mic', device: 'Sonar - Microphone (Virtual)', type: 'dshow', deviceId: null, volume: 100, enabled: true },
+        { label: 'System', device: 'Sonar - Gaming (Virtual)', type: 'wasapi', deviceId: 'stale-id', volume: 100, enabled: true },
+      ]);
+      const updated = vi.fn();
+      provider.on('audio-sources-updated', updated);
+
+      const enabled = [
+        { device: 'Sonar - Microphone (Virtual)', type: 'dshow', deviceId: null, volume: 100 },
+        { device: 'Sonar - Gaming (Virtual)', type: 'wasapi', deviceId: 'stale-id', volume: 100 },
+      ];
+      await provider._healWasapiDeviceIds(enabled);
+
+      expect(enabled[1].deviceId).toBe('new-gaming-id');
+      expect(provider._audioSources[1].deviceId).toBe('new-gaming-id');
+      expect(updated).toHaveBeenCalledWith(provider._audioSources);
+    });
+
+    it('keeps a still-valid deviceId and does not emit', async () => {
+      provider.setAudioConfig([
+        { label: 'System', device: 'Sonar - Gaming (Virtual)', type: 'wasapi', deviceId: 'new-gaming-id', volume: 100, enabled: true },
+      ]);
+      const updated = vi.fn();
+      provider.on('audio-sources-updated', updated);
+
+      const enabled = [{ device: 'Sonar - Gaming (Virtual)', type: 'wasapi', deviceId: 'new-gaming-id', volume: 100 }];
+      await provider._healWasapiDeviceIds(enabled);
+
+      expect(enabled[0].deviceId).toBe('new-gaming-id');
+      expect(updated).not.toHaveBeenCalled();
+    });
+
+    it('throws a clear error when the device is gone under both id and name', async () => {
+      const enabled = [{ device: 'Unplugged Headset', type: 'wasapi', deviceId: 'gone-id', volume: 100 }];
+      await expect(provider._healWasapiDeviceIds(enabled)).rejects.toThrow(
+        /Audio device "Unplugged Headset" not found/
+      );
+    });
+
+    it('skips enumeration entirely when no wasapi sources are enabled', async () => {
+      const enabled = [{ device: 'Some Mic', type: 'dshow', deviceId: null, volume: 100 }];
+      await expect(provider._healWasapiDeviceIds(enabled)).resolves.toBeUndefined();
+      expect(provider._enumerateOutputDevices).not.toHaveBeenCalled();
+    });
+  });
 });

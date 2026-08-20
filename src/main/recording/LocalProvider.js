@@ -6,6 +6,7 @@ const { buildFFmpegArgs } = require('./buildFFmpegArgs');
 const { WasapiCapture } = require('./WasapiCapture');
 const { AppLoopbackCapture } = require('./AppLoopbackCapture');
 const { getFfmpegPath } = require('./ffmpegPath');
+const { resolveWasapiDevice } = require('./resolveWasapiDevice');
 
 // Prefer electron-log in the app; fall back to console in tests / non-Electron.
 let log;
@@ -812,6 +813,55 @@ class LocalProvider extends RecordingProvider {
   }
 
   /**
+   * Validate the WASAPI sources' stored deviceIds against the devices present
+   * right now, re-resolving stale ids by device name (Windows regenerates
+   * endpoint GUIDs on driver updates/reinstalls). Mutates the passed sources
+   * in place, mirrors healed ids back into this._audioSources so the whole
+   * session uses them, and emits 'audio-sources-updated' so the host can
+   * persist the corrected config. Throws when a configured device is missing
+   * under both identities — recording from it is impossible.
+   *
+   * @param {Array<{device: string, type: string, deviceId: string|null}>} enabledSources
+   */
+  async _healWasapiDeviceIds(enabledSources) {
+    const wasapiSources = enabledSources.filter((s) => s.type === 'wasapi');
+    if (wasapiSources.length === 0) return;
+
+    const devices = await this._enumerateOutputDevices();
+    let healedAny = false;
+
+    for (const source of wasapiSources) {
+      const resolved = resolveWasapiDevice(devices, source);
+      if (!resolved) {
+        throw new Error(
+          `Audio device "${source.device}" not found — reselect it under Settings → Audio Sources`
+        );
+      }
+      if (resolved.healed) {
+        log.warn(
+          `[LocalProvider] Stale WASAPI deviceId for "${source.device}" — re-resolved by name ` +
+            `(${source.deviceId || 'none'} → ${resolved.deviceId})`
+        );
+        source.deviceId = resolved.deviceId;
+        const configured = this._audioSources.find(
+          (s) => s.type === 'wasapi' && s.device === source.device
+        );
+        if (configured) configured.deviceId = resolved.deviceId;
+        healedAny = true;
+      }
+    }
+
+    if (healedAny) {
+      this.emit('audio-sources-updated', this._audioSources);
+    }
+  }
+
+  /** Present WASAPI output devices. Seam for tests to stub. */
+  _enumerateOutputDevices() {
+    return WasapiCapture.getOutputDevices();
+  }
+
+  /**
    * Spawn FFmpeg to capture audio from configured sources to `outputPath`.
    * Supports both dshow (mic) and WASAPI (output device loopback) sources.
    * Falls back to single loopback device if no sources configured.
@@ -831,6 +881,8 @@ class LocalProvider extends RecordingProvider {
       }));
 
     if (enabledSources.length > 0) {
+      await this._healWasapiDeviceIds(enabledSources);
+
       // Start WASAPI captures for output device sources
       const resolvedSources = [];
       let pipeIndex = 0;

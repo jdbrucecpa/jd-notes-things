@@ -1787,6 +1787,22 @@ app.whenReady().then(async () => {
     aiServiceManager.setServiceUrl(appSettings.aiServiceUrl);
   }
 
+  // Auto-start the JD Audio Service at launch when a path is configured.
+  // ensureRunning() is otherwise lazy (first transcription or a manual click),
+  // and shutdown() kills the service on quit — so without this the service is
+  // down after every app restart. Fire-and-forget: the health poll can take up
+  // to 30s and must not block startup. Opt out with "aiServiceAutoStart": false.
+  if (appSettings.aiServicePath && appSettings.aiServiceAutoStart !== false) {
+    logger.main.info('[AIService] Auto-starting at launch...');
+    aiServiceManager.ensureRunning().then((healthy) => {
+      if (!healthy) {
+        logger.main.warn(
+          `[AIService] Launch auto-start failed: ${aiServiceManager.lastError || 'unknown'}`
+        );
+      }
+    });
+  }
+
   // Initialize the Recall.ai SDK
   await initSDK();
 
@@ -2534,6 +2550,14 @@ async function initSDK() {
     recordingProvider = new LocalProvider();
     recordingManager = new RecordingManager(recordingProvider);
     logger.main.info('[Recording] Using LocalProvider (FFmpeg + Window Monitoring)');
+
+    // Persist WASAPI deviceIds the provider healed at record-start (Windows
+    // regenerates endpoint GUIDs on audio-driver updates, stranding stored ids).
+    recordingProvider.on('audio-sources-updated', (sources) => {
+      appSettings.audioSources = sources;
+      saveAppSettings();
+      logger.main.info('[Recording] Saved re-resolved audio source deviceIds');
+    });
 
     // Initialize local provider
     try {
@@ -9301,6 +9325,22 @@ ipcMain.handle('audioDevices:test', async () => {
       RECORDING_PATH,
       `test-recording-${Date.now()}.mp3`
     );
+
+    // Heal stale WASAPI deviceIds by name before starting captures (endpoint
+    // GUIDs change on audio-driver updates; same logic as LocalProvider).
+    const { resolveWasapiDevice } = require('./main/recording/resolveWasapiDevice');
+    const presentDevices = await WasapiCapture.getOutputDevices();
+    for (const source of sources) {
+      if (source.type !== 'wasapi') continue;
+      const resolved = resolveWasapiDevice(presentDevices, source);
+      if (!resolved) {
+        return {
+          success: false,
+          error: `Audio device "${source.device}" not found — reselect it under Settings → Audio Sources`,
+        };
+      }
+      source.deviceId = resolved.deviceId;
+    }
 
     // Start WASAPI captures for output sources
     const wasapiCaptures = [];
