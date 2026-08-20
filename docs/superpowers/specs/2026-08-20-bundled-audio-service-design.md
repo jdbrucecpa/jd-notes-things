@@ -11,7 +11,7 @@ Today the service lives in a separate repo (`C:\Users\brigh\Documents\code\jd-au
 Constraints that shape the design:
 
 - The installed environment is ~5.2 GB (nightly cu128 PyTorch for the RTX 5090 dominates). It cannot ship inside the installer without making every auto-update a multi-GB download.
-- PyAnnote models are HuggingFace-gated and need an HF token on first download; they land in the shared HF cache (`%USERPROFILE%\.cache\huggingface`).
+- PyAnnote models are HuggingFace-gated and need an HF token on first download; they land in the service's own cache (`%APPDATA%\JDAudioService\models`, referenced as `JD_AUDIO_MODEL_DIR`).
 - Electron auto-updates replace the whole `app-X.Y.Z` folder, so anything that must survive updates lives outside it.
 
 ## Decisions (approved 2026-08-20)
@@ -44,7 +44,7 @@ Owns the self-contained environment at `%LOCALAPPDATA%\JDNotesThings\audio-servi
 
 - **Freshness marker:** a file recording the hash of (`uv.lock` + bundled service source version). On launch: marker matches → env is ready, start the service. Marker missing/mismatched → provision.
 - **Provisioning:** run bundled `uv sync` against the shipped `pyproject.toml`/`uv.lock`. uv downloads its own CPython 3.11 — no system Python required. Progress (download/install phases) streams to the renderer.
-- **Model warm-up:** after env sync, models download on first service use into the shared HF cache; the provisioner surfaces this as a distinct progress phase. Machines that already have the models (this one) skip the download.
+- **Model warm-up:** after env sync, models download on first service use into the service's own cache (`%APPDATA%\JDAudioService\models`); the provisioner surfaces this as a distinct progress phase. Machines that already have the models (this one) skip the download.
 - **Failure handling:** provisioning errors set a clear status surfaced in Settings → AI Services, with a **Repair** button that wipes the env and re-syncs. Cloud transcription providers remain fully usable while local setup is broken or in progress.
 
 ### 4. AIServiceManager changes
@@ -66,7 +66,7 @@ Dev builds (`npm start`) use the same provisioner pointed at the repo's `audio-s
 ### 7. Testing
 
 - Unit tests (Vitest, mocked spawn/fs): provisioner marker hashing, path resolution (dev vs packaged), uv command construction, failure states; AIServiceManager's new direct-python launch path.
-- The service's pytest suite moves with it (`audio-service/tests`) and runs without GPU via the existing `-m "not gpu"` marker.
+- The service's pytest suite moves to `audio-service/tests` and runs locally via `uv run pytest -m "not gpu"` (this repo has no unit-test CI; release.yml only builds).
 - Manual verification on this machine: fresh provision end-to-end, then a real recording → local transcription round trip.
 
 ## Risks
