@@ -126,3 +126,7 @@ class ModelsResponse(BaseModel):
 class UnloadResponse(BaseModel):
     status: str
     vramFreed: float
+
+
+class WarmupResponse(BaseModel):
+    loading: list[str]

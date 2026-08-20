@@ -9,7 +9,7 @@ from api.schemas import (
     DiarizeRequest, DiarizeResponse,
     EmbedSpeakersRequest, EmbedSpeakersResponse,
     IdentifySpeakersRequest, IdentifySpeakersResponse,
-    HealthResponse, ModelsResponse, UnloadResponse,
+    HealthResponse, ModelsResponse, UnloadResponse, WarmupResponse,
     TranscriptEntry, DiarizationSegment, SpeakerEmbedding,
     QualityInfo,
 )
@@ -69,6 +69,25 @@ def health(request: Request):
         device=device,
         engineVersion=VERSION,
     )
+
+
+@router.post("/warmup", response_model=WarmupResponse)
+def warmup(request: Request):
+    """Kick off model loading in the background so the first real request
+    doesn't pay the multi-minute load/download cost."""
+    mgr = get_model_manager(request)
+
+    def _load_all():
+        from models.transcriber import Transcriber
+        from models.diarizer import Diarizer
+        from models.embedder import Embedder
+        with _gpu_lock:
+            mgr.get_or_load("transcriber", lambda: Transcriber())
+            mgr.get_or_load("diarizer", lambda: Diarizer())
+            mgr.get_or_load("embedder", lambda: Embedder())
+
+    threading.Thread(target=_load_all, daemon=True).start()
+    return WarmupResponse(loading=["transcriber", "diarizer", "embedder"])
 
 
 @router.get("/models", response_model=ModelsResponse)
