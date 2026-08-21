@@ -43,7 +43,7 @@ Constraints that shape the design:
 Owns the self-contained environment at `%LOCALAPPDATA%\JDNotesThings\audio-service\`:
 
 - **Freshness marker:** a file recording the hash of (`uv.lock` + bundled service source version). On launch: marker matches → env is ready, start the service. Marker missing/mismatched → provision.
-- **Provisioning:** run bundled `uv sync` against the shipped `pyproject.toml`/`uv.lock`. uv downloads its own CPython 3.11 — no system Python required. Progress (download/install phases) streams to the renderer.
+- **Provisioning:** run bundled `uv sync` against the shipped `pyproject.toml`/`uv.lock`. uv downloads its own CPython 3.13 — no system Python required. Progress (download/install phases) streams to the renderer.
 - **Model warm-up:** after env sync, models download on first service use into the service's own cache (`%APPDATA%\JDAudioService\models`); the provisioner surfaces this as a distinct progress phase. Machines that already have the models (this one) skip the download.
 - **Failure handling:** provisioning errors set a clear status surfaced in Settings → AI Services, with a **Repair** button that wipes the env and re-syncs. Cloud transcription providers remain fully usable while local setup is broken or in progress.
 

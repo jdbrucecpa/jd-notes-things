@@ -25,6 +25,18 @@ describe('AudioServiceProvisioner', () => {
     expect(h1).toMatch(/^[0-9a-f]{64}$/);
   });
 
+  it('computeLockHash is stable across CRLF vs LF line endings (e.g. a CI checkout with core.autocrlf=true)', () => {
+    fs.writeFileSync(path.join(serviceRoot, 'uv.lock'), 'line-one\nline-two\n');
+    fs.writeFileSync(path.join(serviceRoot, 'pyproject.toml'), '[project]\nname = "x"\n');
+    const lfHash = prov.computeLockHash();
+
+    fs.writeFileSync(path.join(serviceRoot, 'uv.lock'), 'line-one\r\nline-two\r\n');
+    fs.writeFileSync(path.join(serviceRoot, 'pyproject.toml'), '[project]\r\nname = "x"\r\n');
+    const crlfHash = prov.computeLockHash();
+
+    expect(crlfHash).toBe(lfHash);
+  });
+
   it('isProvisioned is false with no marker, true after a matching marker', () => {
     expect(prov.isProvisioned()).toBe(false);
     fs.mkdirSync(envDir, { recursive: true });

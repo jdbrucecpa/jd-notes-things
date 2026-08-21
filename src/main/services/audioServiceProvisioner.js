@@ -30,9 +30,22 @@ class AudioServiceProvisioner {
   }
 
   computeLockHash() {
+    // Normalize CRLF->LF before hashing so a CI checkout with
+    // core.autocrlf=true (which materializes CRLF) doesn't produce a
+    // different hash than a locally-provisioned LF env — that mismatch
+    // would trigger a surprise full ~5 GB reprovision after an auto-update
+    // built on such a checkout. .gitattributes pins these files to LF in
+    // git itself; this normalization is belt-and-braces for any non-git
+    // copy path (e.g. packaging/staging).
     const h = crypto.createHash('sha256');
-    h.update(fs.readFileSync(path.join(this.serviceRoot, 'uv.lock')));
-    h.update(fs.readFileSync(path.join(this.serviceRoot, 'pyproject.toml')));
+    h.update(
+      fs.readFileSync(path.join(this.serviceRoot, 'uv.lock'), 'utf8').replace(/\r\n/g, '\n')
+    );
+    h.update(
+      fs
+        .readFileSync(path.join(this.serviceRoot, 'pyproject.toml'), 'utf8')
+        .replace(/\r\n/g, '\n')
+    );
     return h.digest('hex');
   }
 

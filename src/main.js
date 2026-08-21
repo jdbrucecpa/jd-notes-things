@@ -9395,9 +9395,9 @@ ipcMain.handle(
       aiServiceManager.setServiceUrl(updates.aiServiceUrl);
     }
 
-    if (updates.aiServicePath) {
+    if (updates.aiServicePath !== undefined) {
       appSettings.aiServicePath = updates.aiServicePath;
-      aiServiceManager.setServicePath(updates.aiServicePath);
+      aiServiceManager.setServicePath(updates.aiServicePath || null);
     }
 
     // Save to disk
