@@ -74,6 +74,7 @@ const {
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 const { RecordingManager, RecallProvider, LocalProvider } = require('./main/recording');
 const { AIServiceManager } = require('./main/services/aiServiceManager');
+const { AudioServiceProvisioner } = require('./main/services/audioServiceProvisioner');
 const { mergeNearDuplicateLabels } = require('./main/services/speakerLabelMerge');
 const { computeTrackAnchor } = require('./main/services/trackAnchorService');
 const { runBackfill } = require('./main/services/voiceProfileBackfill');
@@ -441,6 +442,19 @@ let recordingManager = null;
 
 // v2.0: JD Audio Service manager (auto-launch for local transcription)
 const aiServiceManager = new AIServiceManager();
+
+// Bundled AI service provisioner (Task 4/6) — instantiated inside
+// app.whenReady() once packaged-vs-dev paths can be resolved; stays null
+// when the bundle isn't present (dev without `npm run fetch:uv`, or a build
+// that doesn't ship it), and the manager falls back to the legacy
+// appSettings.aiServicePath override flow. Declared here (module scope, not
+// inside the whenReady() callback) because the aiService:status/repair IPC
+// handlers registered later in this file also need it.
+let audioServiceProvisioner = null;
+// Guards concurrent `uv sync` runs: shared between the launch auto-start
+// provisioning path and the aiService:repair IPC handler so a manual repair
+// can't race a first-run provision (or vice versa).
+let aiServiceProvisionInFlight = false;
 
 // Meeting monitor state
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
@@ -1779,6 +1793,45 @@ app.whenReady().then(async () => {
     logger.main.info('User will need to configure LLM API keys in settings');
   }
 
+  // v2.0: Bundled AI service provisioner — self-contained Python env under
+  // %LOCALAPPDATA%, downloaded via uv on first run. Only wired up when the
+  // bundle is actually present: packaged builds always ship it, but dev
+  // needs `npm run fetch:uv` once. Falls back to the legacy
+  // appSettings.aiServicePath override flow when absent.
+  const bundledServiceRoot = app.isPackaged
+    ? path.join(process.resourcesPath, 'audio-service')
+    : path.join(app.getAppPath(), 'audio-service');
+  const bundledUvPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'uv', 'uv.exe')
+    : path.join(app.getAppPath(), 'vendor', 'uv', 'uv.exe');
+  if (fs.existsSync(path.join(bundledServiceRoot, 'uv.lock')) && fs.existsSync(bundledUvPath)) {
+    audioServiceProvisioner = new AudioServiceProvisioner({
+      serviceRoot: bundledServiceRoot,
+      envDir: path.join(process.env.LOCALAPPDATA, 'JDNotesThings', 'audio-service'),
+      uvPath: bundledUvPath,
+    });
+    aiServiceManager.setProvisioner(audioServiceProvisioner);
+    aiServiceManager.setHfTokenGetter(() => keyManagementService.getKey('HF_TOKEN'));
+  }
+
+  // One-time migration: the bundled service replaces the old "point Settings
+  // at a manual jd-audio-service checkout" flow. Clear the stale path so the
+  // manager uses the bundle instead of trying (and failing) to launch a
+  // checkout that may no longer exist. A user who re-enters a path in
+  // Settings later re-activates the override intentionally.
+  if (
+    appSettings.aiServicePath &&
+    audioServiceProvisioner &&
+    appSettings.aiServicePathMigratedToBundled !== true
+  ) {
+    logger.main.info(
+      `[AIService] Migrating from manual service path (${appSettings.aiServicePath}) to the bundled service`
+    );
+    appSettings.aiServicePath = '';
+    appSettings.aiServicePathMigratedToBundled = true;
+    saveAppSettings();
+  }
+
   // Configure AI service manager from settings
   if (appSettings.aiServicePath) {
     aiServiceManager.setServicePath(appSettings.aiServicePath);
@@ -1787,20 +1840,48 @@ app.whenReady().then(async () => {
     aiServiceManager.setServiceUrl(appSettings.aiServiceUrl);
   }
 
-  // Auto-start the JD Audio Service at launch when a path is configured.
-  // ensureRunning() is otherwise lazy (first transcription or a manual click),
-  // and shutdown() kills the service on quit — so without this the service is
-  // down after every app restart. Fire-and-forget: the health poll can take up
-  // to 30s and must not block startup. Opt out with "aiServiceAutoStart": false.
-  if (appSettings.aiServicePath && appSettings.aiServiceAutoStart !== false) {
+  // Auto-start the JD Audio Service at launch — bundled (self-provisioning)
+  // or the legacy manual-path override. ensureRunning() is otherwise lazy
+  // (first transcription or a manual click), and shutdown() kills the
+  // service on quit — so without this the service is down after every app
+  // restart. Fire-and-forget: first-run provisioning + health poll can take
+  // minutes and must not block startup. Opt out with "aiServiceAutoStart": false.
+  if (
+    appSettings.aiServiceAutoStart !== false &&
+    (audioServiceProvisioner || appSettings.aiServicePath)
+  ) {
+    const needsProvision = audioServiceProvisioner && !audioServiceProvisioner.isProvisioned();
+    const taskId = needsProvision
+      ? backgroundTaskManager.addTask({
+          type: 'ai-service-setup',
+          description: 'Setting up local AI (first run, ~5 GB download)',
+        })
+      : null;
     logger.main.info('[AIService] Auto-starting at launch...');
-    aiServiceManager.ensureRunning().then((healthy) => {
-      if (!healthy) {
-        logger.main.warn(
-          `[AIService] Launch auto-start failed: ${aiServiceManager.lastError || 'unknown'}`
-        );
-      }
-    });
+    if (needsProvision) aiServiceProvisionInFlight = true;
+    aiServiceManager
+      .ensureRunning((line) => {
+        if (taskId) backgroundTaskManager.updateTask(taskId, null, line.trim().slice(0, 120));
+      })
+      .then(async (healthy) => {
+        if (needsProvision) aiServiceProvisionInFlight = false;
+        if (taskId) {
+          if (healthy) backgroundTaskManager.completeTask(taskId);
+          else backgroundTaskManager.failTask(taskId, aiServiceManager.lastError || 'setup failed');
+        }
+        if (healthy) {
+          // Preload models so the first transcription is instant.
+          try {
+            await fetch(`${aiServiceManager.serviceUrl}/warmup`, { method: 'POST' });
+          } catch {
+            /* warmup is best-effort */
+          }
+        } else {
+          logger.main.warn(
+            `[AIService] Launch auto-start failed: ${aiServiceManager.lastError || 'unknown'}`
+          );
+        }
+      });
   }
 
   // Initialize the Recall.ai SDK
@@ -7317,6 +7398,49 @@ ipcMain.handle('aiService:start', async () => {
     };
   } catch (error) {
     return { success: false, error: error.message };
+  }
+});
+
+// v2.0: Bundled AI service status/repair — mode reflects whether Settings has
+// a manual override path configured (legacy flow) or the bundled/provisioned
+// service is in play. `provisioning` mirrors aiServiceProvisionInFlight
+// (module-scope, shared with the launch auto-start provisioning above) so
+// the renderer can show a spinner instead of a stale "not provisioned" state.
+ipcMain.handle('aiService:status', async () => {
+  return {
+    mode: appSettings.aiServicePath ? 'override' : 'bundled',
+    provisioned: audioServiceProvisioner ? audioServiceProvisioner.isProvisioned() : null,
+    healthy: await aiServiceManager.checkHealth(),
+    provisioning: aiServiceProvisionInFlight,
+    lastError: aiServiceManager.lastError || null,
+  };
+});
+
+ipcMain.handle('aiService:repair', async () => {
+  if (!audioServiceProvisioner) {
+    return { success: false, error: 'Bundled service not available in this build' };
+  }
+  if (aiServiceProvisionInFlight) {
+    return { success: false, error: 'Setup already running' };
+  }
+  aiServiceProvisionInFlight = true;
+  const taskId = backgroundTaskManager.addTask({
+    type: 'ai-service-repair',
+    description: 'Repairing local AI environment',
+  });
+  try {
+    aiServiceManager.shutdown();
+    await audioServiceProvisioner.repair((line) =>
+      backgroundTaskManager.updateTask(taskId, null, line.trim().slice(0, 120))
+    );
+    const healthy = await aiServiceManager.ensureRunning();
+    backgroundTaskManager.completeTask(taskId);
+    return { success: healthy, error: healthy ? undefined : aiServiceManager.lastError };
+  } catch (error) {
+    backgroundTaskManager.failTask(taskId, error.message);
+    return { success: false, error: error.message };
+  } finally {
+    aiServiceProvisionInFlight = false;
   }
 });
 
