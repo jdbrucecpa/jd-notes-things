@@ -11,8 +11,8 @@ def test_warmup_reports_models_and_returns_immediately(monkeypatch):
         mgr, "get_or_load", lambda name, loader: loaded.append(name)
     )
 
-    # Mock model imports to allow them to succeed in test environment
-    # (imports must succeed even though the loader is never actually called)
+    # Mock model classes so their constructors don't try to load real ML models
+    # (Transcriber(), Diarizer(), Embedder() instantiation blocks indefinitely in test env)
     monkeypatch.setattr("models.transcriber.Transcriber", type("MockTranscriber", (), {}))
     monkeypatch.setattr("models.diarizer.Diarizer", type("MockDiarizer", (), {}))
     monkeypatch.setattr("models.embedder.Embedder", type("MockEmbedder", (), {}))
@@ -48,7 +48,7 @@ def test_warmup_continues_on_per_model_failure(monkeypatch):
 
     monkeypatch.setattr(mgr, "get_or_load", get_or_load_with_failure)
 
-    # Mock model imports to allow them to succeed in test environment
+    # Mock model classes so their constructors don't try to load real ML models
     monkeypatch.setattr("models.transcriber.Transcriber", type("MockTranscriber", (), {}))
     monkeypatch.setattr("models.diarizer.Diarizer", type("MockDiarizer", (), {}))
     monkeypatch.setattr("models.embedder.Embedder", type("MockEmbedder", (), {}))
