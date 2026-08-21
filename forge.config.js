@@ -11,7 +11,12 @@ module.exports = {
     asar: {
       unpack: '**/{@recallai,better-sqlite3}/**',
     },
-    extraResource: ['./config', ffmpegStatic].filter(Boolean),
+    extraResource: [
+      './config',
+      ffmpegStatic,
+      './vendor/stage/audio-service',
+      './vendor/uv',
+    ].filter(Boolean),
     osxSign: {
       continueOnError: false,
       optionsForFile: _ => {
