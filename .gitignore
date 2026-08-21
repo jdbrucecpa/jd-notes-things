@@ -114,3 +114,8 @@ tests/fixtures/audio/*.mp3
 nul
 # Claude Code local worktrees
 .claude/worktrees/
+
+# Python (audio-service)
+audio-service/.venv/
+__pycache__/
+.pytest_cache/

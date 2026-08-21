@@ -16,6 +16,8 @@ module.exports = [
       'vault/**',
       // Stream Deck plugin bundled output (generated from TypeScript)
       'streamdeck-plugin/com.jdnotes.recording.sdPlugin/bin/**',
+      // Bundled Python service — not JS, nothing here should be linted
+      'audio-service/**',
     ],
   },
   // Base recommended rules
@@ -58,6 +60,17 @@ module.exports = [
         // Stop-confirmation countdown dialog entry points
         STOP_CONFIRM_WEBPACK_ENTRY: 'readonly',
         STOP_CONFIRM_PRELOAD_WEBPACK_ENTRY: 'readonly',
+      },
+    },
+  },
+  // Node-side build/tooling scripts (ESM)
+  {
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        ...globals.node,
       },
     },
   },
