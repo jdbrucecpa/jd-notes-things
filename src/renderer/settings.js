@@ -154,7 +154,10 @@ export function initializeSettingsUI() {
   const transcriptionProviderSelect = document.getElementById('transcriptionProviderSelect');
   const aiServiceUrlInput = document.getElementById('aiServiceUrlInput');
   const aiServiceStartBtn = document.getElementById('aiServiceStartBtn');
+  const aiServiceRepairBtn = document.getElementById('aiServiceRepairBtn');
   const aiServicePathInput = document.getElementById('aiServicePathInput');
+  const hfTokenInput = document.getElementById('hfTokenInput');
+  const hfTokenSaveBtn = document.getElementById('hfTokenSaveBtn');
   const localLLMUrlInput = document.getElementById('localLLMUrlInput');
   const fullyLocalPresetBtn = document.getElementById('fullyLocalPresetBtn');
   // Audio source controls (v2.0 mixer)
@@ -477,6 +480,53 @@ export function initializeSettingsUI() {
       }
       aiServiceStartBtn.textContent = 'Start';
       aiServiceStartBtn.disabled = false;
+      await refreshAiServiceStatus();
+    });
+  }
+
+  // AI Service Repair button (re-provisions the bundled local AI environment)
+  if (aiServiceRepairBtn) {
+    aiServiceRepairBtn.addEventListener('click', async () => {
+      const confirmed = confirm('Rebuild the local AI environment? This re-downloads ~5 GB.');
+      if (!confirmed) return;
+      aiServiceRepairBtn.textContent = 'Repairing...';
+      aiServiceRepairBtn.disabled = true;
+      try {
+        const result = await window.electronAPI.aiServiceRepair();
+        if (result.success) {
+          notifySuccess('Local AI environment repaired');
+        } else {
+          notifyError('Repair failed: ' + (result.error || 'unknown error'));
+        }
+      } catch (error) {
+        notifyError('Repair failed: ' + (error?.message || 'unknown error'));
+      }
+      aiServiceRepairBtn.textContent = 'Repair local AI';
+      aiServiceRepairBtn.disabled = false;
+      await refreshAiServiceStatus();
+    });
+  }
+
+  // Hugging Face Token (used by the local AI service for diarization models)
+  if (hfTokenSaveBtn) {
+    hfTokenSaveBtn.addEventListener('click', async () => {
+      const value = (hfTokenInput?.value || '').trim();
+      if (!value) {
+        notifyError('Enter a Hugging Face token before saving');
+        return;
+      }
+      try {
+        const result = await window.electronAPI.keysSet('HF_TOKEN', value);
+        if (result?.success) {
+          if (hfTokenInput) hfTokenInput.value = '';
+          notifySuccess('Hugging Face token saved');
+          await refreshHfTokenHint();
+        } else {
+          notifyError('Failed to save Hugging Face token: ' + (result?.error || 'unknown error'));
+        }
+      } catch (error) {
+        notifyError('Failed to save Hugging Face token: ' + (error?.message || 'unknown error'));
+      }
     });
   }
 
@@ -775,6 +825,44 @@ export function initializeSettingsUI() {
       statusEl.textContent = 'Disconnected';
       statusEl.className = 'service-status disconnected';
       if (startBtn) startBtn.style.display = 'inline-block';
+    }
+  }
+
+  /**
+   * Refresh the bundled/local AI service status line (mode, provisioning,
+   * health) shown above the Service Endpoints controls.
+   */
+  async function refreshAiServiceStatus() {
+    const line = document.getElementById('aiServiceStatusLine');
+    if (!line) return;
+    try {
+      const s = await window.electronAPI.aiServiceStatus();
+      if (s.provisioning) {
+        line.textContent = 'Local AI: setting up… (see background tasks)';
+      } else if (s.healthy) {
+        line.textContent = `Local AI: running (${s.mode === 'override' ? 'custom path' : 'built-in'})`;
+      } else if (s.mode === 'bundled' && s.provisioned === false) {
+        line.textContent = 'Local AI: not set up yet — starts on first launch or Repair';
+      } else {
+        line.textContent = `Local AI: stopped${s.lastError ? ' — ' + s.lastError : ''}`;
+      }
+    } catch {
+      line.textContent = 'Local AI: status unavailable';
+    }
+  }
+
+  /**
+   * Show a "configured" hint next to the Hugging Face token field without
+   * ever displaying the stored value itself.
+   */
+  async function refreshHfTokenHint() {
+    const hint = document.getElementById('hfTokenConfiguredHint');
+    if (!hint) return;
+    try {
+      const result = await window.electronAPI.keysGet('HF_TOKEN');
+      hint.textContent = result?.success && result.data ? ' (configured)' : '';
+    } catch {
+      hint.textContent = '';
     }
   }
 
@@ -1137,13 +1225,20 @@ export function initializeSettingsUI() {
             if (!result.success) return;
             const { action, path } = reconcileAiServicePath(
               result.data?.aiServicePath,
-              currentSettings.aiServicePath
+              currentSettings.aiServicePath,
+              result.data?.aiServicePathMigratedToBundled === true
             );
             if (action === 'push' && window.electronAPI?.appUpdateSettings) {
               window.electronAPI.appUpdateSettings({ aiServicePath: path });
             } else if (action === 'pull') {
               aiServicePathInput.value = path;
               updateSetting('aiServicePath', path);
+            } else if (action === 'clear') {
+              // Main already cleared its path as part of the bundled-service
+              // migration; wipe the stale renderer-only copy instead of
+              // pushing it back (see servicePathSync.js for the full story).
+              aiServicePathInput.value = '';
+              updateSetting('aiServicePath', '');
             }
           })
           .catch(() => {});
@@ -1156,6 +1251,8 @@ export function initializeSettingsUI() {
     // v2.0: Check service statuses on load
     checkAIServiceStatus();
     checkLocalLLMStatus();
+    refreshAiServiceStatus();
+    refreshHfTokenHint();
 
     // v2.0: Show/hide audio sources section based on recording provider
     setTimeout(() => updateAudioSourcesVisibility(), 100);

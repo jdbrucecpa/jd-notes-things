@@ -1764,6 +1764,8 @@
                 Configure URLs for local AI services. Used when local providers are selected.
               </div>
 
+              <div id="aiServiceStatusLine" class="settings-item-description" style="margin-bottom: 16px;">Checking…</div>
+
               <div class="settings-item">
                 <div class="settings-item-info">
                   <div class="settings-item-label">JD Audio Service URL</div>
@@ -1773,13 +1775,29 @@
                   <input type="text" class="settings-input" id="aiServiceUrlInput" placeholder="http://localhost:8374" />
                   <span class="service-status" id="aiServiceStatus"></span>
                   <button class="btn btn-sm" id="aiServiceStartBtn" style="margin-left: 8px; display: none;">Start</button>
+                  <button class="btn-secondary" id="aiServiceRepairBtn" style="margin-left: 8px;">Repair local AI</button>
+                </div>
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
+                  <div class="settings-item-label">Hugging Face Token</div>
+                  <div class="settings-item-description">
+                    Required for the local AI service to download diarization models. Get one at
+                    <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer">huggingface.co/settings/tokens</a>.
+                    <span id="hfTokenConfiguredHint"></span>
+                  </div>
+                </div>
+                <div class="settings-item-control">
+                  <input type="password" class="settings-input" id="hfTokenInput" placeholder="hf_…" autocomplete="off" />
+                  <button class="btn btn-sm" id="hfTokenSaveBtn" style="margin-left: 8px;">Save</button>
                 </div>
               </div>
 
               <div class="settings-item">
                 <div class="settings-item-info">
                   <div class="settings-item-label">JD Audio Service Path</div>
-                  <div class="settings-item-description">Local path to the jd-audio-service directory</div>
+                  <div class="settings-item-description">Advanced: service path override — leave empty to use the built-in service.</div>
                 </div>
                 <div class="settings-item-control">
                   <input type="text" class="settings-input" id="aiServicePathInput" placeholder="C:\path\to\jd-audio-service" />

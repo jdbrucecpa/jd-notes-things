@@ -8,14 +8,25 @@
  * input's change event that does the forwarding never fires for a value the
  * user doesn't retype. Main is the source of truth once it has a value.
  *
+ * The bundled-audio-service migration (main.js, one-time) intentionally
+ * clears main's aiServicePath and sets aiServicePathMigratedToBundled=true so
+ * the app switches to the built-in service. Without the `migrated` flag, an
+ * empty main path always looked like the pre-2.0.3 "self-heal" case, so this
+ * reconciler pushed the renderer's stale localStorage copy straight back into
+ * main — silently undoing the migration on every Settings open. When
+ * `migrated` is true, an empty main path is authoritative: clear the stale
+ * renderer copy instead of pushing it.
+ *
  * @param {string|undefined} mainPath - aiServicePath from main process settings
  * @param {string|undefined} rendererPath - aiServicePath from renderer localStorage
- * @returns {{action: 'push'|'pull'|'none', path: string}}
- *   push - main has no path; write the renderer's path to main (self-heal)
+ * @param {boolean} [migrated] - true once main has run the one-time bundled migration
+ * @returns {{action: 'push'|'pull'|'clear'|'none', path: string}}
+ *   push - main has no path and no migration has run; write the renderer's path to main (self-heal)
  *   pull - main's path wins; update the renderer to match
+ *   clear - main was migrated to bundled mode; wipe the stale renderer-only copy, do not push it back
  *   none - stores already agree (or neither has a value)
  */
-export function reconcileAiServicePath(mainPath, rendererPath) {
+export function reconcileAiServicePath(mainPath, rendererPath, migrated = false) {
   const main = (mainPath || '').trim();
   const renderer = (rendererPath || '').trim();
 
@@ -23,6 +34,9 @@ export function reconcileAiServicePath(mainPath, rendererPath) {
     return renderer === main ? { action: 'none', path: main } : { action: 'pull', path: main };
   }
   if (renderer) {
+    if (migrated) {
+      return { action: 'clear', path: '' };
+    }
     return { action: 'push', path: renderer };
   }
   return { action: 'none', path: '' };
