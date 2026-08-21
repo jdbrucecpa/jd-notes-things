@@ -7429,7 +7429,10 @@ ipcMain.handle('aiService:repair', async () => {
     description: 'Repairing local AI environment',
   });
   try {
-    aiServiceManager.shutdown();
+    // Await the actual process exit before repair() deletes the venv —
+    // shutdown()'s taskkill is async, and rmSync on a still-dying python.exe's
+    // handles throws EPERM on Windows (the root cause of the repair-race bug).
+    await aiServiceManager.shutdown();
     await audioServiceProvisioner.repair((line) =>
       backgroundTaskManager.updateTask(taskId, null, line.trim().slice(0, 120))
     );

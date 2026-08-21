@@ -63,15 +63,83 @@ describe('AIServiceManager', () => {
     expect(manager.serviceUrl).toBe('http://localhost:9999');
   });
 
-  it('shutdown kills the child process', () => {
-    const mockKill = vi.fn();
-    manager._process = { kill: mockKill, pid: 123, killed: false };
-    manager.shutdown();
-    expect(manager._process).toBeNull();
-  });
+  describe('shutdown', () => {
+    // taskkill is fire-and-forget; what matters for these tests is the
+    // tracked child process's own 'exit'/'error' events, so the fake process
+    // is a minimal EventEmitter-like stub (mirrors the top-of-file
+    // vi.mock('child_process', ...) shape) rather than a real process.
+    const makeFakeProcess = (pid = 123) => {
+      const listeners = {};
+      return {
+        pid,
+        killed: false,
+        kill: vi.fn(),
+        once: vi.fn((event, cb) => {
+          (listeners[event] ||= []).push(cb);
+        }),
+        _emit: (event, ...args) => {
+          (listeners[event] || []).forEach((cb) => cb(...args));
+        },
+      };
+    };
 
-  it('shutdown is safe to call with no process', () => {
-    expect(() => manager.shutdown()).not.toThrow();
+    it('kills the child process and clears _process synchronously', () => {
+      const proc = makeFakeProcess();
+      manager._process = proc;
+      manager.shutdown();
+      expect(manager._process).toBeNull();
+    });
+
+    it('is safe to call with no process', async () => {
+      await expect(manager.shutdown()).resolves.toBeUndefined();
+    });
+
+    it('returns a promise', () => {
+      const proc = makeFakeProcess();
+      manager._process = proc;
+      const result = manager.shutdown();
+      expect(result).toBeInstanceOf(Promise);
+      proc._emit('exit', 0); // avoid an unresolved promise/timer leaking into later tests
+    });
+
+    it('resolves after the process exit event fires', async () => {
+      const proc = makeFakeProcess();
+      manager._process = proc;
+      const shutdownPromise = manager.shutdown();
+      let resolved = false;
+      shutdownPromise.then(() => {
+        resolved = true;
+      });
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+
+      proc._emit('exit', 0);
+      await shutdownPromise;
+      expect(resolved).toBe(true);
+    });
+
+    it('resolves within the timeout when no exit event ever fires', async () => {
+      vi.useFakeTimers();
+      try {
+        const proc = makeFakeProcess();
+        manager._process = proc;
+        const shutdownPromise = manager.shutdown();
+        let resolved = false;
+        shutdownPromise.then(() => {
+          resolved = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(4999);
+        expect(resolved).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(resolved).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('lastError', () => {

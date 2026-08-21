@@ -6,6 +6,11 @@ const log = require('electron-log');
 const DEFAULT_SERVICE_URL = 'http://localhost:8374';
 const HEALTH_POLL_INTERVAL_MS = 500;
 const HEALTH_POLL_TIMEOUT_MS = 30000;
+// Bound on how long shutdown() will wait for the killed process's 'exit'
+// event before giving up and resolving anyway — callers that need the
+// process handle to actually be released (e.g. repair(), which deletes the
+// venv directory right after) should await this; it must never hang forever.
+const SHUTDOWN_EXIT_TIMEOUT_MS = 5000;
 
 class AIServiceManager {
   constructor() {
@@ -185,18 +190,42 @@ class AIServiceManager {
     });
   }
 
+  // Kills the tracked process and returns a Promise that resolves once it has
+  // actually exited (or after a bounded timeout, so this can never hang).
+  // Callers that don't need to know when the process is gone — e.g. the
+  // app-quit path — can call this without awaiting; it remains fire-and-forget
+  // there since nothing consumes the returned promise.
   shutdown() {
-    if (this._process) {
-      log.info(`[AIService] Killing process (PID ${this._process.pid})`);
-      try {
-        spawn('taskkill', ['/pid', String(this._process.pid), '/t', '/f'], {
-          windowsHide: true,
-        });
-      } catch {
-        this._process.kill();
-      }
-      this._process = null;
+    if (!this._process) {
+      return Promise.resolve();
     }
+    const proc = this._process;
+    log.info(`[AIService] Killing process (PID ${proc.pid})`);
+
+    const exited = new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve();
+      };
+      proc.once('exit', finish);
+      proc.once('error', finish);
+      const timer = setTimeout(finish, SHUTDOWN_EXIT_TIMEOUT_MS);
+      if (typeof timer.unref === 'function') timer.unref();
+    });
+
+    try {
+      spawn('taskkill', ['/pid', String(proc.pid), '/t', '/f'], {
+        windowsHide: true,
+      });
+    } catch {
+      proc.kill();
+    }
+    this._process = null;
+
+    return exited;
   }
 }
 

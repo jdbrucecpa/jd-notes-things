@@ -111,6 +111,37 @@ describe('AudioServiceProvisioner', () => {
     expect(prov.isProvisioned()).toBe(true);
   });
 
+  it('repair passes Windows-safe retry options to the venv/marker deletions', async () => {
+    // Regression test: repair() runs immediately after aiServiceManager
+    // .shutdown() kills the running service, and on Windows the dying
+    // python.exe's handles into venv/ can still be closing when rmSync runs
+    // — a bare rmSync can throw EPERM. maxRetries/retryDelay is Node's
+    // built-in mitigation. Asserted via the `_rm` seam (mirrors `_spawn`)
+    // rather than real file locking, which isn't reliably reproducible here.
+    const rmCalls = [];
+    prov._rm = vi.fn((target, opts) => {
+      rmCalls.push({ target, opts });
+    });
+    prov._spawn = () => {
+      const { EventEmitter } = require('node:events');
+      const p = new EventEmitter();
+      p.stderr = new EventEmitter();
+      process.nextTick(() => p.emit('close', 0));
+      return p;
+    };
+
+    await prov.repair(() => {});
+
+    expect(rmCalls).toHaveLength(2);
+    expect(rmCalls[0].target).toBe(path.join(envDir, 'venv'));
+    expect(rmCalls[1].target).toBe(path.join(envDir, 'provision-marker.json'));
+    for (const { opts } of rmCalls) {
+      expect(opts.force).toBe(true);
+      expect(opts.maxRetries).toBe(10);
+      expect(opts.retryDelay).toBe(200);
+    }
+  });
+
   it('getPythonExe points into the env venv', () => {
     expect(prov.getPythonExe()).toBe(path.join(envDir, 'venv', 'Scripts', 'python.exe'));
   });

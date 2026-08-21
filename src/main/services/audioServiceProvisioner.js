@@ -26,6 +26,7 @@ class AudioServiceProvisioner {
     this.envDir = envDir;
     this.uvPath = uvPath;
     this._spawn = spawn; // test seam
+    this._rm = fs.rmSync; // test seam
   }
 
   computeLockHash() {
@@ -83,8 +84,15 @@ class AudioServiceProvisioner {
   }
 
   async repair(onProgress) {
-    fs.rmSync(path.join(this.envDir, 'venv'), { recursive: true, force: true });
-    fs.rmSync(path.join(this.envDir, MARKER_FILE), { force: true });
+    // Repair runs right after aiServiceManager.shutdown() kills the running
+    // service. On Windows the dying python.exe's file handles into venv/ can
+    // take a moment to release even after the process has exited, so a bare
+    // rmSync can throw EPERM/EBUSY here. maxRetries/retryDelay are Node's
+    // built-in Windows-safe retry for exactly this (see EPERM handling in
+    // fs.rmSync docs) — defense-in-depth on top of awaiting shutdown().
+    const RM_OPTS = { recursive: true, force: true, maxRetries: 10, retryDelay: 200 };
+    this._rm(path.join(this.envDir, 'venv'), RM_OPTS);
+    this._rm(path.join(this.envDir, MARKER_FILE), RM_OPTS);
     await this.provision(onProgress);
   }
 
