@@ -18,6 +18,15 @@ class AIServiceManager {
     // renderer doesn't have to invent a reason (it used to say "timeout" for
     // every failure, including a missing service path).
     this.lastError = null;
+    // Bundled-service provisioning (Task 4's AudioServiceProvisioner). Wired
+    // in by main.js; used only when servicePath is not set (advanced
+    // override always wins — see ensureRunning()).
+    this.provisioner = null;
+    this._getHfToken = null;
+    // Test seam for the bundled-launch spawn call (mirrors the injectable
+    // `_spawn` on AudioServiceProvisioner) — the legacy .bat flow above still
+    // calls the module-level `spawn` directly and is untouched.
+    this._spawn = spawn;
   }
 
   setServicePath(servicePath) {
@@ -26,6 +35,14 @@ class AIServiceManager {
 
   setServiceUrl(serviceUrl) {
     this.serviceUrl = serviceUrl;
+  }
+
+  setProvisioner(provisioner) {
+    this.provisioner = provisioner;
+  }
+
+  setHfTokenGetter(getter) {
+    this._getHfToken = getter;
   }
 
   isRunning() {
@@ -53,7 +70,7 @@ class AIServiceManager {
     }
   }
 
-  async ensureRunning() {
+  async ensureRunning(onProvisionProgress) {
     if (await this.checkHealth()) {
       log.info('[AIService] Already running');
       this.lastError = null;
@@ -65,27 +82,61 @@ class AIServiceManager {
       return this._pollHealth();
     }
 
-    if (!this.servicePath) {
-      this.lastError =
-        'No service path configured — set the JD Audio Service folder in Settings (AI Services tab), or switch to a cloud transcription provider';
-      log.error(`[AIService] ${this.lastError}`);
-      return false;
+    // Advanced override: a configured servicePath always wins and uses the
+    // legacy .bat launch flow, even if a provisioner is also wired up.
+    if (this.servicePath) {
+      const batPath = path.join(this.servicePath, 'run-jd-audio-service.bat');
+      if (!fs.existsSync(batPath)) {
+        this.lastError = `Launch script not found: ${batPath} — check the JD Audio Service path in Settings`;
+        log.error(`[AIService] ${this.lastError}`);
+        return false;
+      }
+
+      log.info(`[AIService] Starting from: ${this.servicePath}`);
+      this._process = spawn('cmd.exe', ['/c', batPath, '--no-tray'], {
+        cwd: this.servicePath,
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      this._attachProcessHandlers();
+      return this._pollHealth();
     }
 
-    const batPath = path.join(this.servicePath, 'run-jd-audio-service.bat');
-    if (!fs.existsSync(batPath)) {
-      this.lastError = `Launch script not found: ${batPath} — check the JD Audio Service path in Settings`;
-      log.error(`[AIService] ${this.lastError}`);
-      return false;
+    if (this.provisioner) {
+      try {
+        await this.provisioner.ensureProvisioned(onProvisionProgress);
+      } catch (err) {
+        this.lastError = err.message;
+        log.error(`[AIService] Provisioning failed: ${err.message}`);
+        return false;
+      }
+
+      const env = { ...process.env };
+      const hfToken = this._getHfToken ? await this._getHfToken() : null;
+      if (hfToken) {
+        env.HF_TOKEN = hfToken;
+        env.HUGGING_FACE_HUB_TOKEN = hfToken;
+      }
+
+      const pythonExe = this.provisioner.getPythonExe();
+      log.info(`[AIService] Starting bundled service: ${pythonExe}`);
+      this._process = this._spawn(pythonExe, [path.join('src', 'main.py'), '--no-tray'], {
+        cwd: this.provisioner.getServiceRoot(),
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env,
+      });
+      this._attachProcessHandlers();
+      return this._pollHealth();
     }
 
-    log.info(`[AIService] Starting from: ${this.servicePath}`);
-    this._process = spawn('cmd.exe', ['/c', batPath, '--no-tray'], {
-      cwd: this.servicePath,
-      windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    this.lastError =
+      'No service path configured — set the JD Audio Service folder in Settings (AI Services tab), or switch to a cloud transcription provider';
+    log.error(`[AIService] ${this.lastError}`);
+    return false;
+  }
 
+  _attachProcessHandlers() {
     this._process.on('exit', (code) => {
       log.info(`[AIService] Process exited with code ${code}`);
       this._process = null;
@@ -100,8 +151,6 @@ class AIServiceManager {
       const line = chunk.toString().trim();
       if (line) log.debug(`[AIService stderr] ${line}`);
     });
-
-    return this._pollHealth();
   }
 
   _pollHealth() {

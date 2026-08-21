@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import path from 'path';
 
 vi.mock('child_process', () => ({
   spawn: vi.fn(() => ({
@@ -111,6 +112,94 @@ describe('AIServiceManager', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+
+  describe('bundled provisioner launch', () => {
+    const makeProvisioner = () => ({
+      ensureProvisioned: vi.fn(async () => {}),
+      getPythonExe: () => 'C:\\env\\venv\\Scripts\\python.exe',
+      getServiceRoot: () => 'C:\\res\\audio-service',
+    });
+
+    it('provisions then spawns the provisioned python with --no-tray and HF_TOKEN', async () => {
+      const provisioner = makeProvisioner();
+      manager.setProvisioner(provisioner);
+      manager.setHfTokenGetter(async () => 'hf_secret');
+      // ai-service-manager's own spawn mock (see the top-of-file
+      // vi.mock('child_process', ...)) never sees calls made from inside the
+      // required aiServiceManager.js module in this Vitest setup — CJS
+      // require() there resolves the real module, not the mock (confirmed by
+      // isolated probing; regular npm packages have the same gap). The
+      // bundled-launch path therefore uses an injectable `_spawn` seam,
+      // mirroring the `_spawn` test seam already used in
+      // AudioServiceProvisioner (src/main/services/audioServiceProvisioner.js).
+      const fakeChild = {
+        pid: 4242,
+        killed: false,
+        on: vi.fn(),
+        stderr: { on: vi.fn() },
+        stdout: { on: vi.fn() },
+        kill: vi.fn(),
+      };
+      const spawnSeam = vi.fn(() => fakeChild);
+      manager._spawn = spawnSeam;
+      // Health: down on the initial check (forces the spawn path), up on the
+      // first poll tick after spawn.
+      manager.checkHealth = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+
+      vi.useFakeTimers();
+      let result;
+      try {
+        const promise = manager.ensureRunning();
+        await vi.advanceTimersByTimeAsync(500);
+        result = await promise;
+      } finally {
+        vi.useRealTimers();
+      }
+
+      expect(provisioner.ensureProvisioned).toHaveBeenCalled();
+      expect(result).toBe(true);
+      expect(spawnSeam).toHaveBeenCalledTimes(1);
+      const [cmd, args, opts] = spawnSeam.mock.calls[0];
+      expect(cmd).toBe('C:\\env\\venv\\Scripts\\python.exe');
+      expect(args).toEqual([path.join('src', 'main.py'), '--no-tray']);
+      expect(opts.cwd).toBe('C:\\res\\audio-service');
+      expect(opts.windowsHide).toBe(true);
+      expect(opts.stdio).toEqual(['ignore', 'pipe', 'pipe']);
+      expect(opts.env.HF_TOKEN).toBe('hf_secret');
+      expect(opts.env.HUGGING_FACE_HUB_TOKEN).toBe('hf_secret');
+    });
+
+    it('a configured servicePath (advanced override) wins over the provisioner', async () => {
+      const provisioner = makeProvisioner();
+      manager.setProvisioner(provisioner);
+      manager.setServicePath('C:\\definitely\\not\\a\\real\\dir');
+      manager.checkHealth = vi.fn(async () => false);
+      manager._spawn = vi.fn();
+
+      const result = await manager.ensureRunning();
+
+      expect(result).toBe(false);
+      expect(provisioner.ensureProvisioned).not.toHaveBeenCalled();
+      expect(manager._spawn).not.toHaveBeenCalled();
+      expect(manager.lastError).toMatch(/Launch script not found/);
+    });
+
+    it('surfaces provisioning failure via lastError and returns false', async () => {
+      const provisioner = makeProvisioner();
+      provisioner.ensureProvisioned = vi.fn(async () => {
+        throw new Error('uv sync failed (exit 1)');
+      });
+      manager.setProvisioner(provisioner);
+      manager.checkHealth = vi.fn(async () => false);
+      manager._spawn = vi.fn();
+
+      const result = await manager.ensureRunning();
+
+      expect(result).toBe(false);
+      expect(manager.lastError).toMatch(/uv sync failed/);
+      expect(manager._spawn).not.toHaveBeenCalled();
     });
   });
 });
