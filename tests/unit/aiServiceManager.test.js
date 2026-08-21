@@ -171,6 +171,65 @@ describe('AIServiceManager', () => {
       expect(opts.env.HUGGING_FACE_HUB_TOKEN).toBe('hf_secret');
     });
 
+    it('degrades to no token and still launches when the HF token getter rejects', async () => {
+      const provisioner = makeProvisioner();
+      manager.setProvisioner(provisioner);
+      manager.setHfTokenGetter(async () => {
+        throw new Error('Credential Manager read failed');
+      });
+      const fakeChild = {
+        pid: 4243,
+        killed: false,
+        on: vi.fn(),
+        stderr: { on: vi.fn() },
+        stdout: { on: vi.fn() },
+        kill: vi.fn(),
+      };
+      const spawnSeam = vi.fn(() => fakeChild);
+      manager._spawn = spawnSeam;
+      manager.checkHealth = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true);
+
+      vi.useFakeTimers();
+      let result;
+      let rejection;
+      const onUnhandledRejection = (err) => {
+        rejection = err;
+      };
+      process.on('unhandledRejection', onUnhandledRejection);
+      // Isolate from whatever the dev/CI shell happens to already export —
+      // this test asserts the manager itself sets neither var, not that the
+      // ambient environment is empty.
+      const hadHfToken = Object.prototype.hasOwnProperty.call(process.env, 'HF_TOKEN');
+      const prevHfToken = process.env.HF_TOKEN;
+      const hadHfHubToken = Object.prototype.hasOwnProperty.call(
+        process.env,
+        'HUGGING_FACE_HUB_TOKEN'
+      );
+      const prevHfHubToken = process.env.HUGGING_FACE_HUB_TOKEN;
+      delete process.env.HF_TOKEN;
+      delete process.env.HUGGING_FACE_HUB_TOKEN;
+      try {
+        const promise = manager.ensureRunning();
+        await vi.advanceTimersByTimeAsync(500);
+        result = await promise;
+        // Flush any pending microtasks so a same-tick unhandled rejection
+        // would have already fired before we assert below.
+        await Promise.resolve();
+      } finally {
+        vi.useRealTimers();
+        process.off('unhandledRejection', onUnhandledRejection);
+        if (hadHfToken) process.env.HF_TOKEN = prevHfToken;
+        if (hadHfHubToken) process.env.HUGGING_FACE_HUB_TOKEN = prevHfHubToken;
+      }
+
+      expect(rejection).toBeUndefined();
+      expect(result).toBe(true);
+      expect(spawnSeam).toHaveBeenCalledTimes(1);
+      const [, , opts] = spawnSeam.mock.calls[0];
+      expect(opts.env.HF_TOKEN).toBeUndefined();
+      expect(opts.env.HUGGING_FACE_HUB_TOKEN).toBeUndefined();
+    });
+
     it('a configured servicePath (advanced override) wins over the provisioner', async () => {
       const provisioner = makeProvisioner();
       manager.setProvisioner(provisioner);

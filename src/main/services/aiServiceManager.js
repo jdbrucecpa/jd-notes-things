@@ -112,7 +112,18 @@ class AIServiceManager {
       }
 
       const env = { ...process.env };
-      const hfToken = this._getHfToken ? await this._getHfToken() : null;
+      let hfToken = null;
+      if (this._getHfToken) {
+        try {
+          hfToken = await this._getHfToken();
+        } catch (err) {
+          // A missing/unreadable token should not block launch — it's only
+          // needed for first-time gated model downloads (models are already
+          // cached in the common case). Degrade to "no token" instead of
+          // letting this escape ensureRunning() as an unhandled rejection.
+          log.warn(`[AIService] HF token read failed: ${err.message}`);
+        }
+      }
       if (hfToken) {
         env.HF_TOKEN = hfToken;
         env.HUGGING_FACE_HUB_TOKEN = hfToken;
