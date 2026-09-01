@@ -19,12 +19,13 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          # Node 24 matches Electron 43's runtime; Node 20 hit EOL 2026-04.
+          node-version: '24'
           cache: 'npm'
 
       # Install without lifecycle scripts to skip native-recorder-nodejs's broken
@@ -59,7 +60,7 @@ jobs:
         shell: bash
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ steps.get_version.outputs.VERSION }}
           draft: false

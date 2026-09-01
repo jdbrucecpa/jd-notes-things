@@ -29,15 +29,17 @@ You are releasing version $VERSION of JD Notes Things with message: "$MESSAGE". 
 ### Step 3: Run Lint
 Run `npm run lint` and fix any errors or warnings before proceeding. Do NOT release with lint failures.
 
-### Step 4: Update Version Numbers
-**IMPORTANT:** Read each file first before editing (the Edit tool requires a prior Read).
+### Step 4: Update Version Number
 
-Update the version number in BOTH locations:
+Bump package.json AND package-lock.json in one step:
 
-1. **package.json** - Update the `"version": "X.Y.Z"` field
-2. **src/index.html** - Update the about page version: `<p class="version" id="appVersion">vX.Y.Z</p>`
+```bash
+npm version $VERSION --no-git-tag-version
+```
 
-The version in index.html should have a "v" prefix.
+Do NOT edit `src/index.html` — the about-page version (`#appVersion`) is
+populated at runtime from `app.getVersion()` (see settings.js), so
+package.json is the single source of truth.
 
 ### Step 5: Generate Release Notes
 Create `RELEASE_NOTES_v$VERSION.md` following the established format (see `RELEASE_NOTES_v1.3.0.md` for reference).
