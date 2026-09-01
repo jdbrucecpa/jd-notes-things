@@ -39,6 +39,11 @@ def identify_speakers(
 
         for prof in profiles:
             prof_vec = np.array(prof["vector"], dtype=np.float32)
+            # Profiles enrolled under a different embedding model have a
+            # different dimension — incomparable, and scipy cosine would
+            # raise. Skip them (they re-enroll app-side).
+            if prof_vec.shape != emb_vec.shape:
+                continue
             dist = cosine(emb_vec, prof_vec)
             if dist < best_distance:
                 best_distance = dist
@@ -57,7 +62,8 @@ def identify_speakers(
             "speaker": emb["speaker"],
             "name": best_name,
             "confidence": round(confidence, 3),
-            "distance": round(best_distance, 4),
+            # inf when every profile was dimension-skipped — not JSON-serializable
+            "distance": None if best_distance == float("inf") else round(best_distance, 4),
         })
 
     return results

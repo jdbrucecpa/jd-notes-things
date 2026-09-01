@@ -76,7 +76,7 @@ const { RecordingManager, RecallProvider, LocalProvider } = require('./main/reco
 const { AIServiceManager } = require('./main/services/aiServiceManager');
 const { AudioServiceProvisioner } = require('./main/services/audioServiceProvisioner');
 const { mergeNearDuplicateLabels } = require('./main/services/speakerLabelMerge');
-const { computeTrackAnchor } = require('./main/services/trackAnchorService');
+const { computeTrackAnchorWithOverrides } = require('./main/services/trackAnchorService');
 const { runBackfill } = require('./main/services/voiceProfileBackfill');
 const { reembedCorrections } = require('./main/services/correctionReembed');
 const { runContentAwarePass } = require('./main/services/contentAwarePass');
@@ -3338,16 +3338,35 @@ async function initSDK() {
                       console.warn('[Waterfall] Stage 0 skipped:', stage0Err.message);
                     }
 
-                    // Stage 1: track anchor (user + remote identification from isolation tracks).
+                    // Stage 1 + 1.5: track anchor (user/remote identification from
+                    // isolation tracks) plus per-utterance stem overrides — flip
+                    // turns whose stem evidence strongly contradicts their
+                    // diarization label (see 2026-09-01 stem-override spec).
                     try {
-                      trackAnchor = await computeTrackAnchor(
+                      const anchored = await computeTrackAnchorWithOverrides(
                         {
                           micAudioFilePath: meetingForMatching.micAudioFilePath,
                           appAudioFilePath: meetingForMatching.appAudioFilePath,
                           systemAudioFilePath: meetingForMatching.systemAudioFilePath,
                         },
-                        waterfallSegments
+                        waterfallSegments,
+                        meetingForMatching.transcript
                       );
+                      trackAnchor = anchored.anchor;
+                      if (anchored.overrides.length > 0) {
+                        for (const o of anchored.overrides) {
+                          meetingForMatching.transcript[o.index] = {
+                            ...meetingForMatching.transcript[o.index],
+                            speaker: o.to,
+                          };
+                        }
+                        console.log(
+                          `[Waterfall] Stage 1.5 flipped ${anchored.overrides.length} utterance(s):`,
+                          anchored.overrides.map(o => `#${o.index} ${o.from}→${o.to}`).join(', ')
+                        );
+                        meetingsData.pastMeetings[meetingIndex].transcript =
+                          meetingForMatching.transcript;
+                      }
                     } catch (stage1Err) {
                       console.warn('[Waterfall] Stage 1 skipped:', stage1Err.message);
                     }
@@ -8468,14 +8487,25 @@ async function rerunTranscriptionForMeeting({ meetingId, provider = null, audioP
         }
 
         try {
-          rerunTrackAnchor = await computeTrackAnchor(
+          const anchored = await computeTrackAnchorWithOverrides(
             {
               micAudioFilePath: meeting.micAudioFilePath,
               appAudioFilePath: meeting.appAudioFilePath,
               systemAudioFilePath: meeting.systemAudioFilePath,
             },
-            rerunWaterfallSegments
+            rerunWaterfallSegments,
+            meeting.transcript
           );
+          rerunTrackAnchor = anchored.anchor;
+          if (anchored.overrides.length > 0) {
+            for (const o of anchored.overrides) {
+              meeting.transcript[o.index] = { ...meeting.transcript[o.index], speaker: o.to };
+            }
+            console.log(
+              `[Waterfall:Rerun] Stage 1.5 flipped ${anchored.overrides.length} utterance(s):`,
+              anchored.overrides.map(o => `#${o.index} ${o.from}→${o.to}`).join(', ')
+            );
+          }
         } catch (stage1Err) {
           console.warn('[Waterfall:Rerun] Stage 1 skipped:', stage1Err.message);
         }
@@ -12671,7 +12701,7 @@ async function processRecallAITranscript(transcript, meetingId, _windowId) {
 
 /**
  * Map provider preference value to simple provider name
- * @param {string} providerValue - Value from settings (e.g., 'claude-haiku-4-5', 'gemini-3.1-flash-lite', 'ollama-llama3')
+ * @param {string} providerValue - Value from settings (e.g., 'claude-haiku-4-5', 'gemini-3.5-flash-lite', 'ollama-llama3')
  * @returns {string} Provider name for llmService.switchProvider() (e.g., 'anthropic', 'gemini', 'ollama')
  */
 function mapProviderValue(providerValue) {

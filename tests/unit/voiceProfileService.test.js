@@ -94,6 +94,16 @@ function makeDb() {
           duration: s.duration,
           created_at: '',
         })),
+    deleteVoiceSamples: profileId => {
+      let removed = 0;
+      for (let i = samples.length - 1; i >= 0; i--) {
+        if (samples[i].profile_id === profileId) {
+          samples.splice(i, 1);
+          removed++;
+        }
+      }
+      return removed;
+    },
   };
 }
 
@@ -835,5 +845,121 @@ describe('recomputeProfile — centroid recency window', () => {
     // capped at 0.95.
     expect(profile.sampleCount).toBe(60);
     expect(profile.confidence).toBeCloseTo(0.95, 5);
+  });
+});
+
+// ============================================================
+// 8. Embedding-model migration — dimension guards
+// (pyannote/embedding 512-d → wespeaker 256-d, 2026-09)
+// ============================================================
+
+describe('dimension guards (embedding-model migration)', () => {
+  it('cosineSimilarity returns 0 for mismatched dimensions (never garbage)', () => {
+    const a = unitVector(4, 0);
+    const b = unitVector(8, 0); // same direction but different space
+    expect(cosineSimilarity(a, b)).toBe(0);
+    expect(cosineDistance(a, b)).toBe(1);
+  });
+
+  it('findBestMatch never matches a profile from a different embedding space', () => {
+    const db = makeDb();
+    const svc = new VoiceProfileService(db);
+    // Old-space profile (8-d), stored directly via saveProfile
+    svc.saveProfile({
+      contactName: 'Old Space',
+      contactEmail: 'old@example.com',
+      embedding: unitVector(8, 0),
+      sampleCount: 5,
+      totalDuration: 100,
+      confidence: 0.75,
+    });
+
+    // Query with a new-space (4-d) embedding aligned with the old profile's axis
+    const result = svc.findBestMatch(unitVector(4, 0));
+    expect(result.confidence).toBe('low');
+    expect(result.distance).toBe(1);
+  });
+
+  it('findBestMatch prefers a same-space profile over a stale different-space one', () => {
+    const db = makeDb();
+    const svc = new VoiceProfileService(db);
+    svc.saveProfile({
+      contactName: 'Stale',
+      contactEmail: 'stale@example.com',
+      embedding: unitVector(8, 0),
+      sampleCount: 5,
+      totalDuration: 100,
+      confidence: 0.75,
+    });
+    svc.saveProfile({
+      contactName: 'Fresh',
+      contactEmail: 'fresh@example.com',
+      embedding: unitVector(4, 0),
+      sampleCount: 5,
+      totalDuration: 100,
+      confidence: 0.75,
+    });
+
+    const result = svc.findBestMatch(unitVector(4, 0));
+    expect(result.profile.contactName).toBe('Fresh');
+    expect(result.distance).toBeCloseTo(0, 5);
+  });
+
+  it('upsertProfileSample re-founds a profile when the embedding space changes', () => {
+    const db = makeDb();
+    const svc = new VoiceProfileService(db);
+
+    // Establish an old-space (8-d) profile with 2 samples
+    svc.upsertProfileSample(
+      { contactName: 'Migrating', contactEmail: 'm@example.com' },
+      unitVector(8, 0),
+      10,
+      'meeting-1'
+    );
+    svc.upsertProfileSample(
+      { contactName: 'Migrating', contactEmail: 'm@example.com' },
+      unitVector(8, 0),
+      10,
+      'meeting-2'
+    );
+
+    // New-space (4-d) sample arrives — must NOT be rejected by the poisoning
+    // guard; the profile is re-founded in the new space instead.
+    const result = svc.upsertProfileSample(
+      { contactName: 'Migrating', contactEmail: 'm@example.com' },
+      unitVector(4, 2),
+      15,
+      'meeting-3'
+    );
+    expect(result.rejected).toBeFalsy();
+
+    const profile = svc.getProfileByEmail('m@example.com');
+    expect(profile.embedding.length).toBe(4); // centroid now in the new space
+    expect(profile.sampleCount).toBe(1); // old samples discarded
+    const samples = svc.getSamples(profile.id);
+    expect(samples.length).toBe(1);
+    expect(samples[0].embedding.length).toBe(4);
+  });
+
+  it('recomputeProfile averages only samples from the newest embedding space', () => {
+    const db = makeDb();
+    const svc = new VoiceProfileService(db);
+    const { id } = svc.saveProfile({
+      contactName: 'Mixed',
+      contactEmail: 'mixed@example.com',
+      embedding: unitVector(8, 0),
+      sampleCount: 1,
+      totalDuration: 10,
+      confidence: 0.5,
+    });
+    // Mixed-dimension samples (defensive scenario — ingestion guards should
+    // prevent this, but the centroid must never average across spaces)
+    svc.addSample(id, 'meeting-1', unitVector(8, 0), 10);
+    svc.addSample(id, 'meeting-2', unitVector(4, 1), 10);
+
+    expect(svc.recomputeProfile(id)).toBe(true);
+    const profile = svc.getProfile(id);
+    expect(profile.embedding.length).toBe(4);
+    expect(profile.embedding[1]).toBeCloseTo(1, 5);
   });
 });

@@ -34,6 +34,15 @@ const DOMINANCE_MARGIN = 0.15; // and beat the runner-up by this much
 const ACTIVE_FLOOR_RATIO = 0.1; // "track active" = RMS > 10% of its p95
 const REMOTE_ACTIVE_FRACTION = 0.6; // label is remote if >=60% of its segments are app-active
 
+// Stage 1.5 (per-utterance stem override) tunables. Flips require
+// near-exclusive single-stem activity across the utterance; double-talk
+// windows (including echo bleed) and silence count only toward the
+// denominator, diluting both fractions — so ambiguous audio blocks a flip
+// rather than causing one.
+const OVERRIDE_MIN_DURATION_S = 0.5; // shorter utterances have too few windows to judge
+const OVERRIDE_STRONG_FRACTION = 0.8; // dominant stem must be exclusively active this often
+const OVERRIDE_CONTRA_FRACTION = 0.05; // opposing stem may be exclusively active at most this often
+
 /**
  * Mean RMS of the windows covering [startSec, endSec). Pure.
  * Windows past the end of the array contribute 0 (solo tracks can be shorter
@@ -142,6 +151,94 @@ function computeAnchor(segments, micWindows, appWindows) {
   return { userLabel, userDominance, remoteLabels: remoteLabels.sort() };
 }
 
+/**
+ * Stage 1.5: per-utterance stem overrides. Pure.
+ *
+ * Flips a transcript utterance's diarization label when the isolation-track
+ * evidence strongly contradicts it: an utterance labeled remote whose span is
+ * near-exclusively mic-active is the user; an utterance labeled as the user
+ * whose span is near-exclusively app-active is remote. The user→remote flip
+ * needs an unambiguous target (a sole remote label from the anchor, else a
+ * sole non-user label in the transcript) — with 2+ remote speakers the true
+ * target is unknowable from stems, so the label is left alone.
+ *
+ * Word times are seconds (local-provider utterance shape). Utterances without
+ * word timings, or shorter than OVERRIDE_MIN_DURATION_S, are skipped.
+ *
+ * @param {Array<{speaker: string, words?: Array<{start: number, end: number}>}>} transcript
+ * @param {{userLabel: string|null, remoteLabels: string[]}|null} anchor - Stage 1 result
+ * @param {Float32Array|null} micWindows - per-100ms RMS of the mic track
+ * @param {Float32Array|null} appWindows - per-100ms RMS of the app/system track
+ * @returns {Array<{index: number, from: string, to: string}>}
+ */
+function computeUtteranceOverrides(transcript, anchor, micWindows, appWindows) {
+  // Both stems are required: "exclusively active on one stem" is not
+  // measurable with only one stem decoded.
+  if (!anchor?.userLabel || !micWindows || !appWindows || !Array.isArray(transcript)) {
+    return [];
+  }
+
+  const micFloor = p95(micWindows) * ACTIVE_FLOOR_RATIO;
+  const appFloor = p95(appWindows) * ACTIVE_FLOOR_RATIO;
+
+  let remoteTarget = null;
+  if (anchor.remoteLabels?.length === 1) {
+    remoteTarget = anchor.remoteLabels[0];
+  } else if (!anchor.remoteLabels?.length) {
+    const others = new Set();
+    for (const u of transcript) {
+      if (u?.speaker && u.speaker !== anchor.userLabel) others.add(u.speaker);
+    }
+    if (others.size === 1) remoteTarget = others.values().next().value;
+  }
+
+  const overrides = [];
+  for (let index = 0; index < transcript.length; index++) {
+    const u = transcript[index];
+    const words = u?.words;
+    if (!Array.isArray(words) || words.length === 0) continue;
+    const startSec = words[0]?.start;
+    const endSec = words[words.length - 1]?.end;
+    if (typeof startSec !== 'number' || typeof endSec !== 'number') continue;
+    if (endSec - startSec < OVERRIDE_MIN_DURATION_S) continue;
+
+    const from = Math.max(0, Math.floor((startSec * 1000) / WINDOW_MS));
+    const to = Math.ceil((endSec * 1000) / WINDOW_MS);
+    const total = to - from;
+    if (total <= 0) continue;
+
+    let micOnly = 0;
+    let appOnly = 0;
+    for (let i = from; i < to; i++) {
+      // Past-EOF windows read as silent (solo tracks can be shorter than the mix).
+      const mic = i < micWindows.length ? micWindows[i] : 0;
+      const app = i < appWindows.length ? appWindows[i] : 0;
+      const micActive = mic > micFloor;
+      const appActive = app > appFloor;
+      if (micActive && !appActive) micOnly++;
+      else if (appActive && !micActive) appOnly++;
+    }
+    const micOnlyFrac = micOnly / total;
+    const appOnlyFrac = appOnly / total;
+
+    if (
+      u.speaker !== anchor.userLabel &&
+      micOnlyFrac >= OVERRIDE_STRONG_FRACTION &&
+      appOnlyFrac <= OVERRIDE_CONTRA_FRACTION
+    ) {
+      overrides.push({ index, from: u.speaker, to: anchor.userLabel });
+    } else if (
+      u.speaker === anchor.userLabel &&
+      remoteTarget &&
+      appOnlyFrac >= OVERRIDE_STRONG_FRACTION &&
+      micOnlyFrac <= OVERRIDE_CONTRA_FRACTION
+    ) {
+      overrides.push({ index, from: u.speaker, to: remoteTarget });
+    }
+  }
+  return overrides;
+}
+
 /** Decode an audio file to per-100ms RMS windows via FFmpeg. Streams; O(windows) memory. */
 function decodeToRmsWindows(audioFilePath) {
   return new Promise((resolve, reject) => {
@@ -203,6 +300,19 @@ function decodeToRmsWindows(audioFilePath) {
  * @returns {Promise<{userLabel: string|null, userDominance: number, remoteLabels: string[]}|null>}
  */
 async function computeTrackAnchor(trackPaths, segments) {
+  const decoded = await decodeTrackWindows(trackPaths);
+  if (!decoded) return null;
+
+  const anchor = computeAnchor(segments, decoded.micWindows, decoded.appWindows);
+  log.info(
+    `[TrackAnchor] userLabel=${anchor.userLabel} dominance=${anchor.userDominance.toFixed(3)} ` +
+      `remote=[${anchor.remoteLabels.join(',')}]`
+  );
+  return anchor;
+}
+
+/** Decode both isolation tracks to RMS windows; null when neither is usable. */
+async function decodeTrackWindows(trackPaths) {
   const micPath = trackPaths.micAudioFilePath || null;
   const appPath = trackPaths.appAudioFilePath || trackPaths.systemAudioFilePath || null;
   if (!micPath && !appPath) return null; // no isolation tracks → skip Stage 1
@@ -221,21 +331,59 @@ async function computeTrackAnchor(trackPaths, segments) {
     log.warn(`[TrackAnchor] app/system decode failed: ${appResult.reason?.message}`);
   }
   if (!micWindows && !appWindows) return null;
+  return { micWindows, appWindows };
+}
 
-  const anchor = computeAnchor(segments, micWindows, appWindows);
+/**
+ * Stage 1 + Stage 1.5 in one pass (single decode of each stem): compute the
+ * anchor, then per-utterance overrides for flips the caller applies to the
+ * transcript. Degrades exactly like computeTrackAnchor — with no usable
+ * tracks, returns a null anchor and no overrides.
+ *
+ * @param {{ micAudioFilePath?: string|null, appAudioFilePath?: string|null,
+ *           systemAudioFilePath?: string|null }} trackPaths
+ * @param {Array<{speaker: string, start: number, end: number}>} segments
+ * @param {Array<{speaker: string, words?: Array}>} transcript - utterances (local-provider shape)
+ * @returns {Promise<{anchor: {userLabel: string|null, userDominance: number, remoteLabels: string[]}|null,
+ *                    overrides: Array<{index: number, from: string, to: string}>}>}
+ */
+async function computeTrackAnchorWithOverrides(trackPaths, segments, transcript) {
+  const decoded = await decodeTrackWindows(trackPaths);
+  if (!decoded) return { anchor: null, overrides: [] };
+
+  const anchor = computeAnchor(segments, decoded.micWindows, decoded.appWindows);
   log.info(
     `[TrackAnchor] userLabel=${anchor.userLabel} dominance=${anchor.userDominance.toFixed(3)} ` +
       `remote=[${anchor.remoteLabels.join(',')}]`
   );
-  return anchor;
+
+  const overrides = computeUtteranceOverrides(
+    transcript,
+    anchor,
+    decoded.micWindows,
+    decoded.appWindows
+  );
+  if (overrides.length > 0) {
+    log.info(
+      `[TrackAnchor] Stage 1.5 stem overrides: ${overrides
+        .map(o => `#${o.index} ${o.from}→${o.to}`)
+        .join(', ')}`
+    );
+  }
+  return { anchor, overrides };
 }
 
 module.exports = {
   computeTrackAnchor,
+  computeTrackAnchorWithOverrides,
   computeAnchor,
+  computeUtteranceOverrides,
   segmentRms,
   decodeToRmsWindows,
   WINDOW_MS,
   DOMINANCE_THRESHOLD,
   DOMINANCE_MARGIN,
+  OVERRIDE_MIN_DURATION_S,
+  OVERRIDE_STRONG_FRACTION,
+  OVERRIDE_CONTRA_FRACTION,
 };

@@ -21,8 +21,12 @@ TRANSCRIPTION_COMPUTE_TYPE = os.getenv("JD_AUDIO_COMPUTE_TYPE", "float16")
 ALIGNMENT_MODEL = "WAV2VEC2_ASR_BASE_960H"
 
 # PyAnnote model identifiers
-DIARIZATION_MODEL = "pyannote/speaker-diarization-3.1"
-EMBEDDING_MODEL = "pyannote/embedding"
+DIARIZATION_MODEL = "pyannote/speaker-diarization-community-1"
+# wespeaker resnet34-LM (~1% EER) replaced the 2020-era pyannote/embedding
+# (~2.8% EER) on 2026-09-01. Embeddings from different models are NOT
+# comparable — voice profiles enrolled under the old model are re-founded
+# by the app on their next sample (see voiceProfileService.js).
+EMBEDDING_MODEL = "pyannote/wespeaker-voxceleb-resnet34-LM"
 
 # Version
-VERSION = "0.2.0"
+VERSION = "0.3.0"

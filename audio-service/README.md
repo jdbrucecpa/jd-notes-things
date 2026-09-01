@@ -2,7 +2,7 @@
 
 Local audio transcription + speaker diarization service.
 
-A standalone Python service that provides local (on-device) audio processing using faster-whisper (Whisper large-v3-turbo) for transcription, PyAnnote 3.1 for speaker diarization, and FastAPI for the HTTP interface. Designed to run as a Windows system tray application alongside an Electron desktop meeting note-taker.
+A standalone Python service that provides local (on-device) audio processing using faster-whisper (Whisper large-v3-turbo) for transcription, PyAnnote community-1 for speaker diarization, and FastAPI for the HTTP interface. Designed to run as a Windows system tray application alongside an Electron desktop meeting note-taker.
 
 ## Prerequisites
 
@@ -49,7 +49,7 @@ python -m venv .venv
 
 **Step 2.** Install core dependencies (this pulls CPU-only PyTorch via PyAnnote):
 ```
-pip install faster-whisper "pyannote.audio>=3.1" soundfile librosa fastapi "uvicorn[standard]" pydantic numpy scipy pystray Pillow omegaconf
+pip install faster-whisper "pyannote.audio>=4" soundfile librosa fastapi "uvicorn[standard]" pydantic numpy scipy pystray Pillow omegaconf
 ```
 
 **Step 3.** Override with CUDA nightly PyTorch:
@@ -131,8 +131,8 @@ Lists available model names by category.
 ```json
 {
   "transcription": ["large-v3-turbo"],
-  "diarization": ["pyannote-3.1"],
-  "embedding": ["pyannote-embedding"]
+  "diarization": ["pyannote-community-1"],
+  "embedding": ["wespeaker-voxceleb-resnet34-LM"]
 }
 ```
 
@@ -406,7 +406,7 @@ All endpoints return standard HTTP error codes:
                 +-----------+-----------+
                 |           |           |
           Transcriber   Diarizer    Embedder
-         (faster-whisper) (PyAnnote 3.1)  (PyAnnote embedding)
+         (faster-whisper) (PyAnnote comm-1) (wespeaker resnet34)
                 |           |           |
                 +-----+-----+-----------+
                       |
@@ -420,8 +420,8 @@ All endpoints return standard HTTP error codes:
 - **ModelManager** handles lazy loading (models load on first request, not at startup) and automatic unloading after 5 minutes of inactivity. This keeps GPU memory at zero when idle.
 - **Models:**
   - faster-whisper large-v3-turbo for transcription (via CTranslate2)
-  - PyAnnote speaker-diarization-3.1 for speaker segmentation
-  - PyAnnote embedding for speaker voice fingerprints
+  - PyAnnote speaker-diarization-community-1 for speaker segmentation (exclusive, non-overlapping turns used for the transcript merge)
+  - wespeaker-voxceleb-resnet34-LM (256-d, via pyannote) for speaker voice fingerprints — replaced pyannote/embedding 2026-09; old profiles re-enroll automatically on their next sample
 - **GPU memory:** approximately 2.4 GB at peak (all models loaded), zero when idle.
 - **System tray app** (pystray) manages the Windows lifecycle -- start, stop, and unload from the tray icon.
 - **Stateless design:** the service processes audio files and returns JSON. No database, no persistent storage, no session state.

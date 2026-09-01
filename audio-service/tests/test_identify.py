@@ -75,3 +75,30 @@ class TestIdentifySpeakers:
         names = {m["speaker"]: m["name"] for m in matches}
         assert names["Speaker 1"] == "Tim"
         assert names["Speaker 2"] == "Sarah"
+
+
+class TestDimensionMismatch:
+    def test_skips_profiles_from_a_different_embedding_space(self):
+        """Profiles enrolled under the old 512-d model must be skipped (not
+        crash scipy, not garbage-match) when queried with new-space vectors."""
+        embeddings = [{"speaker": "SPEAKER_00", "vector": [1.0, 0.0, 0.0, 0.0]}]
+        profiles = [
+            {"name": "Old Model", "vector": [1.0] + [0.0] * 511},  # stale 512-d
+            {"name": "New Model", "vector": [1.0, 0.0, 0.0, 0.0]},  # same space
+        ]
+        results = identify_speakers(embeddings, profiles)
+        assert results[0]["name"] == "New Model"
+        assert results[0]["distance"] == 0.0
+
+    def test_all_profiles_stale_yields_no_match(self):
+        embeddings = [{"speaker": "SPEAKER_00", "vector": [1.0, 0.0, 0.0, 0.0]}]
+        profiles = [{"name": "Old Model", "vector": [1.0] + [0.0] * 511}]
+        results = identify_speakers(embeddings, profiles)
+        assert results[0]["name"] is None
+        assert results[0]["confidence"] == 0.0
+
+    def test_all_stale_distance_is_json_safe_none(self):
+        embeddings = [{"speaker": "SPEAKER_00", "vector": [1.0, 0.0, 0.0, 0.0]}]
+        profiles = [{"name": "Old Model", "vector": [1.0] + [0.0] * 511}]
+        results = identify_speakers(embeddings, profiles)
+        assert results[0]["distance"] is None

@@ -86,6 +86,10 @@ function deserializeEmbedding(buffer) {
  * @returns {number}
  */
 function cosineSimilarity(a, b) {
+  // Different embedding models produce different vector dimensions; comparing
+  // across spaces is meaningless (and indexing past the shorter vector would
+  // produce garbage or NaN). Treat as orthogonal: similarity 0, distance 1.
+  if (a.length !== b.length) return 0;
   let dot = 0;
   let magA = 0;
   let magB = 0;
@@ -337,8 +341,15 @@ class VoiceProfileService {
     // the newest window is the tail). Sample count, total duration, and
     // confidence still reflect the FULL history — the window only bounds which
     // samples move the embedding, so drift is absorbed quickly.
+    // Embedding-space guard: after an embedding-model migration, samples from
+    // different models must never average together. The centroid uses only
+    // samples in the NEWEST sample's embedding space (ingestion re-founds
+    // profiles on a space change, so this is defense in depth).
+    const newestDim = samples[samples.length - 1].embedding.length;
+    const sameSpace = samples.filter(s => s.embedding.length === newestDim);
+
     const centroidSamples =
-      samples.length > MAX_CENTROID_SAMPLES ? samples.slice(-MAX_CENTROID_SAMPLES) : samples;
+      sameSpace.length > MAX_CENTROID_SAMPLES ? sameSpace.slice(-MAX_CENTROID_SAMPLES) : sameSpace;
 
     const avgEmbedding = weightedAverageEmbedding(centroidSamples);
     const sampleCount = samples.length;
@@ -455,6 +466,18 @@ class VoiceProfileService {
       });
       profile = { id };
       created = true;
+    } else if (profile.embedding && profile.embedding.length !== embedding.length) {
+      // Embedding-model migration (e.g. pyannote/embedding 512-d → wespeaker
+      // 256-d, 2026-09): the stored profile lives in a different embedding
+      // space and its samples can never be compared to new ones. Re-found the
+      // profile from this sample — the learning loop (corrections, backfill,
+      // auto-enroll) rebuilds it in the new space over subsequent meetings.
+      log.warn(
+        `${LOG_PREFIX} Embedding space changed for ${contact.contactName} (${email}): ` +
+          `stored ${profile.embedding.length}-d vs incoming ${embedding.length}-d — ` +
+          `re-founding profile ${profile.id} in the new space (old samples discarded)`
+      );
+      this.db.deleteVoiceSamples(profile.id);
     } else if ((profile.sampleCount ?? 0) >= 2) {
       // Sample poisoning guard: no un-enroll mechanism exists, so a bad sample
       // is permanent — an established profile refuses samples that don't match

@@ -105,8 +105,8 @@ def warmup(request: Request):
 def models():
     return ModelsResponse(
         transcription=["large-v3-turbo"],
-        diarization=["pyannote-3.1"],
-        embedding=["pyannote-embedding"],
+        diarization=["pyannote-community-1"],
+        embedding=["wespeaker-voxceleb-resnet34-LM"],
     )
 
 

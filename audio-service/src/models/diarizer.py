@@ -43,8 +43,14 @@ class Diarizer:
         audio = load_audio(audio_path)
         output = self.pipeline(audio, **kwargs)
 
-        # pyannote.audio 4.x returns DiarizeOutput; extract the Annotation
-        diarization = getattr(output, "speaker_diarization", output)
+        # pyannote.audio 4.x returns DiarizeOutput. Prefer the exclusive
+        # (non-overlapping) annotation when the pipeline provides one
+        # (community-1) — word-midpoint merging downstream is only
+        # well-defined against non-overlapping turns. Fall back to the
+        # standard annotation, then to the raw output (3.x bare Annotation).
+        diarization = getattr(output, "exclusive_speaker_diarization", None)
+        if diarization is None:
+            diarization = getattr(output, "speaker_diarization", output)
 
         segments = []
         for turn, _, speaker in diarization.itertracks(yield_label=True):

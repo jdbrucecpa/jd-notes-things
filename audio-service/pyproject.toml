@@ -1,6 +1,6 @@
 [project]
 name = "jd-audio-service"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local audio transcription + diarization + speaker identification service"
 requires-python = "==3.13.*"
 dependencies = [
