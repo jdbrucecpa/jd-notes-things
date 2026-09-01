@@ -1248,8 +1248,8 @@ function showRerunProviderPicker() {
 
     const providers = [
       { id: 'local', name: 'Local (JD Audio Service)', price: 'Free' },
-      { id: 'assemblyai', name: 'AssemblyAI', price: '$0.37/hr' },
-      { id: 'deepgram', name: 'Deepgram', price: '$0.43/hr' },
+      { id: 'assemblyai', name: 'AssemblyAI', price: '$0.21/hr' },
+      { id: 'deepgram', name: 'Deepgram', price: '$0.26/hr' },
     ];
 
     for (const p of providers) {
@@ -2068,12 +2068,13 @@ async function getModelOptions() {
   const models = [
     { value: 'default', label: `Default (${getModelDisplayName(defaultModel)})` },
     // Budget tier
-    { value: 'gemini-3.1-flash-lite', label: '💰 Gemini 3.1 Flash Lite — $0.25/$1.50' },
+    { value: 'gemini-3.5-flash-lite', label: '💰 Gemini 3.5 Flash Lite — $0.30/$2.50' },
     // Balanced tier
-    { value: 'gemini-3.5-flash', label: '⚖️ Gemini 3.5 Flash — $1.50/$9.00' },
-    { value: 'claude-haiku-4-5', label: '⚖️ Claude Haiku 4.5 — $0.80/$4.00' },
+    { value: 'gemini-3.7-flash', label: '⚖️ Gemini 3.7 Flash — $0.75/$3.75 (intro)' },
+    { value: 'claude-haiku-4-5', label: '⚖️ Claude Haiku 4.5 — $1.00/$5.00' },
     // Premium tier
-    { value: 'claude-sonnet-5', label: '⭐ Claude Sonnet 5 — $3.00/$15.00' },
+    { value: 'claude-sonnet-5', label: '⭐ Claude Sonnet 5 — $2.00/$10.00' },
+    { value: 'claude-opus-5', label: '⭐ Claude Opus 5 — $5.00/$25.00' },
   ];
 
   // Dynamically add available Ollama models
@@ -2102,10 +2103,14 @@ async function getModelOptions() {
  */
 function getModelDisplayName(modelValue) {
   const names = {
-    'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
-    'gemini-3.5-flash': 'Gemini 3.5 Flash',
+    'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
+    'gemini-3.7-flash': 'Gemini 3.7 Flash',
     'claude-haiku-4-5': 'Claude Haiku 4.5',
     'claude-sonnet-5': 'Claude Sonnet 5',
+    'claude-opus-5': 'Claude Opus 5',
+    // Legacy preference strings (pre-2026-09) — may persist in old settings/meetings
+    'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
+    'gemini-3.5-flash': 'Gemini 3.5 Flash',
   };
   if (names[modelValue]) return names[modelValue];
   // Dynamic Ollama models: 'ollama-llama3:latest' → 'Ollama llama3:latest'

@@ -130,8 +130,8 @@ LLM service scans folder, presents templates in UI, generates summaries matching
 
 Unified `TranscriptionService` with provider-specific adapters:
 
-- **AssemblyAI:** $0.37/hr (3-step API: upload → transcribe → poll)
-- **Deepgram:** $0.43/hr (direct upload)
+- **AssemblyAI:** $0.21/hr, universal-3-5-pro (3-step API: upload → transcribe → poll)
+- **Deepgram:** $0.26/hr, nova-3 (direct upload)
 - **Local:** Free — JD Audio Service (Whisper large-v3-turbo via faster-whisper + PyAnnote diarization). Requires an NVIDIA GPU with CUDA.
 
 Runtime switching via UI dropdown with localStorage persistence. The `recallai` transcription provider was removed in v2.0.

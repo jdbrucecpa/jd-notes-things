@@ -29,7 +29,7 @@ function describeHttpError(label, error) {
  * Supports multiple providers: AssemblyAI, Deepgram, Local (JD Audio Service)
  *
  * Universal-3-Pro Features (AssemblyAI):
- * - Higher accuracy transcription with speech_models: ['universal-3-pro', 'universal-2']
+ * - Higher accuracy transcription with speech_models: ['universal-3-5-pro', 'universal-2']
  * - Keyterms prompting via `keyterms_prompt` (up to 1,000 domain-specific terms)
  * - Speaker identification with names via speech_understanding
  * - Verbatim mode for disfluencies (preserves "um", "uh", etc.)
@@ -341,7 +341,7 @@ class TranscriptionService {
     const requestBody = {
       audio_url: uploadUrl,
       speaker_labels: true, // Enable speaker diarization
-      speech_models: ['universal-3-pro', 'universal-2'], // Primary + fallback (required for dual prompting)
+      speech_models: ['universal-3-5-pro', 'universal-2'], // Primary + fallback (required for dual prompting); universal-3-pro retired 2026-09-02
       language_detection: true, // Recommended for Universal-3-Pro
     };
 
@@ -492,7 +492,7 @@ class TranscriptionService {
    * https://developers.deepgram.com/docs
    * @param {string} audioFilePath - Path to audio file
    * @param {object} options - Transcription options
-   * @param {Array} options.keywords - Keyword boosts ["word:intensifier", ...]
+   * @param {Array} options.keywords - Vocabulary terms for keyterm prompting (plain words)
    */
   async transcribeWithDeepgram(audioFilePath, options = {}) {
     const DEEPGRAM_API_KEY = await this.getApiKey('DEEPGRAM_API_KEY');
@@ -506,16 +506,18 @@ class TranscriptionService {
     const audioStream = fs.createReadStream(audioFilePath);
 
     // Build URL with base parameters
-    let url = 'https://api.deepgram.com/v1/listen?diarize=true&punctuate=true&utterances=true';
+    let url =
+      'https://api.deepgram.com/v1/listen?model=nova-3&diarize=true&punctuate=true&utterances=true';
 
-    // Add keywords if vocabulary is provided (VC-3.3)
+    // Add vocabulary if provided (VC-3.3). nova-3 replaced the legacy
+    // `keywords=word:boost` feature with `keyterm` prompting — plain terms,
+    // no intensifier syntax. Strip any legacy `:boost` suffix defensively.
     if (options.keywords && options.keywords.length > 0) {
-      // Deepgram accepts multiple keywords params: &keywords=word1:3&keywords=word2:5
-      const keywordsParams = options.keywords
-        .map(kw => `keywords=${encodeURIComponent(kw)}`)
+      const keytermParams = options.keywords
+        .map(kw => `keyterm=${encodeURIComponent(String(kw).split(':')[0])}`)
         .join('&');
-      url += '&' + keywordsParams;
-      console.log(`[Deepgram] Using ${options.keywords.length} keyword boosts`);
+      url += '&' + keytermParams;
+      console.log(`[Deepgram] Using ${options.keywords.length} keyterm prompts`);
     }
 
     let response;

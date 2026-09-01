@@ -1167,20 +1167,37 @@ export function initializeSettingsUI() {
       }
     }
 
-    // Update AI provider selections (v1.3.2: Anthropic, Gemini, Ollama)
+    // Update AI provider selections (v1.3.2: Anthropic, Gemini, Ollama).
+    // Legacy Gemini preference strings (pre-2026-09) no longer have dropdown
+    // options — show the current model the LLM service maps them to.
+    const LEGACY_MODEL_TO_CURRENT = {
+      'gemini-3.1-flash-lite': 'gemini-3.5-flash-lite',
+      'gemini-3.5-flash': 'gemini-3.7-flash',
+    };
+    const normalizeModelPref = (value, fallback) => {
+      const v = value || fallback;
+      return LEGACY_MODEL_TO_CURRENT[v] || v;
+    };
+
     if (autoSummaryProviderSelect) {
-      autoSummaryProviderSelect.value =
-        currentSettings.autoSummaryProvider || 'claude-haiku-4-5';
+      autoSummaryProviderSelect.value = normalizeModelPref(
+        currentSettings.autoSummaryProvider,
+        'claude-haiku-4-5'
+      );
     }
 
     if (templateSummaryProviderSelect) {
-      templateSummaryProviderSelect.value =
-        currentSettings.templateSummaryProvider || 'claude-sonnet-5';
+      templateSummaryProviderSelect.value = normalizeModelPref(
+        currentSettings.templateSummaryProvider,
+        'claude-sonnet-5'
+      );
     }
 
     if (patternGenerationProviderSelect) {
-      patternGenerationProviderSelect.value =
-        currentSettings.patternGenerationProvider || 'claude-haiku-4-5';
+      patternGenerationProviderSelect.value = normalizeModelPref(
+        currentSettings.patternGenerationProvider,
+        'claude-haiku-4-5'
+      );
     }
 
     // v2.0: Recording provider (also read from main process appSettings for accuracy)

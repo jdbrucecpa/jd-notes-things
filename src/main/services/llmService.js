@@ -4,7 +4,7 @@
  */
 
 const Anthropic = require('@anthropic-ai/sdk');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 const { OpenAI } = require('openai');
 
 /**
@@ -56,13 +56,17 @@ const ANTHROPIC_MODEL_MAP = {
   'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
   // Premium tier
   'claude-sonnet-5': 'claude-sonnet-5',
+  'claude-opus-5': 'claude-opus-5',
 };
 
 const GEMINI_MODEL_MAP = {
   // Budget tier (current cheapest text model)
-  'gemini-3.1-flash-lite': 'gemini-3.1-flash-lite',
+  'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
   // Balanced tier
-  'gemini-3.5-flash': 'gemini-3.5-flash',
+  'gemini-3.7-flash': 'gemini-3.7-flash',
+  // Legacy preference strings (pre-2026-09 settings/meetings) → nearest current model
+  'gemini-3.1-flash-lite': 'gemini-3.5-flash-lite',
+  'gemini-3.5-flash': 'gemini-3.7-flash',
 };
 
 /**
@@ -73,6 +77,7 @@ const GEMINI_MODEL_MAP = {
 const CLAUDE_MODERN_PARAM_MODELS = [
   'claude-opus-4-7',
   'claude-opus-4-8',
+  'claude-opus-5',
   'claude-sonnet-5',
   'claude-fable-5',
   'claude-mythos-5',
@@ -81,9 +86,16 @@ const CLAUDE_MODERN_PARAM_MODELS = [
 /**
  * Modern models that accept `thinking: { type: 'disabled' }` to run without thinking.
  * Excludes Fable 5 / Mythos 5 (thinking is always on there — an explicit disabled 400s);
- * for those the thinking field would be omitted entirely.
+ * for those the thinking field would be omitted entirely. Opus 5 accepts disabled
+ * only at effort `high` or below — we never send output_config.effort, so the
+ * default (high) keeps this valid.
  */
-const CLAUDE_THINKING_DISABLE_MODELS = ['claude-opus-4-7', 'claude-opus-4-8', 'claude-sonnet-5'];
+const CLAUDE_THINKING_DISABLE_MODELS = [
+  'claude-opus-4-7',
+  'claude-opus-4-8',
+  'claude-opus-5',
+  'claude-sonnet-5',
+];
 
 function claudeUsesModernParams(modelId) {
   return CLAUDE_MODERN_PARAM_MODELS.some(m => modelId && modelId.startsWith(m));
@@ -96,7 +108,7 @@ function claudeSupportsThinkingDisabled(modelId) {
 /**
  * Extract model ID from preference string
  * e.g., 'claude-haiku-4-5' => 'claude-haiku-4-5-20251001'
- * e.g., 'gemini-3.5-flash' => 'gemini-3.5-flash'
+ * e.g., 'gemini-3.7-flash' => 'gemini-3.7-flash'
  * e.g., 'ollama-llama3' => 'llama3'
  */
 function extractModelFromPreference(preference) {
@@ -205,8 +217,11 @@ class AnthropicAdapter extends LLMAdapter {
       }
     }
 
+    // Find the text block explicitly — content[0] can be a thinking block on
+    // models where thinking runs (defensive; summaries currently disable it).
+    const textBlock = message.content.find(b => b.type === 'text');
     return {
-      content: message.content[0].text,
+      content: textBlock ? textBlock.text : '',
       model: message.model,
     };
   }
@@ -289,13 +304,31 @@ class AnthropicAdapter extends LLMAdapter {
 
 /**
  * Google Gemini Adapter
- * Supports Gemini 2.5 Flash and Flash Lite models
+ * Uses the @google/genai SDK (the old @google/generative-ai hit EOL 2025-11-30).
+ * Supports Gemini 3.5 Flash Lite and 3.7 Flash models.
  */
 class GeminiAdapter extends LLMAdapter {
-  constructor(apiKey, model = 'gemini-3.1-flash-lite') {
+  constructor(apiKey, model = 'gemini-3.5-flash-lite') {
     super();
-    this.genAI = new GoogleGenerativeAI(apiKey);
+    this.genAI = new GoogleGenAI({ apiKey });
     this.model = model;
+  }
+
+  _buildRequest({ systemPrompt, userPrompt, cacheableContext, maxTokens, temperature }) {
+    // Build the user prompt with optional cacheable context
+    let fullPrompt = userPrompt;
+    if (cacheableContext) {
+      fullPrompt = `Here is the meeting transcript:\n\n${cacheableContext}\n\n${userPrompt}`;
+    }
+    return {
+      model: this.model,
+      contents: fullPrompt,
+      config: {
+        systemInstruction: systemPrompt,
+        maxOutputTokens: maxTokens,
+        temperature,
+      },
+    };
   }
 
   async generateCompletion(options) {
@@ -307,23 +340,9 @@ class GeminiAdapter extends LLMAdapter {
       temperature = 0.7,
     } = options;
 
-    const generativeModel = this.genAI.getGenerativeModel({
-      model: this.model,
-      systemInstruction: systemPrompt,
-      generationConfig: {
-        maxOutputTokens: maxTokens,
-        temperature,
-      },
-    });
-
-    // Build the user prompt with optional cacheable context
-    let fullPrompt = userPrompt;
-    if (cacheableContext) {
-      fullPrompt = `Here is the meeting transcript:\n\n${cacheableContext}\n\n${userPrompt}`;
-    }
-
-    const result = await generativeModel.generateContent(fullPrompt);
-    const response = result.response;
+    const response = await this.genAI.models.generateContent(
+      this._buildRequest({ systemPrompt, userPrompt, cacheableContext, maxTokens, temperature })
+    );
 
     // Log token usage
     if (response.usageMetadata) {
@@ -331,7 +350,7 @@ class GeminiAdapter extends LLMAdapter {
     }
 
     return {
-      content: response.text(),
+      content: response.text, // property in @google/genai (was a method in the old SDK)
       model: this.model,
     };
   }
@@ -346,26 +365,13 @@ class GeminiAdapter extends LLMAdapter {
       onChunk,
     } = options;
 
-    const generativeModel = this.genAI.getGenerativeModel({
-      model: this.model,
-      systemInstruction: systemPrompt,
-      generationConfig: {
-        maxOutputTokens: maxTokens,
-        temperature,
-      },
-    });
-
-    // Build the user prompt with optional cacheable context
-    let fullPrompt = userPrompt;
-    if (cacheableContext) {
-      fullPrompt = `Here is the meeting transcript:\n\n${cacheableContext}\n\n${userPrompt}`;
-    }
-
-    const result = await generativeModel.generateContentStream(fullPrompt);
+    const stream = await this.genAI.models.generateContentStream(
+      this._buildRequest({ systemPrompt, userPrompt, cacheableContext, maxTokens, temperature })
+    );
 
     let fullText = '';
-    for await (const chunk of result.stream) {
-      const chunkText = chunk.text();
+    for await (const chunk of stream) {
+      const chunkText = chunk.text;
       if (chunkText) {
         fullText += chunkText;
         if (onChunk) {
@@ -519,7 +525,7 @@ class LLMService {
           throw new Error('Google API key (Gemini) is required');
         }
         console.log(
-          `[LLM Service] Initializing Gemini adapter with model: ${this.config.gemini.model || 'gemini-3.1-flash-lite'}`
+          `[LLM Service] Initializing Gemini adapter with model: ${this.config.gemini.model || 'gemini-3.5-flash-lite'}`
         );
         return new GeminiAdapter(this.config.gemini.apiKey, this.config.gemini.model);
 
@@ -607,7 +613,7 @@ class LLMService {
 
   /**
    * Switch to a specific model using preference string
-   * @param {string} preference - Full preference string (e.g., 'claude-haiku-4-5', 'gemini-3.1-flash-lite', 'ollama-llama3')
+   * @param {string} preference - Full preference string (e.g., 'claude-haiku-4-5', 'gemini-3.5-flash-lite', 'ollama-llama3')
    */
   switchToPreference(preference) {
     const model = extractModelFromPreference(preference);
@@ -636,7 +642,7 @@ class LLMService {
     if (this.config.provider === 'anthropic') {
       return this.config.anthropic?.model || 'claude-haiku-4-5-20251001';
     } else if (this.config.provider === 'gemini') {
-      return this.config.gemini?.model || 'gemini-3.1-flash-lite';
+      return this.config.gemini?.model || 'gemini-3.5-flash-lite';
     } else if (this.config.provider === 'ollama') {
       return this.config.ollama?.model || 'llama3';
     }
@@ -668,7 +674,7 @@ function createLLMServiceFromEnv() {
     },
     gemini: {
       apiKey: process.env.GOOGLE_API_KEY,
-      model: 'gemini-3.1-flash-lite',
+      model: 'gemini-3.5-flash-lite',
     },
     ollama: {
       model: process.env.OLLAMA_MODEL || 'llama3',
@@ -714,7 +720,7 @@ async function createLLMServiceFromCredentials(keyManagementService) {
     },
     gemini: {
       apiKey: geminiKey,
-      model: 'gemini-3.1-flash-lite',
+      model: 'gemini-3.5-flash-lite',
     },
     ollama: {
       model: ollamaModel,
@@ -727,7 +733,7 @@ async function createLLMServiceFromCredentials(keyManagementService) {
 
 /**
  * Create LLM service from a provider preference string
- * @param {string} providerPreference - e.g., 'claude-haiku-4-5', 'gemini-3.1-flash-lite', 'ollama-llama3'
+ * @param {string} providerPreference - e.g., 'claude-haiku-4-5', 'gemini-3.5-flash-lite', 'ollama-llama3'
  * @returns {LLMService}
  */
 function createLLMServiceFromPreference(providerPreference) {
@@ -738,7 +744,7 @@ function createLLMServiceFromPreference(providerPreference) {
     },
     gemini: {
       apiKey: process.env.GOOGLE_API_KEY,
-      model: 'gemini-3.1-flash-lite',
+      model: 'gemini-3.5-flash-lite',
     },
     ollama: {
       model: process.env.OLLAMA_MODEL || 'llama3',

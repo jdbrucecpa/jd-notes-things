@@ -321,40 +321,40 @@ class VocabularyService {
   }
 
   /**
-   * Format vocabulary for Deepgram keywords parameter
+   * Format vocabulary for Deepgram's keyterm prompting (nova-3)
    * @param {Object} vocabulary - Merged vocabulary object
-   * @returns {Array} Array of "word:intensifier" strings for Deepgram
+   * @returns {Array} Array of plain terms for Deepgram's keyterm parameter
    */
   formatForDeepgram(vocabulary) {
+    // nova-3 uses keyterm prompting: plain terms only — the legacy
+    // `word:intensifier` keywords syntax is not supported by that model.
     const keywords = [];
 
-    // Add keyword boosts
+    // Add boosted terms
     if (vocabulary.keyword_boosts) {
       for (const kb of vocabulary.keyword_boosts) {
         if (kb.word) {
-          const intensifier = kb.intensifier || 3; // Default boost
-          keywords.push(`${kb.word}:${intensifier}`);
+          keywords.push(kb.word);
         }
       }
     }
 
-    // For spelling corrections, boost the correct spelling
+    // For spelling corrections, prompt the correct spelling
     if (vocabulary.spelling_corrections) {
       for (const sc of vocabulary.spelling_corrections) {
         if (sc.to) {
-          // Add the correct term with a moderate boost
-          keywords.push(`${sc.to}:3`);
+          keywords.push(sc.to);
         }
       }
     }
 
-    // Deepgram has a 200 keyword limit
-    if (keywords.length > 200) {
-      console.warn(`${LOG_PREFIX} Vocabulary exceeds Deepgram's 200 keyword limit, truncating`);
-      keywords.length = 200;
+    // Keyterm prompting is capped at ~100 terms (500 tokens)
+    if (keywords.length > 100) {
+      console.warn(`${LOG_PREFIX} Vocabulary exceeds Deepgram's keyterm limit, truncating to 100`);
+      keywords.length = 100;
     }
 
-    console.log(`${LOG_PREFIX} Formatted ${keywords.length} keywords for Deepgram`);
+    console.log(`${LOG_PREFIX} Formatted ${keywords.length} keyterms for Deepgram`);
     return keywords;
   }
 

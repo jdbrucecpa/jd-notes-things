@@ -191,47 +191,68 @@ class TemplateParser {
    * NOTE: Prices may change. Verify current pricing before major deployments.
    *
    * Models are organized into pricing tiers:
-   * - Budget: Gemini 2.5 Flash Lite
-   * - Balanced: Gemini 2.5 Flash, Claude Haiku 4.5
-   * - Premium: Claude Sonnet 4.6
+   * - Budget: Gemini 3.5 Flash Lite
+   * - Balanced: Gemini 3.7 Flash, Claude Haiku 4.5
+   * - Premium: Claude Sonnet 5, Claude Opus 5
    * - Local: Ollama (free, runs on your hardware)
    */
   static MODEL_PRICING = {
     // ═══════════════════════════════════════════════════════════════════
     // BUDGET TIER - Best for high-volume, cost-sensitive tasks
     // ═══════════════════════════════════════════════════════════════════
-    'gemini-3.1-flash-lite': {
-      input: 0.25, // $0.25 per 1M tokens
-      output: 1.5, // $1.50 per 1M tokens
+    'gemini-3.5-flash-lite': {
+      input: 0.3, // $0.30 per 1M tokens
+      output: 2.5, // $2.50 per 1M tokens
       tier: 'budget',
-      updated: '2026-07-07',
+      updated: '2026-09-01',
     },
 
     // ═══════════════════════════════════════════════════════════════════
     // BALANCED TIER - Good balance of quality and cost
     // ═══════════════════════════════════════════════════════════════════
-    'gemini-3.5-flash': {
-      input: 1.5, // $1.50 per 1M tokens
-      output: 9.0, // $9.00 per 1M tokens
+    'gemini-3.7-flash': {
+      // Intro pricing through 2027-01-01; rises to $1.50/$7.50 after
+      input: 0.75, // $0.75 per 1M tokens
+      output: 3.75, // $3.75 per 1M tokens
       tier: 'balanced',
-      updated: '2026-07-07',
+      updated: '2026-09-01',
     },
     'claude-haiku-4-5': {
-      input: 0.8, // $0.80 per 1M tokens
-      output: 4.0, // $4.00 per 1M tokens
+      input: 1.0, // $1.00 per 1M tokens
+      output: 5.0, // $5.00 per 1M tokens
       tier: 'balanced',
-      updated: '2026-02-28',
+      updated: '2026-09-01',
     },
 
     // ═══════════════════════════════════════════════════════════════════
     // PREMIUM TIER - Best quality for important summaries
     // ═══════════════════════════════════════════════════════════════════
     'claude-sonnet-5': {
-      // Standard rate; intro pricing of $2.00/$10.00 applies through 2026-08-31
-      input: 3.0, // $3.00 per 1M tokens
-      output: 15.0, // $15.00 per 1M tokens
+      input: 2.0, // $2.00 per 1M tokens
+      output: 10.0, // $10.00 per 1M tokens
       tier: 'premium',
-      updated: '2026-07-07',
+      updated: '2026-09-01',
+    },
+    'claude-opus-5': {
+      input: 5.0, // $5.00 per 1M tokens
+      output: 25.0, // $25.00 per 1M tokens
+      tier: 'premium',
+      updated: '2026-09-01',
+    },
+
+    // Legacy preference strings (pre-2026-09 settings/meetings) — the LLM
+    // service maps these to the current models, so estimate at those rates
+    'gemini-3.1-flash-lite': {
+      input: 0.3,
+      output: 2.5,
+      tier: 'budget',
+      updated: '2026-09-01',
+    },
+    'gemini-3.5-flash': {
+      input: 0.75,
+      output: 3.75,
+      tier: 'balanced',
+      updated: '2026-09-01',
     },
 
     // Ollama models (any ollama-* prefix) are always free — handled dynamically in estimateTokens
@@ -242,10 +263,10 @@ class TemplateParser {
    * Using rough estimate: 1 token ≈ 4 characters
    * @param {Object} template - Template object
    * @param {string} transcriptText - Meeting transcript
-   * @param {string} provider - Model provider (e.g., 'gemini-3.1-flash-lite', 'claude-haiku-4-5', 'claude-sonnet-5')
+   * @param {string} provider - Model provider (e.g., 'gemini-3.5-flash-lite', 'claude-haiku-4-5', 'claude-sonnet-5')
    * @returns {Object} Token estimates and cost
    */
-  static estimateTokens(template, transcriptText, provider = 'gemini-3.1-flash-lite') {
+  static estimateTokens(template, transcriptText, provider = 'gemini-3.5-flash-lite') {
     // Estimate input tokens (transcript + all prompts)
     const transcriptTokens = Math.ceil(transcriptText.length / 4);
     const promptsText = template.sections.map(s => s.prompt).join(' ');
@@ -258,11 +279,11 @@ class TemplateParser {
     // Total tokens
     const totalTokens = inputTokens + outputTokens;
 
-    // Get pricing for the selected provider (Ollama models are always free, fallback to gemini-3.1-flash-lite)
+    // Get pricing for the selected provider (Ollama models are always free, fallback to gemini-3.5-flash-lite)
     const pricing =
       this.MODEL_PRICING[provider] ||
       (provider && provider.startsWith('ollama-') ? { input: 0, output: 0 } : null) ||
-      this.MODEL_PRICING['gemini-3.1-flash-lite'];
+      this.MODEL_PRICING['gemini-3.5-flash-lite'];
 
     // Cost estimation using provider-specific pricing
     const inputCost = (inputTokens / 1000000) * pricing.input;
