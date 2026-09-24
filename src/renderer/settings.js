@@ -1168,11 +1168,13 @@ export function initializeSettingsUI() {
     }
 
     // Update AI provider selections (v1.3.2: Anthropic, Gemini, Ollama).
-    // Legacy Gemini preference strings (pre-2026-09) no longer have dropdown
+    // Legacy Gemini/Claude preference strings no longer have dropdown
     // options — show the current model the LLM service maps them to.
     const LEGACY_MODEL_TO_CURRENT = {
       'gemini-3.1-flash-lite': 'gemini-3.5-flash-lite',
-      'gemini-3.5-flash': 'gemini-3.7-flash',
+      'gemini-3.5-flash': 'gemini-3.8-flash',
+      'gemini-3.7-flash': 'gemini-3.8-flash',
+      'claude-opus-5': 'claude-opus-5-5',
     };
     const normalizeModelPref = (value, fallback) => {
       const v = value || fallback;

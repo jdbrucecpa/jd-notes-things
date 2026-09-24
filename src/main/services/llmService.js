@@ -56,17 +56,20 @@ const ANTHROPIC_MODEL_MAP = {
   'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
   // Premium tier
   'claude-sonnet-5': 'claude-sonnet-5',
-  'claude-opus-5': 'claude-opus-5',
+  'claude-opus-5-5': 'claude-opus-5-5',
+  // Legacy preference strings (pre-2026-09-23 settings/meetings) → current model
+  'claude-opus-5': 'claude-opus-5-5',
 };
 
 const GEMINI_MODEL_MAP = {
-  // Budget tier (current cheapest text model)
+  // Budget tier (current Flash-Lite — no newer Flash-Lite as of 2026-09)
   'gemini-3.5-flash-lite': 'gemini-3.5-flash-lite',
   // Balanced tier
-  'gemini-3.7-flash': 'gemini-3.7-flash',
-  // Legacy preference strings (pre-2026-09 settings/meetings) → nearest current model
+  'gemini-3.8-flash': 'gemini-3.8-flash',
+  // Legacy preference strings (older settings/meetings) → nearest current model
   'gemini-3.1-flash-lite': 'gemini-3.5-flash-lite',
-  'gemini-3.5-flash': 'gemini-3.7-flash',
+  'gemini-3.5-flash': 'gemini-3.8-flash',
+  'gemini-3.7-flash': 'gemini-3.8-flash',
 };
 
 /**
@@ -77,28 +80,38 @@ const GEMINI_MODEL_MAP = {
 const CLAUDE_MODERN_PARAM_MODELS = [
   'claude-opus-4-7',
   'claude-opus-4-8',
-  'claude-opus-5',
+  'claude-opus-5-5',
   'claude-sonnet-5',
   'claude-fable-5',
   'claude-mythos-5',
 ];
 
 /**
- * Modern models that accept `thinking: { type: 'disabled' }` to run without thinking.
- * Excludes Fable 5 / Mythos 5 (thinking is always on there — an explicit disabled 400s);
- * for those the thinking field would be omitted entirely. Opus 5 accepts disabled
- * only at effort `high` or below — we never send output_config.effort, so the
- * default (high) keeps this valid.
+ * Models where thinking is ALWAYS on: `thinking: { type: 'disabled' }` and
+ * budget_tokens both 400. Effort (output_config.effort) is the only control.
+ * Checked BEFORE the disable list — prefix matching means e.g. a future
+ * 'claude-opus-5' entry there would also match 'claude-opus-5-5'.
  */
-const CLAUDE_THINKING_DISABLE_MODELS = [
-  'claude-opus-4-7',
-  'claude-opus-4-8',
-  'claude-opus-5',
-  'claude-sonnet-5',
-];
+const CLAUDE_ALWAYS_THINKING_MODELS = ['claude-opus-5-5', 'claude-fable-5', 'claude-mythos-5'];
+
+/**
+ * Modern models that accept `thinking: { type: 'disabled' }` to run without thinking.
+ */
+const CLAUDE_THINKING_DISABLE_MODELS = ['claude-opus-4-7', 'claude-opus-4-8', 'claude-sonnet-5'];
+
+/**
+ * Extra max_tokens for always-thinking models, since thinking tokens count
+ * against max_tokens. Billed only if used. Keep LLM_SECTION_MAX_TOKENS (15000)
+ * + this under ~21,333 — above that the SDK refuses non-streaming requests.
+ */
+const CLAUDE_THINKING_HEADROOM_TOKENS = 4000;
 
 function claudeUsesModernParams(modelId) {
   return CLAUDE_MODERN_PARAM_MODELS.some(m => modelId && modelId.startsWith(m));
+}
+
+function claudeThinkingAlwaysOn(modelId) {
+  return CLAUDE_ALWAYS_THINKING_MODELS.some(m => modelId && modelId.startsWith(m));
 }
 
 function claudeSupportsThinkingDisabled(modelId) {
@@ -106,9 +119,26 @@ function claudeSupportsThinkingDisabled(modelId) {
 }
 
 /**
+ * Apply model-appropriate sampling/thinking params to a Messages API request.
+ * Summaries run with as little thinking as each model allows, so thinking
+ * tokens don't eat into the summary's max_tokens budget.
+ */
+function applyClaudeModelParams(params, temperature) {
+  if (!claudeUsesModernParams(params.model)) {
+    params.temperature = temperature;
+  } else if (claudeThinkingAlwaysOn(params.model)) {
+    params.output_config = { effort: 'low' };
+    params.max_tokens += CLAUDE_THINKING_HEADROOM_TOKENS;
+  } else if (claudeSupportsThinkingDisabled(params.model)) {
+    params.thinking = { type: 'disabled' };
+  }
+  return params;
+}
+
+/**
  * Extract model ID from preference string
  * e.g., 'claude-haiku-4-5' => 'claude-haiku-4-5-20251001'
- * e.g., 'gemini-3.7-flash' => 'gemini-3.7-flash'
+ * e.g., 'gemini-3.8-flash' => 'gemini-3.8-flash'
  * e.g., 'ollama-llama3' => 'llama3'
  */
 function extractModelFromPreference(preference) {
@@ -180,16 +210,7 @@ class AnthropicAdapter extends LLMAdapter {
       messages: messages,
       max_tokens: maxTokens,
     };
-    // Modern Claude models (Opus 4.7+, Sonnet 5) reject sampling params with a 400.
-    // Older models (Haiku 4.5, Sonnet 4.6) still accept temperature.
-    if (claudeUsesModernParams(this.model)) {
-      // Keep summaries non-thinking so thinking tokens don't consume max_tokens.
-      if (claudeSupportsThinkingDisabled(this.model)) {
-        requestParams.thinking = { type: 'disabled' };
-      }
-    } else {
-      requestParams.temperature = temperature;
-    }
+    applyClaudeModelParams(requestParams, temperature);
 
     const message = await this.client.messages.create(requestParams);
 
@@ -217,8 +238,8 @@ class AnthropicAdapter extends LLMAdapter {
       }
     }
 
-    // Find the text block explicitly — content[0] can be a thinking block on
-    // models where thinking runs (defensive; summaries currently disable it).
+    // Find the text block explicitly — content[0] is a (possibly empty) thinking
+    // block on always-thinking models like Opus 5.5.
     const textBlock = message.content.find(b => b.type === 'text');
     return {
       content: textBlock ? textBlock.text : '',
@@ -266,14 +287,7 @@ class AnthropicAdapter extends LLMAdapter {
       messages: messages,
       max_tokens: maxTokens,
     };
-    // Modern Claude models (Opus 4.7+, Sonnet 5) reject sampling params with a 400.
-    if (claudeUsesModernParams(this.model)) {
-      if (claudeSupportsThinkingDisabled(this.model)) {
-        streamParams.thinking = { type: 'disabled' };
-      }
-    } else {
-      streamParams.temperature = temperature;
-    }
+    applyClaudeModelParams(streamParams, temperature);
 
     const stream = this.client.messages.stream(streamParams);
 
@@ -305,7 +319,7 @@ class AnthropicAdapter extends LLMAdapter {
 /**
  * Google Gemini Adapter
  * Uses the @google/genai SDK (the old @google/generative-ai hit EOL 2025-11-30).
- * Supports Gemini 3.5 Flash Lite and 3.7 Flash models.
+ * Supports Gemini 3.5 Flash Lite and 3.8 Flash models.
  */
 class GeminiAdapter extends LLMAdapter {
   constructor(apiKey, model = 'gemini-3.5-flash-lite') {
@@ -839,4 +853,5 @@ module.exports = {
   fetchLocalModels,
   ANTHROPIC_MODEL_MAP,
   GEMINI_MODEL_MAP,
+  applyClaudeModelParams,
 };

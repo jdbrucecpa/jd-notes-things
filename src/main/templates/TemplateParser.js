@@ -192,8 +192,8 @@ class TemplateParser {
    *
    * Models are organized into pricing tiers:
    * - Budget: Gemini 3.5 Flash Lite
-   * - Balanced: Gemini 3.7 Flash, Claude Haiku 4.5
-   * - Premium: Claude Sonnet 5, Claude Opus 5
+   * - Balanced: Gemini 3.8 Flash, Claude Haiku 4.5
+   * - Premium: Claude Sonnet 5, Claude Opus 5.5
    * - Local: Ollama (free, runs on your hardware)
    */
   static MODEL_PRICING = {
@@ -204,24 +204,24 @@ class TemplateParser {
       input: 0.3, // $0.30 per 1M tokens
       output: 2.5, // $2.50 per 1M tokens
       tier: 'budget',
-      updated: '2026-09-01',
+      updated: '2026-09-23',
     },
 
     // ═══════════════════════════════════════════════════════════════════
     // BALANCED TIER - Good balance of quality and cost
     // ═══════════════════════════════════════════════════════════════════
-    'gemini-3.7-flash': {
-      // Intro pricing through 2027-01-01; rises to $1.50/$7.50 after
+    'gemini-3.8-flash': {
+      // Intro pricing through 2026-12-31; rises to $1.50/$7.50 on 2027-01-01
       input: 0.75, // $0.75 per 1M tokens
       output: 3.75, // $3.75 per 1M tokens
       tier: 'balanced',
-      updated: '2026-09-01',
+      updated: '2026-09-23',
     },
     'claude-haiku-4-5': {
       input: 1.0, // $1.00 per 1M tokens
       output: 5.0, // $5.00 per 1M tokens
       tier: 'balanced',
-      updated: '2026-09-01',
+      updated: '2026-09-23',
     },
 
     // ═══════════════════════════════════════════════════════════════════
@@ -231,28 +231,40 @@ class TemplateParser {
       input: 2.0, // $2.00 per 1M tokens
       output: 10.0, // $10.00 per 1M tokens
       tier: 'premium',
-      updated: '2026-09-01',
+      updated: '2026-09-23',
     },
-    'claude-opus-5': {
-      input: 5.0, // $5.00 per 1M tokens
-      output: 25.0, // $25.00 per 1M tokens
+    'claude-opus-5-5': {
+      input: 4.0, // $4.00 per 1M tokens
+      output: 20.0, // $20.00 per 1M tokens
       tier: 'premium',
-      updated: '2026-09-01',
+      updated: '2026-09-23',
     },
 
-    // Legacy preference strings (pre-2026-09 settings/meetings) — the LLM
-    // service maps these to the current models, so estimate at those rates
+    // Legacy preference strings (older settings/meetings) — the LLM service
+    // maps these to the current models, so estimate at those rates
     'gemini-3.1-flash-lite': {
       input: 0.3,
       output: 2.5,
       tier: 'budget',
-      updated: '2026-09-01',
+      updated: '2026-09-23',
     },
     'gemini-3.5-flash': {
       input: 0.75,
       output: 3.75,
       tier: 'balanced',
-      updated: '2026-09-01',
+      updated: '2026-09-23',
+    },
+    'gemini-3.7-flash': {
+      input: 0.75,
+      output: 3.75,
+      tier: 'balanced',
+      updated: '2026-09-23',
+    },
+    'claude-opus-5': {
+      input: 4.0,
+      output: 20.0,
+      tier: 'premium',
+      updated: '2026-09-23',
     },
 
     // Ollama models (any ollama-* prefix) are always free — handled dynamically in estimateTokens

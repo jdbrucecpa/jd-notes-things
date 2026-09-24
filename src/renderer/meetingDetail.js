@@ -2070,11 +2070,11 @@ async function getModelOptions() {
     // Budget tier
     { value: 'gemini-3.5-flash-lite', label: '💰 Gemini 3.5 Flash Lite — $0.30/$2.50' },
     // Balanced tier
-    { value: 'gemini-3.7-flash', label: '⚖️ Gemini 3.7 Flash — $0.75/$3.75 (intro)' },
+    { value: 'gemini-3.8-flash', label: '⚖️ Gemini 3.8 Flash — $0.75/$3.75 (intro)' },
     { value: 'claude-haiku-4-5', label: '⚖️ Claude Haiku 4.5 — $1.00/$5.00' },
     // Premium tier
     { value: 'claude-sonnet-5', label: '⭐ Claude Sonnet 5 — $2.00/$10.00' },
-    { value: 'claude-opus-5', label: '⭐ Claude Opus 5 — $5.00/$25.00' },
+    { value: 'claude-opus-5-5', label: '⭐ Claude Opus 5.5 — $4.00/$20.00' },
   ];
 
   // Dynamically add available Ollama models
@@ -2104,13 +2104,15 @@ async function getModelOptions() {
 function getModelDisplayName(modelValue) {
   const names = {
     'gemini-3.5-flash-lite': 'Gemini 3.5 Flash Lite',
-    'gemini-3.7-flash': 'Gemini 3.7 Flash',
+    'gemini-3.8-flash': 'Gemini 3.8 Flash',
     'claude-haiku-4-5': 'Claude Haiku 4.5',
     'claude-sonnet-5': 'Claude Sonnet 5',
-    'claude-opus-5': 'Claude Opus 5',
-    // Legacy preference strings (pre-2026-09) — may persist in old settings/meetings
+    'claude-opus-5-5': 'Claude Opus 5.5',
+    // Legacy preference strings — may persist in old settings/meetings
     'gemini-3.1-flash-lite': 'Gemini 3.1 Flash Lite',
     'gemini-3.5-flash': 'Gemini 3.5 Flash',
+    'gemini-3.7-flash': 'Gemini 3.7 Flash',
+    'claude-opus-5': 'Claude Opus 5',
   };
   if (names[modelValue]) return names[modelValue];
   // Dynamic Ollama models: 'ollama-llama3:latest' → 'Ollama llama3:latest'
