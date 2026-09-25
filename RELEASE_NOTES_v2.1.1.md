@@ -17,7 +17,8 @@ Model currency update: **Claude Opus 5.5** replaces Opus 5 as the premium summar
 
 ## Build & Release Pipeline
 
-- **Node 24 Actions runtime**: The release workflow moves to `actions/checkout` v7, `actions/setup-node` v7, and `softprops/action-gh-release` v3; the older versions were flagged as deprecated Node 20. The build itself moves from Node 20 (end of life April 2026) to Node 22. Node 24 was tried first, but its npm 11 skips building git dependencies under `--ignore-scripts`, which left Recall's `osx-sign` fork without its compiled code and broke packaging.
+- **Node 24 Actions runtime**: The release workflow moves to `actions/checkout` v7, `actions/setup-node` v7, and `softprops/action-gh-release` v3; the older versions were flagged as deprecated Node 20. The build itself now runs on Node 24, matching Electron 43's runtime (Node 20 reached end of life in April 2026).
+- **Recall `osx-sign` fork removed**: The build now uses the official `@electron/osx-sign` from the npm registry. Recall's GitHub fork only speeds up macOS code signing, which Windows releases never use, and npm 11 (bundled with Node 24) doesn't build GitHub-hosted dependencies during CI's script-free install, so the fork broke packaging. Re-add it if macOS builds are ever set up.
 - **Release skill fix**: The version bump now touches only `package.json` (and its lockfile); the About page reads the version at runtime.
 
 ---

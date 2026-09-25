@@ -24,13 +24,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          # Node 22 (bundles npm 10.9.x), NOT 24: npm 11 skips a git dependency's
-          # `prepare` under --ignore-scripts, so the github:recallai/osx-sign
-          # override installs without its compiled dist/ and electron-forge make
-          # fails with "Cannot find module .../osx-sign/dist/cjs/index.js".
-          # Build-time Node only needs Electron 43's engine floor (>=22.12); the
-          # app runs on Electron's bundled Node. Node 22 LTS ends 2027-04.
-          node-version: '22'
+          # Node 24 matches Electron 43's runtime; Node 20 hit EOL 2026-04.
+          # Its npm 11 skips a git dependency's `prepare` under --ignore-scripts,
+          # so avoid git dependencies that need a build step (e.g. the former
+          # github:recallai/osx-sign override, which installed without dist/).
+          node-version: '24'
           cache: 'npm'
 
       # Install without lifecycle scripts to skip native-recorder-nodejs's broken

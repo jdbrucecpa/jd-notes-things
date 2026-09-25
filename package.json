@@ -64,9 +64,6 @@
     "vitest": "^4.0.18"
   },
   "overrides": {
-    "@electron/packager": {
-      "@electron/osx-sign": "github:recallai/osx-sign"
-    },
     "localtunnel": {
       "axios": "^1.9.0"
     },
