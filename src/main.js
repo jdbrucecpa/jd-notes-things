@@ -421,6 +421,11 @@ const Gmail = require('./main/integrations/Gmail');
 let gmail = null;
 
 let mainWindow;
+// Set once Squirrel has downloaded an update (applied on next launch). Later
+// hourly checks report 'update-not-available' because the package is already
+// local — without this, they overwrite the "Restart Now" banner with
+// "up to date" and the update silently waits until the next manual restart.
+let downloadedUpdate = null;
 let recordingWidget = null; // Floating recording widget window (v1.2)
 let stopConfirmWindow = null; // "End the recording?" countdown dialog window
 // Exactly one auto-stop confirmation may be pending at a time. Shape when active:
@@ -2166,11 +2171,14 @@ app.whenReady().then(async () => {
 
       autoUpdater.on('update-downloaded', (event, releaseNotes, releaseName) => {
         logger.main.info('[AutoUpdater] Update downloaded:', releaseName);
+        downloadedUpdate = { version: releaseName };
         fetchLatestReleaseInfo().then(releaseInfo => {
-          sendUpdateState('ready', {
+          downloadedUpdate = {
             ...releaseInfo,
+            version: releaseInfo?.version || releaseName,
             releaseName: releaseName || releaseInfo?.version,
-          });
+          };
+          sendUpdateState('ready', downloadedUpdate);
         });
       });
 
@@ -2191,6 +2199,11 @@ app.whenReady().then(async () => {
    * Send update state to renderer process
    */
   function sendUpdateState(state, data = {}) {
+    // A downloaded update stays pending until restart; don't let routine
+    // re-checks replace the "Restart Now" banner.
+    if (downloadedUpdate && (state === 'checking' || state === 'up-to-date')) {
+      return;
+    }
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('update-state-changed', { state, ...data });
     }
@@ -9083,6 +9096,22 @@ ipcMain.handle('settings:checkForUpdates', async () => {
     return {
       success: false,
       message: 'Auto-updates are not available in development mode',
+    };
+  }
+
+  // Squirrel reports "no update" once the new version is already downloaded,
+  // so answer from the pending download instead of re-checking.
+  if (downloadedUpdate) {
+    const ver = downloadedUpdate.version ? ` ${downloadedUpdate.version}` : '';
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-state-changed', {
+        state: 'ready',
+        ...downloadedUpdate,
+      });
+    }
+    return {
+      success: true,
+      message: `Update${ver} is downloaded — restart the app to install it`,
     };
   }
 
