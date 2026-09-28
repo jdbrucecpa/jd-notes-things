@@ -55,10 +55,11 @@ const ANTHROPIC_MODEL_MAP = {
   // Budget tier
   'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
   // Premium tier
-  'claude-sonnet-5': 'claude-sonnet-5',
+  'claude-sonnet-5-5': 'claude-sonnet-5-5',
   'claude-opus-5-5': 'claude-opus-5-5',
-  // Legacy preference strings (pre-2026-09-23 settings/meetings) → current model
+  // Legacy preference strings (older settings/meetings) → current model
   'claude-opus-5': 'claude-opus-5-5',
+  'claude-sonnet-5': 'claude-sonnet-5-5',
 };
 
 const GEMINI_MODEL_MAP = {
@@ -73,7 +74,7 @@ const GEMINI_MODEL_MAP = {
 };
 
 /**
- * Claude models using the modern request surface (Opus 4.7+, Sonnet 5, Fable 5):
+ * Claude models using the modern request surface (Opus 4.7+, Sonnet 5+, Fable 5):
  * sampling params (temperature/top_p/top_k) and budget_tokens are REJECTED with a 400.
  * Older models (Haiku 4.5, Sonnet 4.6, Opus 4.6 and earlier) still accept temperature.
  */
@@ -81,18 +82,27 @@ const CLAUDE_MODERN_PARAM_MODELS = [
   'claude-opus-4-7',
   'claude-opus-4-8',
   'claude-opus-5-5',
+  'claude-sonnet-5-5',
   'claude-sonnet-5',
   'claude-fable-5',
   'claude-mythos-5',
 ];
 
 /**
- * Models where thinking is ALWAYS on: `thinking: { type: 'disabled' }` and
- * budget_tokens both 400. Effort (output_config.effort) is the only control.
- * Checked BEFORE the disable list — prefix matching means e.g. a future
- * 'claude-opus-5' entry there would also match 'claude-opus-5-5'.
+ * Models run at their API defaults: no `thinking` or `effort` fields, i.e.
+ * adaptive thinking at the model's default effort (Sonnet 5.5: high, Opus 5.5:
+ * medium). All reject `thinking: { type: 'disabled' }` with a 400. Chosen from a
+ * 2026-09-28 side-by-side on a real meeting: defaults beat lower thinking on
+ * accuracy (verbatim quotes, multi-step facts) at a small cost increase.
+ * Checked BEFORE the disable list — prefix matching means 'claude-opus-5' /
+ * 'claude-sonnet-5' there would also match 'claude-opus-5-5' / 'claude-sonnet-5-5'.
  */
-const CLAUDE_ALWAYS_THINKING_MODELS = ['claude-opus-5-5', 'claude-fable-5', 'claude-mythos-5'];
+const CLAUDE_DEFAULT_THINKING_MODELS = [
+  'claude-opus-5-5',
+  'claude-sonnet-5-5',
+  'claude-fable-5',
+  'claude-mythos-5',
+];
 
 /**
  * Modern models that accept `thinking: { type: 'disabled' }` to run without thinking.
@@ -100,7 +110,7 @@ const CLAUDE_ALWAYS_THINKING_MODELS = ['claude-opus-5-5', 'claude-fable-5', 'cla
 const CLAUDE_THINKING_DISABLE_MODELS = ['claude-opus-4-7', 'claude-opus-4-8', 'claude-sonnet-5'];
 
 /**
- * Extra max_tokens for always-thinking models, since thinking tokens count
+ * Extra max_tokens for default-thinking models, since thinking tokens count
  * against max_tokens. Billed only if used. Keep LLM_SECTION_MAX_TOKENS (15000)
  * + this under ~21,333 — above that the SDK refuses non-streaming requests.
  */
@@ -110,8 +120,8 @@ function claudeUsesModernParams(modelId) {
   return CLAUDE_MODERN_PARAM_MODELS.some(m => modelId && modelId.startsWith(m));
 }
 
-function claudeThinkingAlwaysOn(modelId) {
-  return CLAUDE_ALWAYS_THINKING_MODELS.some(m => modelId && modelId.startsWith(m));
+function claudeUsesDefaultThinking(modelId) {
+  return CLAUDE_DEFAULT_THINKING_MODELS.some(m => modelId && modelId.startsWith(m));
 }
 
 function claudeSupportsThinkingDisabled(modelId) {
@@ -120,14 +130,13 @@ function claudeSupportsThinkingDisabled(modelId) {
 
 /**
  * Apply model-appropriate sampling/thinking params to a Messages API request.
- * Summaries run with as little thinking as each model allows, so thinking
- * tokens don't eat into the summary's max_tokens budget.
+ * Current models run at their default thinking with extra max_tokens headroom;
+ * older modern-surface models run with thinking disabled.
  */
 function applyClaudeModelParams(params, temperature) {
   if (!claudeUsesModernParams(params.model)) {
     params.temperature = temperature;
-  } else if (claudeThinkingAlwaysOn(params.model)) {
-    params.output_config = { effort: 'low' };
+  } else if (claudeUsesDefaultThinking(params.model)) {
     params.max_tokens += CLAUDE_THINKING_HEADROOM_TOKENS;
   } else if (claudeSupportsThinkingDisabled(params.model)) {
     params.thinking = { type: 'disabled' };

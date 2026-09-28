@@ -193,7 +193,7 @@ class TemplateParser {
    * Models are organized into pricing tiers:
    * - Budget: Gemini 3.5 Flash Lite
    * - Balanced: Gemini 3.8 Flash, Claude Haiku 4.5
-   * - Premium: Claude Sonnet 5, Claude Opus 5.5
+   * - Premium: Claude Sonnet 5.5, Claude Opus 5.5
    * - Local: Ollama (free, runs on your hardware)
    */
   static MODEL_PRICING = {
@@ -227,11 +227,11 @@ class TemplateParser {
     // ═══════════════════════════════════════════════════════════════════
     // PREMIUM TIER - Best quality for important summaries
     // ═══════════════════════════════════════════════════════════════════
-    'claude-sonnet-5': {
+    'claude-sonnet-5-5': {
       input: 2.0, // $2.00 per 1M tokens
       output: 10.0, // $10.00 per 1M tokens
       tier: 'premium',
-      updated: '2026-09-23',
+      updated: '2026-09-28',
     },
     'claude-opus-5-5': {
       input: 4.0, // $4.00 per 1M tokens
@@ -266,6 +266,12 @@ class TemplateParser {
       tier: 'premium',
       updated: '2026-09-23',
     },
+    'claude-sonnet-5': {
+      input: 2.0,
+      output: 10.0,
+      tier: 'premium',
+      updated: '2026-09-28',
+    },
 
     // Ollama models (any ollama-* prefix) are always free — handled dynamically in estimateTokens
   };
@@ -275,7 +281,7 @@ class TemplateParser {
    * Using rough estimate: 1 token ≈ 4 characters
    * @param {Object} template - Template object
    * @param {string} transcriptText - Meeting transcript
-   * @param {string} provider - Model provider (e.g., 'gemini-3.5-flash-lite', 'claude-haiku-4-5', 'claude-sonnet-5')
+   * @param {string} provider - Model provider (e.g., 'gemini-3.5-flash-lite', 'claude-haiku-4-5', 'claude-sonnet-5-5')
    * @returns {Object} Token estimates and cost
    */
   static estimateTokens(template, transcriptText, provider = 'gemini-3.5-flash-lite') {

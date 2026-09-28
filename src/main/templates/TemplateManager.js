@@ -127,7 +127,7 @@ class TemplateManager {
    * Get estimated cost for generating summaries with multiple templates
    * @param {Array<string>} templateIds - Array of template IDs
    * @param {string} transcriptText - Meeting transcript
-   * @param {string} provider - Model provider (e.g., 'gemini-3.5-flash-lite', 'claude-haiku-4-5', 'claude-sonnet-5')
+   * @param {string} provider - Model provider (e.g., 'gemini-3.5-flash-lite', 'claude-haiku-4-5', 'claude-sonnet-5-5')
    * @returns {Object} Combined cost estimate
    */
   estimateCost(templateIds, transcriptText, provider = 'gemini-3.5-flash-lite') {

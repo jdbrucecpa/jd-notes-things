@@ -9262,14 +9262,14 @@ ipcMain.handle('settings:getProviderPreferences', async event => {
         const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
         return {
           autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-4-5',
-          templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5',
+          templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5-5',
           patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-4-5',
           transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'local'
         };
       } catch (e) {
         return {
           autoSummaryProvider: 'claude-haiku-4-5',
-          templateSummaryProvider: 'claude-sonnet-5',
+          templateSummaryProvider: 'claude-sonnet-5-5',
           patternGenerationProvider: 'claude-haiku-4-5',
           transcriptionProvider: 'local'
         };
@@ -12798,7 +12798,7 @@ async function getProviderPreferences() {
     console.warn('[LLM] Main window not available, using default providers');
     return {
       autoSummaryProvider: 'claude-haiku-4-5',
-      templateSummaryProvider: 'claude-sonnet-5',
+      templateSummaryProvider: 'claude-sonnet-5-5',
       patternGenerationProvider: 'claude-haiku-4-5',
       transcriptionProvider: 'local',
     };
@@ -12811,14 +12811,14 @@ async function getProviderPreferences() {
           const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
           return {
             autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-4-5',
-            templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5',
+            templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5-5',
             patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-4-5',
             transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'local'
           };
         } catch (e) {
           return {
             autoSummaryProvider: 'claude-haiku-4-5',
-            templateSummaryProvider: 'claude-sonnet-5',
+            templateSummaryProvider: 'claude-sonnet-5-5',
             patternGenerationProvider: 'claude-haiku-4-5',
             transcriptionProvider: 'local'
           };
@@ -12830,7 +12830,7 @@ async function getProviderPreferences() {
     console.error('[LLM] Error reading provider preferences:', error);
     return {
       autoSummaryProvider: 'claude-haiku-4-5',
-      templateSummaryProvider: 'claude-sonnet-5',
+      templateSummaryProvider: 'claude-sonnet-5-5',
       patternGenerationProvider: 'claude-haiku-4-5',
       transcriptionProvider: 'local',
     };
