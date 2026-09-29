@@ -40,6 +40,9 @@ class RecordingManager extends EventEmitter {
 
     this.provider.on('recording-ended', (data) => {
       const { recordingId } = data;
+      // Carry the note this recording was started for, so the pipeline can
+      // still find it if the note's recordingId link was lost.
+      const noteId = this.recordings[recordingId]?.noteId;
       this.removeRecording(recordingId);
       this.isRecording = Object.keys(this.recordings).length > 0;
       if (!this.isRecording) {
@@ -47,7 +50,7 @@ class RecordingManager extends EventEmitter {
         this.currentMeetingTitle = null;
         this.currentMeetingId = null;
       }
-      this.emit('recording-ended', data);
+      this.emit('recording-ended', noteId && !data.noteId ? { ...data, noteId } : data);
     });
 
     this.provider.on('error', (data) => {

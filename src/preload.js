@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPathForFile: file => webUtils.getPathForFile(file),
 
   navigate: page => ipcRenderer.send('navigate', page),
-  saveMeetingsData: data => ipcRenderer.invoke('saveMeetingsData', data),
+  saveMeetingsData: (data, options) => ipcRenderer.invoke('saveMeetingsData', data, options),
   loadMeetingsData: () => ipcRenderer.invoke('loadMeetingsData'),
   updateMeetingField: (meetingId, field, value) =>
     ipcRenderer.invoke('updateMeetingField', meetingId, field, value),

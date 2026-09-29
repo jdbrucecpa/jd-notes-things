@@ -60,6 +60,16 @@ describe('RecordingManager', () => {
     expect(handler).toHaveBeenCalled();
   });
 
+  it('recording-ended carries the noteId the recording was started for', async () => {
+    const handler = vi.fn();
+    manager.on('recording-ended', handler);
+    await manager.startRecording({ noteId: 'note-1', platform: 'zoom' });
+    provider.emit('recording-ended', { recordingId: 'rec-123', audioFilePath: '/tmp/a.mp3' });
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ recordingId: 'rec-123', noteId: 'note-1' })
+    );
+  });
+
   it('clears detectedMeeting on meeting-closed', () => {
     provider.emit('meeting-detected', { windowId: 'w1', platform: 'zoom', title: 'Test' });
     expect(manager.detectedMeeting).not.toBeNull();

@@ -718,6 +718,7 @@ async function batchExportToObsidian() {
 
   let successCount = 0;
   let errorCount = 0;
+  const exportedIds = [];
 
   // Export each meeting
   for (const meeting of meetingsToExport) {
@@ -728,6 +729,7 @@ async function batchExportToObsidian() {
 
       if (result.success) {
         successCount++;
+        exportedIds.push(meeting.id);
         console.log(`Successfully exported: ${meeting.title}`);
 
         // Update meeting with Obsidian link
@@ -746,7 +748,9 @@ async function batchExportToObsidian() {
   console.log(`Batch export complete: ${successCount} succeeded, ${errorCount} failed`);
 
   // Save updated meetings data
-  await saveMeetingsData();
+  if (exportedIds.length > 0) {
+    await saveMeetingsData({ meetingIds: exportedIds, fields: ['obsidianLink', 'vaultPath'] });
+  }
 
   // Refresh UI
   renderMeetings();
@@ -962,26 +966,26 @@ function getDateGroupLabel(date) {
 
 // We'll initialize pastMeetings and pastMeetingsByDate when we load data from file
 
-// Save meetings data back to file
-async function saveMeetingsData() {
-  // Save to the actual file using IPC
+/**
+ * Save edited meetings back to the database.
+ * Only the meetings named in meetingIds are sent (and, with fields, only those
+ * fields) — this renderer's copy of other meetings may be stale, e.g. one the
+ * main process is still transcribing or summarizing.
+ * @param {{meetingIds: string[], fields?: string[]}} options
+ */
+async function saveMeetingsData({ meetingIds, fields } = {}) {
   try {
-    console.log('Saving meetings data to file...');
-    console.log('[Save] Data being saved:', {
-      upcomingCount: meetingsData.upcomingMeetings?.length || 0,
-      pastCount: meetingsData.pastMeetings?.length || 0,
-      firstPastMeeting: meetingsData.pastMeetings?.[0]
-        ? {
-            id: meetingsData.pastMeetings[0].id,
-            title: meetingsData.pastMeetings[0].title,
-            participantCount: meetingsData.pastMeetings[0].participants?.length || 0,
-            transcriptLength: meetingsData.pastMeetings[0].transcript?.length || 0,
-            firstSpeakers:
-              meetingsData.pastMeetings[0].transcript?.slice(0, 3).map(t => t.speaker) || [],
-          }
-        : null,
-    });
-    const result = await window.electronAPI.saveMeetingsData(meetingsData);
+    const ids = new Set(meetingIds || []);
+    if (ids.size === 0) {
+      console.warn('[Save] saveMeetingsData called without meetingIds — nothing to save');
+      return;
+    }
+    const payload = {
+      upcomingMeetings: meetingsData.upcomingMeetings.filter(m => ids.has(m.id)),
+      pastMeetings: meetingsData.pastMeetings.filter(m => ids.has(m.id)),
+    };
+    console.log('[Save] Saving meetings:', { meetingIds, fields });
+    const result = await window.electronAPI.saveMeetingsData(payload, { meetingIds, fields });
     if (result.success) {
       console.log('Meetings data saved successfully to file');
     } else {
@@ -1061,7 +1065,10 @@ async function saveCurrentNote() {
 
     try {
       // Save the data to file
-      await saveMeetingsData();
+      await saveMeetingsData({
+        meetingIds: [currentEditingMeetingId],
+        fields: ['title', 'content'],
+      });
       console.log('Note saved successfully:', noteTitle);
     } catch (error) {
       console.error('Error saving note:', error);
@@ -2668,7 +2675,7 @@ function showEditorView(meetingId) {
 
       // Save the updated data
       console.log('[Renderer] Calling saveMeetingsData...');
-      await saveMeetingsData();
+      await saveMeetingsData({ meetingIds: [updatedMeetingId] });
       console.log('[Renderer] saveMeetingsData completed');
     }
   );
@@ -2782,7 +2789,7 @@ function setupObsidianLinkAutoSave() {
     // Only save if the value has actually changed
     if (meeting.obsidianLink !== newValue) {
       meeting.obsidianLink = newValue;
-      await saveMeetingsData();
+      await saveMeetingsData({ meetingIds: [meeting.id], fields: ['obsidianLink'] });
       console.log(`Auto-saved Obsidian link for meeting ${currentEditingMeetingId}: "${newValue}"`);
 
       // Update the Obsidian button state
@@ -2877,7 +2884,7 @@ async function createNewMeeting(calendarMeeting = null) {
   // Save the data to file
   let saveFailed = false;
   try {
-    await saveMeetingsData();
+    await saveMeetingsData({ meetingIds: [id] });
     console.log('New meeting created and saved:', newMeeting.title);
   } catch (error) {
     console.error('Error saving new meeting:', error);

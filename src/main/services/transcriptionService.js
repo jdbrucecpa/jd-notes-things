@@ -1,6 +1,7 @@
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const { audioServiceGpuQueue } = require('./gpuQueue');
 
 // Axios sets error.message to "Request failed with status code 400" and discards
 // the response body. Surface the body so toasts/logs show the real cause
@@ -182,22 +183,29 @@ class TranscriptionService {
         `[Local] File size: ${(stats.size / 1024).toFixed(2)} KB, estimated duration: ${estimatedDurationSec.toFixed(0)}s, timeout: ${(timeoutMs / 1000).toFixed(0)}s`
       );
 
-      // POST /process
-      this.updateTaskProgress(taskId, 10, 'Sending audio to JD Audio Service...');
-      console.log('[Local] POSTing to /process...');
-      const response = await fetch(`${aiServiceUrl}/process`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audioPath: audioFilePath,
-          options: {
-            speakerNames: options.speakerNames,
-            minSpeakers: options.minSpeakers,
-            maxSpeakers: options.maxSpeakers,
-            vocabulary: options.vocabulary,
-          },
-        }),
-        signal: AbortSignal.timeout(timeoutMs),
+      // POST /process — queued behind any other meeting's GPU work so the
+      // timeout only starts once this request is actually sent.
+      if (audioServiceGpuQueue.pending > 0) {
+        this.updateTaskProgress(taskId, 8, 'Waiting for another meeting to finish processing...');
+        console.log(`[Local] Waiting behind ${audioServiceGpuQueue.pending} queued GPU job(s)`);
+      }
+      const response = await audioServiceGpuQueue.run(() => {
+        this.updateTaskProgress(taskId, 10, 'Sending audio to JD Audio Service...');
+        console.log('[Local] POSTing to /process...');
+        return fetch(`${aiServiceUrl}/process`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            audioPath: audioFilePath,
+            options: {
+              speakerNames: options.speakerNames,
+              minSpeakers: options.minSpeakers,
+              maxSpeakers: options.maxSpeakers,
+              vocabulary: options.vocabulary,
+            },
+          }),
+          signal: AbortSignal.timeout(timeoutMs),
+        });
       });
 
       if (!response.ok) {

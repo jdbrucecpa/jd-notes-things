@@ -77,6 +77,15 @@ const MeetingsDataSchema = z.object({
   pastMeetings: z.array(MeetingSchema),
 });
 
+// Optional second argument to saveMeetingsData: which meetings (and fields) the
+// renderer actually edited. Omitted = legacy save-everything.
+const SaveMeetingsOptionsSchema = z
+  .object({
+    meetingIds: z.array(z.string().min(1)).min(1),
+    fields: z.array(z.string().min(1)).min(1).optional(),
+  })
+  .optional();
+
 // Simple ID validators for handlers
 const MeetingIdSchema = z.string().min(1);
 const RecordingIdSchema = z.string().min(1);
@@ -84,6 +93,7 @@ const RecordingIdSchema = z.string().min(1);
 module.exports = {
   MeetingSchema,
   MeetingsDataSchema,
+  SaveMeetingsOptionsSchema,
   MeetingIdSchema,
   RecordingIdSchema,
   ParticipantSchema,

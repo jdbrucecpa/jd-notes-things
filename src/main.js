@@ -34,7 +34,12 @@ const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
 const { updateElectronApp } = require('update-electron-app');
 const sdkLogger = require('./sdk-logger');
-const { MeetingsDataSchema, MeetingIdSchema, RecordingIdSchema } = require('./shared/validation');
+const {
+  MeetingsDataSchema,
+  SaveMeetingsOptionsSchema,
+  MeetingIdSchema,
+  RecordingIdSchema,
+} = require('./shared/validation');
 const { z } = require('zod');
 const GoogleAuth = require('./main/integrations/GoogleAuth');
 const GoogleCalendar = require('./main/integrations/GoogleCalendar');
@@ -64,6 +69,10 @@ const {
 } = require('./main/services/contentPassGate');
 const { createYoutubeImporter } = require('./main/services/youtubeImport');
 const databaseService = require('./main/services/databaseService');
+const { createMeetingStore } = require('./main/services/meetingSnapshot');
+const { buildRendererSavePatches } = require('./main/services/rendererMeetingSave');
+const { audioServiceGpuQueue } = require('./main/services/gpuQueue');
+const { resolveRecordingTracks } = require('./main/services/recordingTracks');
 const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
 const { VoiceProfileService } = require('./main/services/voiceProfileService');
@@ -1877,7 +1886,9 @@ app.whenReady().then(async () => {
         if (healthy) {
           // Preload models so the first transcription is instant.
           try {
-            await fetch(`${aiServiceManager.serviceUrl}/warmup`, { method: 'POST' });
+            await audioServiceGpuQueue.run(() =>
+              fetch(`${aiServiceManager.serviceUrl}/warmup`, { method: 'POST' })
+            );
           } catch {
             /* warmup is best-effort */
           }
@@ -2376,27 +2387,27 @@ const RECORDING_PATH = path.join(app.getPath('userData'), 'recordings');
 // v1.3.0: Database-backed compatibility shim replacing the old JSON fileOperationManager.
 // Maintains the same API surface (readMeetingsData, writeData, scheduleOperation) so that
 // all existing callsites work without modification while reading from/writing to SQLite.
+// Field-level read-modify-write: writes only send the fields a caller changed
+// since its read, so long-running flows (transcription, summaries) can't revert
+// meetings other flows updated meanwhile. See meetingSnapshot.js.
+const meetingStore = createMeetingStore(() => databaseService);
+
 const fileOperationManager = {
-  // Read meetings data from SQLite, returned in legacy { upcomingMeetings, pastMeetings } format
+  // Read meetings data from SQLite, returned in legacy { upcomingMeetings, pastMeetings } format.
+  // The returned object is tracked so writeData() can send only what the caller changed.
   readMeetingsData: async function (_skipWait = false) {
     try {
-      return databaseService.getAllMeetings();
+      return meetingStore.read();
     } catch (error) {
       console.error('Error reading meetings data from database:', error);
       return { upcomingMeetings: [], pastMeetings: [] };
     }
   },
 
-  // Schedule an operation: read current data, pass to operationFn, write result back
+  // Schedule an operation: read current data, pass to operationFn, write back only what changed
   scheduleOperation: async function (operationFn) {
     try {
-      const currentData = databaseService.getAllMeetings();
-      const updatedData = await operationFn(currentData);
-
-      if (updatedData) {
-        databaseService.saveAllMeetings(updatedData);
-      }
-
+      await meetingStore.update(operationFn);
       return { success: true };
     } catch (error) {
       console.error('Error in database operation:', error);
@@ -2404,10 +2415,10 @@ const fileOperationManager = {
     }
   },
 
-  // Write data directly to the database
+  // Write back changes made to data returned by readMeetingsData()
   writeData: async function (data) {
     try {
-      databaseService.saveAllMeetings(data);
+      meetingStore.write(data);
       return { success: true };
     } catch (error) {
       console.error('Error writing meetings data to database:', error);
@@ -2918,6 +2929,24 @@ async function initSDK() {
     sdkLogger.logEvent('recording-ended', {
       windowId: windowId,
     });
+
+    // Safety net: everything below finds the note by recordingId. If the note
+    // this recording was started for lost that link, re-link it so the
+    // recording is still transcribed instead of silently orphaned.
+    if (data.noteId) {
+      try {
+        const note = databaseService.getMeeting(data.noteId);
+        if (note && note.recordingId !== windowId) {
+          logger.main.warn(
+            `[Recording] Note ${data.noteId} was not linked to its recording ` +
+              `(recordingId=${note.recordingId || 'none'}) — re-linking to ${windowId}`
+          );
+          databaseService.patchMeeting(data.noteId, { recordingId: windowId });
+        }
+      } catch (relinkError) {
+        logger.main.error('[Recording] Could not verify recording link:', relinkError);
+      }
+    }
 
     try {
       // Update the note with recording information (marks as complete)
@@ -3537,12 +3566,11 @@ async function initSDK() {
               // (see recording-ended event handler above)
             } else {
               backgroundTaskManager.failTask(recordingTaskId, 'Meeting not found');
-              console.error('[Transcription] ✗ Meeting not found with recordingId:', windowId);
+              logger.main.error('[Transcription] ✗ Meeting not found with recordingId:', windowId);
             }
           }
         } catch (error) {
-          console.error('[Transcription] ERROR during transcription:', error);
-          console.error('[Transcription] Error stack:', error.stack);
+          logger.main.error('[Transcription] ERROR during transcription:', error);
 
           // Fail the background task
           backgroundTaskManager.failTask(recordingTaskId, error.message);
@@ -4775,65 +4803,37 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
 // IPC Handlers
 // ============================================================================
 
-// Handle saving meetings data
-ipcMain.handle('saveMeetingsData', async (event, data) => {
+// Handle saving meetings data.
+// options.meetingIds limits the save to the meetings the renderer edited, and
+// options.fields to specific fields of them. The renderer's copy of every other
+// meeting may be stale (e.g. one still being transcribed), so it is ignored.
+ipcMain.handle('saveMeetingsData', async (event, data, options) => {
   console.log('[IPC] saveMeetingsData called with data:', {
     upcomingCount: data?.upcomingMeetings?.length,
     pastCount: data?.pastMeetings?.length,
+    meetingIds: options?.meetingIds,
+    fields: options?.fields,
   });
   try {
-    // Validate input data
-    console.log('[IPC] Validating meetings data...');
     const validatedData = MeetingsDataSchema.parse(data);
-    console.log('[IPC] Validation successful');
+    const validatedOptions = SaveMeetingsOptionsSchema.parse(options);
+    if (!validatedOptions) {
+      console.warn('[IPC] saveMeetingsData called without meetingIds — saving every meeting');
+    }
 
-    // CRITICAL: Merge with current data to prevent losing fields managed by main process
-    // The renderer has stale data, so we need to preserve fields like recordingId, uploadToken, transcript
-    console.log('[IPC] Merging with current file data to preserve main-process-managed fields...');
-    await fileOperationManager.scheduleOperation(async currentData => {
-      // Merge upcoming meetings (renderer manages these)
-      const mergedData = {
-        upcomingMeetings: validatedData.upcomingMeetings,
-        pastMeetings: validatedData.pastMeetings.map(rendererMeeting => {
-          // Find the corresponding meeting in current data
-          const currentMeeting = currentData.pastMeetings.find(m => m.id === rendererMeeting.id);
+    // Synchronous read + apply (better-sqlite3), so nothing can interleave.
+    const currentData = validatedOptions
+      ? {
+          upcomingMeetings: [],
+          pastMeetings: validatedOptions.meetingIds
+            .map(id => databaseService.getMeeting(id))
+            .filter(Boolean),
+        }
+      : databaseService.getAllMeetings();
+    const patches = buildRendererSavePatches(validatedData, currentData, validatedOptions || {});
+    databaseService.applyMeetingPatches(patches);
 
-          if (currentMeeting) {
-            // Merge: keep main-process-managed fields from current, UI fields from renderer
-            return {
-              ...rendererMeeting, // Start with renderer data (has UI updates like title, content, transcript, participants)
-              // Preserve ONLY main-process-managed fields (not transcript/participants which are edited in renderer)
-              recordingId: currentMeeting.recordingId || rendererMeeting.recordingId,
-              uploadToken: currentMeeting.uploadToken || rendererMeeting.uploadToken,
-              recordingComplete:
-                currentMeeting.recordingComplete || rendererMeeting.recordingComplete,
-              recordingEndTime: currentMeeting.recordingEndTime || rendererMeeting.recordingEndTime,
-              summaries: currentMeeting.summaries || rendererMeeting.summaries,
-              // Preserve transcription provider and SDK IDs
-              transcriptionProvider:
-                currentMeeting.transcriptionProvider || rendererMeeting.transcriptionProvider,
-              sdkUploadId: currentMeeting.sdkUploadId || rendererMeeting.sdkUploadId,
-              recallRecordingId:
-                currentMeeting.recallRecordingId || rendererMeeting.recallRecordingId,
-              transcriptProvider:
-                currentMeeting.transcriptProvider || rendererMeeting.transcriptProvider,
-              transcriptConfidence:
-                currentMeeting.transcriptConfidence || rendererMeeting.transcriptConfidence,
-              // UI-1: Preserve platform (can be set by SDK or updateMeetingField IPC)
-              platform: currentMeeting.platform || rendererMeeting.platform,
-            };
-          }
-
-          // New meeting from renderer - use as-is
-          return rendererMeeting;
-        }),
-      };
-
-      console.log('[IPC] Merge complete');
-      return mergedData;
-    });
-
-    console.log('[IPC] File write complete');
+    console.log(`[IPC] Saved ${patches.length} meeting(s)`);
     return { success: true };
   } catch (error) {
     console.error('[IPC] Caught error during save:', error);
@@ -6550,22 +6550,14 @@ ipcMain.handle(
         // Generate summaries with optional custom model
         let summaries;
         if (model) {
-          // Use custom model for this generation
-          const originalProvider = llmService.config.provider;
-          const originalModel = llmService.getCurrentModel();
-          console.log(`[Template IPC] Switching to custom model: ${model}`);
-
-          llmService.switchToPreference(model);
-
-          try {
-            summaries = await generateTemplateSummaries(meeting, templateIds);
-          } finally {
-            // Restore original provider/model
-            console.log(
-              `[Template IPC] Restoring LLM to ${originalProvider} with model ${originalModel}`
-            );
-            llmService.switchProvider(originalProvider, originalModel);
-          }
+          // Use custom model for this generation only (explicit: the template
+          // preference inside generateTemplateSummaries must not replace it)
+          console.log(`[Template IPC] Using custom model: ${model}`);
+          summaries = await llmService.runWithPreference(
+            model,
+            () => generateTemplateSummaries(meeting, templateIds),
+            { explicit: true }
+          );
         } else {
           // Use default model via withProviderSwitch
           summaries = await withProviderSwitch(
@@ -8392,11 +8384,13 @@ async function rerunTranscriptionForMeeting({ meetingId, provider = null, audioP
       return { success: false, error: 'Meeting not found' };
     }
 
-    // Determine audio file path
-    let filePath = audioPath || meeting.videoFile;
+    // Determine audio file path. Local recordings keep their audio path in
+    // recordingId (videoFile is only set by earlier re-runs/imports).
+    const knownPaths = [audioPath, meeting.videoFile, meeting.recordingId];
+    let filePath = knownPaths.find(p => p && path.isAbsolute(p) && fs.existsSync(p)) || null;
 
     // If no audio file path or file doesn't exist, prompt user
-    if (!filePath || !fs.existsSync(filePath)) {
+    if (!filePath) {
       const { dialog } = require('electron');
       const result = await dialog.showOpenDialog(mainWindow, {
         title: 'Select Audio File for Re-transcription',
@@ -8411,6 +8405,24 @@ async function rerunTranscriptionForMeeting({ meetingId, provider = null, audioP
       }
       filePath = result.filePaths[0];
     }
+
+    // A local recording is a mixed file plus -mic/-sys(/-app) isolation stems.
+    // Transcribe the mixed file (even if a stem was picked) and pick up the
+    // stems so the re-run gets the same Stage 1 track anchor as the original.
+    const tracks = resolveRecordingTracks(filePath, fs.existsSync);
+    if (tracks.audioPath !== filePath) {
+      console.log(
+        `[Transcription Rerun] ${path.basename(filePath)} is an isolation stem — transcribing ${path.basename(tracks.audioPath)} instead`
+      );
+      filePath = tracks.audioPath;
+    }
+    const existingOr = (stored, sibling) => (stored && fs.existsSync(stored) ? stored : sibling);
+    const trackPaths = {
+      micAudioFilePath: existingOr(meeting.micAudioFilePath, tracks.micAudioFilePath),
+      appAudioFilePath: existingOr(meeting.appAudioFilePath, tracks.appAudioFilePath),
+      systemAudioFilePath: existingOr(meeting.systemAudioFilePath, tracks.systemAudioFilePath),
+    };
+    console.log('[Transcription Rerun] Isolation tracks:', trackPaths);
 
     const taskId = backgroundTaskManager.addTask({
       type: 'transcription-rerun',
@@ -8465,6 +8477,7 @@ async function rerunTranscriptionForMeeting({ meetingId, provider = null, audioP
       meeting.transcriptionProvider = transcriptionProvider;
       meeting.transcriptConfidence = transcript.confidence || null;
       meeting.videoFile = filePath;
+      Object.assign(meeting, trackPaths);
       // Fresh diarization segments (local provider) — without this the
       // speaker-matching call below would use the PREVIOUS transcription's
       // segments (or none, for pre-v2.0 meetings), starving voice-profile
@@ -8501,11 +8514,7 @@ async function rerunTranscriptionForMeeting({ meetingId, provider = null, audioP
 
         try {
           const anchored = await computeTrackAnchorWithOverrides(
-            {
-              micAudioFilePath: meeting.micAudioFilePath,
-              appAudioFilePath: meeting.appAudioFilePath,
-              systemAudioFilePath: meeting.systemAudioFilePath,
-            },
+            trackPaths,
             rerunWaterfallSegments,
             meeting.transcript
           );
@@ -8605,8 +8614,19 @@ async function rerunTranscriptionForMeeting({ meetingId, provider = null, audioP
       }
 
       // Save updated transcript/mapping first — the auto-summary path below
-      // reloads the meeting from the database.
-      databaseService.saveMeeting(meeting, 'past');
+      // reloads the meeting from the database. Patch only what the re-run
+      // produced: `meeting` was read before transcription (minutes ago), so a
+      // whole-row save would revert anything else changed on it meanwhile.
+      const rerunFields = {
+        transcript: meeting.transcript,
+        transcriptionProvider: meeting.transcriptionProvider,
+        transcriptConfidence: meeting.transcriptConfidence,
+        videoFile: meeting.videoFile,
+        ...trackPaths,
+      };
+      if (meeting.segments) rerunFields.segments = meeting.segments;
+      if (meeting.speakerMapping) rerunFields.speakerMapping = meeting.speakerMapping;
+      databaseService.patchMeeting(meeting.id || meetingId, rerunFields);
 
       // Always regenerate the exec (auto) summary after a rerun. This also runs
       // the Stage 3 content pass (speaker review + meeting renaming) and
@@ -10951,20 +10971,7 @@ ipcMain.handle('generateMeetingSummary', async (event, meetingId, options = {}) 
       // If a custom model is specified, use it directly instead of the default
       if (model) {
         console.log(`[RegenerateSummary] Using one-off custom model: ${model}`);
-        const originalProvider = llmService.config.provider;
-        const originalModel = llmService.getCurrentModel();
-
-        llmService.switchToPreference(model);
-
-        try {
-          result = await performGeneration();
-        } finally {
-          // Restore original provider and model
-          console.log(
-            `[RegenerateSummary] Restoring LLM to ${originalProvider} with model ${originalModel}`
-          );
-          llmService.switchProvider(originalProvider, originalModel);
-        }
+        result = await llmService.runWithPreference(model, performGeneration, { explicit: true });
       } else {
         // Use default model via withProviderSwitch
         result = await withProviderSwitch('auto', performGeneration, '[RegenerateSummary]');
@@ -11617,8 +11624,9 @@ ipcMain.handle(
 // Handle loading meetings data
 ipcMain.handle('loadMeetingsData', async () => {
   try {
-    // Use our file operation manager to safely read the data
-    const data = await fileOperationManager.readMeetingsData();
+    // Plain read — the renderer never writes this object back through writeData,
+    // so skip the change-tracking fingerprint (~40 MB of hashing on a full DB).
+    const data = databaseService.getAllMeetings();
 
     // Return the data
     return {
@@ -12762,30 +12770,16 @@ async function withProviderSwitch(providerType, callback, logContext = '[LLM]') 
         ? 'templateSummaryProvider'
         : 'patternGenerationProvider';
   const preferenceValue = preferences[preferenceKey];
-  const desiredProvider = mapProviderValue(preferenceValue);
-  const originalProvider = llmService.config.provider;
-  const originalModel = llmService.getCurrentModel();
-
-  // Use switchToPreference to set both provider AND model correctly
-  if (preferenceValue) {
-    console.log(
-      `${logContext} Switching LLM to ${preferenceValue} (provider: ${desiredProvider})`
-    );
-
-    llmService.switchToPreference(preferenceValue);
-  }
-
-  try {
+  if (!preferenceValue) {
     return await callback();
-  } finally {
-    // Restore original provider and model
-    if (desiredProvider !== originalProvider || llmService.getCurrentModel() !== originalModel) {
-      console.log(
-        `${logContext} Restoring LLM to ${originalProvider} with model ${originalModel}`
-      );
-      llmService.switchProvider(originalProvider, originalModel);
-    }
   }
+
+  // Scoped to this call chain — concurrent summaries for other meetings keep
+  // their own model, and a model the user explicitly picked for this run wins.
+  console.log(
+    `${logContext} Using LLM ${preferenceValue} (provider: ${mapProviderValue(preferenceValue)})`
+  );
+  return await llmService.runWithPreference(preferenceValue, callback, { yieldToExplicit: true });
 }
 
 /**

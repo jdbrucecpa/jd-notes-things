@@ -17,6 +17,7 @@ const fs = require('fs');
 const { app } = require('electron');
 const log = require('electron-log');
 const { mergeSpeakerMappingExtras } = require('./speakerMappingExtras');
+const { applyPatchToMeeting } = require('./meetingSnapshot');
 
 const CURRENT_SCHEMA_VERSION = 5;
 
@@ -605,20 +606,41 @@ class DatabaseService {
   }
 
   /**
-   * Bulk save all meetings (used by saveMeetingsData IPC handler).
-   * Wraps everything in a transaction for atomicity + speed.
-   * @param {{ upcomingMeetings: Array, pastMeetings: Array }} data
+   * Apply field-level patches (see meetingSnapshot.js) atomically. Each patch is
+   * merged onto the CURRENT row, so fields other writers changed since the
+   * caller's read are preserved. A row's status is kept unless the patch moves
+   * it (so archived meetings stay archived).
+   * @param {Array<{id: string, set?: Object, unset?: string[], insert?: Object, status?: ?string}>} patches
    */
-  saveAllMeetings(data) {
+  applyMeetingPatches(patches) {
     const transaction = this.db.transaction(() => {
-      for (const meeting of (data.upcomingMeetings || [])) {
-        this.saveMeeting(meeting, 'upcoming');
-      }
-      for (const meeting of (data.pastMeetings || [])) {
-        this.saveMeeting(meeting, 'past');
+      for (const patch of patches) {
+        const row = this._stmts.getMeeting.get(patch.id);
+        if (!row) {
+          if (patch.insert) {
+            this.saveMeeting(patch.insert, patch.status || 'past');
+          } else {
+            log.warn(`[Database] Skipping patch for meeting ${patch.id} — deleted since it was read`);
+          }
+          continue;
+        }
+        const current = this._rowToMeeting(row);
+        const merged = patch.insert
+          ? { ...current, ...patch.insert }
+          : applyPatchToMeeting(current, patch);
+        this.saveMeeting(merged, patch.status || row.status);
       }
     });
     transaction();
+  }
+
+  /**
+   * Set only the given fields on a meeting, merged onto its current row.
+   * @param {string} meetingId
+   * @param {Object} fields
+   */
+  patchMeeting(meetingId, fields) {
+    this.applyMeetingPatches([{ id: meetingId, set: fields, unset: [] }]);
   }
 
   /**

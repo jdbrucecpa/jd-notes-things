@@ -11,6 +11,7 @@
 const https = require('https');
 const http = require('http');
 const log = require('electron-log');
+const { audioServiceGpuQueue } = require('./gpuQueue');
 
 const LOG_PREFIX = '[VoiceProfileService]';
 
@@ -522,7 +523,10 @@ class VoiceProfileService {
   async embedSpeakers(audioFilePath, segments) {
     // audioPath matches the JD Audio Service API contract (not audioFilePath)
     const body = JSON.stringify({ audioPath: audioFilePath, segments });
-    const result = await this._postJson('/embed-speakers', body, 30000);
+    // Queued so the 30s timeout doesn't include waiting on another meeting's GPU job.
+    const result = await audioServiceGpuQueue.run(() =>
+      this._postJson('/embed-speakers', body, 30000)
+    );
 
     // Service sends vector as number[]; convert to Float32Array for cosine math + BLOB serialization
     return (result.embeddings || []).map(s => ({

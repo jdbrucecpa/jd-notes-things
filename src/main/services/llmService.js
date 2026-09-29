@@ -3,6 +3,7 @@
  * v1.3.2: Supports Anthropic Claude, Google Gemini, and Ollama (local)
  */
 
+const { AsyncLocalStorage } = require('node:async_hooks');
 const Anthropic = require('@anthropic-ai/sdk');
 const { GoogleGenAI } = require('@google/genai');
 const { OpenAI } = require('openai');
@@ -530,57 +531,100 @@ class LLMService {
   constructor(config) {
     this.config = config;
     this.adapter = this._createAdapter();
+    // Per-call-chain provider override (see runWithPreference). Lets overlapping
+    // summaries for different meetings each use their own model without
+    // mutating the shared default.
+    this._scope = new AsyncLocalStorage();
   }
 
   _createAdapter() {
-    switch (this.config.provider) {
-      case 'anthropic':
+    return this._createAdapterFor(this.config.provider);
+  }
+
+  /**
+   * @param {string} provider - 'anthropic' | 'gemini' | 'ollama'
+   * @param {string} [model] - Defaults to the configured model for that provider
+   */
+  _createAdapterFor(provider, model) {
+    switch (provider) {
+      case 'anthropic': {
         if (!this.config.anthropic?.apiKey) {
           throw new Error('Anthropic API key is required');
         }
+        const anthropicModel = model || this.config.anthropic.model;
         console.log(
-          `[LLM Service] Initializing Anthropic adapter with model: ${this.config.anthropic.model || 'claude-haiku-4-5-20251001'}`
+          `[LLM Service] Initializing Anthropic adapter with model: ${anthropicModel || 'claude-haiku-4-5-20251001'}`
         );
-        return new AnthropicAdapter(this.config.anthropic.apiKey, this.config.anthropic.model);
+        return new AnthropicAdapter(this.config.anthropic.apiKey, anthropicModel);
+      }
 
-      case 'gemini':
+      case 'gemini': {
         if (!this.config.gemini?.apiKey) {
           throw new Error('Google API key (Gemini) is required');
         }
+        const geminiModel = model || this.config.gemini.model;
         console.log(
-          `[LLM Service] Initializing Gemini adapter with model: ${this.config.gemini.model || 'gemini-3.5-flash-lite'}`
+          `[LLM Service] Initializing Gemini adapter with model: ${geminiModel || 'gemini-3.5-flash-lite'}`
         );
-        return new GeminiAdapter(this.config.gemini.apiKey, this.config.gemini.model);
+        return new GeminiAdapter(this.config.gemini.apiKey, geminiModel);
+      }
 
-      case 'ollama':
-        console.log(
-          `[LLM Service] Initializing Local LLM adapter with model: ${this.config.ollama?.model || 'llama3'}`
-        );
+      case 'ollama': {
+        const ollamaModel = model || this.config.ollama?.model || 'llama3';
+        console.log(`[LLM Service] Initializing Local LLM adapter with model: ${ollamaModel}`);
         return new LocalLLMAdapter(
-          this.config.ollama?.model || 'llama3',
+          ollamaModel,
           this.config.ollama?.baseUrl || 'http://localhost:11434'
         );
+      }
 
       default:
         throw new Error(
-          `Unknown provider: ${this.config.provider}. Must be 'anthropic', 'gemini', or 'ollama'`
+          `Unknown provider: ${provider}. Must be 'anthropic', 'gemini', or 'ollama'`
         );
     }
+  }
+
+  /** The adapter for the current call chain: a runWithPreference scope, else the default. */
+  _activeAdapter() {
+    return this._scope.getStore()?.adapter || this.adapter;
+  }
+
+  /**
+   * Run fn with a provider/model override that applies only to LLM calls made
+   * within fn's async call chain. Concurrent scopes don't affect each other or
+   * the default provider.
+   * @param {string} preference - e.g. 'claude-sonnet-5-5', 'gemini-3.5-flash-lite', 'ollama-llama3'
+   * @param {Function} fn
+   * @param {{explicit?: boolean, yieldToExplicit?: boolean}} [opts]
+   *   explicit: a model the user picked for this run.
+   *   yieldToExplicit: skip this override when an enclosing explicit scope exists
+   *   (preference defaults must not replace a user-picked model).
+   */
+  runWithPreference(preference, fn, { explicit = false, yieldToExplicit = false } = {}) {
+    const outer = this._scope.getStore();
+    if (yieldToExplicit && outer?.explicit) {
+      return fn();
+    }
+    const { provider, model } = this._resolvePreference(preference);
+    const adapter = this._createAdapterFor(provider, model);
+    return this._scope.run({ provider, model, adapter, explicit }, fn);
   }
 
   /**
    * Generate completion using configured provider
    */
   async generateCompletion(options) {
+    const adapter = this._activeAdapter();
     try {
-      const result = await this.adapter.generateCompletion(options);
+      const result = await adapter.generateCompletion(options);
       console.log(
-        `[LLM Service] Generated completion using ${this.adapter.getProviderName()} (${result.model})`
+        `[LLM Service] Generated completion using ${adapter.getProviderName()} (${result.model})`
       );
       return result;
     } catch (error) {
       console.error(
-        `[LLM Service] Error generating completion with ${this.adapter.getProviderName()}:`,
+        `[LLM Service] Error generating completion with ${adapter.getProviderName()}:`,
         error
       );
       throw error;
@@ -591,12 +635,13 @@ class LLMService {
    * Generate streaming completion using configured provider
    */
   async streamCompletion(options) {
+    const adapter = this._activeAdapter();
     try {
-      const result = await this.adapter.streamCompletion(options);
-      console.log(`[LLM Service] Completed streaming with ${this.adapter.getProviderName()}`);
+      const result = await adapter.streamCompletion(options);
+      console.log(`[LLM Service] Completed streaming with ${adapter.getProviderName()}`);
       return result;
     } catch (error) {
-      console.error(`[LLM Service] Error streaming with ${this.adapter.getProviderName()}:`, error);
+      console.error(`[LLM Service] Error streaming with ${adapter.getProviderName()}:`, error);
       throw error;
     }
   }
@@ -605,7 +650,7 @@ class LLMService {
    * Get current provider name
    */
   getProviderName() {
-    return this.adapter.getProviderName();
+    return this._activeAdapter().getProviderName();
   }
 
   /**
@@ -639,6 +684,15 @@ class LLMService {
    * @param {string} preference - Full preference string (e.g., 'claude-haiku-4-5', 'gemini-3.5-flash-lite', 'ollama-llama3')
    */
   switchToPreference(preference) {
+    const { provider, model } = this._resolvePreference(preference);
+    this.switchProvider(provider, model);
+  }
+
+  /**
+   * @param {string} preference - e.g. 'claude-haiku-4-5', 'gemini-3.5-flash-lite', 'ollama-llama3'
+   * @returns {{provider: string, model: string}}
+   */
+  _resolvePreference(preference) {
     const model = extractModelFromPreference(preference);
     let provider;
 
@@ -655,13 +709,15 @@ class LLMService {
       provider = 'anthropic';
     }
 
-    this.switchProvider(provider, model);
+    return { provider, model };
   }
 
   /**
-   * Get current model name
+   * Get current model name (of the active runWithPreference scope, if any)
    */
   getCurrentModel() {
+    const scoped = this._scope.getStore();
+    if (scoped) return scoped.model;
     if (this.config.provider === 'anthropic') {
       return this.config.anthropic?.model || 'claude-haiku-4-5-20251001';
     } else if (this.config.provider === 'gemini') {
