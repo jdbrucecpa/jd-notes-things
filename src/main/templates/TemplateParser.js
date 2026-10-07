@@ -191,8 +191,8 @@ class TemplateParser {
    * NOTE: Prices may change. Verify current pricing before major deployments.
    *
    * Models are organized into pricing tiers:
-   * - Budget: Gemini 3.5 Flash Lite
-   * - Balanced: Gemini 3.8 Flash, Claude Haiku 4.5
+   * - Budget: Claude Haiku 5.5, Gemini 3.5 Flash Lite
+   * - Balanced: Gemini 3.8 Flash
    * - Premium: Claude Sonnet 5.5, Claude Opus 5.5
    * - Local: Ollama (free, runs on your hardware)
    */
@@ -200,6 +200,13 @@ class TemplateParser {
     // ═══════════════════════════════════════════════════════════════════
     // BUDGET TIER - Best for high-volume, cost-sensitive tasks
     // ═══════════════════════════════════════════════════════════════════
+    'claude-haiku-5-5': {
+      // Prompts ≤100K tokens; longer prompts bill at $0.50/$2.50 (not modeled here)
+      input: 0.1, // $0.10 per 1M tokens
+      output: 0.5, // $0.50 per 1M tokens
+      tier: 'budget',
+      updated: '2026-10-07',
+    },
     'gemini-3.5-flash-lite': {
       input: 0.3, // $0.30 per 1M tokens
       output: 2.5, // $2.50 per 1M tokens
@@ -214,12 +221,6 @@ class TemplateParser {
       // Intro pricing through 2026-12-31; rises to $1.50/$7.50 on 2027-01-01
       input: 0.75, // $0.75 per 1M tokens
       output: 3.75, // $3.75 per 1M tokens
-      tier: 'balanced',
-      updated: '2026-09-23',
-    },
-    'claude-haiku-4-5': {
-      input: 1.0, // $1.00 per 1M tokens
-      output: 5.0, // $5.00 per 1M tokens
       tier: 'balanced',
       updated: '2026-09-23',
     },
@@ -272,6 +273,12 @@ class TemplateParser {
       tier: 'premium',
       updated: '2026-09-28',
     },
+    'claude-haiku-4-5': {
+      input: 0.1,
+      output: 0.5,
+      tier: 'budget',
+      updated: '2026-10-07',
+    },
 
     // Ollama models (any ollama-* prefix) are always free — handled dynamically in estimateTokens
   };
@@ -281,7 +288,7 @@ class TemplateParser {
    * Using rough estimate: 1 token ≈ 4 characters
    * @param {Object} template - Template object
    * @param {string} transcriptText - Meeting transcript
-   * @param {string} provider - Model provider (e.g., 'gemini-3.5-flash-lite', 'claude-haiku-4-5', 'claude-sonnet-5-5')
+   * @param {string} provider - Model provider (e.g., 'gemini-3.5-flash-lite', 'claude-haiku-5-5', 'claude-sonnet-5-5')
    * @returns {Object} Token estimates and cost
    */
   static estimateTokens(template, transcriptText, provider = 'gemini-3.5-flash-lite') {

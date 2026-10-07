@@ -15,7 +15,7 @@ const {
 function makeService() {
   return new LLMService({
     provider: 'anthropic',
-    anthropic: { apiKey: 'test-key', model: 'claude-haiku-4-5-20251001' },
+    anthropic: { apiKey: 'test-key', model: 'claude-haiku-5-5' },
     gemini: { apiKey: 'test-key', model: 'gemini-3.5-flash-lite' },
     ollama: { model: 'llama3', baseUrl: 'http://localhost:11434' },
   });
@@ -75,9 +75,9 @@ describe('LLMService.runWithPreference', () => {
     const llm = makeService();
     await llm.runWithPreference('gemini-3.5-flash-lite', () => llm.generateCompletion({}));
     expect(llm.config.provider).toBe('anthropic');
-    expect(llm.getCurrentModel()).toBe('claude-haiku-4-5-20251001');
+    expect(llm.getCurrentModel()).toBe('claude-haiku-5-5');
     const result = await llm.generateCompletion({});
-    expect(result.model).toBe('claude-haiku-4-5-20251001');
+    expect(result.model).toBe('claude-haiku-5-5');
   });
 
   it('an explicit (user-chosen) scope is not overridden by a nested default scope', async () => {
@@ -95,7 +95,7 @@ describe('LLMService.runWithPreference', () => {
 
   it('a nested default scope still overrides an outer default scope', async () => {
     const llm = makeService();
-    const model = await llm.runWithPreference('claude-haiku-4-5', () =>
+    const model = await llm.runWithPreference('claude-haiku-5-5', () =>
       llm.runWithPreference('claude-sonnet-5-5', () => llm.getCurrentModel(), {
         yieldToExplicit: true,
       })

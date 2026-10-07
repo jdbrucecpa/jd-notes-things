@@ -24,9 +24,9 @@ const DEFAULT_SETTINGS = {
   autoStartRecording: false,
   debugMode: false,
   vaultPath: '',
-  autoSummaryProvider: 'claude-haiku-4-5', // AI model for auto-summaries (Anthropic default; Gemini is a cheaper backup)
+  autoSummaryProvider: 'claude-haiku-5-5', // AI model for auto-summaries (Anthropic default; Gemini is a cheaper backup)
   templateSummaryProvider: 'claude-sonnet-5-5', // AI model for template summaries (higher-quality default)
-  patternGenerationProvider: 'claude-haiku-4-5', // AI model for pattern generation (Anthropic default, lightweight)
+  patternGenerationProvider: 'claude-haiku-5-5', // AI model for pattern generation (Anthropic default, lightweight)
   // Note: recordingProvider is stored in main process app-settings.json (source of truth), NOT here.
   // Note: transcriptionProvider is stored in its own localStorage key, NOT here.
   // See renderer.js transcriptionProviderSelect handler.
@@ -1176,6 +1176,7 @@ export function initializeSettingsUI() {
       'gemini-3.7-flash': 'gemini-3.8-flash',
       'claude-opus-5': 'claude-opus-5-5',
       'claude-sonnet-5': 'claude-sonnet-5-5',
+      'claude-haiku-4-5': 'claude-haiku-5-5',
     };
     const normalizeModelPref = (value, fallback) => {
       const v = value || fallback;
@@ -1185,7 +1186,7 @@ export function initializeSettingsUI() {
     if (autoSummaryProviderSelect) {
       autoSummaryProviderSelect.value = normalizeModelPref(
         currentSettings.autoSummaryProvider,
-        'claude-haiku-4-5'
+        'claude-haiku-5-5'
       );
     }
 
@@ -1199,7 +1200,7 @@ export function initializeSettingsUI() {
     if (patternGenerationProviderSelect) {
       patternGenerationProviderSelect.value = normalizeModelPref(
         currentSettings.patternGenerationProvider,
-        'claude-haiku-4-5'
+        'claude-haiku-5-5'
       );
     }
 

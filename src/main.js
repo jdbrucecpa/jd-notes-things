@@ -9281,16 +9281,16 @@ ipcMain.handle('settings:getProviderPreferences', async event => {
       try {
         const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
         return {
-          autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-4-5',
+          autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-5-5',
           templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5-5',
-          patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-4-5',
+          patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-5-5',
           transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'local'
         };
       } catch (e) {
         return {
-          autoSummaryProvider: 'claude-haiku-4-5',
+          autoSummaryProvider: 'claude-haiku-5-5',
           templateSummaryProvider: 'claude-sonnet-5-5',
-          patternGenerationProvider: 'claude-haiku-4-5',
+          patternGenerationProvider: 'claude-haiku-5-5',
           transcriptionProvider: 'local'
         };
       }
@@ -12738,7 +12738,7 @@ async function processRecallAITranscript(transcript, meetingId, _windowId) {
 
 /**
  * Map provider preference value to simple provider name
- * @param {string} providerValue - Value from settings (e.g., 'claude-haiku-4-5', 'gemini-3.5-flash-lite', 'ollama-llama3')
+ * @param {string} providerValue - Value from settings (e.g., 'claude-haiku-5-5', 'gemini-3.5-flash-lite', 'ollama-llama3')
  * @returns {string} Provider name for llmService.switchProvider() (e.g., 'anthropic', 'gemini', 'ollama')
  */
 function mapProviderValue(providerValue) {
@@ -12791,9 +12791,9 @@ async function getProviderPreferences() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     console.warn('[LLM] Main window not available, using default providers');
     return {
-      autoSummaryProvider: 'claude-haiku-4-5',
+      autoSummaryProvider: 'claude-haiku-5-5',
       templateSummaryProvider: 'claude-sonnet-5-5',
-      patternGenerationProvider: 'claude-haiku-4-5',
+      patternGenerationProvider: 'claude-haiku-5-5',
       transcriptionProvider: 'local',
     };
   }
@@ -12804,16 +12804,16 @@ async function getProviderPreferences() {
         try {
           const settings = JSON.parse(localStorage.getItem('jd-notes-settings') || '{}');
           return {
-            autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-4-5',
+            autoSummaryProvider: settings.autoSummaryProvider || 'claude-haiku-5-5',
             templateSummaryProvider: settings.templateSummaryProvider || 'claude-sonnet-5-5',
-            patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-4-5',
+            patternGenerationProvider: settings.patternGenerationProvider || 'claude-haiku-5-5',
             transcriptionProvider: localStorage.getItem('transcriptionProvider') || 'local'
           };
         } catch (e) {
           return {
-            autoSummaryProvider: 'claude-haiku-4-5',
+            autoSummaryProvider: 'claude-haiku-5-5',
             templateSummaryProvider: 'claude-sonnet-5-5',
-            patternGenerationProvider: 'claude-haiku-4-5',
+            patternGenerationProvider: 'claude-haiku-5-5',
             transcriptionProvider: 'local'
           };
         }
@@ -12823,9 +12823,9 @@ async function getProviderPreferences() {
   } catch (error) {
     console.error('[LLM] Error reading provider preferences:', error);
     return {
-      autoSummaryProvider: 'claude-haiku-4-5',
+      autoSummaryProvider: 'claude-haiku-5-5',
       templateSummaryProvider: 'claude-sonnet-5-5',
-      patternGenerationProvider: 'claude-haiku-4-5',
+      patternGenerationProvider: 'claude-haiku-5-5',
       transcriptionProvider: 'local',
     };
   }
