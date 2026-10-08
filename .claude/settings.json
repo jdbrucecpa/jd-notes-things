@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__github__create_pull_request",
+      "mcp__github__merge_pull_request",
+      "mcp__github__actions_run_trigger",
+      "mcp__github__actions_list"
+    ]
+  }
+}
