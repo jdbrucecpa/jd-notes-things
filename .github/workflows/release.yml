@@ -1,25 +1,52 @@
 name: Release
 
+# A release happens when a push to main carries a package.json version that has
+# no v<version> tag yet. Pushes that don't change the version find the tag
+# already there and stop after the cheap check job. CI creates the tag (via the
+# release), so nobody pushes tags — the cloud sandbox's git proxy refuses them.
+#
+# Tags created with GITHUB_TOKEN don't trigger other workflows, so the build and
+# publish steps live here instead of in a separate tag-triggered workflow.
 on:
   push:
-    tags:
-      - 'v*'
-  # Cloud Claude Code sessions can only push their own branch (no tags, no
-  # main), so they release by dispatching this workflow via the GitHub API.
-  # The Create Release step then creates the v<version> tag on the checked-out
-  # commit. Dispatch from main; package.json must already be bumped there.
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to release, without the v (e.g. 2.1.4). Must match package.json.'
-        required: true
-        type: string
+    branches: [main]
 
 permissions:
   contents: write
 
+# Serialize releases so two quick pushes can't both see the tag as missing.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Read version and check for an existing tag
+        id: version
+        run: |
+          TAG="v$(node -p "require('./package.json').version")"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "$TAG already exists; nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$TAG has no tag yet; releasing."
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
     # Pinned to windows-2022 (Visual Studio 2022 / v17). windows-latest moved to
     # an image with Visual Studio 18, which the older @electron/node-gyp bundled
     # by electron-forge cannot detect ("unknown version undefined"), breaking the
@@ -29,36 +56,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-
-      # Resolve the tag name (v<version>) for both triggers, and for a dispatch,
-      # refuse to release before spending ~20 minutes on a build: must run from
-      # main (auto-update ships whatever is tagged), version must match
-      # package.json, and the tag must not exist yet.
-      - name: Resolve and validate version
-        id: get_version
-        shell: bash
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
-        run: |
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
-              echo "::error::Dispatch releases from main (got $GITHUB_REF)"; exit 1
-            fi
-            if ! [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "::error::version must be X.Y.Z without a v (got '$INPUT_VERSION')"; exit 1
-            fi
-            PKG_VERSION=$(node -p "require('./package.json').version")
-            if [ "$PKG_VERSION" != "$INPUT_VERSION" ]; then
-              echo "::error::package.json on main is $PKG_VERSION, not $INPUT_VERSION"; exit 1
-            fi
-            if [ -n "$(git ls-remote --tags origin "refs/tags/v$INPUT_VERSION")" ]; then
-              echo "::error::Tag v$INPUT_VERSION already exists"; exit 1
-            fi
-            VERSION="v$INPUT_VERSION"
-          else
-            VERSION="${GITHUB_REF#refs/tags/}"
-          fi
-          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -96,19 +93,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # On a dispatch the tag doesn't exist yet; the release API creates it at
-      # target_commitish. On a tag push both values match the existing tag.
-      - name: Create Release
-        uses: softprops/action-gh-release@v3
-        with:
-          name: Release ${{ steps.get_version.outputs.VERSION }}
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
-          target_commitish: ${{ github.sha }}
-          draft: false
-          prerelease: false
-          files: |
-            out/make/squirrel.windows/x64/*.exe
-            out/make/squirrel.windows/x64/*.nupkg
-            out/make/squirrel.windows/x64/RELEASES
+      # Created only after a successful build: the in-app updater and release
+      # notes read the latest release, so it must never exist without installers.
+      # The tag is created here, at the pushed commit. RELEASE_NOTES_<tag>.md, when
+      # present, leads the body (the app shows it); GitHub's generated notes follow.
+      - name: Create release
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          NOTES_ARGS=(--generate-notes)
+          if [ -f "RELEASE_NOTES_$TAG.md" ]; then
+            NOTES_ARGS+=(--notes-file "RELEASE_NOTES_$TAG.md")
+          fi
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "Release $TAG" \
+            "${NOTES_ARGS[@]}" \
+            out/make/squirrel.windows/x64/*.exe \
+            out/make/squirrel.windows/x64/*.nupkg \
+            out/make/squirrel.windows/x64/RELEASES

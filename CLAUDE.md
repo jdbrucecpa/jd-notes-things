@@ -255,6 +255,13 @@ npx playwright test tests/e2e/recording-pipeline.spec.js   # Recording pipeline 
 npx playwright test tests/e2e/recording-providers.spec.js  # Provider abstraction tests
 ```
 
+## Releases
+
+- Never run `git tag` or push tags; CI creates tags and releases (`.github/workflows/release.yml` releases any push to `main` whose `package.json` version has no `v<version>` tag yet).
+- Never bump the version unless I explicitly ask for a release.
+- To release: bump the version in `package.json` with `npm version X.Y.Z --no-git-tag-version` (updates `package-lock.json` too), add `RELEASE_NOTES_vX.Y.Z.md` (it becomes the release body the app shows), commit, push to `main` (or open a PR if pushing to `main` isn't possible). See `/push-release`.
+- Ordinary commits to `main` never touch the version.
+
 ## Reference Documentation
 
 - **[README.md](./README.md)** - Project overview and quick start

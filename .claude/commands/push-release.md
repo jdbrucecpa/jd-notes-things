@@ -79,58 +79,33 @@ git commit -m "v$VERSION - $MESSAGE"
 ```
 Use the provided message. Do NOT ask for confirmation — just commit with the message provided.
 
-### Step 7: Pick the Release Path
-Run `echo "$CLAUDE_CODE_REMOTE"`.
+### Step 7: Push to main — CI Does the Rest
+Never run `git tag` or push tags. `.github/workflows/release.yml` runs on every push to `main`: when `package.json` holds a version with no `v$VERSION` tag yet, it builds the Windows installer, then creates the tag and the GitHub Release at the pushed commit.
 
-- **`true` → cloud session.** The git proxy only lets a cloud session push its own branch: pushes to `main` and to tags are refused with HTTP 403. Use **Path A** (GitHub API via the `mcp__github__*` tools — load them with ToolSearch if needed).
-- **Anything else → local session.** Use **Path B** (plain git).
+- **On main:** `git push origin main`
+- **On a feature branch:** if you can push to main, merge first:
+  ```bash
+  git checkout main
+  git pull origin main
+  git merge [feature-branch] --no-edit
+  git push origin main
+  ```
+  If there are merge conflicts, stop and ask for help resolving them.
+- **Pushing to main isn't possible** (e.g. a cloud session, whose git proxy refuses pushes to `main` and to tags): push the session's own branch, open a PR into `main` titled `v$VERSION - $MESSAGE` (body = the release notes summary), and merge it with the merge method. If it isn't mergeable (conflicts, failing required checks), stop and report.
 
-Both paths end in the same `.github/workflows/release.yml` run, which builds the Windows installer and publishes the GitHub Release.
-
-### Step 8A: Cloud — Merge via PR, then Dispatch the Release Workflow
-1. Push the release commit to the session's own branch: `git push -u origin <current-branch>`
-2. Open a PR into `main` with `mcp__github__create_pull_request` (title `v$VERSION - $MESSAGE`, body = the release notes summary).
-3. Merge it with `mcp__github__merge_pull_request` (`merge_method: "merge"`). If it isn't mergeable (conflicts, failing required checks), stop and report — do not dispatch.
-4. Confirm `main` now carries the bump: `git fetch origin main && git show origin/main:package.json | grep '"version"'` must show `$VERSION`.
-5. Dispatch the release with `mcp__github__actions_run_trigger`:
-   - `method: "run_workflow"`, `workflow_id: "release.yml"`, `ref: "main"`, `inputs: { "version": "$VERSION" }` (no leading `v`)
-6. The workflow refuses to run if it isn't on `main`, if `version` doesn't match `package.json`, or if tag `v$VERSION` already exists — those checks run before the ~20 minute build. On success, the Create Release step creates tag `v$VERSION` on the dispatched commit.
-
-Do NOT `git push origin main` or `git push origin v$VERSION` from a cloud session — both 403.
-
-### Step 8B: Local — Merge, Tag, and Push
-If NOT already on main:
-```bash
-git checkout main
-git pull origin main
-git merge [feature-branch] --no-edit
-```
-If there are merge conflicts, stop and ask for help resolving them. Then:
-```bash
-git tag v$VERSION
-git push origin main
-git push origin v$VERSION
-```
-The tag push triggers the release workflow. (Path A also works locally via `gh workflow run release.yml -f version=$VERSION` after pushing main, if you'd rather not push tags.)
-
-### Step 9: Verify
-- **Cloud:** find the run with `mcp__github__actions_list` (`method: "list_workflow_runs"`, `workflow_id: "release.yml"`). The tag only appears once the build finishes and the release is created — check it with `git ls-remote --tags origin | grep v$VERSION` at that point, not right after the dispatch.
-- **Local:** confirm the tag was pushed: `git ls-remote --tags origin | grep v$VERSION`
-- Get the actual GitHub URL: `git remote get-url origin` (strip any credentials before showing it)
-- Tell the user to check GitHub Actions for the release build status
-- Provide the GitHub releases URL derived from the remote URL
+### Step 8: Verify
+- Confirm `main` carries the bump: `git fetch origin main && git show origin/main:package.json | grep '"version"'` must show `$VERSION`.
+- Find the run: `gh run list --workflow release.yml --limit 3` (or `mcp__github__actions_list` with `method: "list_workflow_runs"`, `workflow_id: "release.yml"`). Its `check` job should say it is releasing, and `build` should start.
+- The tag only appears once the build finishes and the release is created (~10 minutes) — check `git ls-remote --tags origin | grep v$VERSION` then, not right after the push.
+- Provide the GitHub Actions and Releases URLs, derived from `git remote get-url origin` (strip any credentials before showing it).
 
 ### Important Notes
-- `.github/workflows/release.yml` triggers on `v*` tag pushes (local path) and on `workflow_dispatch` with a `version` input (cloud path)
-- It builds the Windows installer and creates a GitHub Release automatically
-- Electron auto-update will pick up the new release from GitHub Releases
-- Always ensure you're pushing to the correct remote (origin)
+- `.github/workflows/release.yml` triggers only on pushes to `main`; pushes that don't change the version are no-ops (the tag already exists).
+- Tags created by CI with `GITHUB_TOKEN` don't trigger other workflows, so all build/publish steps belong in `release.yml`.
+- Electron auto-update picks up the new release from GitHub Releases. The release is created only after the build succeeds, so it never appears without installers.
+- `RELEASE_NOTES_v$VERSION.md` becomes the start of the release body, which the app shows as release notes; GitHub's generated notes follow it.
 
 ### Rollback (if needed)
-- **Dispatch failed before Create Release:** nothing was tagged or published; fix the cause and dispatch again.
-- **Local, before the tag is pushed:**
-  ```bash
-  git tag -d v$VERSION           # Delete local tag
-  git reset --hard HEAD~1        # Undo last commit (if needed)
-  ```
-- **A tag or release is already on GitHub:** delete the release and tag in the GitHub UI (or locally with `git push origin :refs/tags/v$VERSION`). A cloud session can't delete remote tags — ask the user.
+- **Build failed:** nothing was tagged or published. Fix the cause and push to `main` again (the next push retries, since the tag is still missing), or re-run the failed workflow run.
+- **Before pushing:** `git reset --hard HEAD~1` undoes the release commit.
+- **A release is already on GitHub:** delete the release and its tag in the GitHub UI (`gh release delete v$VERSION --cleanup-tag`). A cloud session can't delete remote tags — ask the user.
