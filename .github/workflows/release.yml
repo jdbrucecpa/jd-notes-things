@@ -4,7 +4,16 @@ on:
   push:
     tags:
       - 'v*'
-
+  # Cloud Claude Code sessions can only push their own branch (no tags, no
+  # main), so they release by dispatching this workflow via the GitHub API.
+  # The Create Release step then creates the v<version> tag on the checked-out
+  # commit. Dispatch from main; package.json must already be bumped there.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, without the v (e.g. 2.1.4). Must match package.json.'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -20,6 +29,36 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+
+      # Resolve the tag name (v<version>) for both triggers, and for a dispatch,
+      # refuse to release before spending ~20 minutes on a build: must run from
+      # main (auto-update ships whatever is tagged), version must match
+      # package.json, and the tag must not exist yet.
+      - name: Resolve and validate version
+        id: get_version
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "::error::Dispatch releases from main (got $GITHUB_REF)"; exit 1
+            fi
+            if ! [[ "$INPUT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::version must be X.Y.Z without a v (got '$INPUT_VERSION')"; exit 1
+            fi
+            PKG_VERSION=$(node -p "require('./package.json').version")
+            if [ "$PKG_VERSION" != "$INPUT_VERSION" ]; then
+              echo "::error::package.json on main is $PKG_VERSION, not $INPUT_VERSION"; exit 1
+            fi
+            if [ -n "$(git ls-remote --tags origin "refs/tags/v$INPUT_VERSION")" ]; then
+              echo "::error::Tag v$INPUT_VERSION already exists"; exit 1
+            fi
+            VERSION="v$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -57,15 +96,14 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-        shell: bash
-
+      # On a dispatch the tag doesn't exist yet; the release API creates it at
+      # target_commitish. On a tag push both values match the existing tag.
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
           name: Release ${{ steps.get_version.outputs.VERSION }}
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          target_commitish: ${{ github.sha }}
           draft: false
           prerelease: false
           files: |
