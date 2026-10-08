@@ -11,7 +11,11 @@ import {
 function windows(totalSec, spans) {
   const arr = new Float32Array(Math.ceil((totalSec * 1000) / WINDOW_MS));
   for (const { start, end, v } of spans) {
-    for (let i = Math.floor((start * 1000) / WINDOW_MS); i < Math.floor((end * 1000) / WINDOW_MS); i++) {
+    for (
+      let i = Math.floor((start * 1000) / WINDOW_MS);
+      i < Math.floor((end * 1000) / WINDOW_MS);
+      i++
+    ) {
       arr[i] = v;
     }
   }
@@ -45,7 +49,10 @@ describe('computeUtteranceOverrides', () => {
       utt('SPEAKER_01', 10, 15),
       utt('SPEAKER_01', 20, 30),
     ];
-    const mic = windows(30, [{ start: 0, end: 8, v: 0.4 }, { start: 10, end: 15, v: 0.4 }]);
+    const mic = windows(30, [
+      { start: 0, end: 8, v: 0.4 },
+      { start: 10, end: 15, v: 0.4 },
+    ]);
     const app = windows(30, [{ start: 20, end: 30, v: 0.4 }]);
     const overrides = computeUtteranceOverrides(transcript, anchor, mic, app);
     expect(overrides).toEqual([{ index: 1, from: 'SPEAKER_01', to: 'SPEAKER_00' }]);
@@ -58,7 +65,10 @@ describe('computeUtteranceOverrides', () => {
       utt('SPEAKER_01', 20, 30),
     ];
     const mic = windows(30, [{ start: 0, end: 8, v: 0.4 }]);
-    const app = windows(30, [{ start: 10, end: 15, v: 0.4 }, { start: 20, end: 30, v: 0.4 }]);
+    const app = windows(30, [
+      { start: 10, end: 15, v: 0.4 },
+      { start: 20, end: 30, v: 0.4 },
+    ]);
     const overrides = computeUtteranceOverrides(transcript, anchor, mic, app);
     expect(overrides).toEqual([{ index: 1, from: 'SPEAKER_00', to: 'SPEAKER_01' }]);
   });

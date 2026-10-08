@@ -153,24 +153,24 @@ class AIServiceManager {
   }
 
   _attachProcessHandlers() {
-    this._process.on('exit', (code) => {
+    this._process.on('exit', code => {
       log.info(`[AIService] Process exited with code ${code}`);
       this._process = null;
     });
 
-    this._process.on('error', (err) => {
+    this._process.on('error', err => {
       log.error(`[AIService] Process error: ${err.message}`);
       this._process = null;
     });
 
-    this._process.stderr.on('data', (chunk) => {
+    this._process.stderr.on('data', chunk => {
       const line = chunk.toString().trim();
       if (line) log.debug(`[AIService stderr] ${line}`);
     });
   }
 
   _pollHealth() {
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const start = Date.now();
       const interval = setInterval(async () => {
         if (Date.now() - start > HEALTH_POLL_TIMEOUT_MS) {
@@ -202,7 +202,7 @@ class AIServiceManager {
     const proc = this._process;
     log.info(`[AIService] Killing process (PID ${proc.pid})`);
 
-    const exited = new Promise((resolve) => {
+    const exited = new Promise(resolve => {
       let settled = false;
       const finish = () => {
         if (settled) return;

@@ -31,9 +31,9 @@ Hotfix for the shipped v2.0.0 installer: the packaged app could not find FFmpeg,
 
 ## Dependency Changes
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `ffmpeg-static` | ^5.3.0 | Bundled FFmpeg 6.1.1 binary (dshow + libmp3lame) |
+| Package         | Version | Purpose                                          |
+| --------------- | ------- | ------------------------------------------------ |
+| `ffmpeg-static` | ^5.3.0  | Bundled FFmpeg 6.1.1 binary (dshow + libmp3lame) |
 
 ---
 

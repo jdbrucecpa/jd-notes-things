@@ -246,7 +246,7 @@ class DatabaseService {
     if (oldVersion < 2) {
       log.info('[Database] Running v1 → v2 migration: clients, client_contacts, backup_log tables');
       const migrate = this.db.transaction(() => {
-      this.db.exec(`
+        this.db.exec(`
         CREATE TABLE IF NOT EXISTS clients (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -285,13 +285,13 @@ class DatabaseService {
         CREATE INDEX IF NOT EXISTS idx_clients_type ON clients(type);
       `);
 
-      // Add routed_clients column to meetings (safe: skip if column already exists)
-      try {
-        this.db.exec('ALTER TABLE meetings ADD COLUMN routed_clients TEXT');
-      } catch (e) {
-        // SQLite error: "table meetings already has a column named routed_clients"
-        if (!e.message.includes('already has a column')) throw e;
-      }
+        // Add routed_clients column to meetings (safe: skip if column already exists)
+        try {
+          this.db.exec('ALTER TABLE meetings ADD COLUMN routed_clients TEXT');
+        } catch (e) {
+          // SQLite error: "table meetings already has a column named routed_clients"
+          if (!e.message.includes('already has a column')) throw e;
+        }
       }); // end transaction
       migrate();
 
@@ -301,17 +301,21 @@ class DatabaseService {
     if (oldVersion < 3) {
       log.info('[Database] Running v2 → v3 migration: Add category column to clients');
       try {
-        this.db.prepare("SELECT category FROM clients LIMIT 1").get();
+        this.db.prepare('SELECT category FROM clients LIMIT 1').get();
       } catch (_e) {
         this.db.prepare("ALTER TABLE clients ADD COLUMN category TEXT DEFAULT 'Other'").run();
       }
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         UPDATE clients SET category = CASE
           WHEN type = 'client' THEN 'Client'
           ELSE 'Other'
         END
         WHERE category IS NULL
-      `).run();
+      `
+        )
+        .run();
       log.info('[Database] v2 → v3 migration complete');
     }
 
@@ -351,7 +355,9 @@ class DatabaseService {
     }
 
     if (oldVersion < 5) {
-      log.info('[Database] Running v4 → v5 migration: dedupe voice_samples + unique (profile_id, meeting_id) index');
+      log.info(
+        '[Database] Running v4 → v5 migration: dedupe voice_samples + unique (profile_id, meeting_id) index'
+      );
       const migratev5 = this.db.transaction(() => {
         // Pre-migration cleanup: an established DB has duplicate (profile_id,
         // meeting_id) rows (verified 2026-07-10: 15 groups). CREATE UNIQUE INDEX
@@ -383,7 +389,9 @@ class DatabaseService {
   _prepareStatements() {
     this._stmts = {
       getMeeting: this.db.prepare('SELECT * FROM meetings WHERE id = ?'),
-      getMeetingsByStatus: this.db.prepare('SELECT * FROM meetings WHERE status = ? ORDER BY date DESC'),
+      getMeetingsByStatus: this.db.prepare(
+        'SELECT * FROM meetings WHERE status = ? ORDER BY date DESC'
+      ),
       insertMeeting: this.db.prepare(`
         INSERT INTO meetings (
           id, type, status, title, date, start_time, end_time, duration,
@@ -428,7 +436,7 @@ class DatabaseService {
       `),
       deleteMeeting: this.db.prepare('DELETE FROM meetings WHERE id = ?'),
       updateMeetingField: this.db.prepare(
-        'UPDATE meetings SET updated_at = datetime(\'now\') WHERE id = ?'
+        "UPDATE meetings SET updated_at = datetime('now') WHERE id = ?"
       ),
 
       // Participants
@@ -480,8 +488,12 @@ class DatabaseService {
           @meeting_id, @name, @email, @response_status, @is_optional, @is_organizer
         )
       `),
-      getCalendarAttendees: this.db.prepare('SELECT * FROM calendar_attendees WHERE meeting_id = ?'),
-      deleteCalendarAttendees: this.db.prepare('DELETE FROM calendar_attendees WHERE meeting_id = ?'),
+      getCalendarAttendees: this.db.prepare(
+        'SELECT * FROM calendar_attendees WHERE meeting_id = ?'
+      ),
+      deleteCalendarAttendees: this.db.prepare(
+        'DELETE FROM calendar_attendees WHERE meeting_id = ?'
+      ),
 
       // Voice profiles
       insertVoiceProfile: this.db.prepare(`
@@ -561,10 +573,14 @@ class DatabaseService {
    * @returns {{ upcomingMeetings: Array, pastMeetings: Array }}
    */
   getAllMeetings() {
-    const upcoming = this._stmts.getMeetingsByStatus.all('upcoming').map(r => this._rowToMeeting(r));
+    const upcoming = this._stmts.getMeetingsByStatus
+      .all('upcoming')
+      .map(r => this._rowToMeeting(r));
     const past = this._stmts.getMeetingsByStatus.all('past').map(r => this._rowToMeeting(r));
     // Also include archived in past for backward compat
-    const archived = this._stmts.getMeetingsByStatus.all('archived').map(r => this._rowToMeeting(r));
+    const archived = this._stmts.getMeetingsByStatus
+      .all('archived')
+      .map(r => this._rowToMeeting(r));
     return {
       upcomingMeetings: upcoming,
       pastMeetings: [...past, ...archived],
@@ -620,7 +636,9 @@ class DatabaseService {
           if (patch.insert) {
             this.saveMeeting(patch.insert, patch.status || 'past');
           } else {
-            log.warn(`[Database] Skipping patch for meeting ${patch.id} — deleted since it was read`);
+            log.warn(
+              `[Database] Skipping patch for meeting ${patch.id} — deleted since it was read`
+            );
           }
           continue;
         }
@@ -680,7 +698,9 @@ class DatabaseService {
    * @returns {Object|null}
    */
   getMeetingByCalendarEvent(calendarEventId) {
-    const row = this.db.prepare('SELECT * FROM meetings WHERE calendar_event_id = ?').get(calendarEventId);
+    const row = this.db
+      .prepare('SELECT * FROM meetings WHERE calendar_event_id = ?')
+      .get(calendarEventId);
     if (!row) return null;
     return this._rowToMeeting(row);
   }
@@ -729,12 +749,16 @@ class DatabaseService {
    * @returns {Array}
    */
   getMeetingsForContact(email) {
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT DISTINCT m.* FROM meetings m
       JOIN participants p ON p.meeting_id = m.id
       WHERE p.email = ?
       ORDER BY m.date DESC
-    `).all(email);
+    `
+      )
+      .all(email);
     return rows.map(r => this._rowToMeeting(r));
   }
 
@@ -744,12 +768,16 @@ class DatabaseService {
    * @returns {Array}
    */
   getMeetingsForOrganization(organization) {
-    const rows = this.db.prepare(`
+    const rows = this.db
+      .prepare(
+        `
       SELECT DISTINCT m.* FROM meetings m
       JOIN participants p ON p.meeting_id = m.id
       WHERE p.organization = ?
       ORDER BY m.date DESC
-    `).all(organization);
+    `
+      )
+      .all(organization);
     return rows.map(r => this._rowToMeeting(r));
   }
 
@@ -759,9 +787,9 @@ class DatabaseService {
    * @returns {number}
    */
   getMeetingCountForContact(email) {
-    const result = this.db.prepare(
-      'SELECT COUNT(DISTINCT meeting_id) as count FROM participants WHERE email = ?'
-    ).get(email);
+    const result = this.db
+      .prepare('SELECT COUNT(DISTINCT meeting_id) as count FROM participants WHERE email = ?')
+      .get(email);
     return result ? result.count : 0;
   }
 
@@ -816,16 +844,19 @@ class DatabaseService {
       const transaction = this.db.transaction(() => {
         let migrated = 0;
 
-        for (const meeting of (data.upcomingMeetings || [])) {
+        for (const meeting of data.upcomingMeetings || []) {
           try {
             this.saveMeeting(meeting, 'upcoming');
             migrated++;
           } catch (error) {
-            log.error(`[Database] Failed to migrate upcoming meeting ${meeting.id}:`, error.message);
+            log.error(
+              `[Database] Failed to migrate upcoming meeting ${meeting.id}:`,
+              error.message
+            );
           }
         }
 
-        for (const meeting of (data.pastMeetings || [])) {
+        for (const meeting of data.pastMeetings || []) {
           try {
             this.saveMeeting(meeting, 'past');
             migrated++;
@@ -874,7 +905,8 @@ class DatabaseService {
       calendarHtmlLink: row.calendar_html_link || undefined,
       calendarDescription: row.calendar_description || undefined,
       transcriptionProvider: row.transcription_provider || undefined,
-      transcriptConfidence: row.transcript_confidence != null ? row.transcript_confidence : undefined,
+      transcriptConfidence:
+        row.transcript_confidence != null ? row.transcript_confidence : undefined,
       recordingComplete: row.recording_complete === 1,
       recordingEndTime: row.recording_end_time || undefined,
       uploadToken: row.upload_token || undefined,
@@ -919,7 +951,10 @@ class DatabaseService {
         try {
           Object.assign(participant, JSON.parse(p.extra_fields));
         } catch (err) {
-          log.warn(`[Database] Corrupt extra_fields on participant in meeting ${row.id}:`, err.message);
+          log.warn(
+            `[Database] Corrupt extra_fields on participant in meeting ${row.id}:`,
+            err.message
+          );
         }
       }
       return participant;
@@ -1014,15 +1049,44 @@ class DatabaseService {
 
     // Collect known fields
     const knownFields = new Set([
-      'id', 'type', 'status', 'title', 'date', 'start', 'end', 'duration',
-      'platform', 'link', 'meetingLink', 'content', 'summary', 'recordingId',
-      'videoFile', 'obsidianLink', 'vaultPath', 'calendarEventId',
-      'calendarHtmlLink', 'calendarDescription', 'transcriptionProvider',
-      'transcriptConfidence', 'recordingComplete', 'recordingEndTime',
-      'uploadToken', 'sdkUploadId', 'recallRecordingId', 'recordingStatus',
-      'subtitle', 'hasDemo', 'participantEmails', 'speakerMapping',
-      'summaries', 'participants', 'transcript', 'calendarAttendees',
-      'transcriptProvider', 'routedClients', // alias
+      'id',
+      'type',
+      'status',
+      'title',
+      'date',
+      'start',
+      'end',
+      'duration',
+      'platform',
+      'link',
+      'meetingLink',
+      'content',
+      'summary',
+      'recordingId',
+      'videoFile',
+      'obsidianLink',
+      'vaultPath',
+      'calendarEventId',
+      'calendarHtmlLink',
+      'calendarDescription',
+      'transcriptionProvider',
+      'transcriptConfidence',
+      'recordingComplete',
+      'recordingEndTime',
+      'uploadToken',
+      'sdkUploadId',
+      'recallRecordingId',
+      'recordingStatus',
+      'subtitle',
+      'hasDemo',
+      'participantEmails',
+      'speakerMapping',
+      'summaries',
+      'participants',
+      'transcript',
+      'calendarAttendees',
+      'transcriptProvider',
+      'routedClients', // alias
     ]);
 
     // Build extra_fields from any unrecognized keys
@@ -1054,7 +1118,8 @@ class DatabaseService {
       calendar_html_link: meeting.calendarHtmlLink || null,
       calendar_description: meeting.calendarDescription || null,
       transcription_provider: meeting.transcriptionProvider || meeting.transcriptProvider || null,
-      transcript_confidence: meeting.transcriptConfidence != null ? meeting.transcriptConfidence : null,
+      transcript_confidence:
+        meeting.transcriptConfidence != null ? meeting.transcriptConfidence : null,
       recording_complete: meeting.recordingComplete ? 1 : 0,
       recording_end_time: meeting.recordingEndTime || null,
       upload_token: meeting.uploadToken || null,
@@ -1063,7 +1128,9 @@ class DatabaseService {
       recording_status: meeting.recordingStatus || null,
       subtitle: meeting.subtitle || null,
       has_demo: meeting.hasDemo ? 1 : 0,
-      participant_emails: meeting.participantEmails ? JSON.stringify(meeting.participantEmails) : null,
+      participant_emails: meeting.participantEmails
+        ? JSON.stringify(meeting.participantEmails)
+        : null,
       speaker_mapping: meeting.speakerMapping ? JSON.stringify(meeting.speakerMapping) : null,
       summaries: meeting.summaries ? JSON.stringify(meeting.summaries) : null,
       extra_fields: Object.keys(extra).length > 0 ? JSON.stringify(extra) : null,
@@ -1082,9 +1149,17 @@ class DatabaseService {
     for (const p of participants) {
       // Collect known participant fields
       const knownFields = new Set([
-        'id', 'name', 'originalName', 'email', 'organization',
-        'isHost', 'platform', 'joinTime', 'googleContactResource',
-        'participant_id', 'mappedFromSpeakerId',
+        'id',
+        'name',
+        'originalName',
+        'email',
+        'organization',
+        'isHost',
+        'platform',
+        'joinTime',
+        'googleContactResource',
+        'participant_id',
+        'mappedFromSpeakerId',
       ]);
       const extra = {};
       for (const key of Object.keys(p)) {
@@ -1199,10 +1274,14 @@ class DatabaseService {
    * @param {{ backupPath: string, backupType: string, filesIncluded: number, totalSize: number }} entry
    */
   logBackup(entry) {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT INTO backup_log (backup_path, backup_type, files_included, total_size)
       VALUES (?, ?, ?, ?)
-    `).run(entry.backupPath, entry.backupType, entry.filesIncluded, entry.totalSize);
+    `
+      )
+      .run(entry.backupPath, entry.backupType, entry.filesIncluded, entry.totalSize);
   }
 
   /**
@@ -1210,9 +1289,9 @@ class DatabaseService {
    * @returns {Object|null}
    */
   getLastBackup() {
-    return this.db.prepare(
-      'SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 1'
-    ).get() || null;
+    return (
+      this.db.prepare('SELECT * FROM backup_log ORDER BY created_at DESC LIMIT 1').get() || null
+    );
   }
 
   /**
@@ -1220,9 +1299,7 @@ class DatabaseService {
    * @returns {Array}
    */
   getBackupHistory() {
-    return this.db.prepare(
-      'SELECT * FROM backup_log ORDER BY created_at DESC'
-    ).all();
+    return this.db.prepare('SELECT * FROM backup_log ORDER BY created_at DESC').all();
   }
 
   // ======================================================================
@@ -1234,10 +1311,13 @@ class DatabaseService {
    * @returns {Array}
    */
   getAllClients() {
-    return this.db.prepare('SELECT * FROM clients ORDER BY name').all().map(row => ({
-      ...row,
-      domains: row.domains ? JSON.parse(row.domains) : [],
-    }));
+    return this.db
+      .prepare('SELECT * FROM clients ORDER BY name')
+      .all()
+      .map(row => ({
+        ...row,
+        domains: row.domains ? JSON.parse(row.domains) : [],
+      }));
   }
 
   /**
@@ -1258,28 +1338,45 @@ class DatabaseService {
   saveClient(client) {
     const existing = this.db.prepare('SELECT id FROM clients WHERE id = ?').get(client.id);
     if (existing) {
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         UPDATE clients SET
           name = ?, type = ?, vault_path = ?, domains = ?, status = ?,
           google_source = ?, notes = ?, category = ?, updated_at = datetime('now')
         WHERE id = ?
-      `).run(
-        client.name, client.type || 'client', client.vaultPath || client.vault_path || null,
-        JSON.stringify(client.domains || []), client.status || 'active',
-        client.googleSource || client.google_source || null,
-        client.notes || null, client.category || 'Other', client.id
-      );
+      `
+        )
+        .run(
+          client.name,
+          client.type || 'client',
+          client.vaultPath || client.vault_path || null,
+          JSON.stringify(client.domains || []),
+          client.status || 'active',
+          client.googleSource || client.google_source || null,
+          client.notes || null,
+          client.category || 'Other',
+          client.id
+        );
     } else {
-      this.db.prepare(`
+      this.db
+        .prepare(
+          `
         INSERT INTO clients (id, name, type, vault_path, domains, status, google_source, notes, category)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        client.id, client.name, client.type || 'client',
-        client.vaultPath || client.vault_path || null,
-        JSON.stringify(client.domains || []), client.status || 'active',
-        client.googleSource || client.google_source || null,
-        client.notes || null, client.category || 'Other'
-      );
+      `
+        )
+        .run(
+          client.id,
+          client.name,
+          client.type || 'client',
+          client.vaultPath || client.vault_path || null,
+          JSON.stringify(client.domains || []),
+          client.status || 'active',
+          client.googleSource || client.google_source || null,
+          client.notes || null,
+          client.category || 'Other'
+        );
     }
   }
 
@@ -1299,9 +1396,9 @@ class DatabaseService {
    * @returns {Array}
    */
   getClientContacts(clientId) {
-    return this.db.prepare(
-      'SELECT * FROM client_contacts WHERE client_id = ? ORDER BY is_primary DESC, name'
-    ).all(clientId);
+    return this.db
+      .prepare('SELECT * FROM client_contacts WHERE client_id = ? ORDER BY is_primary DESC, name')
+      .all(clientId);
   }
 
   /**
@@ -1310,13 +1407,20 @@ class DatabaseService {
    * @param {{ email: string, name?: string, googleContactResource?: string, isPrimary?: boolean }} contact
    */
   addClientContact(clientId, contact) {
-    this.db.prepare(`
+    this.db
+      .prepare(
+        `
       INSERT OR REPLACE INTO client_contacts (client_id, email, name, google_contact_resource, is_primary)
       VALUES (?, ?, ?, ?, ?)
-    `).run(
-      clientId, contact.email, contact.name || null,
-      contact.googleContactResource || null, contact.isPrimary ? 1 : 0
-    );
+    `
+      )
+      .run(
+        clientId,
+        contact.email,
+        contact.name || null,
+        contact.googleContactResource || null,
+        contact.isPrimary ? 1 : 0
+      );
   }
 
   /**
@@ -1326,9 +1430,9 @@ class DatabaseService {
    * @returns {boolean}
    */
   removeClientContact(clientId, email) {
-    const result = this.db.prepare(
-      'DELETE FROM client_contacts WHERE client_id = ? AND email = ?'
-    ).run(clientId, email);
+    const result = this.db
+      .prepare('DELETE FROM client_contacts WHERE client_id = ? AND email = ?')
+      .run(clientId, email);
     return result.changes > 0;
   }
 
@@ -1339,22 +1443,30 @@ class DatabaseService {
    */
   matchEmailToClient(email) {
     // 1. Exact email match in client_contacts
-    const contactMatch = this.db.prepare(`
+    const contactMatch = this.db
+      .prepare(
+        `
       SELECT c.* FROM clients c
       JOIN client_contacts cc ON cc.client_id = c.id
       WHERE cc.email = ? AND c.status = 'active'
       LIMIT 1
-    `).get(email);
+    `
+      )
+      .get(email);
     if (contactMatch) {
-      return { ...contactMatch, domains: contactMatch.domains ? JSON.parse(contactMatch.domains) : [], matchType: 'email' };
+      return {
+        ...contactMatch,
+        domains: contactMatch.domains ? JSON.parse(contactMatch.domains) : [],
+        matchType: 'email',
+      };
     }
 
     // 2. Domain match
     const domain = email.split('@')[1];
     if (domain) {
-      const allClients = this.db.prepare(
-        "SELECT * FROM clients WHERE status = 'active' AND domains IS NOT NULL"
-      ).all();
+      const allClients = this.db
+        .prepare("SELECT * FROM clients WHERE status = 'active' AND domains IS NOT NULL")
+        .all();
       for (const client of allClients) {
         const domains = JSON.parse(client.domains || '[]');
         if (domains.includes(domain)) {
@@ -1373,9 +1485,9 @@ class DatabaseService {
    */
   matchOrganizationToCompany(orgName) {
     if (!orgName) return null;
-    const row = this.db.prepare(
-      'SELECT * FROM clients WHERE LOWER(name) = LOWER(?) AND status = ?'
-    ).get(orgName, 'active');
+    const row = this.db
+      .prepare('SELECT * FROM clients WHERE LOWER(name) = LOWER(?) AND status = ?')
+      .get(orgName, 'active');
     if (!row) return null;
     return {
       ...row,

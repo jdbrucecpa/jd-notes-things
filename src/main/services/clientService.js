@@ -161,9 +161,7 @@ class ClientService {
       }
     }
 
-    return Array.from(companies.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+    return Array.from(companies.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   // ======================================================================
@@ -180,7 +178,8 @@ class ClientService {
       throw new Error('Google Contacts not authenticated');
     }
 
-    const client = databaseService.getAllClients()
+    const client = databaseService
+      .getAllClients()
       .find(c => c.name.toLowerCase() === companyName.toLowerCase());
     if (!client) throw new Error(`Company not found in database: ${companyName}`);
 
@@ -190,7 +189,8 @@ class ClientService {
 
     let added = 0;
     for (const contact of contacts) {
-      if (!contact.organization || contact.organization.toLowerCase() !== companyName.toLowerCase()) continue;
+      if (!contact.organization || contact.organization.toLowerCase() !== companyName.toLowerCase())
+        continue;
       const email = contact.emails?.[0];
       if (email && !existingEmails.has(email.toLowerCase())) {
         databaseService.addClientContact(client.id, {
@@ -211,11 +211,13 @@ class ClientService {
   // ======================================================================
 
   _generateSlug(name) {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .substring(0, 50) || `client-${crypto.randomUUID().substring(0, 8)}`;
+    return (
+      name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '')
+        .substring(0, 50) || `client-${crypto.randomUUID().substring(0, 8)}`
+    );
   }
 }
 

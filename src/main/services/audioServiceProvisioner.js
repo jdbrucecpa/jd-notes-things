@@ -42,18 +42,14 @@ class AudioServiceProvisioner {
       fs.readFileSync(path.join(this.serviceRoot, 'uv.lock'), 'utf8').replace(/\r\n/g, '\n')
     );
     h.update(
-      fs
-        .readFileSync(path.join(this.serviceRoot, 'pyproject.toml'), 'utf8')
-        .replace(/\r\n/g, '\n')
+      fs.readFileSync(path.join(this.serviceRoot, 'pyproject.toml'), 'utf8').replace(/\r\n/g, '\n')
     );
     return h.digest('hex');
   }
 
   isProvisioned() {
     try {
-      const marker = JSON.parse(
-        fs.readFileSync(path.join(this.envDir, MARKER_FILE), 'utf8')
-      );
+      const marker = JSON.parse(fs.readFileSync(path.join(this.envDir, MARKER_FILE), 'utf8'));
       return marker.lockHash === this.computeLockHash();
     } catch {
       return false;
@@ -73,13 +69,13 @@ class AudioServiceProvisioner {
         },
       });
       let tail = '';
-      proc.stderr?.on('data', (chunk) => {
+      proc.stderr?.on('data', chunk => {
         const line = chunk.toString();
         tail = (tail + line).slice(-2000);
         onProgress(line);
       });
       proc.on('error', reject);
-      proc.on('close', (code) => {
+      proc.on('close', code => {
         if (code === 0) resolve();
         else reject(new Error(`uv sync failed (exit ${code}): ${tail.trim()}`));
       });

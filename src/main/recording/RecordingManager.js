@@ -22,23 +22,23 @@ class RecordingManager extends EventEmitter {
   }
 
   _bindProviderEvents() {
-    this.provider.on('meeting-detected', (data) => {
+    this.provider.on('meeting-detected', data => {
       this.detectedMeeting = data;
       this.emit('meeting-detected', data);
     });
 
-    this.provider.on('meeting-closed', (data) => {
+    this.provider.on('meeting-closed', data => {
       this.detectedMeeting = null;
       this.emit('meeting-closed', data);
     });
 
-    this.provider.on('recording-started', (data) => {
+    this.provider.on('recording-started', data => {
       this.isRecording = true;
       this.recordingStartTime = Date.now();
       this.emit('recording-started', data);
     });
 
-    this.provider.on('recording-ended', (data) => {
+    this.provider.on('recording-ended', data => {
       const { recordingId } = data;
       // Carry the note this recording was started for, so the pipeline can
       // still find it if the note's recordingId link was lost.
@@ -53,13 +53,19 @@ class RecordingManager extends EventEmitter {
       this.emit('recording-ended', noteId && !data.noteId ? { ...data, noteId } : data);
     });
 
-    this.provider.on('error', (data) => {
+    this.provider.on('error', data => {
       this.emit('error', data);
     });
 
     // Forward provider-specific events without transformation
-    for (const event of ['participant-joined', 'speech-activity', 'upload-progress', 'sdk-state-change', 'permissions-granted']) {
-      this.provider.on(event, (data) => this.emit(event, data));
+    for (const event of [
+      'participant-joined',
+      'speech-activity',
+      'upload-progress',
+      'sdk-state-change',
+      'permissions-granted',
+    ]) {
+      this.provider.on(event, data => this.emit(event, data));
     }
   }
 

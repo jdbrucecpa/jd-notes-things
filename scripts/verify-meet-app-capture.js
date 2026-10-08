@@ -43,7 +43,7 @@ let sampleCount = 0;
 let peak = 0;
 
 startAudioCapture(String(pid), {
-  onData: (chunk) => {
+  onData: chunk => {
     totalBytes += chunk.length;
     const buf = Buffer.from(chunk);
     for (let i = 0; i + 1 < buf.length; i += 2) {
@@ -77,7 +77,9 @@ setTimeout(() => {
   const NONSILENT_RMS_DBFS = -50;
   if (totalBytes > 0 && rmsDbfs > NONSILENT_RMS_DBFS) {
     console.log('\nVERDICT: NON-SILENT audio captured from the main Chrome PID.');
-    console.log('=> Tree capture WORKS. Meet app-isolation track is viable. No code change needed.');
+    console.log(
+      '=> Tree capture WORKS. Meet app-isolation track is viable. No code change needed.'
+    );
   } else {
     console.log('\nVERDICT: SILENT (no meaningful audio from the main Chrome PID).');
     console.log('=> Single-PID capture only. Meet app track falls back to the system submix');

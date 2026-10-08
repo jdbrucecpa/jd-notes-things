@@ -17,7 +17,6 @@ import { initializeTabs } from './utils/tabHelper.js';
 import { notifySuccess, notifyError, notifyInfo } from './utils/notificationHelper.js';
 import { reconcileAiServicePath } from './servicePathSync.js';
 
-
 // Default settings
 const DEFAULT_SETTINGS = {
   theme: 'light', // 'light' or 'dark'
@@ -412,7 +411,9 @@ export function initializeSettingsUI() {
   if (autoSummaryProviderSelect) {
     autoSummaryProviderSelect.addEventListener('change', e => {
       updateSetting('autoSummaryProvider', e.target.value);
-      notifySuccess(`Auto-summary provider changed to ${e.target.options[e.target.selectedIndex].text}`);
+      notifySuccess(
+        `Auto-summary provider changed to ${e.target.options[e.target.selectedIndex].text}`
+      );
     });
   }
 
@@ -420,7 +421,9 @@ export function initializeSettingsUI() {
   if (templateSummaryProviderSelect) {
     templateSummaryProviderSelect.addEventListener('change', e => {
       updateSetting('templateSummaryProvider', e.target.value);
-      notifySuccess(`Template summary provider changed to ${e.target.options[e.target.selectedIndex].text}`);
+      notifySuccess(
+        `Template summary provider changed to ${e.target.options[e.target.selectedIndex].text}`
+      );
     });
   }
 
@@ -428,7 +431,9 @@ export function initializeSettingsUI() {
   if (patternGenerationProviderSelect) {
     patternGenerationProviderSelect.addEventListener('change', e => {
       updateSetting('patternGenerationProvider', e.target.value);
-      notifySuccess(`Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`);
+      notifySuccess(
+        `Pattern generation provider changed to ${e.target.options[e.target.selectedIndex].text}`
+      );
     });
   }
 
@@ -440,7 +445,9 @@ export function initializeSettingsUI() {
       if (window.electronAPI?.appUpdateSettings) {
         window.electronAPI.appUpdateSettings({ recordingProvider: newProvider });
       }
-      notifyInfo('Recording provider switched to ' + (newProvider === 'local' ? 'Local' : 'Recall.ai') + '.');
+      notifyInfo(
+        'Recording provider switched to ' + (newProvider === 'local' ? 'Local' : 'Recall.ai') + '.'
+      );
       updateAudioSourcesVisibility();
     });
   }
@@ -991,8 +998,8 @@ export function initializeSettingsUI() {
 
     const micDevice = devices.find(d => d.isMicrophone);
     // Prefer WASAPI default output device, fall back to dshow loopback
-    const systemDevice = devices.find(d => d.type === 'wasapi' && d.isDefault)
-      || devices.find(d => d.isLoopback);
+    const systemDevice =
+      devices.find(d => d.type === 'wasapi' && d.isDefault) || devices.find(d => d.isLoopback);
 
     const select0 = document.getElementById('audioSourceDevice0');
     if (select0 && micDevice) select0.value = micDevice.name;
@@ -1120,7 +1127,9 @@ export function initializeSettingsUI() {
         if (patternGenerationProviderSelect) patternGenerationProviderSelect.value = firstModel;
         notifySuccess(`Fully local preset applied — using model: ${firstModel}`);
       } else {
-        notifyInfo('Fully local preset applied. No local models found — configure your LLM server.');
+        notifyInfo(
+          'Fully local preset applied. No local models found — configure your LLM server.'
+        );
       }
     } catch {
       notifyInfo('Fully local preset applied. Could not reach local LLM server.');
@@ -1579,9 +1588,7 @@ async function addTerm() {
     if (addedCount > 0) {
       input.value = '';
       await loadVocabulary();
-      notifySuccess(
-        addedCount === 1 ? 'Term added' : `${addedCount} terms added`
-      );
+      notifySuccess(addedCount === 1 ? 'Term added' : `${addedCount} terms added`);
     } else {
       notifyError('Failed to add terms');
     }
@@ -1861,7 +1868,8 @@ async function loadBackupManifest() {
     const lastInfo = document.getElementById('backupLastInfo');
 
     if (dbInfo) dbInfo.textContent = `${m.database.files} file (${formatBytes(m.database.size)})`;
-    if (configInfo) configInfo.textContent = `${m.config.files} files (${formatBytes(m.config.size)})`;
+    if (configInfo)
+      configInfo.textContent = `${m.config.files} files (${formatBytes(m.config.size)})`;
     if (audioInfo) audioInfo.textContent = `${m.audio.files} files (${formatBytes(m.audio.size)})`;
     if (totalInfo) totalInfo.textContent = `${m.total.files} files (${formatBytes(m.total.size)})`;
     if (lastInfo) {
@@ -1895,7 +1903,8 @@ function initializeBackupUI() {
       fullBtn.disabled = false;
 
       if (result.success) {
-        if (backupStatus) backupStatus.textContent = `Backup complete: ${result.filesIncluded} files (${formatBytes(result.totalSize)})`;
+        if (backupStatus)
+          backupStatus.textContent = `Backup complete: ${result.filesIncluded} files (${formatBytes(result.totalSize)})`;
         notifySuccess('Full backup created successfully');
         loadBackupManifest();
       } else {
@@ -1917,9 +1926,10 @@ function initializeBackupUI() {
       incrementalBtn.disabled = false;
 
       if (result.success) {
-        const msg = result.filesIncluded === 0
-          ? 'No changes since last backup'
-          : `Incremental backup: ${result.filesIncluded} files (${formatBytes(result.totalSize)})`;
+        const msg =
+          result.filesIncluded === 0
+            ? 'No changes since last backup'
+            : `Incremental backup: ${result.filesIncluded} files (${formatBytes(result.totalSize)})`;
         if (backupStatus) backupStatus.textContent = msg;
         notifySuccess(msg);
         loadBackupManifest();
@@ -1942,7 +1952,8 @@ function initializeBackupUI() {
 
       if (validation.valid) {
         selectedBackupPath = fileResult.path;
-        if (restoreStatus) restoreStatus.textContent = `Valid backup: ${validation.fileCount} files`;
+        if (restoreStatus)
+          restoreStatus.textContent = `Valid backup: ${validation.fileCount} files`;
         if (restoreOptions) restoreOptions.style.display = 'block';
       } else {
         if (restoreStatus) restoreStatus.textContent = `Invalid backup: ${validation.error}`;
@@ -1965,7 +1976,9 @@ function initializeBackupUI() {
       if (!selectedBackupPath) return;
 
       const options = {
-        restoreDatabase: document.getElementById('restoreDatabaseToggle')?.classList.contains('active'),
+        restoreDatabase: document
+          .getElementById('restoreDatabaseToggle')
+          ?.classList.contains('active'),
         restoreConfig: document.getElementById('restoreConfigToggle')?.classList.contains('active'),
         restoreAudio: document.getElementById('restoreAudioToggle')?.classList.contains('active'),
       };
@@ -2057,7 +2070,9 @@ function initializeVoiceProfilesUI() {
         if (result.success) {
           const s = result.summary;
           if (statusEl) {
-            const repaired = s.namesRepaired ? ` ${s.namesRepaired} profile name${s.namesRepaired === 1 ? '' : 's'} repaired.` : '';
+            const repaired = s.namesRepaired
+              ? ` ${s.namesRepaired} profile name${s.namesRepaired === 1 ? '' : 's'} repaired.`
+              : '';
             statusEl.textContent = `Done: ${s.embedded} meetings embedded, ${s.samplesAdded} samples added, ${s.samplesRejected} rejected (${s.skippedAlreadySampled} already sampled, ${s.skippedNoAudio} missing audio, ${s.skippedNoIdentities} unverified).${repaired}`;
           }
         } else if (statusEl) {
@@ -2099,7 +2114,9 @@ function initializeMcpUI() {
       if (snippet) {
         navigator.clipboard.writeText(snippet.textContent).then(() => {
           copyBtn.textContent = 'Copied!';
-          setTimeout(() => { copyBtn.textContent = 'Copy to Clipboard'; }, 2000);
+          setTimeout(() => {
+            copyBtn.textContent = 'Copy to Clipboard';
+          }, 2000);
         });
       }
     });
@@ -2181,7 +2198,8 @@ async function renderClientsTab() {
       tr.appendChild(tdPath);
 
       const tdContacts = document.createElement('td');
-      tdContacts.style.cssText = 'padding: 8px 12px; color: var(--text-secondary); font-size: 13px;';
+      tdContacts.style.cssText =
+        'padding: 8px 12px; color: var(--text-secondary); font-size: 13px;';
       tdContacts.textContent = company.contactCount || 0;
       tr.appendChild(tdContacts);
 
@@ -2191,7 +2209,8 @@ async function renderClientsTab() {
       removeBtn.className = 'btn-icon client-remove-btn';
       removeBtn.dataset.name = company.name;
       removeBtn.title = 'Remove';
-      removeBtn.style.cssText = 'background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 16px;';
+      removeBtn.style.cssText =
+        'background: none; border: none; cursor: pointer; color: var(--text-secondary); font-size: 16px;';
       removeBtn.textContent = '\u00d7';
       tdAction.appendChild(removeBtn);
       tr.appendChild(tdAction);
@@ -2213,7 +2232,9 @@ function bindClientsTableHandlers() {
       const name = select.dataset.name;
       const pathInput = select.closest('tr').querySelector('.client-path-input');
       await window.electronAPI.companiesUpdate({
-        name, vaultPath: pathInput?.value || null, category: select.value,
+        name,
+        vaultPath: pathInput?.value || null,
+        category: select.value,
       });
     });
   });
@@ -2228,7 +2249,9 @@ function bindClientsTableHandlers() {
         if (pathInput) pathInput.value = result.folderPath;
         const catSelect = btn.closest('tr').querySelector('.client-category-select');
         await window.electronAPI.companiesUpdate({
-          name, vaultPath: result.folderPath, category: catSelect?.value || 'Other',
+          name,
+          vaultPath: result.folderPath,
+          category: catSelect?.value || 'Other',
         });
       }
     });
@@ -2270,7 +2293,7 @@ async function showAddClientPicker() {
   const result = await window.electronAPI.companiesGetAll();
   const unconfigured = (result.success ? result.companies : []).filter(c => !c.vaultPath);
 
-  const renderResults = (filter) => {
+  const renderResults = filter => {
     const filtered = filter
       ? unconfigured.filter(c => c.name.toLowerCase().includes(filter.toLowerCase()))
       : unconfigured;
@@ -2280,7 +2303,8 @@ async function showAddClientPicker() {
       const opt = document.createElement('div');
       opt.className = 'add-client-option';
       opt.dataset.name = c.name;
-      opt.style.cssText = 'padding: 8px 12px; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;';
+      opt.style.cssText =
+        'padding: 8px 12px; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;';
 
       const nameSpan = document.createElement('span');
       nameSpan.textContent = c.name;
@@ -2298,13 +2322,19 @@ async function showAddClientPicker() {
         const folderResult = await window.electronAPI.companiesSelectFolder();
         if (!folderResult.success || !folderResult.folderPath) return;
         await window.electronAPI.companiesUpdate({
-          name: c.name, vaultPath: folderResult.folderPath, category: 'Client',
+          name: c.name,
+          vaultPath: folderResult.folderPath,
+          category: 'Client',
         });
         picker.style.display = 'none';
         renderClientsTab();
       });
-      opt.addEventListener('mouseenter', () => { opt.style.background = 'var(--bg-secondary)'; });
-      opt.addEventListener('mouseleave', () => { opt.style.background = ''; });
+      opt.addEventListener('mouseenter', () => {
+        opt.style.background = 'var(--bg-secondary)';
+      });
+      opt.addEventListener('mouseleave', () => {
+        opt.style.background = '';
+      });
 
       resultsContainer.appendChild(opt);
     }
@@ -2430,7 +2460,8 @@ function renderSettingsReport() {
     const cov = settingsReportData.coverage;
     if (cov) {
       const summary = document.createElement('div');
-      summary.style.cssText = 'padding: 16px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 16px;';
+      summary.style.cssText =
+        'padding: 16px; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 16px;';
 
       const pct = document.createElement('div');
       pct.style.cssText = 'font-size: 24px; font-weight: 600; margin-bottom: 4px;';
@@ -2458,7 +2489,8 @@ function renderSettingsReport() {
 
   for (const m of meetings) {
     const row = document.createElement('div');
-    row.style.cssText = 'padding: 10px 12px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;';
+    row.style.cssText =
+      'padding: 10px 12px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;';
 
     const info = document.createElement('div');
     const title = document.createElement('div');
@@ -2468,9 +2500,13 @@ function renderSettingsReport() {
 
     const date = document.createElement('div');
     date.style.cssText = 'font-size: 12px; color: var(--text-secondary);';
-    date.textContent = m.date ? new Date(m.date).toLocaleDateString('en-US', {
-      weekday: 'short', month: 'short', day: 'numeric',
-    }) : '';
+    date.textContent = m.date
+      ? new Date(m.date).toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        })
+      : '';
     info.appendChild(date);
     row.appendChild(info);
 

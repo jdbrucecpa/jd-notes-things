@@ -11,8 +11,20 @@
  */
 
 const GENERIC_TITLES = [
-  'transcript', 'meeting', 'imported', 'untitled', 'new meeting', 'new note',
-  'call', 'zoom', 'teams', 'google meet', 'krisp', 'recording', 'audio', 'video',
+  'transcript',
+  'meeting',
+  'imported',
+  'untitled',
+  'new meeting',
+  'new note',
+  'call',
+  'zoom',
+  'teams',
+  'google meet',
+  'krisp',
+  'recording',
+  'audio',
+  'video',
 ];
 
 /** True if the title looks like a placeholder (is/starts-with/contains a generic word). */
@@ -28,8 +40,8 @@ function isGenericTitle(title) {
  * @param {{passTitle:?string, obsidianLink:?string, platform:?string}} args
  */
 function shouldRenameFromContentPass({ passTitle, obsidianLink, platform }) {
-  if (!passTitle) return false;       // pass produced no better title
-  if (obsidianLink) return false;     // already synced → renaming dupes vault files
+  if (!passTitle) return false; // pass produced no better title
+  if (obsidianLink) return false; // already synced → renaming dupes vault files
   if (platform === 'youtube') return false; // authoritative title
   return true;
 }

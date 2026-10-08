@@ -3933,7 +3933,7 @@ var EventEmitter = class {
     if (listeners === void 0) {
       return false;
     }
-    for (let i = 0; i < listeners.length; ) {
+    for (let i = 0; i < listeners.length;) {
       const { listener, once } = listeners[i];
       if (once) {
         listeners.splice(i, 1);

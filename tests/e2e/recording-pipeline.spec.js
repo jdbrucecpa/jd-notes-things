@@ -23,8 +23,8 @@ test.beforeAll(async () => {
   } catch (err) {
     throw new Error(
       `Could not connect to Electron app on port ${CDP_PORT}.\n` +
-      `Start the app first with: npm run start:mock\n` +
-      `Error: ${err.message}`
+        `Start the app first with: npm run start:mock\n` +
+        `Error: ${err.message}`
     );
   }
 
@@ -64,7 +64,13 @@ async function findWidgetPage() {
 }
 
 async function ensureMainView() {
-  const closeButtons = ['#homeButton', '#settingsBackBtn', '#closeContacts', '#closeReports', '#closeClientSetup'];
+  const closeButtons = [
+    '#homeButton',
+    '#settingsBackBtn',
+    '#closeContacts',
+    '#closeReports',
+    '#closeClientSetup',
+  ];
   for (const btn of closeButtons) {
     const el = mainPage.locator(btn);
     if (await el.isVisible().catch(() => false)) {
@@ -84,7 +90,7 @@ async function loadMeetings() {
 }
 
 async function getMeetingById(meetingId) {
-  return mainPage.evaluate(async (id) => {
+  return mainPage.evaluate(async id => {
     const result = await window.electronAPI.loadMeetingsData();
     const meetings = result?.data?.pastMeetings || result?.pastMeetings || [];
     return meetings.find(m => m.id === id) || null;
@@ -180,8 +186,16 @@ test.describe('2. Mock SDK State', () => {
     if (!state) return test.skip();
 
     // The app registers listeners for these events
-    const expectedListeners = ['meeting-detected', 'meeting-closed', 'recording-ended',
-      'upload-progress', 'sdk-state-change', 'realtime-event', 'error', 'permissions-granted'];
+    const expectedListeners = [
+      'meeting-detected',
+      'meeting-closed',
+      'recording-ended',
+      'upload-progress',
+      'sdk-state-change',
+      'realtime-event',
+      'error',
+      'permissions-granted',
+    ];
 
     for (const event of expectedListeners) {
       const count = state.listenerCount[event] || 0;
@@ -250,7 +264,9 @@ test.describe('3. Recording Lifecycle', () => {
 
     // Check if recording started by looking at the widget state
     const recordBtn = widget.locator('#recordBtn');
-    const hasRecordingClass = await recordBtn.evaluate(el => el.classList.contains('recording')).catch(() => false);
+    const hasRecordingClass = await recordBtn
+      .evaluate(el => el.classList.contains('recording'))
+      .catch(() => false);
     const btnTitle = await recordBtn.getAttribute('title');
     console.log(`Record button has .recording class: ${hasRecordingClass}`);
     console.log(`Record button title: "${btnTitle}"`);
@@ -329,7 +345,10 @@ test.describe('3. Recording Lifecycle', () => {
     console.log(`Main window timer visible: ${isVisible}`);
 
     if (isVisible) {
-      const timerValue = await mainPage.locator('#mainTimerValue').textContent().catch(() => 'N/A');
+      const timerValue = await mainPage
+        .locator('#mainTimerValue')
+        .textContent()
+        .catch(() => 'N/A');
       console.log(`Main window timer value: ${timerValue}`);
     }
   });
@@ -348,7 +367,7 @@ test.describe('3. Recording Lifecycle', () => {
     }
 
     // Stop recording via IPC
-    const result = await mainPage.evaluate(async (recId) => {
+    const result = await mainPage.evaluate(async recId => {
       return await window.electronAPI.stopManualRecording(recId);
     }, recordingId);
 
@@ -380,7 +399,7 @@ test.describe('4. Widget Interactions', () => {
     if (!widget) return test.skip();
 
     const infoBtn = widget.locator('#infoBtn');
-    if (!await infoBtn.isVisible().catch(() => false)) return test.skip();
+    if (!(await infoBtn.isVisible().catch(() => false))) return test.skip();
 
     // Hover over info button to show tooltip
     await infoBtn.hover();
@@ -391,8 +410,14 @@ test.describe('4. Widget Interactions', () => {
     console.log(`Info tooltip visible after hover: ${tooltipVisible}`);
 
     if (tooltipVisible) {
-      const title = await widget.locator('#infoTitle').textContent().catch(() => 'N/A');
-      const platform = await widget.locator('#infoPlatform').textContent().catch(() => 'N/A');
+      const title = await widget
+        .locator('#infoTitle')
+        .textContent()
+        .catch(() => 'N/A');
+      const platform = await widget
+        .locator('#infoPlatform')
+        .textContent()
+        .catch(() => 'N/A');
       console.log(`Tooltip title: ${title}`);
       console.log(`Tooltip platform: ${platform}`);
     }
@@ -403,17 +428,21 @@ test.describe('4. Widget Interactions', () => {
     if (!widget) return test.skip();
 
     const pinBtn = widget.locator('#pinBtn');
-    if (!await pinBtn.isVisible().catch(() => false)) return test.skip();
+    if (!(await pinBtn.isVisible().catch(() => false))) return test.skip();
 
     // Check initial state
-    const initialClass = await pinBtn.evaluate(el => el.classList.contains('pinned')).catch(() => null);
+    const initialClass = await pinBtn
+      .evaluate(el => el.classList.contains('pinned'))
+      .catch(() => null);
     console.log(`Pin button initially pinned: ${initialClass}`);
 
     // Click to toggle
     await pinBtn.click();
     await widget.waitForTimeout(300);
 
-    const afterClass = await pinBtn.evaluate(el => el.classList.contains('pinned')).catch(() => null);
+    const afterClass = await pinBtn
+      .evaluate(el => el.classList.contains('pinned'))
+      .catch(() => null);
     console.log(`Pin button after click: ${afterClass}`);
   });
 
@@ -508,7 +537,9 @@ test.describe('6. Data Integrity', () => {
       }
     }
 
-    console.log(`Checked ${totalParticipants} participants across ${withParticipants.length} meetings`);
+    console.log(
+      `Checked ${totalParticipants} participants across ${withParticipants.length} meetings`
+    );
     expect(allHaveOriginalName).toBe(true);
   });
 
@@ -561,9 +592,11 @@ test.describe('7. Error Resilience', () => {
       if (msg.type() === 'error') {
         const text = msg.text();
         // Filter expected messages
-        if (!text.includes('[MockSDK]') &&
-            !text.includes('Failed to send log to Desktop SDK') &&
-            !text.includes('net::ERR_')) {
+        if (
+          !text.includes('[MockSDK]') &&
+          !text.includes('Failed to send log to Desktop SDK') &&
+          !text.includes('net::ERR_')
+        ) {
           errors.push(text);
         }
       }
@@ -573,11 +606,12 @@ test.describe('7. Error Resilience', () => {
     await mainPage.waitForTimeout(3000);
     mainPage.off('console', handler);
 
-    const criticalErrors = errors.filter(e =>
-      e.includes('FATAL') ||
-      e.includes('Uncaught') ||
-      e.includes('Cannot read properties of null') ||
-      e.includes('Cannot read properties of undefined')
+    const criticalErrors = errors.filter(
+      e =>
+        e.includes('FATAL') ||
+        e.includes('Uncaught') ||
+        e.includes('Cannot read properties of null') ||
+        e.includes('Cannot read properties of undefined')
     );
 
     if (criticalErrors.length > 0) {

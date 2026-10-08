@@ -20,7 +20,7 @@ const SpeakerMatcher = require('../../src/main/integrations/SpeakerMatcher.js');
  */
 function createMockContacts(contactsByEmail = {}, contactsByName = {}) {
   return {
-    findContactsByEmails: vi.fn(async (emails) => {
+    findContactsByEmails: vi.fn(async emails => {
       const map = new Map();
       for (const email of emails) {
         if (contactsByEmail[email]) {
@@ -29,7 +29,7 @@ function createMockContacts(contactsByEmail = {}, contactsByName = {}) {
       }
       return map;
     }),
-    findContactByName: vi.fn(async (name) => {
+    findContactByName: vi.fn(async name => {
       return contactsByName[name] || null;
     }),
   };
@@ -92,8 +92,16 @@ describe('SpeakerMatcher', () => {
         },
       },
       {
-        'Jenn Kenning': { email: 'jenn@example.com', emails: ['jenn@example.com'], name: 'Jenn Kenning' },
-        'Jon D. Jones': { email: 'jon@example.com', emails: ['jon@example.com'], name: 'Jon D. Jones' },
+        'Jenn Kenning': {
+          email: 'jenn@example.com',
+          emails: ['jenn@example.com'],
+          name: 'Jenn Kenning',
+        },
+        'Jon D. Jones': {
+          email: 'jon@example.com',
+          emails: ['jon@example.com'],
+          name: 'Jon D. Jones',
+        },
       }
     );
     matcher = new SpeakerMatcher(mockContacts);
@@ -144,11 +152,21 @@ describe('SpeakerMatcher', () => {
       // v1.3: timeline should run first, not be short-circuited
       const transcript = makeTranscript([
         { speaker: 'Jenn', text: 'Hello everyone', timestamp: 1000, speakerIdentified: true },
-        { speaker: 'Jenn', text: 'Welcome to the meeting', timestamp: 6000, speakerIdentified: true },
+        {
+          speaker: 'Jenn',
+          text: 'Welcome to the meeting',
+          timestamp: 6000,
+          speakerIdentified: true,
+        },
         { speaker: 'Jenn', text: 'Lets get started', timestamp: 11000, speakerIdentified: true },
         { speaker: 'Jon Jones', text: 'Thanks Jenn', timestamp: 16000, speakerIdentified: true },
         { speaker: 'Jon Jones', text: 'I have updates', timestamp: 21000, speakerIdentified: true },
-        { speaker: 'Jon Jones', text: 'Heres my report', timestamp: 26000, speakerIdentified: true },
+        {
+          speaker: 'Jon Jones',
+          text: 'Heres my report',
+          timestamp: 26000,
+          speakerIdentified: true,
+        },
       ]);
 
       // SDK knows the REAL full names
@@ -254,7 +272,12 @@ describe('SpeakerMatcher', () => {
       const result = await matcher.matchSpeakers(transcript, participantEmails, {
         speechTimeline,
         participantData: [
-          { name: 'Jenn Kenning', originalName: 'Jenn Kenning', email: 'jenn@example.com', isHost: true },
+          {
+            name: 'Jenn Kenning',
+            originalName: 'Jenn Kenning',
+            email: 'jenn@example.com',
+            isHost: true,
+          },
           { name: 'Jon D. Jones', originalName: 'Jon D. Jones', email: 'jon@example.com' },
         ],
       });
@@ -288,9 +311,7 @@ describe('SpeakerMatcher', () => {
         { speaker: 'Jenn', text: 'Still more', timestamp: 11000, speakerIdentified: true },
       ]);
 
-      const speechTimeline = makeSpeechTimeline([
-        { name: 'Jenn Kenning', segments: [[0, 14000]] },
-      ]);
+      const speechTimeline = makeSpeechTimeline([{ name: 'Jenn Kenning', segments: [[0, 14000]] }]);
 
       await matcher.matchSpeakers(transcript, ['jenn@example.com'], {
         speechTimeline,
@@ -314,9 +335,7 @@ describe('SpeakerMatcher', () => {
         { speaker: 'Jon Jones', text: 'My turn', timestamp: 50000, speakerIdentified: true },
       ]);
 
-      const speechTimeline = makeSpeechTimeline([
-        { name: 'Jenn Kenning', segments: [[0, 14000]] },
-      ]);
+      const speechTimeline = makeSpeechTimeline([{ name: 'Jenn Kenning', segments: [[0, 14000]] }]);
 
       await matcher.matchSpeakers(transcript, ['jenn@example.com', 'jon@example.com'], {
         speechTimeline,
@@ -342,24 +361,25 @@ describe('SpeakerMatcher', () => {
     });
 
     it('returns empty mapping for no participants', async () => {
-      const transcript = makeTranscript([
-        { speaker: 'Speaker A', text: 'Hello', timestamp: 1000 },
-      ]);
+      const transcript = makeTranscript([{ speaker: 'Speaker A', text: 'Hello', timestamp: 1000 }]);
       const result = await matcher.matchSpeakers(transcript, []);
       expect(result).toEqual({});
     });
 
     it('handles speech timeline with empty participants array', async () => {
-      const transcript = makeTranscript([
-        { speaker: 'Speaker A', text: 'Hello', timestamp: 1000 },
-      ]);
+      const transcript = makeTranscript([{ speaker: 'Speaker A', text: 'Hello', timestamp: 1000 }]);
 
       const speechTimeline = { participants: [] };
 
       const result = await matcher.matchSpeakers(transcript, ['jenn@example.com'], {
         speechTimeline,
         participantData: [
-          { name: 'Jenn Kenning', originalName: 'Jenn Kenning', email: 'jenn@example.com', isHost: true },
+          {
+            name: 'Jenn Kenning',
+            originalName: 'Jenn Kenning',
+            email: 'jenn@example.com',
+            isHost: true,
+          },
         ],
       });
 
@@ -368,14 +388,17 @@ describe('SpeakerMatcher', () => {
     });
 
     it('handles null speech timeline gracefully', async () => {
-      const transcript = makeTranscript([
-        { speaker: 'Speaker A', text: 'Hello', timestamp: 1000 },
-      ]);
+      const transcript = makeTranscript([{ speaker: 'Speaker A', text: 'Hello', timestamp: 1000 }]);
 
       const result = await matcher.matchSpeakers(transcript, ['jenn@example.com'], {
         speechTimeline: null,
         participantData: [
-          { name: 'Jenn Kenning', originalName: 'Jenn Kenning', email: 'jenn@example.com', isHost: true },
+          {
+            name: 'Jenn Kenning',
+            originalName: 'Jenn Kenning',
+            email: 'jenn@example.com',
+            isHost: true,
+          },
         ],
       });
 
@@ -429,13 +452,9 @@ describe('SpeakerMatcher', () => {
         { speaker: 'Speaker A', text: 'Hello', timestamp: 2000, words: [{ end: 4000 }] },
       ]);
 
-      const speechTimeline = makeSpeechTimeline([
-        { name: 'Jenn Kenning', segments: [[0, 5000]] },
-      ]);
+      const speechTimeline = makeSpeechTimeline([{ name: 'Jenn Kenning', segments: [[0, 5000]] }]);
 
-      const contacts = new Map([
-        ['jenn@example.com', { name: 'Jenn Kenning' }],
-      ]);
+      const contacts = new Map([['jenn@example.com', { name: 'Jenn Kenning' }]]);
 
       const result = matcher.matchUsingTimeline(
         transcript,
@@ -490,9 +509,7 @@ describe('SpeakerMatcher', () => {
         { name: 'Jenn Kenning', segments: [[10000, 20000]] },
       ]);
 
-      const contacts = new Map([
-        ['jenn@example.com', { name: 'Jenn Kenning' }],
-      ]);
+      const contacts = new Map([['jenn@example.com', { name: 'Jenn Kenning' }]]);
 
       const result = matcher.matchUsingTimeline(
         transcript,
@@ -565,7 +582,11 @@ describe('SpeakerMatcher', () => {
       const result = await matcher.buildMappingFromIdentifiedSpeakers(
         transcript,
         ['jenn@example.com'],
-        { participantData: [{ name: 'Jenn Kenning', originalName: 'Jenn Kenning', email: 'jenn@example.com' }] }
+        {
+          participantData: [
+            { name: 'Jenn Kenning', originalName: 'Jenn Kenning', email: 'jenn@example.com' },
+          ],
+        }
       );
 
       expect(result['Speaker A']).toBeUndefined(); // Not identified
@@ -624,7 +645,12 @@ describe('SpeakerMatcher', () => {
             { name: 'Jon D. Jones', email: 'jon@example.com' },
           ],
           participantData: [
-            { name: 'Jenn Kenning', originalName: 'Jenn Kenning', email: 'jenn@example.com', isHost: true },
+            {
+              name: 'Jenn Kenning',
+              originalName: 'Jenn Kenning',
+              email: 'jenn@example.com',
+              isHost: true,
+            },
             { name: 'Jon D. Jones', originalName: 'Jon D. Jones', email: 'jon@example.com' },
           ],
         }
@@ -704,8 +730,17 @@ describe('SpeakerMatcher', () => {
             { name: 'paul@alman.com.au', email: 'paul@alman.com.au' },
           ],
           participantData: [
-            { name: 'jd@example.com', originalName: 'jd@example.com', email: 'jd@example.com', isHost: true },
-            { name: 'paul@alman.com.au', originalName: 'paul@alman.com.au', email: 'paul@alman.com.au' },
+            {
+              name: 'jd@example.com',
+              originalName: 'jd@example.com',
+              email: 'jd@example.com',
+              isHost: true,
+            },
+            {
+              name: 'paul@alman.com.au',
+              originalName: 'paul@alman.com.au',
+              email: 'paul@alman.com.au',
+            },
           ],
         }
       );
@@ -717,14 +752,17 @@ describe('SpeakerMatcher', () => {
 
     it('gracefully skips when no voiceProfileService is set', async () => {
       // matcher does NOT have setVoiceProfileService called
-      const transcript = makeTranscript([
-        { speaker: 'Speaker A', text: 'Hello', timestamp: 1000 },
-      ]);
+      const transcript = makeTranscript([{ speaker: 'Speaker A', text: 'Hello', timestamp: 1000 }]);
 
       // Should not throw, even with empty options
       const result = await matcher.matchSpeakers(transcript, ['jenn@example.com'], {
         participantData: [
-          { name: 'Jenn Kenning', originalName: 'Jenn Kenning', email: 'jenn@example.com', isHost: true },
+          {
+            name: 'Jenn Kenning',
+            originalName: 'Jenn Kenning',
+            email: 'jenn@example.com',
+            isHost: true,
+          },
         ],
       });
 
@@ -760,9 +798,7 @@ describe('SpeakerMatcher', () => {
     });
 
     it('preserves unmapped entries unchanged', () => {
-      const transcript = [
-        { speaker: 'Speaker C', text: 'Hello' },
-      ];
+      const transcript = [{ speaker: 'Speaker C', text: 'Hello' }];
 
       const mapping = {
         'Speaker A': { name: 'Jenn Kenning', email: 'jenn@example.com', confidence: 'high' },
@@ -785,7 +821,10 @@ describe('SpeakerMatcher', () => {
     ];
 
     it('maps the anchored label to the user profile with high confidence', async () => {
-      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const m = new SpeakerMatcher(mockContacts, {
+        name: 'J.D. Bruce',
+        email: 'jd@jdbrucecpa.com',
+      });
       const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
         trackAnchor: { userLabel: 'SPEAKER_01', userDominance: 0.8, remoteLabels: ['SPEAKER_00'] },
         participantData: [
@@ -801,7 +840,10 @@ describe('SpeakerMatcher', () => {
     });
 
     it('never assigns the user to a remote-anchored label even without a user anchor', async () => {
-      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const m = new SpeakerMatcher(mockContacts, {
+        name: 'J.D. Bruce',
+        email: 'jd@jdbrucecpa.com',
+      });
       const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
         trackAnchor: { userLabel: null, userDominance: 0, remoteLabels: ['SPEAKER_00'] },
         participantData: [
@@ -816,7 +858,10 @@ describe('SpeakerMatcher', () => {
     });
 
     it('survives Stage 0 voice-profile results for the same label (anchor outranks)', async () => {
-      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const m = new SpeakerMatcher(mockContacts, {
+        name: 'J.D. Bruce',
+        email: 'jd@jdbrucecpa.com',
+      });
       const fakeVoiceProfileService = {
         identifySpeakers: vi.fn(async () => [
           {
@@ -848,7 +893,10 @@ describe('SpeakerMatcher', () => {
     });
 
     it('behaves identically to before when no trackAnchor is provided (regression)', async () => {
-      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const m = new SpeakerMatcher(mockContacts, {
+        name: 'J.D. Bruce',
+        email: 'jd@jdbrucecpa.com',
+      });
       const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
         participantData: [
           { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' },
@@ -864,9 +912,16 @@ describe('SpeakerMatcher', () => {
     });
 
     it('never pairs the user positionally with a remote label when ALL labels are remote', async () => {
-      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const m = new SpeakerMatcher(mockContacts, {
+        name: 'J.D. Bruce',
+        email: 'jd@jdbrucecpa.com',
+      });
       const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
-        trackAnchor: { userLabel: null, userDominance: 0, remoteLabels: ['SPEAKER_00', 'SPEAKER_01'] },
+        trackAnchor: {
+          userLabel: null,
+          userDominance: 0,
+          remoteLabels: ['SPEAKER_00', 'SPEAKER_01'],
+        },
         participantData: [
           { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' },
           { name: 'Stacie Rasmussen', email: 'stacie@x.com' },
@@ -883,7 +938,10 @@ describe('SpeakerMatcher', () => {
     });
 
     it('skips remote labels when the host IS the user (hostIsUser branch)', async () => {
-      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const m = new SpeakerMatcher(mockContacts, {
+        name: 'J.D. Bruce',
+        email: 'jd@jdbrucecpa.com',
+      });
       const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
         trackAnchor: { userLabel: null, userDominance: 0, remoteLabels: ['SPEAKER_00'] },
         participantData: [
@@ -899,7 +957,10 @@ describe('SpeakerMatcher', () => {
     });
 
     it('ignores a stale anchor label that is not in the transcript', async () => {
-      const m = new SpeakerMatcher(mockContacts, { name: 'J.D. Bruce', email: 'jd@jdbrucecpa.com' });
+      const m = new SpeakerMatcher(mockContacts, {
+        name: 'J.D. Bruce',
+        email: 'jd@jdbrucecpa.com',
+      });
       const mapping = await m.matchSpeakers(transcript, ['jd@jdbrucecpa.com', 'stacie@x.com'], {
         trackAnchor: { userLabel: 'SPEAKER_99', userDominance: 0.9, remoteLabels: [] },
         participantData: [
@@ -927,13 +988,9 @@ describe('SpeakerMatcher', () => {
 
       matcher.setVoiceProfileService(mockVoiceProfileService);
 
-      const transcript = makeTranscript([
-        { speaker: 'SPEAKER_00', text: 'hello', timestamp: 0 },
-      ]);
+      const transcript = makeTranscript([{ speaker: 'SPEAKER_00', text: 'hello', timestamp: 0 }]);
 
-      const precomputedEmbs = [
-        { speakerLabel: 'SPEAKER_00', embedding: new Float32Array([1, 0]) },
-      ];
+      const precomputedEmbs = [{ speakerLabel: 'SPEAKER_00', embedding: new Float32Array([1, 0]) }];
 
       await matcher.matchSpeakers(transcript, ['test@example.com'], {
         audioFilePath: '/tmp/test.wav',
@@ -1003,7 +1060,10 @@ describe('SpeakerMatcher', () => {
 
     it('resolves email-as-name participants to contact display names in heuristic assignment', async () => {
       const contacts = new Map([
-        ['melissa@x.com', { name: 'Melissa Henderson', givenName: 'Melissa', familyName: 'Henderson' }],
+        [
+          'melissa@x.com',
+          { name: 'Melissa Henderson', givenName: 'Melissa', familyName: 'Henderson' },
+        ],
       ]);
       const contactsStub = { findContactsByEmails: async () => contacts };
       const m = new SpeakerMatcher(contactsStub, { name: 'JD Bruce', email: 'jd@x.com' });
@@ -1014,7 +1074,11 @@ describe('SpeakerMatcher', () => {
         ],
         ['jd@x.com', 'melissa@x.com'],
         {
-          trackAnchor: { userLabel: 'SPEAKER_00', userDominance: 0.9, remoteLabels: ['SPEAKER_01'] },
+          trackAnchor: {
+            userLabel: 'SPEAKER_00',
+            userDominance: 0.9,
+            remoteLabels: ['SPEAKER_01'],
+          },
           participantData: [
             { name: 'jd@x.com', originalName: 'jd@x.com', email: 'jd@x.com' },
             { name: 'melissa@x.com', originalName: 'melissa@x.com', email: 'melissa@x.com' },

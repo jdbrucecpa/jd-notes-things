@@ -76,7 +76,9 @@ cost_estimate: 0.01
   });
 
   it('rejects a name with no alphanumeric characters', () => {
-    expect(() => manager.createTemplate({ name: '!!!', format: '.md' })).toThrow(/letters or numbers/);
+    expect(() => manager.createTemplate({ name: '!!!', format: '.md' })).toThrow(
+      /letters or numbers/
+    );
   });
 
   it('rejects an empty name', () => {

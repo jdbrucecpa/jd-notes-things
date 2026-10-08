@@ -1,6 +1,7 @@
 # v1.4.3 Release Notes
 
 ## Highlights
+
 Upgrades the Recall.ai Desktop SDK from 2.0.6 to 2.0.8, bringing audio quality improvements and better device handling on Windows.
 
 ---
@@ -18,11 +19,12 @@ Upgrades the Recall.ai Desktop SDK from 2.0.6 to 2.0.8, bringing audio quality i
 
 ## Dependencies
 
-| Package | Old | New |
-|---------|-----|-----|
+| Package                 | Old   | New   |
+| ----------------------- | ----- | ----- |
 | `@recallai/desktop-sdk` | 2.0.6 | 2.0.8 |
 
 ---
 
 ## Files Changed
+
 3 files changed (package.json, package-lock.json, src/index.html)

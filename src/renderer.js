@@ -104,7 +104,7 @@ function initializeUpdateBanner() {
 
       case 'up-to-date':
         // Briefly show "up to date" message then hide
-        message.textContent = 'You\'re up to date!';
+        message.textContent = "You're up to date!";
         version.textContent = '';
         actionBtn.style.display = 'none';
         progress.style.display = 'none';
@@ -2165,14 +2165,14 @@ function renderReportResults() {
     return;
   }
 
-  const meetings = activeReportType === 'no-recording'
-    ? reportData.noRecording
-    : reportData.noCalendar;
+  const meetings =
+    activeReportType === 'no-recording' ? reportData.noRecording : reportData.noCalendar;
 
   if (meetings.length === 0) {
-    const message = activeReportType === 'no-recording'
-      ? 'All calendar meetings in this range have recordings.'
-      : 'All recordings in this range are linked to calendar events.';
+    const message =
+      activeReportType === 'no-recording'
+        ? 'All calendar meetings in this range have recordings.'
+        : 'All recordings in this range are linked to calendar events.';
     resultsEl.innerHTML = `
       <div class="reports-empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2183,22 +2183,32 @@ function renderReportResults() {
     return;
   }
 
-  resultsEl.innerHTML = meetings.map(meeting => {
-    const date = meeting.date ? new Date(meeting.date).toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric', year: 'numeric'
-    }) : 'Unknown date';
-    const time = meeting.startTime ? new Date(meeting.startTime).toLocaleTimeString('en-US', {
-      hour: 'numeric', minute: '2-digit'
-    }) : '';
-    const platform = meeting.platform || 'Unknown';
-    const participantCount = meeting.participants?.length || meeting.participantEmails?.length || 0;
+  resultsEl.innerHTML = meetings
+    .map(meeting => {
+      const date = meeting.date
+        ? new Date(meeting.date).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          })
+        : 'Unknown date';
+      const time = meeting.startTime
+        ? new Date(meeting.startTime).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+          })
+        : '';
+      const platform = meeting.platform || 'Unknown';
+      const participantCount =
+        meeting.participants?.length || meeting.participantEmails?.length || 0;
 
-    // Action button depends on report type
-    const actionBtn = activeReportType === 'no-recording'
-      ? '' // No action for missing recordings — user needs to record
-      : `<button class="btn btn-outline btn-sm report-link-btn" data-meeting-id="${meeting.id}" title="Link to a calendar event">Link to Calendar</button>`;
+      // Action button depends on report type
+      const actionBtn =
+        activeReportType === 'no-recording'
+          ? '' // No action for missing recordings — user needs to record
+          : `<button class="btn btn-outline btn-sm report-link-btn" data-meeting-id="${meeting.id}" title="Link to a calendar event">Link to Calendar</button>`;
 
-    return `
+      return `
       <div class="report-card" data-meeting-id="${meeting.id}">
         <div class="report-card-info">
           <div class="report-card-title">${escapeHtml(meeting.title || 'Untitled Meeting')}</div>
@@ -2213,7 +2223,8 @@ function renderReportResults() {
           <button class="btn btn-outline btn-sm report-open-btn" data-meeting-id="${meeting.id}">Open</button>
         </div>
       </div>`;
-  }).join('');
+    })
+    .join('');
 
   // Bind click handlers
   resultsEl.querySelectorAll('.report-open-btn').forEach(btn => {
@@ -2255,7 +2266,12 @@ function renderCoverageResults(resultsEl) {
 
   // Coverage summary bar
   const pct = data.coveragePercent;
-  const barColor = pct >= 80 ? 'var(--status-success, #34c759)' : pct >= 50 ? 'var(--color-warning, #ff9500)' : 'var(--color-error, #ff3b30)';
+  const barColor =
+    pct >= 80
+      ? 'var(--status-success, #34c759)'
+      : pct >= 50
+        ? 'var(--color-warning, #ff9500)'
+        : 'var(--color-error, #ff3b30)';
 
   let html = `
     <div style="margin-bottom: 20px; padding: 16px; background: var(--card-bg); border-radius: 8px; border: 1px solid var(--border-color);">
@@ -2271,16 +2287,24 @@ function renderCoverageResults(resultsEl) {
   // Uncovered meetings (actionable)
   if (data.uncovered.length > 0) {
     html += `<h4 style="margin: 16px 0 8px; font-size: 14px; color: var(--text-secondary);">Meetings Without Notes (${data.uncovered.length})</h4>`;
-    html += data.uncovered.map((event, idx) => {
-      const date = event.date ? new Date(event.date).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric'
-      }) : '';
-      const time = event.date ? new Date(event.date).toLocaleTimeString('en-US', {
-        hour: 'numeric', minute: '2-digit'
-      }) : '';
-      const attendeeCount = event.attendees?.length || 0;
+    html += data.uncovered
+      .map((event, idx) => {
+        const date = event.date
+          ? new Date(event.date).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })
+          : '';
+        const time = event.date
+          ? new Date(event.date).toLocaleTimeString('en-US', {
+              hour: 'numeric',
+              minute: '2-digit',
+            })
+          : '';
+        const attendeeCount = event.attendees?.length || 0;
 
-      return `
+        return `
         <div class="report-card" data-coverage-idx="${idx}">
           <div class="report-card-info">
             <div class="report-card-title">${escapeHtml(event.title)}</div>
@@ -2293,18 +2317,24 @@ function renderCoverageResults(resultsEl) {
             <button class="btn btn-outline btn-sm coverage-placeholder-btn" data-coverage-idx="${idx}">Create Placeholder</button>
           </div>
         </div>`;
-    }).join('');
+      })
+      .join('');
   }
 
   // Covered meetings
   if (data.covered.length > 0) {
     html += `<h4 style="margin: 16px 0 8px; font-size: 14px; color: var(--text-secondary);">Meetings With Notes (${data.covered.length})</h4>`;
-    html += data.covered.map(event => {
-      const date = event.date ? new Date(event.date).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric'
-      }) : '';
+    html += data.covered
+      .map(event => {
+        const date = event.date
+          ? new Date(event.date).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })
+          : '';
 
-      return `
+        return `
         <div class="report-card" data-meeting-id="${event.meetingId}" style="opacity: 0.7;">
           <div class="report-card-info">
             <div class="report-card-title">${escapeHtml(event.meetingTitle || event.title)}</div>
@@ -2314,7 +2344,8 @@ function renderCoverageResults(resultsEl) {
             <button class="btn btn-outline btn-sm report-open-btn" data-meeting-id="${event.meetingId}">Open</button>
           </div>
         </div>`;
-    }).join('');
+      })
+      .join('');
   }
 
   resultsEl.innerHTML = html;
@@ -2392,21 +2423,33 @@ async function showCalendarLinkingDialog(meetingId) {
     // Build a simple selection dialog
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;';
+    overlay.style.cssText =
+      'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;';
 
     const modal = document.createElement('div');
-    modal.style.cssText = 'background:var(--card-bg);border-radius:12px;padding:24px;max-width:500px;width:90%;max-height:70vh;display:flex;flex-direction:column;';
+    modal.style.cssText =
+      'background:var(--card-bg);border-radius:12px;padding:24px;max-width:500px;width:90%;max-height:70vh;display:flex;flex-direction:column;';
     modal.innerHTML = `
       <h3 style="margin:0 0 16px;color:var(--text-primary);">Link to Calendar Event</h3>
       <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
-        ${availableEvents.map(event => {
-          const evDate = new Date(event.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          const evTime = event.startTime ? new Date(event.startTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-          return `<button class="report-card calendar-link-option" data-event-id="${event.calendarEventId}" style="text-align:left;cursor:pointer;border:1px solid var(--border-color);border-radius:8px;padding:10px 14px;background:var(--card-bg);">
+        ${availableEvents
+          .map(event => {
+            const evDate = new Date(event.date).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            });
+            const evTime = event.startTime
+              ? new Date(event.startTime).toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })
+              : '';
+            return `<button class="report-card calendar-link-option" data-event-id="${event.calendarEventId}" style="text-align:left;cursor:pointer;border:1px solid var(--border-color);border-radius:8px;padding:10px 14px;background:var(--card-bg);">
             <div class="report-card-title">${escapeHtml(event.title || 'Untitled')}</div>
             <div class="report-card-meta"><span>${evDate}${evTime ? ' at ' + evTime : ''}</span></div>
           </button>`;
-        }).join('')}
+          })
+          .join('')}
       </div>
       <div style="display:flex;justify-content:flex-end;margin-top:16px;">
         <button class="btn btn-secondary" id="cancelLinkDialog">Cancel</button>
@@ -2418,14 +2461,19 @@ async function showCalendarLinkingDialog(meetingId) {
 
     // Cancel
     document.getElementById('cancelLinkDialog').onclick = () => overlay.remove();
-    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+    overlay.onclick = e => {
+      if (e.target === overlay) overlay.remove();
+    };
 
     // Select event
     modal.querySelectorAll('.calendar-link-option').forEach(opt => {
       opt.addEventListener('click', async () => {
         const calendarEventId = opt.dataset.eventId;
         try {
-          const linkResult = await window.electronAPI.calendarLinkMeeting(meetingId, calendarEventId);
+          const linkResult = await window.electronAPI.calendarLinkMeeting(
+            meetingId,
+            calendarEventId
+          );
           if (linkResult.success) {
             showToast('Meeting linked to calendar event!', 'success');
             overlay.remove();
@@ -3074,7 +3122,11 @@ function filterMeetings(meetings) {
 
     // v1.3: Recording status filter
     if (filters.recordingStatus) {
-      const hasRecording = !!(meeting.recordingId || meeting.videoFile || meeting.recordingComplete);
+      const hasRecording = !!(
+        meeting.recordingId ||
+        meeting.videoFile ||
+        meeting.recordingComplete
+      );
       if (filters.recordingStatus === 'has-recording' && !hasRecording) {
         return false;
       }
@@ -4676,7 +4728,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.electronAPI.onMeetingUpdated(meetingId => {
     console.log(`[MeetingUpdated] Meeting ${meetingId} was updated, refreshing...`);
     // If we're currently viewing this meeting, refresh it
-    if (window.currentEditingMeetingId === meetingId && typeof window.showEditorView === 'function') {
+    if (
+      window.currentEditingMeetingId === meetingId &&
+      typeof window.showEditorView === 'function'
+    ) {
       window.showEditorView(meetingId);
     }
     // Also reload the meetings list
@@ -4697,20 +4752,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // v1.2 fix: Get the created meeting ID and info for widget tracking
       const createdMeetingId = currentEditingMeetingId;
-      const createdMeeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === createdMeetingId);
+      const createdMeeting = [...upcomingMeetings, ...pastMeetings].find(
+        m => m.id === createdMeetingId
+      );
 
       // Send success response back to main process with meeting ID
       window.electronAPI.sendWidgetRecordingResult({
         success: true,
         meetingId: createdMeetingId,
         meetingTitle: createdMeeting?.title || calendarMeeting?.title || 'New Meeting',
-        meetingInfo: createdMeeting ? {
-          id: createdMeeting.id,
-          title: createdMeeting.title,
-          date: createdMeeting.date,
-          platform: createdMeeting.platform,
-          participants: createdMeeting.participants,
-        } : null,
+        meetingInfo: createdMeeting
+          ? {
+              id: createdMeeting.id,
+              title: createdMeeting.title,
+              date: createdMeeting.date,
+              platform: createdMeeting.platform,
+              participants: createdMeeting.participants,
+            }
+          : null,
       });
     } catch (error) {
       console.error('[Widget] Failed to create meeting:', error);
@@ -4764,19 +4823,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       const resultMeetingId = currentEditingMeetingId;
-      const resultMeeting = [...upcomingMeetings, ...pastMeetings].find(m => m.id === resultMeetingId);
+      const resultMeeting = [...upcomingMeetings, ...pastMeetings].find(
+        m => m.id === resultMeetingId
+      );
 
       window.electronAPI.sendWidgetRecordingResult({
         success: true,
         meetingId: resultMeetingId,
         meetingTitle: resultMeeting?.title || 'Meeting',
-        meetingInfo: resultMeeting ? {
-          id: resultMeeting.id,
-          title: resultMeeting.title,
-          date: resultMeeting.date,
-          platform: resultMeeting.platform,
-          participants: resultMeeting.participants,
-        } : null,
+        meetingInfo: resultMeeting
+          ? {
+              id: resultMeeting.id,
+              title: resultMeeting.title,
+              date: resultMeeting.date,
+              platform: resultMeeting.platform,
+              participants: resultMeeting.participants,
+            }
+          : null,
       });
     } catch (error) {
       console.error('[Widget] Failed to create/record with action:', error);
@@ -4832,8 +4895,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (hasDetectedMeeting) {
           console.log('Found detected meeting, joining...');
           // Get transcription provider from localStorage
-          const transcriptionProvider =
-            localStorage.getItem('transcriptionProvider') || 'local';
+          const transcriptionProvider = localStorage.getItem('transcriptionProvider') || 'local';
           console.log('[Join Meeting] Using transcription provider:', transcriptionProvider);
           const joinResult = await window.electronAPI.joinDetectedMeeting(transcriptionProvider);
           // On success we navigate to the new note, so leave the button disabled.
@@ -5392,8 +5454,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const transcriptionProviderSelect = document.getElementById('transcriptionProviderSelect');
   if (transcriptionProviderSelect) {
     // Load saved provider preference (default to AssemblyAI)
-    const savedTranscriptionProvider =
-      localStorage.getItem('transcriptionProvider') || 'local';
+    const savedTranscriptionProvider = localStorage.getItem('transcriptionProvider') || 'local';
     transcriptionProviderSelect.value = savedTranscriptionProvider;
     console.log('Current transcription provider:', savedTranscriptionProvider);
 
@@ -5413,7 +5474,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         deepgram: 'Deepgram',
         local: 'Local (JD Audio Service)',
       };
-      notifySuccess(`Transcription provider changed to ${providerNames[newProvider] || newProvider}`);
+      notifySuccess(
+        `Transcription provider changed to ${providerNames[newProvider] || newProvider}`
+      );
     });
   }
 
@@ -5562,7 +5625,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Reset Join Meeting button when recording starts or stops
     const joinButton = document.getElementById('joinMeetingBtn');
-    if (joinButton && (data.state === 'recording' || data.state === 'stopped' || data.state === 'error')) {
+    if (
+      joinButton &&
+      (data.state === 'recording' || data.state === 'stopped' || data.state === 'error')
+    ) {
       // Reset the button to its default state
       joinButton.disabled = !window.meetingDetected; // Re-enable only if a meeting is detected
       joinButton.innerHTML = `
@@ -6430,7 +6496,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       );
 
       if (result.success) {
-        notifySuccess(`Added ${selectedDomainsForRule.size} domain(s) to ${routingOverride.organization}`);
+        notifySuccess(
+          `Added ${selectedDomainsForRule.size} domain(s) to ${routingOverride.organization}`
+        );
         hideCreateRulePrompt();
       } else {
         notifyError('Failed to create routing rule');
@@ -7023,7 +7091,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (validFiles.length > 0) {
         handleFilePaths(validFiles);
         if (validFiles.length < files.length) {
-          notifyInfo(`Imported ${validFiles.length} of ${files.length} files (filtered unsupported formats)`);
+          notifyInfo(
+            `Imported ${validFiles.length} of ${files.length} files (filtered unsupported formats)`
+          );
         }
       } else {
         notifyWarning('No supported transcript files found in folder');

@@ -281,29 +281,35 @@ const optionalBooleanSchema = z.boolean().optional();
 const hoursAheadSchema = z.number().int().min(1).max(168).optional();
 
 // Settings/config schemas
-const userProfileSchema = z.object({
-  name: z.string().optional(),
-  email: z.string().optional(),
-  company: z.string().optional(),
-  role: z.string().optional(),
-}).passthrough();
+const userProfileSchema = z
+  .object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+    company: z.string().optional(),
+    role: z.string().optional(),
+  })
+  .passthrough();
 
 const appSettingsSchema = z.object({}).passthrough();
 
-const logsOptionsSchema = z.object({
-  lines: z.number().int().min(1).max(10000).optional(),
-  level: z.string().optional(),
-}).optional();
+const logsOptionsSchema = z
+  .object({
+    lines: z.number().int().min(1).max(10000).optional(),
+    level: z.string().optional(),
+  })
+  .optional();
 
 // Key management schemas
 const keyNameSchema = z.string().min(1, 'Key name cannot be empty');
 
 // Import schemas
-const importOptionsSchema = z.object({
-  overwriteSettings: z.boolean().optional(),
-  importMeetings: z.boolean().optional(),
-  importTemplates: z.boolean().optional(),
-}).optional();
+const importOptionsSchema = z
+  .object({
+    overwriteSettings: z.boolean().optional(),
+    importMeetings: z.boolean().optional(),
+    importTemplates: z.boolean().optional(),
+  })
+  .optional();
 
 // Vocabulary config schema (for bulk save)
 const vocabularyConfigSchema = z.object({}).passthrough();
@@ -311,7 +317,15 @@ const vocabularyConfigSchema = z.object({}).passthrough();
 // Meeting field update schema
 const updateMeetingFieldSchema = z.object({
   meetingId: z.string().min(1, 'Meeting ID cannot be empty'),
-  field: z.enum(['platform', 'title', 'status', 'vaultPath', 'obsidianLink', 'exportedAt', 'summaries']),
+  field: z.enum([
+    'platform',
+    'title',
+    'status',
+    'vaultPath',
+    'obsidianLink',
+    'exportedAt',
+    'summaries',
+  ]),
   // Value can be string (for most fields), null, or array (for summaries)
   value: z.union([z.string().nullable(), z.array(z.any())]),
 });
@@ -359,11 +373,13 @@ const backupIncrementalSchema = z.object({
 
 const backupRestoreSchema = z.object({
   backupPath: z.string().min(1, 'Backup path cannot be empty'),
-  options: z.object({
-    restoreDatabase: z.boolean().optional(),
-    restoreConfig: z.boolean().optional(),
-    restoreAudio: z.boolean().optional(),
-  }).optional(),
+  options: z
+    .object({
+      restoreDatabase: z.boolean().optional(),
+      restoreConfig: z.boolean().optional(),
+      restoreAudio: z.boolean().optional(),
+    })
+    .optional(),
 });
 
 const backupValidateSchema = z.object({
@@ -406,10 +422,14 @@ const meetingPlaceholderSchema = z.object({
   title: z.string().min(1, 'Title cannot be empty'),
   date: z.string().min(1, 'Date cannot be empty'),
   calendarEventId: z.string().optional(),
-  participants: z.array(z.object({
-    name: z.string().optional(),
-    email: z.string().optional(),
-  })).optional(),
+  participants: z
+    .array(
+      z.object({
+        name: z.string().optional(),
+        email: z.string().optional(),
+      })
+    )
+    .optional(),
 });
 
 // ===================================================
@@ -470,7 +490,9 @@ function validateIpcInput(schema, data) {
     return schema.parse(data);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const issues = error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`).join(', ');
+      const issues = error.issues
+        .map(issue => `${issue.path.join('.')}: ${issue.message}`)
+        .join(', ');
       throw new Error(`IPC Input Validation Failed: ${issues}`);
     }
     throw error;

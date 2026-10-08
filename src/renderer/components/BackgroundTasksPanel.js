@@ -238,32 +238,43 @@ function renderTasks() {
     return;
   }
 
-  listEl.innerHTML = tasks.map(task => {
-    const elapsed = getElapsedTime(task.startTime);
-    const statusClass = `task-status-${task.status}`;
-    const progressWidth = task.progress || 0;
+  listEl.innerHTML = tasks
+    .map(task => {
+      const elapsed = getElapsedTime(task.startTime);
+      const statusClass = `task-status-${task.status}`;
+      const progressWidth = task.progress || 0;
 
-    return `
+      return `
       <div class="background-task-item ${statusClass}" data-task-id="${task.id}" data-meeting-id="${task.meetingId || ''}">
         <div class="background-task-header">
           <span class="background-task-description">${escapeHtml(task.description)}</span>
           <span class="background-task-time">${elapsed}</span>
         </div>
-        ${task.status === 'in-progress' ? `
+        ${
+          task.status === 'in-progress'
+            ? `
           <div class="background-task-progress">
             <div class="background-task-progress-bar" style="width: ${progressWidth}%"></div>
           </div>
           ${task.statusMessage ? `<div class="background-task-status-message">${escapeHtml(task.statusMessage)}</div>` : ''}
-        ` : ''}
-        ${task.status === 'completed' ? `
+        `
+            : ''
+        }
+        ${
+          task.status === 'completed'
+            ? `
           <div class="background-task-completed">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
             Completed
           </div>
-        ` : ''}
-        ${task.status === 'failed' ? `
+        `
+            : ''
+        }
+        ${
+          task.status === 'failed'
+            ? `
           <div class="background-task-failed">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
@@ -271,14 +282,17 @@ function renderTasks() {
             </svg>
             ${escapeHtml(task.error || 'Failed')}
           </div>
-        ` : ''}
+        `
+            : ''
+        }
       </div>
     `;
-  }).join('');
+    })
+    .join('');
 
   // Add click handlers for meeting navigation
   listEl.querySelectorAll('.background-task-item[data-meeting-id]').forEach(item => {
-    item.addEventListener('click', (_e) => {
+    item.addEventListener('click', _e => {
       const meetingId = item.getAttribute('data-meeting-id');
       if (meetingId && meetingId !== 'null' && meetingId !== '') {
         navigateToMeeting(meetingId);

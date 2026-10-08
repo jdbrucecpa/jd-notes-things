@@ -124,12 +124,12 @@ Contributions to add cross-platform support are welcome!
 
 ### Required API Keys (Cloud Mode)
 
-| Service                  | Purpose             | Get Key                                                                         |
-| ------------------------ | ------------------- | ------------------------------------------------------------------------------- |
-| Recall.ai                | Audio recording (cloud) | [recall.ai](https://recall.ai)                                              |
-| AssemblyAI _or_ Deepgram | Transcription (cloud) | [assemblyai.com](https://assemblyai.com) / [deepgram.com](https://deepgram.com) |
-| OpenAI _or_ Anthropic _or_ Google | AI summaries | [openai.com](https://openai.com) / [anthropic.com](https://anthropic.com) / [aistudio.google.com](https://aistudio.google.com) |
-| Google Cloud             | Calendar & Contacts | [console.cloud.google.com](https://console.cloud.google.com)                    |
+| Service                           | Purpose                 | Get Key                                                                                                                        |
+| --------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Recall.ai                         | Audio recording (cloud) | [recall.ai](https://recall.ai)                                                                                                 |
+| AssemblyAI _or_ Deepgram          | Transcription (cloud)   | [assemblyai.com](https://assemblyai.com) / [deepgram.com](https://deepgram.com)                                                |
+| OpenAI _or_ Anthropic _or_ Google | AI summaries            | [openai.com](https://openai.com) / [anthropic.com](https://anthropic.com) / [aistudio.google.com](https://aistudio.google.com) |
+| Google Cloud                      | Calendar & Contacts     | [console.cloud.google.com](https://console.cloud.google.com)                                                                   |
 
 **Fully Local Mode:** No API keys needed except Google (for Calendar/Contacts). Requires [JD Audio Service](https://github.com/jdbrucecpa/jd-audio-service) and a local LLM server (Ollama or LM Studio).
 
@@ -257,12 +257,12 @@ src/
 
 ## Cost Estimates
 
-| Component     | Cloud Cost     | Local Cost | Notes                  |
-| ------------- | -------------- | ---------- | ---------------------- |
-| Recording     | Recall.ai fees | Free       | Local requires FFmpeg  |
+| Component     | Cloud Cost     | Local Cost | Notes                            |
+| ------------- | -------------- | ---------- | -------------------------------- |
+| Recording     | Recall.ai fees | Free       | Local requires FFmpeg            |
 | Transcription | $0.37-0.43/hr  | Free       | Local requires GPU (~2.3GB VRAM) |
 | AI Summary    | ~$0.05/meeting | Free       | Local requires Ollama/LM Studio  |
-| **Total**     | **~$0.50/hr**  | **Free**   | Mix and match any combination |
+| **Total**     | **~$0.50/hr**  | **Free**   | Mix and match any combination    |
 
 Cloud prompt caching provides 85-90% cost reduction on LLM calls. Local mode has zero ongoing costs after setup.
 

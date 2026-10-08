@@ -44,7 +44,9 @@ try {
 }
 
 // Clean up on exit
-process.on('exit', () => { if (db) db.close(); });
+process.on('exit', () => {
+  if (db) db.close();
+});
 process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
@@ -60,7 +62,8 @@ const server = new McpServer({
 server.registerTool(
   'search_meetings',
   {
-    description: 'Search meetings by date range, title, participant, or company. Returns meeting summaries.',
+    description:
+      'Search meetings by date range, title, participant, or company. Returns meeting summaries.',
     inputSchema: z.object({
       startDate: z.string().optional().describe('Start date (YYYY-MM-DD)'),
       endDate: z.string().optional().describe('End date (YYYY-MM-DD)'),
@@ -72,7 +75,8 @@ server.registerTool(
   },
   async ({ startDate, endDate, title, participant, company, limit: maxResults }) => {
     const resultLimit = maxResults || 20;
-    let sql = 'SELECT DISTINCT m.id, m.title, m.date, m.platform, m.summary, m.status FROM meetings m';
+    let sql =
+      'SELECT DISTINCT m.id, m.title, m.date, m.platform, m.summary, m.status FROM meetings m';
     const params = [];
     const joins = [];
 
@@ -83,9 +87,18 @@ server.registerTool(
 
     sql += ' ' + joins.join(' ') + ' WHERE 1=1';
 
-    if (startDate) { sql += ' AND m.date >= ?'; params.push(startDate); }
-    if (endDate) { sql += ' AND m.date <= ?'; params.push(endDate); }
-    if (title) { sql += ' AND m.title LIKE ?'; params.push(`%${title}%`); }
+    if (startDate) {
+      sql += ' AND m.date >= ?';
+      params.push(startDate);
+    }
+    if (endDate) {
+      sql += ' AND m.date <= ?';
+      params.push(endDate);
+    }
+    if (title) {
+      sql += ' AND m.title LIKE ?';
+      params.push(`%${title}%`);
+    }
     if (participant) {
       sql += ' AND (p.name LIKE ? OR p.email LIKE ?)';
       params.push(`%${participant}%`, `%${participant}%`);
@@ -100,11 +113,15 @@ server.registerTool(
 
     const meetings = db.prepare(sql).all(...params);
 
-    const text = meetings.length === 0
-      ? 'No meetings found matching the criteria.'
-      : meetings.map(m =>
-          `[${m.date}] ${m.title} (${m.platform || 'Unknown'})\nID: ${m.id}\n${m.summary ? m.summary.substring(0, 200) + '...' : 'No summary'}`
-        ).join('\n\n---\n\n');
+    const text =
+      meetings.length === 0
+        ? 'No meetings found matching the criteria.'
+        : meetings
+            .map(
+              m =>
+                `[${m.date}] ${m.title} (${m.platform || 'Unknown'})\nID: ${m.id}\n${m.summary ? m.summary.substring(0, 200) + '...' : 'No summary'}`
+            )
+            .join('\n\n---\n\n');
 
     return { content: [{ type: 'text', text }] };
   }
@@ -127,15 +144,20 @@ server.registerTool(
       return { content: [{ type: 'text', text: 'Meeting not found.' }] };
     }
 
-    const participants = db.prepare('SELECT * FROM participants WHERE meeting_id = ?').all(meetingId);
-    const attendees = db.prepare('SELECT * FROM calendar_attendees WHERE meeting_id = ?').all(meetingId);
+    const participants = db
+      .prepare('SELECT * FROM participants WHERE meeting_id = ?')
+      .all(meetingId);
+    const attendees = db
+      .prepare('SELECT * FROM calendar_attendees WHERE meeting_id = ?')
+      .all(meetingId);
 
     let text = `# ${meeting.title}\n\n`;
     text += `**Date:** ${meeting.date}\n`;
     text += `**Platform:** ${meeting.platform || 'Unknown'}\n`;
     text += `**Status:** ${meeting.status}\n`;
     if (meeting.duration) text += `**Duration:** ${Math.round(meeting.duration / 60)} minutes\n`;
-    if (meeting.transcription_provider) text += `**Transcription:** ${meeting.transcription_provider}\n`;
+    if (meeting.transcription_provider)
+      text += `**Transcription:** ${meeting.transcription_provider}\n`;
 
     if (participants.length > 0) {
       text += `\n## Participants (${participants.length})\n`;
@@ -164,7 +186,9 @@ server.registerTool(
             text += `### ${s.templateName || s.templateId || 'Template'}\n${s.content || s.text || ''}\n\n`;
           }
         }
-      } catch { /* ignore parse errors */ }
+      } catch {
+        /* ignore parse errors */
+      }
     }
 
     return { content: [{ type: 'text', text }] };
@@ -183,19 +207,21 @@ server.registerTool(
     }),
   },
   async ({ meetingId }) => {
-    const entries = db.prepare(
-      'SELECT * FROM transcript_entries WHERE meeting_id = ? ORDER BY entry_order'
-    ).all(meetingId);
+    const entries = db
+      .prepare('SELECT * FROM transcript_entries WHERE meeting_id = ? ORDER BY entry_order')
+      .all(meetingId);
 
     if (entries.length === 0) {
       return { content: [{ type: 'text', text: 'No transcript found for this meeting.' }] };
     }
 
-    const text = entries.map(e => {
-      const speaker = e.speaker_display_name || e.speaker_name || e.speaker;
-      const ts = e.timestamp != null ? `[${formatTimestamp(e.timestamp)}] ` : '';
-      return `${ts}**${speaker}:** ${e.text}`;
-    }).join('\n');
+    const text = entries
+      .map(e => {
+        const speaker = e.speaker_display_name || e.speaker_name || e.speaker;
+        const ts = e.timestamp != null ? `[${formatTimestamp(e.timestamp)}] ` : '';
+        return `${ts}**${speaker}:** ${e.text}`;
+      })
+      .join('\n');
 
     return { content: [{ type: 'text', text }] };
   }
@@ -215,7 +241,9 @@ server.registerTool(
   },
   async ({ query, limit: maxResults }) => {
     const resultLimit = maxResults || 20;
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(
+        `
       SELECT DISTINCT name, original_name, email, organization,
         COUNT(DISTINCT meeting_id) as meeting_count
       FROM participants
@@ -223,15 +251,20 @@ server.registerTool(
       GROUP BY COALESCE(email, name)
       ORDER BY meeting_count DESC
       LIMIT ?
-    `).all(`%${query}%`, `%${query}%`, `%${query}%`, resultLimit);
+    `
+      )
+      .all(`%${query}%`, `%${query}%`, `%${query}%`, resultLimit);
 
     if (rows.length === 0) {
       return { content: [{ type: 'text', text: 'No contacts found.' }] };
     }
 
-    const text = rows.map(r =>
-      `${r.name}${r.email ? ` (${r.email})` : ''}${r.organization ? ` - ${r.organization}` : ''} [${r.meeting_count} meetings]`
-    ).join('\n');
+    const text = rows
+      .map(
+        r =>
+          `${r.name}${r.email ? ` (${r.email})` : ''}${r.organization ? ` - ${r.organization}` : ''} [${r.meeting_count} meetings]`
+      )
+      .join('\n');
 
     return { content: [{ type: 'text', text }] };
   }
@@ -249,17 +282,19 @@ server.registerTool(
     }),
   },
   async ({ email }) => {
-    const meetings = db.prepare(`
+    const meetings = db
+      .prepare(
+        `
       SELECT DISTINCT m.id, m.title, m.date, m.platform
       FROM meetings m
       JOIN participants p ON p.meeting_id = m.id
       WHERE p.email = ?
       ORDER BY m.date DESC
-    `).all(email);
+    `
+      )
+      .all(email);
 
-    const participant = db.prepare(
-      'SELECT * FROM participants WHERE email = ? LIMIT 1'
-    ).get(email);
+    const participant = db.prepare('SELECT * FROM participants WHERE email = ? LIMIT 1').get(email);
 
     let text = '';
     if (participant) {
@@ -289,20 +324,26 @@ server.registerTool(
     inputSchema: z.object({}),
   },
   async () => {
-    const rows = db.prepare(`
+    const rows = db
+      .prepare(
+        `
       SELECT organization, COUNT(DISTINCT email) as contact_count,
         COUNT(DISTINCT meeting_id) as meeting_count
       FROM participants
       WHERE organization IS NOT NULL AND organization != ''
       GROUP BY organization
       ORDER BY meeting_count DESC
-    `).all();
+    `
+      )
+      .all();
 
     // Also include DB-driven clients if available
     let clientRows = [];
     try {
       clientRows = db.prepare('SELECT * FROM clients ORDER BY name').all();
-    } catch { /* clients table may not exist */ }
+    } catch {
+      /* clients table may not exist */
+    }
 
     let text = `# Companies (${rows.length} from meetings)\n\n`;
     for (const r of rows) {
@@ -313,7 +354,11 @@ server.registerTool(
       text += `\n# Configured Clients (${clientRows.length})\n\n`;
       for (const c of clientRows) {
         let domains = '';
-        try { domains = c.domains ? JSON.parse(c.domains).join(', ') : ''; } catch { /* ignore */ }
+        try {
+          domains = c.domains ? JSON.parse(c.domains).join(', ') : '';
+        } catch {
+          /* ignore */
+        }
         text += `- **${c.name}** (${c.category || c.type}, ${c.status})${domains ? ` — ${domains}` : ''}\n`;
       }
     }
@@ -334,20 +379,28 @@ server.registerTool(
     }),
   },
   async ({ company }) => {
-    const contacts = db.prepare(`
+    const contacts = db
+      .prepare(
+        `
       SELECT DISTINCT name, email
       FROM participants
       WHERE organization LIKE ?
-    `).all(`%${company}%`);
+    `
+      )
+      .all(`%${company}%`);
 
-    const meetings = db.prepare(`
+    const meetings = db
+      .prepare(
+        `
       SELECT DISTINCT m.id, m.title, m.date, m.platform
       FROM meetings m
       JOIN participants p ON p.meeting_id = m.id
       WHERE p.organization LIKE ?
       ORDER BY m.date DESC
       LIMIT 50
-    `).all(`%${company}%`);
+    `
+      )
+      .all(`%${company}%`);
 
     let text = `# ${company}\n\n`;
     text += `## Contacts (${contacts.length})\n`;
@@ -377,9 +430,11 @@ server.registerTool(
     }),
   },
   async ({ startDate, endDate }) => {
-    const meetings = db.prepare(
-      'SELECT id, title, date, platform, status, calendar_event_id, summary FROM meetings WHERE date BETWEEN ? AND ? ORDER BY date'
-    ).all(startDate, endDate);
+    const meetings = db
+      .prepare(
+        'SELECT id, title, date, platform, status, calendar_event_id, summary FROM meetings WHERE date BETWEEN ? AND ? ORDER BY date'
+      )
+      .all(startDate, endDate);
 
     const withNotes = meetings.filter(m => m.summary);
     const withoutNotes = meetings.filter(m => !m.summary);
@@ -422,20 +477,28 @@ server.registerTool(
     const resultLimit = maxResults || 10;
 
     // Search in summaries
-    const summaryMatches = db.prepare(`
+    const summaryMatches = db
+      .prepare(
+        `
       SELECT id, title, date, summary FROM meetings
       WHERE summary LIKE ? OR content LIKE ?
       ORDER BY date DESC LIMIT ?
-    `).all(`%${query}%`, `%${query}%`, resultLimit);
+    `
+      )
+      .all(`%${query}%`, `%${query}%`, resultLimit);
 
     // Search in transcripts
-    const transcriptMatches = db.prepare(`
+    const transcriptMatches = db
+      .prepare(
+        `
       SELECT DISTINCT t.meeting_id, m.title, m.date, t.text, t.speaker
       FROM transcript_entries t
       JOIN meetings m ON m.id = t.meeting_id
       WHERE t.text LIKE ?
       ORDER BY m.date DESC LIMIT ?
-    `).all(`%${query}%`, resultLimit);
+    `
+      )
+      .all(`%${query}%`, resultLimit);
 
     let text = `# Search Results for "${query}"\n\n`;
 

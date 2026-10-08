@@ -7,6 +7,5 @@ contextBridge.exposeInMainWorld('confirmAPI', {
   keep: () => ipcRenderer.send('confirm:keep'),
   // Main process is authoritative for the countdown; it pushes the remaining
   // whole seconds each tick. Renderer only displays.
-  onTick: callback =>
-    ipcRenderer.on('confirm:tick', (_event, data) => callback(data)),
+  onTick: callback => ipcRenderer.on('confirm:tick', (_event, data) => callback(data)),
 });

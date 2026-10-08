@@ -50,7 +50,7 @@ function composeTitle(company, participantName, topic) {
     .slice(0, 6)
     // Short all-caps tokens (M&A, RIA, CPA) are acronyms — keep them; everything
     // else is normalized to Title Case.
-    .map((w) =>
+    .map(w =>
       /^[A-Z][A-Z0-9&./-]{0,4}$/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
     )
     .join(' ');
@@ -68,7 +68,9 @@ function applyReassignments(speakerMapping, reassignments, roster) {
     if (!entry) continue;
     if (PROTECTED_METHODS.has(entry.method)) continue;
     if (!REASSIGNABLE_CONFIDENCE.has(entry.confidence)) continue;
-    const contact = (roster || []).find((a) => (a.name || '').toLowerCase() === (r.name || '').toLowerCase());
+    const contact = (roster || []).find(
+      a => (a.name || '').toLowerCase() === (r.name || '').toLowerCase()
+    );
     if (!contact) continue; // model may not invent identities
     if ((entry.name || '').toLowerCase() === contact.name.toLowerCase()) continue;
     updated[r.label] = {
@@ -103,10 +105,16 @@ function parseContentPassResponse(text) {
 /** Cue-taxonomy prompt (spec §5 Stage 3). Transcript rides in cacheableContext. */
 function buildContentPassPrompts(speakerMapping, roster) {
   const rosterLines = (roster || [])
-    .map((a) => `- ${a.name}${a.organization ? ` (${a.organization})` : ''}${a.email ? ` <${a.email}>` : ''}`)
+    .map(
+      a =>
+        `- ${a.name}${a.organization ? ` (${a.organization})` : ''}${a.email ? ` <${a.email}>` : ''}`
+    )
     .join('\n');
   const mappingLines = Object.entries(speakerMapping || {})
-    .map(([label, e]) => `- ${label}: ${e.name || 'Unknown'} [confidence=${e.confidence}, method=${e.method}]`)
+    .map(
+      ([label, e]) =>
+        `- ${label}: ${e.name || 'Unknown'} [confidence=${e.confidence}, method=${e.method}]`
+    )
     .join('\n');
   const systemPrompt =
     'You review speaker assignments in a meeting transcript and name the meeting. ' +
@@ -151,12 +159,14 @@ async function runContentAwarePass(deps, input) {
     const main = computeMainParticipant(transcript, user);
     const rosterEntry = main
       ? roster.find(
-          (a) =>
+          a =>
             (main.email && (a.email || '').toLowerCase() === main.email.toLowerCase()) ||
             (a.name || '').toLowerCase() === main.name.toLowerCase()
         )
       : null;
-    const title = main ? composeTitle(rosterEntry?.organization || null, main.name, parsed.topic) : null;
+    const title = main
+      ? composeTitle(rosterEntry?.organization || null, main.name, parsed.topic)
+      : null;
 
     if (changed.length > 0) deps.log(`[ContentPass] Reassigned: ${changed.join(', ')}`);
     return { updatedMapping: updated, changed, title };

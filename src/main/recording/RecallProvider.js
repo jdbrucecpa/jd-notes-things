@@ -58,7 +58,7 @@ class RecallProvider extends RecordingProvider {
   }
 
   _registerSdkEventHandlers() {
-    this.sdk.addEventListener('meeting-detected', (event) => {
+    this.sdk.addEventListener('meeting-detected', event => {
       const win = event.window || event;
       this.emit('meeting-detected', {
         windowId: win.id,
@@ -68,14 +68,14 @@ class RecallProvider extends RecordingProvider {
       });
     });
 
-    this.sdk.addEventListener('meeting-closed', (event) => {
+    this.sdk.addEventListener('meeting-closed', event => {
       this.emit('meeting-closed', {
         windowId: event.window?.id || event.windowId,
         raw: event,
       });
     });
 
-    this.sdk.addEventListener('recording-ended', (event) => {
+    this.sdk.addEventListener('recording-ended', event => {
       const windowId = event.window?.id || event.windowId || this._activeWindowId;
       this._recording = false;
       this._activeWindowId = null;
@@ -86,11 +86,11 @@ class RecallProvider extends RecordingProvider {
       });
     });
 
-    this.sdk.addEventListener('upload-progress', (event) => {
+    this.sdk.addEventListener('upload-progress', event => {
       this.emit('upload-progress', { raw: event, ...event });
     });
 
-    this.sdk.addEventListener('sdk-state-change', (event) => {
+    this.sdk.addEventListener('sdk-state-change', event => {
       const windowId = event.window?.id || event.windowId;
       if (event.state === 'recording') {
         this._recording = true;
@@ -100,7 +100,7 @@ class RecallProvider extends RecordingProvider {
       this.emit('sdk-state-change', { state: event.state, raw: event });
     });
 
-    this.sdk.addEventListener('realtime-event', (event) => {
+    this.sdk.addEventListener('realtime-event', event => {
       if (event.type === 'participant_join') {
         this.emit('participant-joined', {
           windowId: event.windowId,
@@ -116,14 +116,14 @@ class RecallProvider extends RecordingProvider {
       }
     });
 
-    this.sdk.addEventListener('error', (event) => {
+    this.sdk.addEventListener('error', event => {
       this.emit('error', {
         type: 'sdk-error',
         message: event.message || String(event),
       });
     });
 
-    this.sdk.addEventListener('permissions-granted', (event) => {
+    this.sdk.addEventListener('permissions-granted', event => {
       this.emit('permissions-granted', event);
     });
   }

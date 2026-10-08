@@ -590,8 +590,17 @@ class VoiceProfileService {
    *   candidates?: Array<Object>
    * }>>}
    */
-  async identifySpeakers(audioFilePath, segments, calendarAttendees, meetingId, precomputedEmbeddings = null, anchorOptions = null) {
-    log.info(`${LOG_PREFIX} identifySpeakers: ${segments.length} segments, ${calendarAttendees.length} attendees`);
+  async identifySpeakers(
+    audioFilePath,
+    segments,
+    calendarAttendees,
+    meetingId,
+    precomputedEmbeddings = null,
+    anchorOptions = null
+  ) {
+    log.info(
+      `${LOG_PREFIX} identifySpeakers: ${segments.length} segments, ${calendarAttendees.length} attendees`
+    );
 
     // Step 1: Get embeddings (precomputed by the waterfall pipeline, or fetch)
     let speakerEmbeddings = precomputedEmbeddings;
@@ -620,7 +629,11 @@ class VoiceProfileService {
       if (anchored) {
         const duration = this._segmentDuration(segments, anchoredLabel);
         const upsert = this.upsertProfileSample(
-          { contactName: anchorUser.name, contactEmail: anchorUser.email, googleContactId: anchorUser.googleContactId || null },
+          {
+            contactName: anchorUser.name,
+            contactEmail: anchorUser.email,
+            googleContactId: anchorUser.googleContactId || null,
+          },
           anchored.embedding,
           duration,
           meetingId
@@ -738,7 +751,11 @@ class VoiceProfileService {
       }
 
       const upsert = this.upsertProfileSample(
-        { contactName: attendee.name, contactEmail: attendee.email, googleContactId: attendee.googleContactId || null },
+        {
+          contactName: attendee.name,
+          contactEmail: attendee.email,
+          googleContactId: attendee.googleContactId || null,
+        },
         speaker.embedding,
         duration,
         meetingId
@@ -852,9 +869,11 @@ class VoiceProfileService {
         timeout: timeoutMs,
       };
 
-      const req = transport.request(options, (res) => {
+      const req = transport.request(options, res => {
         let data = '';
-        res.on('data', chunk => { data += chunk; });
+        res.on('data', chunk => {
+          data += chunk;
+        });
         res.on('end', () => {
           try {
             if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -873,7 +892,7 @@ class VoiceProfileService {
         reject(new Error(`AI service request timed out after ${timeoutMs}ms`));
       });
 
-      req.on('error', (err) => {
+      req.on('error', err => {
         reject(new Error(`AI service request failed: ${err.message}`));
       });
 

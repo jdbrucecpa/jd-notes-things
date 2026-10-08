@@ -33,10 +33,14 @@ function buildFFmpegArgs(sources, mixer = {}, outputPath, trackOutputs = {}) {
     if (sourceType === 'wasapi') {
       // WASAPI loopback: raw PCM via named pipe
       args.push(
-        '-f', 's16le',
-        '-ar', String(source.sampleRate || 48000),
-        '-ac', String(source.channels || 2),
-        '-i', source.device
+        '-f',
+        's16le',
+        '-ar',
+        String(source.sampleRate || 48000),
+        '-ac',
+        String(source.channels || 2),
+        '-i',
+        source.device
       );
     } else {
       // DirectShow input device (mic, stereo mix, etc.)
@@ -46,9 +50,7 @@ function buildFFmpegArgs(sources, mixer = {}, outputPath, trackOutputs = {}) {
 
   // Solo-track targets. Mic = first dshow source; system = all wasapi sources.
   const micIndex = sources.findIndex(s => (s.type || 'dshow') !== 'wasapi');
-  const wasapiIndexes = sources
-    .map((s, i) => (s.type === 'wasapi' ? i : -1))
-    .filter(i => i >= 0);
+  const wasapiIndexes = sources.map((s, i) => (s.type === 'wasapi' ? i : -1)).filter(i => i >= 0);
   const wantMicTrack = !!trackOutputs.micTrackPath && micIndex >= 0;
   const wantSystemTrack = !!trackOutputs.systemTrackPath && wasapiIndexes.length > 0;
 
@@ -136,15 +138,27 @@ function buildFFmpegArgs(sources, mixer = {}, outputPath, trackOutputs = {}) {
   // wantMicTrack/wantSystemTrack each imply needsFilter, so the labels always exist.
   if (wantMicTrack) {
     args.push(
-      '-map', '[mic_solo]',
-      '-acodec', 'libmp3lame', '-ab', '96k', '-ar', '44100',
+      '-map',
+      '[mic_solo]',
+      '-acodec',
+      'libmp3lame',
+      '-ab',
+      '96k',
+      '-ar',
+      '44100',
       trackOutputs.micTrackPath
     );
   }
   if (wantSystemTrack) {
     args.push(
-      '-map', '[sys_solo]',
-      '-acodec', 'libmp3lame', '-ab', '96k', '-ar', '44100',
+      '-map',
+      '[sys_solo]',
+      '-acodec',
+      'libmp3lame',
+      '-ab',
+      '96k',
+      '-ar',
+      '44100',
       trackOutputs.systemTrackPath
     );
   }

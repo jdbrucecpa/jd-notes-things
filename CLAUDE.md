@@ -175,12 +175,14 @@ Voice profiles are linked to Google Contacts and stored in the `voice_profiles` 
 ### Participant Data Model (IMPORTANT)
 
 **Data Authority Hierarchy:**
+
 - **`originalName`:** The IMMUTABLE participant name from Zoom SDK. This field is set once when a participant joins and should NEVER be modified. This is the source of truth.
 - **`name`:** Display name that may be updated by contact matching. Can become corrupted - always fall back to `originalName`.
 - **Emails:** NEVER authoritative. Emails are always inferred from Google Contacts matching and can be wrong. The Zoom SDK and transcription services do not provide participant emails.
 - **Organization:** Inferred from contact matching, not authoritative.
 
 **Participant Object Structure:**
+
 ```javascript
 {
   id: string,           // SDK participant ID

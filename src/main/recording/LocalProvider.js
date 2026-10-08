@@ -178,7 +178,10 @@ class LocalProvider extends RecordingProvider {
     try {
       fs.mkdirSync(this._recordingPath, { recursive: true });
     } catch (err) {
-      this.emit('error', { type: 'init-error', message: `Cannot create recordings dir: ${err.message}` });
+      this.emit('error', {
+        type: 'init-error',
+        message: `Cannot create recordings dir: ${err.message}`,
+      });
     }
 
     this._startPolling();
@@ -231,7 +234,7 @@ class LocalProvider extends RecordingProvider {
       if (meetingPid && AppLoopbackCapture.isAvailable()) {
         try {
           this._appCapture = new AppLoopbackCapture();
-          this._appCapture.on('error', (err) => {
+          this._appCapture.on('error', err => {
             // Capture failure degrades the isolation track only — never the recording.
             this.emit('error', { type: 'app-loopback-error', message: err.message });
           });
@@ -239,7 +242,9 @@ class LocalProvider extends RecordingProvider {
           appTrackActive = true;
           log.info(`[LocalProvider] App-loopback capture started (pid=${meetingPid})`);
         } catch (err) {
-          log.warn(`[LocalProvider] App-loopback capture failed, using system submix: ${err.message}`);
+          log.warn(
+            `[LocalProvider] App-loopback capture failed, using system submix: ${err.message}`
+          );
           this._appCapture = null;
         }
       }
@@ -339,7 +344,7 @@ class LocalProvider extends RecordingProvider {
     }
 
     // Resolve as soon as FFmpeg actually exits (whether via 'q' or a kill).
-    const exitPromise = new Promise((resolve) => {
+    const exitPromise = new Promise(resolve => {
       proc.once('close', () => resolve());
     });
 
@@ -583,17 +588,19 @@ class LocalProvider extends RecordingProvider {
    */
   _getWindowList() {
     return new Promise((resolve, reject) => {
-      const ps = spawn('powershell', [
-        '-NoProfile',
-        '-Command',
-        WINDOW_ENUM_SCRIPT,
-      ], { windowsHide: true });
+      const ps = spawn('powershell', ['-NoProfile', '-Command', WINDOW_ENUM_SCRIPT], {
+        windowsHide: true,
+      });
 
       let stdout = '';
       let stderr = '';
 
-      ps.stdout.on('data', chunk => { stdout += chunk; });
-      ps.stderr.on('data', chunk => { stderr += chunk; });
+      ps.stdout.on('data', chunk => {
+        stdout += chunk;
+      });
+      ps.stderr.on('data', chunk => {
+        stderr += chunk;
+      });
 
       ps.on('close', code => {
         if (code !== 0) {
@@ -719,15 +726,15 @@ class LocalProvider extends RecordingProvider {
    * @returns {Promise<Array<{name: string, isLoopback: boolean, isMicrophone: boolean}>>}
    */
   _enumerateDshowDevices() {
-    return new Promise((resolve) => {
-      const ff = spawn(getFfmpegPath(), [
-        '-list_devices', 'true',
-        '-f', 'dshow',
-        '-i', 'dummy',
-      ], { windowsHide: true });
+    return new Promise(resolve => {
+      const ff = spawn(getFfmpegPath(), ['-list_devices', 'true', '-f', 'dshow', '-i', 'dummy'], {
+        windowsHide: true,
+      });
 
       let stderr = '';
-      ff.stderr.on('data', chunk => { stderr += chunk; });
+      ff.stderr.on('data', chunk => {
+        stderr += chunk;
+      });
 
       ff.on('close', () => {
         const devices = [];
@@ -756,8 +763,7 @@ class LocalProvider extends RecordingProvider {
               nameLower.includes('loopback') ||
               nameLower.includes('virtual cable') ||
               nameLower.includes('vb-audio');
-            const isMicrophone =
-              nameLower.includes('microphone') || nameLower.includes('mic');
+            const isMicrophone = nameLower.includes('microphone') || nameLower.includes('mic');
 
             devices.push({ name, isLoopback, isMicrophone });
           }
@@ -788,8 +794,7 @@ class LocalProvider extends RecordingProvider {
               nameLower.includes('loopback') ||
               nameLower.includes('virtual cable') ||
               nameLower.includes('vb-audio');
-            const isMicrophone =
-              nameLower.includes('microphone') || nameLower.includes('mic');
+            const isMicrophone = nameLower.includes('microphone') || nameLower.includes('mic');
 
             devices.push({ name, isLoopback, isMicrophone });
           }
@@ -824,7 +829,7 @@ class LocalProvider extends RecordingProvider {
    * @param {Array<{device: string, type: string, deviceId: string|null}>} enabledSources
    */
   async _healWasapiDeviceIds(enabledSources) {
-    const wasapiSources = enabledSources.filter((s) => s.type === 'wasapi');
+    const wasapiSources = enabledSources.filter(s => s.type === 'wasapi');
     if (wasapiSources.length === 0) return;
 
     const devices = await this._enumerateOutputDevices();
@@ -844,7 +849,7 @@ class LocalProvider extends RecordingProvider {
         );
         source.deviceId = resolved.deviceId;
         const configured = this._audioSources.find(
-          (s) => s.type === 'wasapi' && s.device === source.device
+          s => s.type === 'wasapi' && s.device === source.device
         );
         if (configured) configured.deviceId = resolved.deviceId;
         healedAny = true;
@@ -890,11 +895,14 @@ class LocalProvider extends RecordingProvider {
       for (const source of enabledSources) {
         if (source.type === 'wasapi' && source.deviceId) {
           const capture = new WasapiCapture();
-          capture.on('error', (err) => {
+          capture.on('error', err => {
             this.emit('error', { type: 'wasapi-error', message: err.message });
           });
 
-          const { pipePath, sampleRate, channels } = await capture.start(source.deviceId, pipeIndex);
+          const { pipePath, sampleRate, channels } = await capture.start(
+            source.deviceId,
+            pipeIndex
+          );
           this._wasapiCaptures.push(capture);
           pipeIndex++;
 
@@ -933,11 +941,16 @@ class LocalProvider extends RecordingProvider {
 
       ffmpegArgs = [
         '-y',
-        '-f', 'dshow',
-        '-i', audioInput,
-        '-acodec', 'libmp3lame',
-        '-ab', '128k',
-        '-ar', '44100',
+        '-f',
+        'dshow',
+        '-i',
+        audioInput,
+        '-acodec',
+        'libmp3lame',
+        '-ab',
+        '128k',
+        '-ar',
+        '44100',
         outputPath,
       ];
     }
@@ -949,15 +962,15 @@ class LocalProvider extends RecordingProvider {
 
     const { recordingId, audioFilePath } = this._activeRecording;
 
-    this._ffmpegProcess.on('close', (code) =>
+    this._ffmpegProcess.on('close', code =>
       this._handleFfmpegClose(recordingId, audioFilePath, code)
     );
 
-    this._ffmpegProcess.on('error', (err) => {
+    this._ffmpegProcess.on('error', err => {
       this.emit('error', { type: 'ffmpeg-error', message: err.message });
     });
 
-    this._ffmpegProcess.stderr.on('data', (chunk) => {
+    this._ffmpegProcess.stderr.on('data', chunk => {
       // Keep a rolling tail of FFmpeg stderr (format errors, missing devices,
       // etc.). FFmpeg writes both progress and errors here.
       this._ffmpegStderrTail = (this._ffmpegStderrTail + chunk.toString()).slice(-4000);

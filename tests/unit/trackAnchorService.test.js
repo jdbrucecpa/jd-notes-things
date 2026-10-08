@@ -11,7 +11,11 @@ import {
 function windows(totalSec, spans) {
   const arr = new Float32Array(Math.ceil((totalSec * 1000) / WINDOW_MS));
   for (const { start, end, v } of spans) {
-    for (let i = Math.floor((start * 1000) / WINDOW_MS); i < Math.floor((end * 1000) / WINDOW_MS); i++) {
+    for (
+      let i = Math.floor((start * 1000) / WINDOW_MS);
+      i < Math.floor((end * 1000) / WINDOW_MS);
+      i++
+    ) {
       arr[i] = v;
     }
   }
@@ -41,7 +45,10 @@ describe('computeAnchor', () => {
   ];
 
   it('anchors the mic-dominant label as user and app-active labels as remote', () => {
-    const mic = windows(60, [{ start: 0, end: 30, v: 0.4 }, { start: 30, end: 60, v: 0.05 }]); // bleed
+    const mic = windows(60, [
+      { start: 0, end: 30, v: 0.4 },
+      { start: 30, end: 60, v: 0.05 },
+    ]); // bleed
     const app = windows(60, [{ start: 30, end: 60, v: 0.4 }]);
     const r = computeAnchor(segments, mic, app);
     expect(r.userLabel).toBe('SPEAKER_00');

@@ -1,6 +1,7 @@
 # v1.4.4 Release Notes
 
 ## Highlights
+
 Fixes a bug where clicking Record during the SDK startup restart cycle would silently fail to start recording.
 
 ---
@@ -12,4 +13,5 @@ Fixes a bug where clicking Record during the SDK startup restart cycle would sil
 ---
 
 ## Files Changed
+
 3 files changed, ~19 additions, ~2 deletions (net +17 lines)

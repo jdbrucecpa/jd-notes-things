@@ -135,7 +135,7 @@ class AppLoopbackCapture extends EventEmitter {
 
     try {
       appLoopback.startAudioCapture(this._pid, {
-        onData: (chunk) => {
+        onData: chunk => {
           if (this._fd === null) return;
           if (this._bytesWritten + chunk.length > MAX_WAV_DATA_BYTES) {
             this._failCapture(new Error('AppLoopbackCapture: WAV 4GB limit reached'));

@@ -18,7 +18,7 @@ if (!pid) {
 let bytes = 0;
 const start = Date.now();
 startAudioCapture(String(pid), {
-  onData: (c) => {
+  onData: c => {
     bytes += c.length;
   },
 });
@@ -28,5 +28,7 @@ setTimeout(() => {
   const secs = (Date.now() - start) / 1000;
   const rate = bytes / secs;
   console.log(`bytes/sec ≈ ${Math.round(rate)}`);
-  console.log('Candidates: 192000=48k/2ch/16-bit int (expected), 384000=48k/2ch/float32, 176400=44.1k/2ch/16-bit int');
+  console.log(
+    'Candidates: 192000=48k/2ch/16-bit int (expected), 384000=48k/2ch/float32, 176400=44.1k/2ch/16-bit int'
+  );
 }, 5000);

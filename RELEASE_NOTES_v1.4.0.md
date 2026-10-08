@@ -66,15 +66,17 @@ This release replaces the file-based routing system with database-driven company
 ## New Tests
 
 ### Unit Tests (Vitest)
-| Suite | Tests | Coverage |
-|-------|-------|----------|
-| `mcp-server.test.js` | 3 | MCP server import validation, usage error, bad DB path |
+
+| Suite                | Tests | Coverage                                               |
+| -------------------- | ----- | ------------------------------------------------------ |
+| `mcp-server.test.js` | 3     | MCP server import validation, usage error, bad DB path |
 
 ### E2E Tests (Playwright)
-| Suite | Tests | Coverage |
-|-------|-------|----------|
-| `app.spec.js` | 37 (+10) | Added: routing destinations, re-run button, originalName integrity, company picker, backup manifest, coverage IPC, MCP config, company detail, companies API, console errors |
-| `recording-pipeline.spec.js` | 28 (new) | Widget lifecycle, mock SDK state, recording start/stop, participant tracking, data integrity, error resilience |
+
+| Suite                        | Tests    | Coverage                                                                                                                                                                     |
+| ---------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app.spec.js`                | 37 (+10) | Added: routing destinations, re-run button, originalName integrity, company picker, backup manifest, coverage IPC, MCP config, company detail, companies API, console errors |
+| `recording-pipeline.spec.js` | 28 (new) | Widget lifecycle, mock SDK state, recording start/stop, participant tracking, data integrity, error resilience                                                               |
 
 **Total test count**: 44 unit + 37 E2E (app) + 28 E2E (recording) = 109 tests
 
@@ -83,15 +85,17 @@ This release replaces the file-based routing system with database-driven company
 ## Dependency Updates
 
 ### New Dependencies
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `archiver` | ^7.0.1 | Streaming ZIP archive creation for backups |
-| `@modelcontextprotocol/sdk` | ^1.x | MCP server SDK for Claude Desktop integration |
+
+| Package                     | Version | Purpose                                       |
+| --------------------------- | ------- | --------------------------------------------- |
+| `archiver`                  | ^7.0.1  | Streaming ZIP archive creation for backups    |
+| `@modelcontextprotocol/sdk` | ^1.x    | MCP server SDK for Claude Desktop integration |
 
 ### New Dev Dependencies
-| Package | Version | Purpose |
-|---------|---------|---------|
-| (recording pipeline tests use existing Playwright + Vitest) | | |
+
+| Package                                                     | Version | Purpose |
+| ----------------------------------------------------------- | ------- | ------- |
+| (recording pipeline tests use existing Playwright + Vitest) |         |         |
 
 ---
 
@@ -100,20 +104,22 @@ This release replaces the file-based routing system with database-driven company
 27 files changed, ~5,997 additions, ~1,148 deletions (net +4,849 lines)
 
 ### New Files
-| File | Purpose |
-|------|---------|
-| `src/mcp-server.js` | Standalone MCP server for Claude Desktop |
-| `src/main/services/backupService.js` | Full and incremental backup/restore |
-| `src/main/services/clientService.js` | Company CRUD operations |
-| `src/renderer/companyDetail.js` | Company detail view UI |
-| `src/renderer/meetingDetail.js` | Meeting detail enhancements (re-run transcription) |
-| `tests/mocks/MockRecallSdk.js` | Mock Recall.ai SDK for testing |
-| `tests/e2e/recording-pipeline.spec.js` | Recording pipeline E2E tests |
-| `tests/unit/mcp-server.test.js` | MCP server import/startup tests |
-| `tests/fixtures/scenarios/*.json` | Test scenario definitions |
-| `test_pragma.js` | Pragma comment auto-numbering utility |
+
+| File                                   | Purpose                                            |
+| -------------------------------------- | -------------------------------------------------- |
+| `src/mcp-server.js`                    | Standalone MCP server for Claude Desktop           |
+| `src/main/services/backupService.js`   | Full and incremental backup/restore                |
+| `src/main/services/clientService.js`   | Company CRUD operations                            |
+| `src/renderer/companyDetail.js`        | Company detail view UI                             |
+| `src/renderer/meetingDetail.js`        | Meeting detail enhancements (re-run transcription) |
+| `tests/mocks/MockRecallSdk.js`         | Mock Recall.ai SDK for testing                     |
+| `tests/e2e/recording-pipeline.spec.js` | Recording pipeline E2E tests                       |
+| `tests/unit/mcp-server.test.js`        | MCP server import/startup tests                    |
+| `tests/fixtures/scenarios/*.json`      | Test scenario definitions                          |
+| `test_pragma.js`                       | Pragma comment auto-numbering utility              |
 
 ### Deleted Files
-| File | Reason |
-|------|--------|
+
+| File                      | Reason                                           |
+| ------------------------- | ------------------------------------------------ |
 | `src/renderer/routing.js` | Replaced by company management UI in settings.js |

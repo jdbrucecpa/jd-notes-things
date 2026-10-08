@@ -77,7 +77,9 @@ async function reembedCorrections(deps, meeting, targets, meetingId) {
       );
       if (upsert?.rejected) {
         summary.samplesRejected++;
-        log(`[CorrectionReembed] Sample for ${target.name} rejected by poisoning guard in ${meetingId}`);
+        log(
+          `[CorrectionReembed] Sample for ${target.name} rejected by poisoning guard in ${meetingId}`
+        );
       } else if (upsert) {
         summary.samplesAdded++;
         log(
@@ -88,7 +90,9 @@ async function reembedCorrections(deps, meeting, targets, meetingId) {
     }
   } catch (err) {
     summary.error = err.message;
-    warn(`[CorrectionReembed] Re-embed failed for ${meetingId} (correction still applied): ${err.message}`);
+    warn(
+      `[CorrectionReembed] Re-embed failed for ${meetingId} (correction still applied): ${err.message}`
+    );
   }
 
   return summary;

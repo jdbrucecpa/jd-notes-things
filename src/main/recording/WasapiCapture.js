@@ -66,7 +66,7 @@ class WasapiCapture extends EventEmitter {
   static async getOutputDevices() {
     if (!nativeRecorder) return [];
     const devices = nativeRecorder.AudioRecorder.getDevices('output');
-    return devices.map((d) => ({
+    return devices.map(d => ({
       name: d.name,
       deviceId: d.id,
       isDefault: d.isDefault || false,
@@ -119,7 +119,7 @@ class WasapiCapture extends EventEmitter {
 
     // Create named pipe server
     await new Promise((resolve, reject) => {
-      this._pipeServer = net.createServer((client) => {
+      this._pipeServer = net.createServer(client => {
         this._pipeClient = client;
         // Anchor the pacing clock to when FFmpeg actually starts reading.
         this._bytesWritten = 0;
@@ -130,7 +130,7 @@ class WasapiCapture extends EventEmitter {
         });
       });
 
-      this._pipeServer.on('error', (err) => {
+      this._pipeServer.on('error', err => {
         this.emit('error', { type: 'pipe-error', message: err.message });
         reject(err);
       });
@@ -143,14 +143,14 @@ class WasapiCapture extends EventEmitter {
     // Create and start AudioRecorder
     this._recorder = new nativeRecorder.AudioRecorder();
 
-    this._recorder.on('data', (buffer) => {
+    this._recorder.on('data', buffer => {
       if (this._pipeClient && !this._pipeClient.destroyed) {
         this._pipeClient.write(buffer);
         this._bytesWritten += buffer.length;
       }
     });
 
-    this._recorder.on('error', (err) => {
+    this._recorder.on('error', err => {
       this.emit('error', { type: 'wasapi-error', message: err.message });
     });
 

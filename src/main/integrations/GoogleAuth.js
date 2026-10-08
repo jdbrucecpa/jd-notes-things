@@ -26,10 +26,10 @@ class GoogleAuth {
 
     // v1.3.0: Upgraded scopes for read/write Calendar, Contacts, and Gmail
     this.scopes = [
-      'https://www.googleapis.com/auth/calendar.events',   // Read/write events (extendedProperties)
-      'https://www.googleapis.com/auth/contacts',           // Read/write contacts (custom fields, create)
-      'https://www.googleapis.com/auth/gmail.readonly',     // Read email threads
-      'https://www.googleapis.com/auth/userinfo.email',     // Current user identification
+      'https://www.googleapis.com/auth/calendar.events', // Read/write events (extendedProperties)
+      'https://www.googleapis.com/auth/contacts', // Read/write contacts (custom fields, create)
+      'https://www.googleapis.com/auth/gmail.readonly', // Read email threads
+      'https://www.googleapis.com/auth/userinfo.email', // Current user identification
     ];
 
     // Track whether a scope upgrade is needed (existing token has old scopes)

@@ -71,7 +71,10 @@ async function ensureMainView() {
   await page.waitForTimeout(200);
 
   // Close editor view if open — use #homeButton (NOT #backButton which is for contact nav)
-  const editorOpen = await page.locator('#editorView').isVisible().catch(() => false);
+  const editorOpen = await page
+    .locator('#editorView')
+    .isVisible()
+    .catch(() => false);
   if (editorOpen) {
     const homeBtn = page.locator('#homeButton');
     if (await homeBtn.isVisible().catch(() => false)) {
@@ -91,7 +94,10 @@ async function ensureMainView() {
     }
   }
   // Close settings if open
-  const settingsOpen = await page.locator('#settingsView').isVisible().catch(() => false);
+  const settingsOpen = await page
+    .locator('#settingsView')
+    .isVisible()
+    .catch(() => false);
   if (settingsOpen) {
     const closeBtn = page.locator('#closeSettings');
     if (await closeBtn.isVisible().catch(() => false)) {
@@ -109,7 +115,10 @@ async function ensureMainView() {
     }
   }
   // Close contacts if open
-  const contactsOpen = await page.locator('#contactsView').isVisible().catch(() => false);
+  const contactsOpen = await page
+    .locator('#contactsView')
+    .isVisible()
+    .catch(() => false);
   if (contactsOpen) {
     const closeBtn = page.locator('#closeContacts');
     if (await closeBtn.isVisible().catch(() => false)) {
@@ -127,7 +136,10 @@ async function ensureMainView() {
     }
   }
   // Close reports if open
-  const reportsOpen = await page.locator('#reportsView').isVisible().catch(() => false);
+  const reportsOpen = await page
+    .locator('#reportsView')
+    .isVisible()
+    .catch(() => false);
   if (reportsOpen) {
     const closeBtn = page.locator('#closeReports');
     if (await closeBtn.isVisible().catch(() => false)) {
@@ -136,7 +148,10 @@ async function ensureMainView() {
     }
   }
   // Wait for home view content to be visible
-  await page.locator('#homeView').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  await page
+    .locator('#homeView')
+    .waitFor({ state: 'visible', timeout: 5000 })
+    .catch(() => {});
 }
 
 /**
@@ -145,8 +160,11 @@ async function ensureMainView() {
 async function navigateToFirstMeeting() {
   await ensureMainView();
   // Wait for meeting cards to render (they may still be loading after view switch)
-  await page.locator('.meeting-card:not(.calendar-meeting)').first()
-    .waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
+  await page
+    .locator('.meeting-card:not(.calendar-meeting)')
+    .first()
+    .waitFor({ state: 'visible', timeout: 10_000 })
+    .catch(() => {});
   const meetingCard = page.locator('.meeting-card:not(.calendar-meeting)').first();
   if (!(await meetingCard.isVisible().catch(() => false))) {
     return false;
@@ -1051,7 +1069,10 @@ test('re-run transcription button is present in meeting detail', async () => {
 
   // Also check for a button with matching text content
   const rerunByText = page.locator('button:has-text("Re-run"), button[title*="Re-run"]');
-  const rerunByTextVisible = await rerunByText.first().isVisible().catch(() => false);
+  const rerunByTextVisible = await rerunByText
+    .first()
+    .isVisible()
+    .catch(() => false);
 
   console.log(`[E2E] Re-run button by ID: ${rerunVisible}, by text: ${rerunByTextVisible}`);
   expect(rerunVisible || rerunByTextVisible).toBe(true);
@@ -1078,19 +1099,23 @@ test('placeholder meeting originalName is never an email address', async () => {
   ];
 
   const placeholders = meetings.filter(m => m.id && m.id.startsWith('placeholder-'));
-  console.log(`[E2E] Placeholder meetings found: ${placeholders.length} (total meetings: ${meetings.length})`);
+  console.log(
+    `[E2E] Placeholder meetings found: ${placeholders.length} (total meetings: ${meetings.length})`
+  );
 
   const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
   for (const meeting of placeholders) {
     const participants = Array.isArray(meeting.participants)
       ? meeting.participants
-      : (typeof meeting.participants === 'string'
-          ? JSON.parse(meeting.participants || '[]')
-          : []);
+      : typeof meeting.participants === 'string'
+        ? JSON.parse(meeting.participants || '[]')
+        : [];
 
     for (const p of participants) {
       if (p.originalName && emailRegex.test(p.originalName)) {
-        console.error(`[E2E] BUG: originalName is an email: "${p.originalName}" in meeting ${meeting.id}`);
+        console.error(
+          `[E2E] BUG: originalName is an email: "${p.originalName}" in meeting ${meeting.id}`
+        );
       }
       expect(emailRegex.test(p.originalName || '')).toBe(false);
     }
@@ -1129,15 +1154,19 @@ test('add company picker opens when clicking Add Client button', async () => {
 
   // Check that the picker/dialog opened
   const picker = page.locator('#addClientPicker, #addClientModal, .add-client-picker');
-  const pickerVisible = await picker.first().isVisible().catch(() => false);
+  const pickerVisible = await picker
+    .first()
+    .isVisible()
+    .catch(() => false);
   console.log(`[E2E] Add Client picker visible: ${pickerVisible}`);
   expect(pickerVisible).toBe(true);
 
   // Dismiss picker
   await page.evaluate(() => {
-    const picker = document.getElementById('addClientPicker') ||
-                   document.getElementById('addClientModal') ||
-                   document.querySelector('.add-client-picker');
+    const picker =
+      document.getElementById('addClientPicker') ||
+      document.getElementById('addClientModal') ||
+      document.querySelector('.add-client-picker');
     if (picker) picker.style.display = 'none';
   });
 
@@ -1165,8 +1194,14 @@ test('backup manifest shows database info after tab load', async () => {
   await page.waitForTimeout(1500); // Wait for manifest IPC call
 
   // Check manifest info populated
-  const dbInfo = await page.locator('#backupDbInfo').textContent().catch(() => '');
-  const lastInfo = await page.locator('#backupLastInfo').textContent().catch(() => '');
+  const dbInfo = await page
+    .locator('#backupDbInfo')
+    .textContent()
+    .catch(() => '');
+  const lastInfo = await page
+    .locator('#backupLastInfo')
+    .textContent()
+    .catch(() => '');
   console.log(`[E2E] Backup DB info: "${dbInfo}", Last backup: "${lastInfo}"`);
 
   // DB info should have content (at minimum "1 file" or similar)
@@ -1188,15 +1223,20 @@ test('calendar coverage IPC returns valid response', async () => {
   const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   const endDate = now.toISOString().split('T')[0];
 
-  const result = await page.evaluate(async ({ start, end }) => {
-    try {
-      return await window.electronAPI.calendarCoverageReport(start, end);
-    } catch (e) {
-      return { error: e.message };
-    }
-  }, { start: startDate, end: endDate });
+  const result = await page.evaluate(
+    async ({ start, end }) => {
+      try {
+        return await window.electronAPI.calendarCoverageReport(start, end);
+      } catch (e) {
+        return { error: e.message };
+      }
+    },
+    { start: startDate, end: endDate }
+  );
 
-  console.log(`[E2E] Coverage report result: success=${result?.success}, error=${result?.error || 'none'}`);
+  console.log(
+    `[E2E] Coverage report result: success=${result?.success}, error=${result?.error || 'none'}`
+  );
 
   // The IPC should return without crashing — either success with data or an error (if calendar not connected)
   expect(result).toBeTruthy();
@@ -1205,7 +1245,9 @@ test('calendar coverage IPC returns valid response', async () => {
     expect(typeof result.coveragePercent).toBe('number');
     expect(Array.isArray(result.covered)).toBe(true);
     expect(Array.isArray(result.uncovered)).toBe(true);
-    console.log(`[E2E] Coverage: ${result.coveragePercent}% (${result.covered.length} covered, ${result.uncovered.length} uncovered)`);
+    console.log(
+      `[E2E] Coverage: ${result.coveragePercent}% (${result.covered.length} covered, ${result.uncovered.length} uncovered)`
+    );
   }
   // If not success, that's OK — just means calendar isn't connected
 });
@@ -1220,8 +1262,15 @@ test('MCP config copy button appears and works after loading config', async () =
   await page.waitForTimeout(500);
 
   // Navigate to the tab containing MCP config (Advanced/Security)
-  const advancedTab = page.locator('.settings-tab[data-tab="advanced"], .settings-tab[data-tab="security"]');
-  if (!(await advancedTab.first().isVisible().catch(() => false))) {
+  const advancedTab = page.locator(
+    '.settings-tab[data-tab="advanced"], .settings-tab[data-tab="security"]'
+  );
+  if (
+    !(await advancedTab
+      .first()
+      .isVisible()
+      .catch(() => false))
+  ) {
     console.log('[E2E] Advanced/Security tab not found — skipping');
     await ensureMainView();
     return;
@@ -1270,7 +1319,10 @@ test('company detail opens when clicking a company in contacts view', async () =
     if (sv) sv.style.display = 'none';
     if (rv) rv.style.display = 'none';
     if (mv) mv.style.display = 'none';
-    if (cv) { cv.style.display = 'flex'; return true; }
+    if (cv) {
+      cv.style.display = 'flex';
+      return true;
+    }
     return false;
   });
 
@@ -1282,7 +1334,12 @@ test('company detail opens when clicking a company in contacts view', async () =
 
   // Switch to Companies mode
   const companiesToggle = page.locator('#companiesToggle, .toggle-btn:has-text("Companies")');
-  if (!(await companiesToggle.first().isVisible().catch(() => false))) {
+  if (
+    !(await companiesToggle
+      .first()
+      .isVisible()
+      .catch(() => false))
+  ) {
     console.log('[E2E] Companies toggle not found — skipping');
     await ensureMainView();
     return;
@@ -1305,7 +1362,10 @@ test('company detail opens when clicking a company in contacts view', async () =
 
   // Check that detail panel is visible
   const detailPanel = page.locator('#contactDetail, .contact-detail, .company-detail');
-  const detailVisible = await detailPanel.first().isVisible().catch(() => false);
+  const detailVisible = await detailPanel
+    .first()
+    .isVisible()
+    .catch(() => false);
   console.log(`[E2E] Company detail panel visible: ${detailVisible}`);
   expect(detailVisible).toBe(true);
 
@@ -1323,7 +1383,9 @@ test('companies:getAll returns companies with required fields', async () => {
   });
 
   // companiesGetAll returns { success, companies: [...] }
-  console.log(`[E2E] companiesGetAll success: ${result?.success}, companies count: ${result?.companies?.length ?? 'N/A'}`);
+  console.log(
+    `[E2E] companiesGetAll success: ${result?.success}, companies count: ${result?.companies?.length ?? 'N/A'}`
+  );
 
   expect(result).toBeTruthy();
   expect(result.success).toBe(true);
@@ -1359,7 +1421,12 @@ test('settings general panel has provider dropdowns and toggles', async () => {
 
   // Transcription provider dropdown should have local option (v2.0)
   const transcriptionSelect = page.locator('#transcriptionProviderSelect');
-  if (await transcriptionSelect.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await transcriptionSelect
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     const options = await transcriptionSelect.locator('option').allTextContents();
     console.log('[E2E] Transcription providers:', options.join(', '));
     expect(options.length).toBeGreaterThanOrEqual(2);
@@ -1388,13 +1455,23 @@ test('settings has service endpoint fields and fully local preset (v2.0)', async
   const aiServiceUrl = page.locator('#aiServiceUrlInput');
   const localLLMUrl = page.locator('#localLLMUrlInput');
 
-  if (await aiServiceUrl.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await aiServiceUrl
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     const aiValue = await aiServiceUrl.inputValue();
     console.log('[E2E] AI service URL:', aiValue);
     expect(aiValue).toContain('localhost');
   }
 
-  if (await localLLMUrl.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await localLLMUrl
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     const llmValue = await localLLMUrl.inputValue();
     console.log('[E2E] Local LLM URL:', llmValue);
     expect(llmValue).toContain('localhost');
@@ -1402,17 +1479,32 @@ test('settings has service endpoint fields and fully local preset (v2.0)', async
 
   // Fully Local preset button (v2.0)
   const fullyLocalBtn = page.locator('#fullyLocalPresetBtn');
-  if (await fullyLocalBtn.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await fullyLocalBtn
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     console.log('[E2E] Fully Local preset button found');
   }
 
   // Health status indicators
   const aiStatus = page.locator('#aiServiceStatus');
   const llmStatus = page.locator('#localLLMStatus');
-  if (await aiStatus.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await aiStatus
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     console.log('[E2E] AI service status indicator attached');
   }
-  if (await llmStatus.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await llmStatus
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     console.log('[E2E] Local LLM status indicator attached');
   }
 
@@ -1437,10 +1529,20 @@ test('settings my profile tab has form fields', async () => {
   // Should have name, email, organization fields
   const nameInput = page.locator('#profileName');
   const emailInput = page.locator('#profileEmail');
-  if (await nameInput.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await nameInput
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     console.log('[E2E] Profile name field attached');
   }
-  if (await emailInput.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await emailInput
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     console.log('[E2E] Profile email field attached');
   }
 
@@ -1511,10 +1613,20 @@ test('settings logs tab opens with log controls', async () => {
   // Clear logs and open log file buttons
   const clearBtn = page.locator('#clearLogsBtn');
   const openBtn = page.locator('#openLogFileBtn');
-  if (await clearBtn.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await clearBtn
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     console.log('[E2E] Clear logs button found');
   }
-  if (await openBtn.count().then(c => c > 0).catch(() => false)) {
+  if (
+    await openBtn
+      .count()
+      .then(c => c > 0)
+      .catch(() => false)
+  ) {
     console.log('[E2E] Open log file button found');
   }
 
@@ -1557,7 +1669,10 @@ test('meeting detail metadata tab populates', async () => {
     await page.waitForTimeout(500);
 
     const metadataContent = page.locator('#metadataContent, #metadataPanel, .metadata-section');
-    const visible = await metadataContent.first().isVisible().catch(() => false);
+    const visible = await metadataContent
+      .first()
+      .isVisible()
+      .catch(() => false);
     console.log('[E2E] Metadata content visible:', visible);
   } else {
     console.log('[E2E] Metadata tab not visible — skipping');
@@ -1581,7 +1696,12 @@ test('meeting detail has transcript search input', async () => {
     await page.waitForTimeout(500);
 
     const searchInput = page.locator('#transcriptSearch');
-    if (await searchInput.count().then(c => c > 0).catch(() => false)) {
+    if (
+      await searchInput
+        .count()
+        .then(c => c > 0)
+        .catch(() => false)
+    ) {
       await searchInput.fill('test search');
       const value = await searchInput.inputValue();
       expect(value).toBe('test search');
@@ -1635,8 +1755,13 @@ test('template modal opens with routing preview and template checkboxes', async 
   }
 
   // Look for the generate summary button
-  const generateBtn = page.locator('#generateSummaryBtn, button:has-text("Generate Summary"), button:has-text("Select Templates")');
-  const btnVisible = await generateBtn.first().isVisible().catch(() => false);
+  const generateBtn = page.locator(
+    '#generateSummaryBtn, button:has-text("Generate Summary"), button:has-text("Select Templates")'
+  );
+  const btnVisible = await generateBtn
+    .first()
+    .isVisible()
+    .catch(() => false);
 
   if (btnVisible) {
     await generateBtn.first().click();
@@ -1649,7 +1774,10 @@ test('template modal opens with routing preview and template checkboxes', async 
     if (modalVisible) {
       // Routing preview section
       const routingPreview = page.locator('#routingPreview, .routing-preview');
-      const routingVisible = await routingPreview.first().isVisible().catch(() => false);
+      const routingVisible = await routingPreview
+        .first()
+        .isVisible()
+        .catch(() => false);
       console.log('[E2E] Routing preview visible:', routingVisible);
 
       // Template checkboxes
@@ -1659,7 +1787,9 @@ test('template modal opens with routing preview and template checkboxes', async 
 
       // Close modal
       await page.evaluate(() => {
-        document.querySelectorAll('.modal-overlay').forEach(m => { m.style.display = 'none'; });
+        document.querySelectorAll('.modal-overlay').forEach(m => {
+          m.style.display = 'none';
+        });
       });
       await page.waitForTimeout(200);
     }
@@ -1681,12 +1811,26 @@ test('filter panel has company, platform, and sync status filters', async () => 
   const syncFilter = page.locator('#filterSyncStatus');
   const clearAllBtn = page.locator('#filterClearAll');
 
-  const companyAttached = await companyFilter.count().then(c => c > 0).catch(() => false);
-  const platformAttached = await platformFilter.count().then(c => c > 0).catch(() => false);
-  const syncAttached = await syncFilter.count().then(c => c > 0).catch(() => false);
-  const clearAttached = await clearAllBtn.count().then(c => c > 0).catch(() => false);
+  const companyAttached = await companyFilter
+    .count()
+    .then(c => c > 0)
+    .catch(() => false);
+  const platformAttached = await platformFilter
+    .count()
+    .then(c => c > 0)
+    .catch(() => false);
+  const syncAttached = await syncFilter
+    .count()
+    .then(c => c > 0)
+    .catch(() => false);
+  const clearAttached = await clearAllBtn
+    .count()
+    .then(c => c > 0)
+    .catch(() => false);
 
-  console.log(`[E2E] Filters — Company: ${companyAttached}, Platform: ${platformAttached}, Sync: ${syncAttached}, Clear: ${clearAttached}`);
+  console.log(
+    `[E2E] Filters — Company: ${companyAttached}, Platform: ${platformAttached}, Sync: ${syncAttached}, Clear: ${clearAttached}`
+  );
 
   // At minimum platform filter should exist
   expect(platformAttached || companyAttached).toBe(true);
@@ -1697,7 +1841,12 @@ test('bulk selection mode activates with toolbar', async () => {
   await ensureMainView();
 
   const bulkToggle = page.locator('#toggleBulkSelectBtn');
-  if (!(await bulkToggle.count().then(c => c > 0).catch(() => false))) {
+  if (
+    !(await bulkToggle
+      .count()
+      .then(c => c > 0)
+      .catch(() => false))
+  ) {
     console.log('[E2E] Bulk select button not found — skipping');
     return;
   }
@@ -1734,17 +1883,25 @@ test('import modal opens with file drop zone', async () => {
   if (modalVisible) {
     // Platform selector
     const platformSelect = page.locator('#importPlatformSelect');
-    const platformAttached = await platformSelect.count().then(c => c > 0).catch(() => false);
+    const platformAttached = await platformSelect
+      .count()
+      .then(c => c > 0)
+      .catch(() => false);
     console.log('[E2E] Import platform selector:', platformAttached);
 
     // Start import button
     const startBtn = page.locator('#startImport');
-    const startAttached = await startBtn.count().then(c => c > 0).catch(() => false);
+    const startAttached = await startBtn
+      .count()
+      .then(c => c > 0)
+      .catch(() => false);
     console.log('[E2E] Start import button:', startAttached);
 
     // Close modal
     await page.evaluate(() => {
-      document.querySelectorAll('.modal-overlay').forEach(m => { m.style.display = 'none'; });
+      document.querySelectorAll('.modal-overlay').forEach(m => {
+        m.style.display = 'none';
+      });
     });
     await page.waitForTimeout(200);
   }
@@ -1821,7 +1978,7 @@ test('routingPreviewMeetingRoute returns route for a meeting', async () => {
   }
 
   const meetingId = meetings[0].id;
-  const result = await page.evaluate(async (id) => {
+  const result = await page.evaluate(async id => {
     return window.electronAPI.routingPreviewMeetingRoute(id);
   }, meetingId);
 
@@ -1866,8 +2023,13 @@ test('transcript export button exists in meeting detail', async () => {
     await transcriptTab.click();
     await page.waitForTimeout(500);
 
-    const exportBtn = page.locator('#exportTranscriptBtn, button[title*="Export"], button:has-text("Export")');
-    const exportVisible = await exportBtn.first().isVisible().catch(() => false);
+    const exportBtn = page.locator(
+      '#exportTranscriptBtn, button[title*="Export"], button:has-text("Export")'
+    );
+    const exportVisible = await exportBtn
+      .first()
+      .isVisible()
+      .catch(() => false);
     console.log('[E2E] Transcript export button visible:', exportVisible);
   } else {
     console.log('[E2E] Transcript tab not visible — skipping');
@@ -1884,11 +2046,17 @@ test('CRM integration settings section is removed', async () => {
 
   // Navigate through all settings tabs to make sure CRM toggle is gone
   const crmToggle = page.locator('#crmEnabledToggle');
-  const crmAttached = await crmToggle.count().then(c => c > 0).catch(() => false);
+  const crmAttached = await crmToggle
+    .count()
+    .then(c => c > 0)
+    .catch(() => false);
   expect(crmAttached).toBe(false);
 
   const crmContainer = page.locator('#crmSettingsContainer');
-  const containerAttached = await crmContainer.count().then(c => c > 0).catch(() => false);
+  const containerAttached = await crmContainer
+    .count()
+    .then(c => c > 0)
+    .catch(() => false);
   expect(containerAttached).toBe(false);
 
   console.log('[E2E] CRM integration settings confirmed removed');
@@ -1902,11 +2070,25 @@ test('window controls exist in custom titlebar', async () => {
   const maximizeBtn = page.locator('#maximizeBtn, .titlebar-maximize, [title="Maximize"]');
   const closeBtn = page.locator('#closeBtn, .titlebar-close, [title="Close"]');
 
-  const minAttached = await minimizeBtn.first().count().then(c => c > 0).catch(() => false);
-  const maxAttached = await maximizeBtn.first().count().then(c => c > 0).catch(() => false);
-  const closeAttached = await closeBtn.first().count().then(c => c > 0).catch(() => false);
+  const minAttached = await minimizeBtn
+    .first()
+    .count()
+    .then(c => c > 0)
+    .catch(() => false);
+  const maxAttached = await maximizeBtn
+    .first()
+    .count()
+    .then(c => c > 0)
+    .catch(() => false);
+  const closeAttached = await closeBtn
+    .first()
+    .count()
+    .then(c => c > 0)
+    .catch(() => false);
 
-  console.log(`[E2E] Window controls — Min: ${minAttached}, Max: ${maxAttached}, Close: ${closeAttached}`);
+  console.log(
+    `[E2E] Window controls — Min: ${minAttached}, Max: ${maxAttached}, Close: ${closeAttached}`
+  );
 
   // At least close button should exist
   expect(closeAttached).toBe(true);
@@ -1917,14 +2099,14 @@ test('window controls exist in custom titlebar', async () => {
 // ===================================================================
 test('no critical console errors', async () => {
   const errors = [];
-  page.on('pageerror', (error) => {
+  page.on('pageerror', error => {
     errors.push(error.message);
   });
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(5000);
 
-  const critical = errors.filter((msg) => {
+  const critical = errors.filter(msg => {
     if (msg.includes('ResizeObserver')) return false;
     if (msg.includes('favicon')) return false;
     if (msg.includes('net::ERR_')) return false;

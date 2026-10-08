@@ -2,12 +2,20 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { CorrectionTelemetry, diffCorrections } from '../../src/main/services/correctionTelemetry.js';
+import {
+  CorrectionTelemetry,
+  diffCorrections,
+} from '../../src/main/services/correctionTelemetry.js';
 
 describe('diffCorrections (pure)', () => {
   const prev = {
     SPEAKER_00: { name: 'JD Bruce', email: 'jd@x.com', method: 'track-anchor', confidence: 'high' },
-    SPEAKER_01: { name: 'Kurt Anderson', email: 'kurt@x.com', method: 'unverified-positional', confidence: 'low' },
+    SPEAKER_01: {
+      name: 'Kurt Anderson',
+      email: 'kurt@x.com',
+      method: 'unverified-positional',
+      confidence: 'low',
+    },
   };
 
   it('records only entries whose assigned contact actually changed', () => {
@@ -34,7 +42,14 @@ describe('diffCorrections (pure)', () => {
   it('treats adding an email to the same name as enrichment, not a correction', () => {
     const diffs = diffCorrections(
       'm1',
-      { SPEAKER_00: { name: 'Kurt', email: null, method: 'unverified-positional', confidence: 'low' } },
+      {
+        SPEAKER_00: {
+          name: 'Kurt',
+          email: null,
+          method: 'unverified-positional',
+          confidence: 'low',
+        },
+      },
       { SPEAKER_00: { contactName: 'Kurt', contactEmail: 'kurt@x.com' } }
     );
     expect(diffs).toEqual([]);
@@ -43,7 +58,14 @@ describe('diffCorrections (pure)', () => {
   it('treats emails as authoritative when both sides have one (same name, different email)', () => {
     const diffs = diffCorrections(
       'm1',
-      { SPEAKER_00: { name: 'Kurt', email: 'kurt@x.com', method: 'voice-profile', confidence: 'high' } },
+      {
+        SPEAKER_00: {
+          name: 'Kurt',
+          email: 'kurt@x.com',
+          method: 'voice-profile',
+          confidence: 'high',
+        },
+      },
       { SPEAKER_00: { contactName: 'Kurt', contactEmail: 'kurt@other.com' } }
     );
     expect(diffs).toHaveLength(1);
@@ -89,9 +111,36 @@ describe('CorrectionTelemetry (file-backed)', () => {
   it('appends corrections and reports stats by overridden stage', () => {
     const t = new CorrectionTelemetry(path.join(dir, 'telemetry.json'));
     t.record([
-      { at: 'x', meetingId: 'm1', speakerLabel: 'A', fromMethod: 'unverified-positional', fromName: 'K', fromConfidence: 'low', toName: 'M', toEmail: 'm@x.com' },
-      { at: 'x', meetingId: 'm2', speakerLabel: 'B', fromMethod: 'track-anchor', fromName: 'J', fromConfidence: 'high', toName: 'Q', toEmail: 'q@x.com' },
-      { at: 'x', meetingId: 'm3', speakerLabel: 'C', fromMethod: 'unverified-positional', fromName: 'Z', fromConfidence: 'low', toName: 'W', toEmail: 'w@x.com' },
+      {
+        at: 'x',
+        meetingId: 'm1',
+        speakerLabel: 'A',
+        fromMethod: 'unverified-positional',
+        fromName: 'K',
+        fromConfidence: 'low',
+        toName: 'M',
+        toEmail: 'm@x.com',
+      },
+      {
+        at: 'x',
+        meetingId: 'm2',
+        speakerLabel: 'B',
+        fromMethod: 'track-anchor',
+        fromName: 'J',
+        fromConfidence: 'high',
+        toName: 'Q',
+        toEmail: 'q@x.com',
+      },
+      {
+        at: 'x',
+        meetingId: 'm3',
+        speakerLabel: 'C',
+        fromMethod: 'unverified-positional',
+        fromName: 'Z',
+        fromConfidence: 'low',
+        toName: 'W',
+        toEmail: 'w@x.com',
+      },
     ]);
     const t2 = new CorrectionTelemetry(path.join(dir, 'telemetry.json')); // reload from disk
     const stats = t2.getStats();

@@ -131,7 +131,8 @@ function createMeetingStore(getDb) {
       const byId = new Map([...eachMeeting(data)].map(e => [e.meeting.id, e]));
       for (const patch of patches) {
         const entry = byId.get(patch.id);
-        if (entry) own.set(patch.id, { status: entry.status, fields: fingerprintMeeting(entry.meeting) });
+        if (entry)
+          own.set(patch.id, { status: entry.status, fields: fingerprintMeeting(entry.meeting) });
       }
     }
   }

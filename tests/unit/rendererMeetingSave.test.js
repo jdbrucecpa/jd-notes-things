@@ -34,7 +34,12 @@ describe('buildRendererSavePatches', () => {
       fields: ['title', 'content'],
     });
     expect(patches).toEqual([
-      { id: 'editing', set: { title: 'Jake — edited', content: 'new notes' }, unset: [], status: null },
+      {
+        id: 'editing',
+        set: { title: 'Jake — edited', content: 'new notes' },
+        unset: [],
+        status: null,
+      },
     ]);
   });
 
@@ -42,7 +47,11 @@ describe('buildRendererSavePatches', () => {
     const patches = buildRendererSavePatches(renderer, current, { meetingIds: ['editing'] });
     expect(patches).toHaveLength(1);
     const { set, unset, status } = patches[0];
-    expect(set).toMatchObject({ title: 'Jake — edited', content: 'new notes', recordingId: 'C:/rec/b.mp3' });
+    expect(set).toMatchObject({
+      title: 'Jake — edited',
+      content: 'new notes',
+      recordingId: 'C:/rec/b.mp3',
+    });
     expect(unset).toEqual([]);
     expect(status).toBeNull();
   });
@@ -59,7 +68,11 @@ describe('buildRendererSavePatches', () => {
       pastMeetings: [{ id: 'brand-new', title: 'New', type: 'document' }],
     };
     expect(buildRendererSavePatches(withNew, current, { meetingIds: ['brand-new'] })).toEqual([
-      { id: 'brand-new', insert: { id: 'brand-new', title: 'New', type: 'document' }, status: 'past' },
+      {
+        id: 'brand-new',
+        insert: { id: 'brand-new', title: 'New', type: 'document' },
+        status: 'past',
+      },
     ]);
   });
 

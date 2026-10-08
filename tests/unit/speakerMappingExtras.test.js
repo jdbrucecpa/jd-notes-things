@@ -7,10 +7,23 @@ describe('mergeSpeakerMappingExtras', () => {
     SPEAKER_01: { email: null, name: 'Unknown', confidence: 'low', method: 'unmatched' },
   };
   const fromJson = {
-    SPEAKER_00: { email: 'jd@x.com', name: 'JD', confidence: 'high', method: 'track-anchor', dominance: 0.88 },
-    SPEAKER_01: { email: null, name: 'Unknown', confidence: 'low', method: 'unmatched',
-      embedding: [0.1, 0.2], status: 'unmatched', needsVerification: true,
-      candidates: [{ profileId: 3, contactName: 'Kurt' }] },
+    SPEAKER_00: {
+      email: 'jd@x.com',
+      name: 'JD',
+      confidence: 'high',
+      method: 'track-anchor',
+      dominance: 0.88,
+    },
+    SPEAKER_01: {
+      email: null,
+      name: 'Unknown',
+      confidence: 'low',
+      method: 'unmatched',
+      embedding: [0.1, 0.2],
+      status: 'unmatched',
+      needsVerification: true,
+      candidates: [{ profileId: 3, contactName: 'Kurt' }],
+    },
   };
 
   it('copies extra keys from JSON onto row-built entries without touching row-owned fields', () => {
@@ -26,8 +39,23 @@ describe('mergeSpeakerMappingExtras', () => {
 
   it('row value wins for overlapping row-owned fields', () => {
     const merged = mergeSpeakerMappingExtras(
-      { A: { email: 'new@x.com', name: 'New Name', confidence: 'manual', method: 'user-correction' } },
-      { A: { email: 'old@x.com', name: 'Old', confidence: 'low', method: 'unmatched', embedding: [1] } }
+      {
+        A: {
+          email: 'new@x.com',
+          name: 'New Name',
+          confidence: 'manual',
+          method: 'user-correction',
+        },
+      },
+      {
+        A: {
+          email: 'old@x.com',
+          name: 'Old',
+          confidence: 'low',
+          method: 'unmatched',
+          embedding: [1],
+        },
+      }
     );
     expect(merged.A.email).toBe('new@x.com');
     expect(merged.A.method).toBe('user-correction');

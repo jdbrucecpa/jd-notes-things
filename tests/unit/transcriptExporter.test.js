@@ -32,17 +32,13 @@ describe('formatTranscriptForExport', () => {
   });
 
   it('falls back to speaker label when speakerName is missing', () => {
-    const transcript = [
-      { speaker: 'Speaker 1', text: 'No matched name here.' },
-    ];
+    const transcript = [{ speaker: 'Speaker 1', text: 'No matched name here.' }];
     const result = formatTranscriptForExport(transcript);
     expect(result).toBe('Speaker 1: No matched name here.');
   });
 
   it('uses speaker_name (DB column format) as fallback', () => {
-    const transcript = [
-      { speaker: 'Speaker 1', speaker_name: 'Carol', text: 'DB format name.' },
-    ];
+    const transcript = [{ speaker: 'Speaker 1', speaker_name: 'Carol', text: 'DB format name.' }];
     const result = formatTranscriptForExport(transcript);
     expect(result).toBe('Carol: DB format name.');
   });
@@ -69,17 +65,13 @@ describe('formatTranscriptForExport', () => {
   });
 
   it('flattens newlines in text to spaces', () => {
-    const transcript = [
-      { speaker: 'Alice', text: 'Line one.\nLine two.\r\nLine three.' },
-    ];
+    const transcript = [{ speaker: 'Alice', text: 'Line one.\nLine two.\r\nLine three.' }];
     const result = formatTranscriptForExport(transcript);
     expect(result).toBe('Alice: Line one. Line two. Line three.');
   });
 
   it('collapses multiple spaces from flattened newlines', () => {
-    const transcript = [
-      { speaker: 'Alice', text: 'Before.  \n  After.' },
-    ];
+    const transcript = [{ speaker: 'Alice', text: 'Before.  \n  After.' }];
     const result = formatTranscriptForExport(transcript);
     expect(result).toBe('Alice: Before. After.');
   });

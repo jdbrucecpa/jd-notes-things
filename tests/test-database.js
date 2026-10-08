@@ -75,17 +75,25 @@ function runTests() {
 
     // Check indexes
     const indexes = databaseService.db
-      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%' ORDER BY name")
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%' ORDER BY name"
+      )
       .all()
       .map(r => r.name);
 
     assert(indexes.includes('idx_meetings_date'), 'idx_meetings_date index exists');
     assert(indexes.includes('idx_meetings_status'), 'idx_meetings_status index exists');
-    assert(indexes.includes('idx_meetings_calendar_event'), 'idx_meetings_calendar_event index exists');
+    assert(
+      indexes.includes('idx_meetings_calendar_event'),
+      'idx_meetings_calendar_event index exists'
+    );
     assert(indexes.includes('idx_participants_email'), 'idx_participants_email index exists');
     assert(indexes.includes('idx_participants_meeting'), 'idx_participants_meeting index exists');
     assert(indexes.includes('idx_transcript_meeting'), 'idx_transcript_meeting index exists');
-    assert(indexes.includes('idx_calendar_attendees_email'), 'idx_calendar_attendees_email index exists');
+    assert(
+      indexes.includes('idx_calendar_attendees_email'),
+      'idx_calendar_attendees_email index exists'
+    );
 
     // Check WAL mode
     const journalMode = databaseService.db.pragma('journal_mode', { simple: true });
@@ -121,8 +129,22 @@ function runTests() {
       calendarEventId: 'cal-event-001',
       calendarHtmlLink: 'https://calendar.google.com/event/001',
       participants: [
-        { participantId: 'p1', originalName: 'John Doe', name: 'John Doe', email: 'john@example.com', organization: 'Acme Corp', isHost: true },
-        { participantId: 'p2', originalName: 'Jane Smith', name: 'Jane Smith', email: 'jane@example.com', organization: 'WidgetCo', isHost: false },
+        {
+          participantId: 'p1',
+          originalName: 'John Doe',
+          name: 'John Doe',
+          email: 'john@example.com',
+          organization: 'Acme Corp',
+          isHost: true,
+        },
+        {
+          participantId: 'p2',
+          originalName: 'Jane Smith',
+          name: 'Jane Smith',
+          email: 'jane@example.com',
+          organization: 'WidgetCo',
+          isHost: false,
+        },
       ],
       transcript: [
         { speaker: 'Speaker 1', text: 'Hello everyone', timestamp: 0, endTimestamp: 2 },
@@ -144,7 +166,11 @@ function runTests() {
     assertEq(retrieved.calendarEventId, 'cal-event-001', 'Calendar event ID preserved');
     assert(Array.isArray(retrieved.participants), 'Participants is array');
     assertEq(retrieved.participants.length, 2, 'Two participants preserved');
-    assertEq(retrieved.participants[0].originalName, 'John Doe', 'Original name preserved (IMMUTABLE check)');
+    assertEq(
+      retrieved.participants[0].originalName,
+      'John Doe',
+      'Original name preserved (IMMUTABLE check)'
+    );
     assertEq(retrieved.participants[0].email, 'john@example.com', 'Participant email preserved');
     assert(Array.isArray(retrieved.transcript), 'Transcript is array');
     assertEq(retrieved.transcript.length, 2, 'Two transcript entries preserved');
@@ -176,25 +202,67 @@ function runTests() {
     // Insert several meetings for query testing
     const meetings = [
       {
-        id: 'q-001', type: 'document', status: 'past', title: 'Q1 Review',
-        date: '2026-01-15T10:00:00Z', platform: 'zoom', recordingId: 'rec-q1',
+        id: 'q-001',
+        type: 'document',
+        status: 'past',
+        title: 'Q1 Review',
+        date: '2026-01-15T10:00:00Z',
+        platform: 'zoom',
+        recordingId: 'rec-q1',
         calendarEventId: 'cal-q1',
-        participants: [{ participantId: 'p1', originalName: 'Alice', name: 'Alice', email: 'alice@acme.com', organization: 'Acme' }],
+        participants: [
+          {
+            participantId: 'p1',
+            originalName: 'Alice',
+            name: 'Alice',
+            email: 'alice@acme.com',
+            organization: 'Acme',
+          },
+        ],
       },
       {
-        id: 'q-002', type: 'document', status: 'past', title: 'Q2 Planning',
-        date: '2026-02-10T14:00:00Z', platform: 'teams',
+        id: 'q-002',
+        type: 'document',
+        status: 'past',
+        title: 'Q2 Planning',
+        date: '2026-02-10T14:00:00Z',
+        platform: 'teams',
         // No recording - orphaned calendar event
         calendarEventId: 'cal-q2',
-        participants: [{ participantId: 'p2', originalName: 'Bob', name: 'Bob', email: 'bob@acme.com', organization: 'Acme' }],
+        participants: [
+          {
+            participantId: 'p2',
+            originalName: 'Bob',
+            name: 'Bob',
+            email: 'bob@acme.com',
+            organization: 'Acme',
+          },
+        ],
       },
       {
-        id: 'q-003', type: 'document', status: 'past', title: 'Team Standup',
-        date: '2026-02-20T09:00:00Z', platform: 'zoom', recordingId: 'rec-q3',
+        id: 'q-003',
+        type: 'document',
+        status: 'past',
+        title: 'Team Standup',
+        date: '2026-02-20T09:00:00Z',
+        platform: 'zoom',
+        recordingId: 'rec-q3',
         // No calendar event - orphaned recording
         participants: [
-          { participantId: 'p1', originalName: 'Alice', name: 'Alice', email: 'alice@acme.com', organization: 'Acme' },
-          { participantId: 'p3', originalName: 'Charlie', name: 'Charlie', email: 'charlie@widgetco.com', organization: 'WidgetCo' },
+          {
+            participantId: 'p1',
+            originalName: 'Alice',
+            name: 'Alice',
+            email: 'alice@acme.com',
+            organization: 'Acme',
+          },
+          {
+            participantId: 'p3',
+            originalName: 'Charlie',
+            name: 'Charlie',
+            email: 'charlie@widgetco.com',
+            organization: 'WidgetCo',
+          },
         ],
       },
     ];
@@ -210,11 +278,17 @@ function runTests() {
 
     // getMeetingsInRange
     const rangeResults = databaseService.getMeetingsInRange('2026-02-01', '2026-02-28');
-    assert(rangeResults.length >= 2, `getMeetingsInRange() returns meetings in Feb (got ${rangeResults.length})`);
+    assert(
+      rangeResults.length >= 2,
+      `getMeetingsInRange() returns meetings in Feb (got ${rangeResults.length})`
+    );
 
     // getMeetingsForContact
     const contactResults = databaseService.getMeetingsForContact('alice@acme.com');
-    assert(contactResults.length >= 2, `getMeetingsForContact(alice) returns ${contactResults.length} meetings`);
+    assert(
+      contactResults.length >= 2,
+      `getMeetingsForContact(alice) returns ${contactResults.length} meetings`
+    );
 
     // getMeetingCountForContact
     const count = databaseService.getMeetingCountForContact('alice@acme.com');
@@ -222,17 +296,32 @@ function runTests() {
 
     // getMeetingsForOrganization
     const orgResults = databaseService.getMeetingsForOrganization('Acme');
-    assert(orgResults.length >= 2, `getMeetingsForOrganization(Acme) returns ${orgResults.length} meetings`);
+    assert(
+      orgResults.length >= 2,
+      `getMeetingsForOrganization(Acme) returns ${orgResults.length} meetings`
+    );
 
     // Reports: meetings without recordings
     const noRecordings = databaseService.getMeetingsWithoutRecordings('2026-01-01', '2026-12-31');
     assert(noRecordings.length >= 1, `getMeetingsWithoutRecordings() found ${noRecordings.length}`);
-    assert(noRecordings.some(m => m.id === 'q-002'), 'q-002 (no recording) found in report');
+    assert(
+      noRecordings.some(m => m.id === 'q-002'),
+      'q-002 (no recording) found in report'
+    );
 
     // Reports: recordings without calendar events
-    const noCalendar = databaseService.getRecordingsWithoutCalendarEvents('2026-01-01', '2026-12-31');
-    assert(noCalendar.length >= 1, `getRecordingsWithoutCalendarEvents() found ${noCalendar.length}`);
-    assert(noCalendar.some(m => m.id === 'q-003'), 'q-003 (no calendar) found in report');
+    const noCalendar = databaseService.getRecordingsWithoutCalendarEvents(
+      '2026-01-01',
+      '2026-12-31'
+    );
+    assert(
+      noCalendar.length >= 1,
+      `getRecordingsWithoutCalendarEvents() found ${noCalendar.length}`
+    );
+    assert(
+      noCalendar.some(m => m.id === 'q-003'),
+      'q-003 (no calendar) found in report'
+    );
   } catch (err) {
     failed++;
     console.error('  ✗ FAIL: Query method threw:', err.message);
@@ -252,17 +341,28 @@ function runTests() {
     const mockMeetingsJson = {
       upcomingMeetings: [
         {
-          id: 'upcoming-001', type: 'calendar', title: 'Future Meeting',
-          date: '2026-03-01T10:00:00Z', platform: 'zoom',
-          participants: [{ participantId: 'p1', originalName: 'Dave', name: 'Dave', email: 'dave@test.com' }],
+          id: 'upcoming-001',
+          type: 'calendar',
+          title: 'Future Meeting',
+          date: '2026-03-01T10:00:00Z',
+          platform: 'zoom',
+          participants: [
+            { participantId: 'p1', originalName: 'Dave', name: 'Dave', email: 'dave@test.com' },
+          ],
         },
       ],
       pastMeetings: [
         {
-          id: 'past-001', type: 'document', title: 'Past Meeting',
-          date: '2026-01-01T10:00:00Z', platform: 'teams', recordingId: 'rec-past1',
+          id: 'past-001',
+          type: 'document',
+          title: 'Past Meeting',
+          date: '2026-01-01T10:00:00Z',
+          platform: 'teams',
+          recordingId: 'rec-past1',
           content: '# Past Notes',
-          participants: [{ participantId: 'p2', originalName: 'Eve', name: 'Eve', email: 'eve@test.com' }],
+          participants: [
+            { participantId: 'p2', originalName: 'Eve', name: 'Eve', email: 'eve@test.com' },
+          ],
           transcript: [{ speaker: 'Speaker 1', text: 'Test', timestamp: 0 }],
         },
       ],
@@ -285,7 +385,10 @@ function runTests() {
 
     // Verify data was migrated
     const all = databaseService.getAllMeetings();
-    assert(all.upcomingMeetings.length >= 1, `Upcoming meetings migrated (${all.upcomingMeetings.length})`);
+    assert(
+      all.upcomingMeetings.length >= 1,
+      `Upcoming meetings migrated (${all.upcomingMeetings.length})`
+    );
     assert(all.pastMeetings.length >= 1, `Past meetings migrated (${all.pastMeetings.length})`);
 
     const pastMeeting = databaseService.getMeeting('past-001');
@@ -317,12 +420,8 @@ function runTests() {
       type: 'document',
       title: 'Transaction Test',
       date: '2026-03-01T10:00:00Z',
-      participants: [
-        { participantId: 'p1', originalName: 'Good', name: 'Good' },
-      ],
-      transcript: [
-        { speaker: 'Speaker 1', text: 'Hello', timestamp: 0 },
-      ],
+      participants: [{ participantId: 'p1', originalName: 'Good', name: 'Good' }],
+      transcript: [{ speaker: 'Speaker 1', text: 'Hello', timestamp: 0 }],
     };
 
     // This should succeed atomically

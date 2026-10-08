@@ -87,9 +87,7 @@ class Gmail {
     }
 
     // Fetch metadata for each thread
-    const results = await Promise.all(
-      threads.map(t => this._getThreadSnippet(t.id))
-    );
+    const results = await Promise.all(threads.map(t => this._getThreadSnippet(t.id)));
 
     return results.filter(Boolean);
   }
@@ -116,7 +114,7 @@ class Gmail {
       const latestMessage = messages[messages.length - 1];
       const headers = latestMessage.payload?.headers || [];
 
-      const getHeader = (name) => {
+      const getHeader = name => {
         const header = headers.find(h => h.name.toLowerCase() === name.toLowerCase());
         return header ? header.value : null;
       };

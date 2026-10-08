@@ -10,36 +10,56 @@ import {
 describe('runBackfill — contact-name resolution', () => {
   it('resolves email display names via the optional resolver, falling back to the email', async () => {
     const meetings = [
-      { id: 'm1', videoFile: 'C:/audio/a.mp3',
-        transcript: [T('S0', 'melissa@x.com', 'melissa@x.com', 0, 120000)] },
-      { id: 'm2', videoFile: 'C:/audio/b.mp3',
-        transcript: [T('S0', 'ghost@x.com', 'ghost@x.com', 0, 120000)] },
+      {
+        id: 'm1',
+        videoFile: 'C:/audio/a.mp3',
+        transcript: [T('S0', 'melissa@x.com', 'melissa@x.com', 0, 120000)],
+      },
+      {
+        id: 'm2',
+        videoFile: 'C:/audio/b.mp3',
+        transcript: [T('S0', 'ghost@x.com', 'ghost@x.com', 0, 120000)],
+      },
     ];
     const deps = {
       getAllMeetings: () => ({ upcomingMeetings: [], pastMeetings: meetings }),
       getSampledProfileIdsForMeeting: () => [],
       getProfileIdByEmail: () => null,
       fileExists: () => true,
-      embedSpeakers: vi.fn().mockResolvedValue([{ speakerLabel: 'S0', embedding: new Float32Array([1]) }]),
+      embedSpeakers: vi
+        .fn()
+        .mockResolvedValue([{ speakerLabel: 'S0', embedding: new Float32Array([1]) }]),
       upsertProfileSample: vi.fn().mockReturnValue({ profileId: 1, created: true }),
-      resolveContactName: vi.fn(async email => (email === 'melissa@x.com' ? 'Melissa Henderson' : null)),
+      resolveContactName: vi.fn(async email =>
+        email === 'melissa@x.com' ? 'Melissa Henderson' : null
+      ),
       log: () => {},
     };
     await runBackfill(deps, {});
     expect(deps.upsertProfileSample).toHaveBeenCalledWith(
       expect.objectContaining({ contactName: 'Melissa Henderson', contactEmail: 'melissa@x.com' }),
-      expect.anything(), expect.anything(), 'm1'
+      expect.anything(),
+      expect.anything(),
+      'm1'
     );
     expect(deps.upsertProfileSample).toHaveBeenCalledWith(
       expect.objectContaining({ contactName: 'ghost@x.com' }), // resolver returned null → keep email
-      expect.anything(), expect.anything(), 'm2'
+      expect.anything(),
+      expect.anything(),
+      'm2'
     );
   });
 });
 
 describe('synthesizeSegments — legacy transcripts without endTimestamp', () => {
   const ids = { S0: { name: 'JD', email: 'jd@x.com' } };
-  const L = (speaker, startMs) => ({ speaker, speakerName: 'JD', speakerEmail: 'jd@x.com', timestamp: startMs, endTimestamp: null });
+  const L = (speaker, startMs) => ({
+    speaker,
+    speakerName: 'JD',
+    speakerEmail: 'jd@x.com',
+    timestamp: startMs,
+    endTimestamp: null,
+  });
 
   it('derives the end from the next utterance start', () => {
     const segs = synthesizeSegments([L('S0', 0), L('S0', 5000), L('S0', 9000)], ids);
@@ -56,7 +76,13 @@ describe('synthesizeSegments — legacy transcripts without endTimestamp', () =>
   });
 
   it('skips entries with null timestamps entirely', () => {
-    const nullTs = { speaker: 'S0', speakerName: 'JD', speakerEmail: 'jd@x.com', timestamp: null, endTimestamp: null };
+    const nullTs = {
+      speaker: 'S0',
+      speakerName: 'JD',
+      speakerEmail: 'jd@x.com',
+      timestamp: null,
+      endTimestamp: null,
+    };
     expect(synthesizeSegments([nullTs, nullTs], ids)).toEqual([]);
   });
 });
@@ -73,9 +99,9 @@ describe('resolveAudioPath', () => {
   };
 
   it('prefers an existing videoFile', () => {
-    expect(resolveAudioPath({ videoFile: 'C:\\vids\\explicit.mp3', recordingId: 'abc-123' }, deps)).toBe(
-      'C:\\vids\\explicit.mp3'
-    );
+    expect(
+      resolveAudioPath({ videoFile: 'C:\\vids\\explicit.mp3', recordingId: 'abc-123' }, deps)
+    ).toBe('C:\\vids\\explicit.mp3');
   });
 
   it('falls back to the windows-desktop convention for GUID recordingIds', () => {
@@ -85,9 +111,9 @@ describe('resolveAudioPath', () => {
   });
 
   it('treats path-like recordingIds (local era) as the file itself', () => {
-    expect(resolveAudioPath({ recordingId: 'C:\\local\\recordings\\recording-2026.mp3' }, deps)).toBe(
-      'C:\\local\\recordings\\recording-2026.mp3'
-    );
+    expect(
+      resolveAudioPath({ recordingId: 'C:\\local\\recordings\\recording-2026.mp3' }, deps)
+    ).toBe('C:\\local\\recordings\\recording-2026.mp3');
   });
 
   it('returns null when nothing exists', () => {
@@ -139,11 +165,26 @@ describe('runBackfill', () => {
       {
         id: 'm-good',
         videoFile: 'C:/audio/good.mp3',
-        transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000), T('S1', 'Kurt', 'kurt@x.com', 60000, 120000)],
+        transcript: [
+          T('S0', 'JD', 'jd@x.com', 0, 60000),
+          T('S1', 'Kurt', 'kurt@x.com', 60000, 120000),
+        ],
       },
-      { id: 'm-sampled', videoFile: 'C:/audio/sampled.mp3', transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000)] },
-      { id: 'm-noaudio', videoFile: 'C:/audio/missing.mp3', transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000)] },
-      { id: 'm-unverified', videoFile: 'C:/audio/good2.mp3', transcript: [T('S0', 'Speaker A', null, 0, 60000)] },
+      {
+        id: 'm-sampled',
+        videoFile: 'C:/audio/sampled.mp3',
+        transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000)],
+      },
+      {
+        id: 'm-noaudio',
+        videoFile: 'C:/audio/missing.mp3',
+        transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000)],
+      },
+      {
+        id: 'm-unverified',
+        videoFile: 'C:/audio/good2.mp3',
+        transcript: [T('S0', 'Speaker A', null, 0, 60000)],
+      },
     ];
     const profileIdByEmail = { 'jd@x.com': 1, 'kurt@x.com': 2 };
     const deps = {
@@ -180,8 +221,11 @@ describe('runBackfill', () => {
     // m1 already has a sample from A (profile 1) but NOT from B (profile 2).
     // Per-identity skip: embed again, but only for B — A is skipped.
     const meetings = [
-      { id: 'm1', videoFile: 'C:/audio/m1.mp3',
-        transcript: [T('A', 'Alice', 'a@x.com', 0, 60000), T('B', 'Bob', 'b@x.com', 60000, 120000)] },
+      {
+        id: 'm1',
+        videoFile: 'C:/audio/m1.mp3',
+        transcript: [T('A', 'Alice', 'a@x.com', 0, 60000), T('B', 'Bob', 'b@x.com', 60000, 120000)],
+      },
     ];
     const profileIdByEmail = { 'a@x.com': 1, 'b@x.com': 2 };
     const deps = {
@@ -219,7 +263,10 @@ describe('runBackfill', () => {
       {
         id: 'm-mixed',
         videoFile: 'C:/audio/mixed.mp3',
-        transcript: [T('S0', 'JD', 'jd@x.com', 0, 60000), T('S1', 'Kurt', 'kurt@x.com', 60000, 120000)],
+        transcript: [
+          T('S0', 'JD', 'jd@x.com', 0, 60000),
+          T('S1', 'Kurt', 'kurt@x.com', 60000, 120000),
+        ],
       },
     ];
     const deps = {

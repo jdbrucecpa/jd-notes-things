@@ -20,10 +20,10 @@
  *   is not present under either identity.
  */
 function resolveWasapiDevice(devices, source) {
-  if (source.deviceId && devices.some((d) => d.deviceId === source.deviceId)) {
+  if (source.deviceId && devices.some(d => d.deviceId === source.deviceId)) {
     return { deviceId: source.deviceId, healed: false };
   }
-  const byName = devices.find((d) => d.name === source.device);
+  const byName = devices.find(d => d.name === source.device);
   if (byName) {
     return { deviceId: byName.deviceId, healed: true };
   }

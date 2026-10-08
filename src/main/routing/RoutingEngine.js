@@ -169,7 +169,12 @@ class RoutingEngine {
    * @deprecated Use getDestinations() or route.organizationName instead.
    */
   getConfig() {
-    return { clients: {}, industry: {}, internal: { vault_path: 'internal' }, settings: { unfiled_path: '_unfiled', duplicate_multi_org: 'all' } };
+    return {
+      clients: {},
+      industry: {},
+      internal: { vault_path: 'internal' },
+      settings: { unfiled_path: '_unfiled', duplicate_multi_org: 'all' },
+    };
   }
 
   /**
@@ -192,7 +197,9 @@ class RoutingEngine {
   }
 
   getDestinations() {
-    const clients = databaseService.getAllClients().filter(c => c.vault_path && c.status === 'active');
+    const clients = databaseService
+      .getAllClients()
+      .filter(c => c.vault_path && c.status === 'active');
     return {
       destinations: clients.map(c => ({
         type: c.category === 'Client' ? 'client' : c.category === 'Industry' ? 'industry' : 'other',

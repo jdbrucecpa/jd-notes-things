@@ -200,7 +200,8 @@ class SpeakerMappingService {
    * @returns {Object} { speakerIds: string[], existingMappings: {speakerId: speakerName}, speakerStats: {speakerId: {talkTimePercent, sampleQuote, wordCount}} }
    */
   extractUniqueSpeakerIds(transcript) {
-    if (!Array.isArray(transcript)) return { speakerIds: [], existingMappings: {}, speakerStats: {} };
+    if (!Array.isArray(transcript))
+      return { speakerIds: [], existingMappings: {}, speakerStats: {} };
 
     const speakers = new Set();
     const existingMappings = {}; // Map of speaker (original) → speakerName (current display)
@@ -234,11 +235,15 @@ class SpeakerMappingService {
 
       // Calculate statistics for this speaker
       if (effectiveSpeakerId && text) {
-        const wordCount = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+        const wordCount = text
+          .trim()
+          .split(/\s+/)
+          .filter(w => w.length > 0).length;
         totalWords += wordCount;
 
         // Accumulate word count
-        speakerWordCounts[effectiveSpeakerId] = (speakerWordCounts[effectiveSpeakerId] || 0) + wordCount;
+        speakerWordCounts[effectiveSpeakerId] =
+          (speakerWordCounts[effectiveSpeakerId] || 0) + wordCount;
 
         // Capture first meaningful quote (at least 10 chars, not already captured)
         if (!speakerFirstQuotes[effectiveSpeakerId] && text.trim().length >= 10) {
@@ -333,7 +338,9 @@ class SpeakerMappingService {
 
     if (realSpeakers.length < 2) {
       // Not enough real names to compare
-      logger.debug(`${LOG_PREFIX} Only ${realSpeakers.length} real speaker name(s), skipping duplicate detection`);
+      logger.debug(
+        `${LOG_PREFIX} Only ${realSpeakers.length} real speaker name(s), skipping duplicate detection`
+      );
       return { autoMerge, suggestions };
     }
 

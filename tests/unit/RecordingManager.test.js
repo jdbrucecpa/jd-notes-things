@@ -4,10 +4,14 @@ import { EventEmitter } from 'events';
 
 class MockProvider extends EventEmitter {
   async initialize() {}
-  async startRecording() { return 'rec-123'; }
+  async startRecording() {
+    return 'rec-123';
+  }
   async stopRecording() {}
   async shutdown() {}
-  getState() { return { recording: false, meetingDetected: false }; }
+  getState() {
+    return { recording: false, meetingDetected: false };
+  }
 }
 
 describe('RecordingManager', () => {

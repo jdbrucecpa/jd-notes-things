@@ -15,6 +15,7 @@ This is a maintenance release with a UI fix for the double scrollbar issue.
 **Root Cause:** Both the `html` and `body` elements were independently scrollable, causing two overlapping scrollbars to appear.
 
 **Solution:** Added explicit overflow handling to ensure only the `body` element scrolls:
+
 - `html { overflow: hidden; height: 100%; }`
 - `body { overflow-y: auto; height: 100%; }`
 

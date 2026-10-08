@@ -19,7 +19,7 @@ Because the local stack replaces the areas the v1.4.x hotfixes touched, v2.0 sup
 
 - **Recording provider abstraction**: New `RecordingProvider` base class, `RecordingManager` orchestrator, and two implementations — `RecallProvider` (Recall.ai SDK) and `LocalProvider` (local capture). Providers **hot-swap without an app restart**.
 - **WASAPI output-loopback capture**: `WasapiCapture` streams system-audio output devices into FFmpeg over blocking named pipes via `native-recorder-nodejs`.
-- **Silence-pacing (critical reliability fix)**: A silent WASAPI source used to starve FFmpeg on its blocking pipe read, producing a 0-byte, unplayable recording *and* a stuck stop. `WasapiCapture` now keeps each pipe fed at the device's real-time byte rate (real PCM when present, zero-filled silence for the deficit), so recordings are never empty and stop is reliable. `LocalProvider.stopRecording` force-kills FFmpeg as a safety net if the `q` quit doesn't land in ~2.5s.
+- **Silence-pacing (critical reliability fix)**: A silent WASAPI source used to starve FFmpeg on its blocking pipe read, producing a 0-byte, unplayable recording _and_ a stuck stop. `WasapiCapture` now keeps each pipe fed at the device's real-time byte rate (real PCM when present, zero-filled silence for the deficit), so recordings are never empty and stop is reliable. `LocalProvider.stopRecording` force-kills FFmpeg as a safety net if the `q` quit doesn't land in ~2.5s.
 - **Multi-source mixing**: `buildFFmpegArgs` is a pure, unit-tested function that mixes mic + one or more system/WASAPI sources, with null-device and mixer guards.
 - **Local Recording Sources UI**: Device dropdowns, per-source volume sliders, WASAPI output-device selection, and a "test recording" button, all in Settings.
 - **Isolation tracks**: `LocalProvider` can emit separate **app**, **mic**, and **system** submix tracks, plus **per-process app audio capture** (`application-loopback`) to a paced WAV — feeding cleaner audio to diarization while isolating app-loopback failures from the main recording.
@@ -102,27 +102,30 @@ A multi-stage pipeline in `SpeakerMatcher`, run on both first transcription and 
 ## Dependency Changes
 
 ### New
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `native-recorder-nodejs` | ^1.2.0 | WASAPI output-loopback capture via named pipes |
-| `application-loopback` | ^1.2.7 | Per-process app audio capture (isolation tracks) |
-| `update-electron-app` | ^3.1.2 | Auto-update from GitHub Releases |
+
+| Package                  | Version | Purpose                                          |
+| ------------------------ | ------- | ------------------------------------------------ |
+| `native-recorder-nodejs` | ^1.2.0  | WASAPI output-loopback capture via named pipes   |
+| `application-loopback`   | ^1.2.7  | Per-process app audio capture (isolation tracks) |
+| `update-electron-app`    | ^3.1.2  | Auto-update from GitHub Releases                 |
 
 ### Updated
-| Package | From | To |
-|---------|------|-----|
-| `electron` (dev) | ^40.6.1 | ^43.1.0 (Node 24 runtime, native ABI 148) |
-| `@anthropic-ai/sdk` | ^0.78.0 | ^0.110.0 |
-| `archiver` | ^7.0.1 | ^8.0.0 (ESM-only; factory shim in backup/export services) |
-| `googleapis` | ^171.4.0 | ^173.0.0 |
-| `marked` | ^17.0.3 | ^18.0.5 |
-| `js-yaml` | ^4.1.0 | ^5.2.1 |
-| `copy-webpack-plugin` (dev) | ^13.0.1 | ^14.0.0 |
-| `eslint-plugin-security` (dev) | ^3.0.1 | ^4.0.1 |
-| `globals` (dev) | ^16.5.0 | ^17.7.0 |
-| `@rolldown/binding-win32-x64-msvc` (dev) | — | ^1.1.4 (added; Vitest 4.1+ rolldown binding on Windows) |
+
+| Package                                  | From     | To                                                        |
+| ---------------------------------------- | -------- | --------------------------------------------------------- |
+| `electron` (dev)                         | ^40.6.1  | ^43.1.0 (Node 24 runtime, native ABI 148)                 |
+| `@anthropic-ai/sdk`                      | ^0.78.0  | ^0.110.0                                                  |
+| `archiver`                               | ^7.0.1   | ^8.0.0 (ESM-only; factory shim in backup/export services) |
+| `googleapis`                             | ^171.4.0 | ^173.0.0                                                  |
+| `marked`                                 | ^17.0.3  | ^18.0.5                                                   |
+| `js-yaml`                                | ^4.1.0   | ^5.2.1                                                    |
+| `copy-webpack-plugin` (dev)              | ^13.0.1  | ^14.0.0                                                   |
+| `eslint-plugin-security` (dev)           | ^3.0.1   | ^4.0.1                                                    |
+| `globals` (dev)                          | ^16.5.0  | ^17.7.0                                                   |
+| `@rolldown/binding-win32-x64-msvc` (dev) | —        | ^1.1.4 (added; Vitest 4.1+ rolldown binding on Windows)   |
 
 ### Removed (code-level, not packages)
+
 - **`recallai` transcription provider** — deleted from `TranscriptionService`.
 - **Obsidian-CRM plugin integration** — removed along with the contact/company page-creation system.
 
@@ -133,21 +136,23 @@ A multi-stage pipeline in `SpeakerMatcher`, run on both first transcription and 
 126 files changed, ~32,719 additions, ~6,417 deletions (net +26,302 lines) since v1.4.9.
 
 ### Notable New Files
-| File | Purpose |
-|------|---------|
+
+| File                                                                                                      | Purpose                                        |
+| --------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | `src/main/recording/RecordingProvider.js`, `RecordingManager.js`, `RecallProvider.js`, `LocalProvider.js` | Recording provider abstraction + local capture |
-| `src/main/recording/WasapiCapture.js` | WASAPI loopback capture via named pipes |
-| `src/main/services/voiceProfileService.js` | Voice profile CRUD, embedding math, speaker ID |
-| `src/main/services/aiServiceManager.js` | JD Audio Service lifecycle (auto-launch/kill) |
-| `src/main/integrations/SpeakerMatcher.js` (waterfall) | Multi-stage speaker identification |
-| `src/main/services/youtube*` + import UI | YouTube URL import pipeline |
-| `config/templates/youtube-shorts-clips.txt` | New short-form clip template |
+| `src/main/recording/WasapiCapture.js`                                                                     | WASAPI loopback capture via named pipes        |
+| `src/main/services/voiceProfileService.js`                                                                | Voice profile CRUD, embedding math, speaker ID |
+| `src/main/services/aiServiceManager.js`                                                                   | JD Audio Service lifecycle (auto-launch/kill)  |
+| `src/main/integrations/SpeakerMatcher.js` (waterfall)                                                     | Multi-stage speaker identification             |
+| `src/main/services/youtube*` + import UI                                                                  | YouTube URL import pipeline                    |
+| `config/templates/youtube-shorts-clips.txt`                                                               | New short-form clip template                   |
 
 ### Notable Removed Files
-| File | Reason |
-|------|--------|
+
+| File                                                      | Reason               |
+| --------------------------------------------------------- | -------------------- |
 | Obsidian-CRM integration + contact/company page templates | Vault-export divorce |
-| `recallai` transcription path | Provider removed |
+| `recallai` transcription path                             | Provider removed     |
 
 ---
 

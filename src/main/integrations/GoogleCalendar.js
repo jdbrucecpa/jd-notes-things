@@ -85,7 +85,9 @@ class GoogleCalendar {
 
     const now = new Date();
     const timeMax = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
-    log.debug(`[GoogleCalendar] Fetching events from ${now.toISOString()} to ${timeMax.toISOString()}`);
+    log.debug(
+      `[GoogleCalendar] Fetching events from ${now.toISOString()} to ${timeMax.toISOString()}`
+    );
 
     try {
       const response = await this.calendar.events.list({
@@ -173,8 +175,8 @@ class GoogleCalendar {
           }
         : null,
       status: event.status || 'confirmed',
-      htmlLink: event.htmlLink || null,               // v1.3.0: Direct link to Google Calendar event
-      jdNotesProperties: jdNotesProps,                 // v1.3.0: Our custom extended properties
+      htmlLink: event.htmlLink || null, // v1.3.0: Direct link to Google Calendar event
+      jdNotesProperties: jdNotesProps, // v1.3.0: Our custom extended properties
       hasRecording: !!jdNotesProps.jdNotesRecordingId, // v1.3.0: Quick check for existing recording
       // Metadata for routing
       participantEmails: (event.attendees || []).map(a => a.email).filter(Boolean),
@@ -349,7 +351,10 @@ class GoogleCalendar {
       },
     });
 
-    log.info(`[GoogleCalendar] Updated extendedProperties for event ${eventId}:`, Object.keys(properties));
+    log.info(
+      `[GoogleCalendar] Updated extendedProperties for event ${eventId}:`,
+      Object.keys(properties)
+    );
     return response.data;
   }
 
@@ -389,7 +394,9 @@ class GoogleCalendar {
       pageToken = response.data.nextPageToken;
     } while (pageToken);
 
-    log.info(`[GoogleCalendar] getEventsInRange: ${allEvents.length} events from ${timeMin} to ${timeMax}`);
+    log.info(
+      `[GoogleCalendar] getEventsInRange: ${allEvents.length} events from ${timeMin} to ${timeMax}`
+    );
     return allEvents.map(e => this._formatMeeting(e));
   }
 

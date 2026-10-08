@@ -74,7 +74,10 @@ describe('diffAgainstBaseline', () => {
   });
 
   it('turns a deleted key into an unset', () => {
-    const data = { upcomingMeetings: [], pastMeetings: [{ id: 'a', title: 'A', recordingAction: 'new' }] };
+    const data = {
+      upcomingMeetings: [],
+      pastMeetings: [{ id: 'a', title: 'A', recordingAction: 'new' }],
+    };
     const base = captureBaseline(data);
     delete data.pastMeetings[0].recordingAction;
     expect(diffAgainstBaseline(base, data)).toEqual([
@@ -133,7 +136,9 @@ describe('createMeetingStore', () => {
       transcriptionProvider: 'local',
       recordingAction: 'new',
     });
-    expect(final.find(m => m.id === 'chris').transcript).toEqual([{ speaker: 'JD', text: 'hello' }]);
+    expect(final.find(m => m.id === 'chris').transcript).toEqual([
+      { speaker: 'JD', text: 'hello' },
+    ]);
   });
 
   it('merges concurrent edits to different fields of the same meeting', () => {
@@ -147,7 +152,10 @@ describe('createMeetingStore', () => {
     store.write(s1);
     store.write(s2);
 
-    expect(db.getAllMeetings().pastMeetings[0]).toMatchObject({ title: 'New title', content: 'summary' });
+    expect(db.getAllMeetings().pastMeetings[0]).toMatchObject({
+      title: 'New title',
+      content: 'summary',
+    });
   });
 
   it('a second write from the same snapshot only sends fields changed since the first write', () => {
@@ -188,7 +196,10 @@ describe('createMeetingStore', () => {
       pastMeetings: current.pastMeetings.map(m => (m.id === 'a' ? { ...m, title: 'A2' } : m)),
     }));
 
-    const titles = db.getAllMeetings().pastMeetings.map(m => m.title).sort();
+    const titles = db
+      .getAllMeetings()
+      .pastMeetings.map(m => m.title)
+      .sort();
     expect(titles).toEqual(['A2', 'B']);
   });
 
@@ -210,7 +221,10 @@ describe('createMeetingStore', () => {
 
     store.write({ upcomingMeetings: [], pastMeetings: [{ id: 'n', title: 'N' }] });
 
-    const ids = db.getAllMeetings().pastMeetings.map(m => m.id).sort();
+    const ids = db
+      .getAllMeetings()
+      .pastMeetings.map(m => m.id)
+      .sort();
     expect(ids).toEqual(['a', 'n']);
     expect(db.getAllMeetings().pastMeetings.find(m => m.id === 'a').content).toBe('keep');
   });

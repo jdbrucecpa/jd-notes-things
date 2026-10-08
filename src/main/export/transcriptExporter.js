@@ -29,7 +29,12 @@ function formatTranscriptForExport(transcript) {
     if (!text) continue;
 
     // Prefer matched real name, fall back to raw speaker label
-    const speaker = (entry.speakerName || entry.speaker_name || entry.speaker || 'Unknown Speaker').trim();
+    const speaker = (
+      entry.speakerName ||
+      entry.speaker_name ||
+      entry.speaker ||
+      'Unknown Speaker'
+    ).trim();
 
     // Flatten any embedded newlines so each utterance stays on one line
     const flatText = text.replace(/\r?\n/g, ' ').replace(/\s{2,}/g, ' ');

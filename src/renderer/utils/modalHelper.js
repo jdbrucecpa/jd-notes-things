@@ -75,7 +75,18 @@ export function createModal({
       'textarea',
       'small',
     ],
-    ALLOWED_ATTR: ['class', 'style', 'id', 'for', 'type', 'placeholder', 'value', 'name', 'checked', 'disabled'],
+    ALLOWED_ATTR: [
+      'class',
+      'style',
+      'id',
+      'for',
+      'type',
+      'placeholder',
+      'value',
+      'name',
+      'checked',
+      'disabled',
+    ],
   });
 
   // Escape title to prevent XSS (title is plain text, not HTML)

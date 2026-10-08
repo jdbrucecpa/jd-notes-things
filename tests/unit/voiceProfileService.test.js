@@ -334,9 +334,7 @@ describe('VoiceProfileService CRUD', () => {
 
   it('getProfile deserializes DB Buffer embedding back to Float32Array', () => {
     const originalEmbedding = new Float32Array([0.1, 0.9, 0.5]);
-    mockDb.getVoiceProfile.mockReturnValue(
-      makeProfileRow(1, 'Alice', originalEmbedding)
-    );
+    mockDb.getVoiceProfile.mockReturnValue(makeProfileRow(1, 'Alice', originalEmbedding));
 
     const profile = service.getProfile(1);
 
@@ -407,9 +405,7 @@ describe('VoiceProfileService CRUD', () => {
   it('findBestMatch returns high confidence for nearly identical vector', () => {
     // Profile embedding: unit vector along x
     const profileEmb = unitVector(4, 0);
-    mockDb.getAllVoiceProfiles.mockReturnValue([
-      makeProfileRow(1, 'Alice', profileEmb),
-    ]);
+    mockDb.getAllVoiceProfiles.mockReturnValue([makeProfileRow(1, 'Alice', profileEmb)]);
 
     // Query is the same vector
     const result = service.findBestMatch(unitVector(4, 0));
@@ -423,9 +419,7 @@ describe('VoiceProfileService CRUD', () => {
   it('findBestMatch returns low confidence for dissimilar vector', () => {
     // Profile along x, query along y — orthogonal → distance = 1
     const profileEmb = unitVector(4, 0);
-    mockDb.getAllVoiceProfiles.mockReturnValue([
-      makeProfileRow(1, 'Alice', profileEmb),
-    ]);
+    mockDb.getAllVoiceProfiles.mockReturnValue([makeProfileRow(1, 'Alice', profileEmb)]);
 
     const result = service.findBestMatch(unitVector(4, 1));
 
@@ -451,9 +445,7 @@ describe('VoiceProfileService CRUD', () => {
     // Create a vector at 45° from the query — distance = 1 - cos(45°) ≈ 0.293
     // DISTANCE_HIGH_CONFIDENCE = 0.25, DISTANCE_MEDIUM_CONFIDENCE = 0.45
     const profileEmb = new Float32Array([1.0, 1.0, 0.0, 0.0]); // normalized by service
-    mockDb.getAllVoiceProfiles.mockReturnValue([
-      makeProfileRow(1, 'Alice', profileEmb),
-    ]);
+    mockDb.getAllVoiceProfiles.mockReturnValue([makeProfileRow(1, 'Alice', profileEmb)]);
 
     // Query along x axis
     const query = unitVector(4, 0);
@@ -537,16 +529,10 @@ describe('embedSpeakers response mapping (service contract)', () => {
     expect(out).toHaveLength(2);
     expect(out[0].speakerLabel).toBe('SPEAKER_00');
     expect(out[0].embedding).toBeInstanceOf(Float32Array);
-    expect(Array.from(out[0].embedding)).toEqual([
-      expect.closeTo(0.1),
-      expect.closeTo(0.2),
-    ]);
+    expect(Array.from(out[0].embedding)).toEqual([expect.closeTo(0.1), expect.closeTo(0.2)]);
     expect(out[1].speakerLabel).toBe('SPEAKER_01');
     expect(out[1].embedding).toBeInstanceOf(Float32Array);
-    expect(Array.from(out[1].embedding)).toEqual([
-      expect.closeTo(0.3),
-      expect.closeTo(0.4),
-    ]);
+    expect(Array.from(out[1].embedding)).toEqual([expect.closeTo(0.3), expect.closeTo(0.4)]);
   });
 });
 
@@ -647,9 +633,7 @@ describe('findBestMatch margin rule', () => {
 
   it('single profile: no margin demotion possible', () => {
     const db = {
-      getAllVoiceProfiles: () => [
-        makeProfileRow(1, 'Alice', new Float32Array([1, 0, 0])),
-      ],
+      getAllVoiceProfiles: () => [makeProfileRow(1, 'Alice', new Float32Array([1, 0, 0]))],
     };
     const svc = new VoiceProfileService(db);
     const result = svc.findBestMatch(new Float32Array([1, 0.01, 0]));
@@ -666,7 +650,9 @@ describe('upsertProfileSample', () => {
     const svc = new VoiceProfileService(makeDb());
     const r = svc.upsertProfileSample(
       { contactName: 'Kurt Anderson', contactEmail: 'kurt@x.com', googleContactId: null },
-      new Float32Array([1, 0]), 42, 'meeting-1'
+      new Float32Array([1, 0]),
+      42,
+      'meeting-1'
     );
     expect(r.created).toBe(true);
     expect(svc.getProfileByEmail('kurt@x.com')).not.toBeNull();
@@ -677,9 +663,17 @@ describe('upsertProfileSample', () => {
     const db = makeDb();
     const svc = new VoiceProfileService(db);
     const first = svc.upsertProfileSample(
-      { contactName: 'Kurt', contactEmail: 'kurt@x.com' }, new Float32Array([1, 0]), 40, 'm1');
+      { contactName: 'Kurt', contactEmail: 'kurt@x.com' },
+      new Float32Array([1, 0]),
+      40,
+      'm1'
+    );
     const second = svc.upsertProfileSample(
-      { contactName: 'Kurt', contactEmail: 'kurt@x.com' }, new Float32Array([0.9, 0.1]), 60, 'm2');
+      { contactName: 'Kurt', contactEmail: 'kurt@x.com' },
+      new Float32Array([0.9, 0.1]),
+      60,
+      'm2'
+    );
     expect(second.created).toBe(false);
     expect(second.profileId).toBe(first.profileId);
     expect(svc.getSamples(first.profileId)).toHaveLength(2);
@@ -691,16 +685,29 @@ describe('upsertProfileSample', () => {
   it('matches an existing profile case-insensitively (no duplicate on casing variants)', () => {
     const svc = new VoiceProfileService(makeDb());
     const first = svc.upsertProfileSample(
-      { contactName: 'Kurt', contactEmail: 'kurt@x.com' }, new Float32Array([1, 0]), 40, 'm1');
+      { contactName: 'Kurt', contactEmail: 'kurt@x.com' },
+      new Float32Array([1, 0]),
+      40,
+      'm1'
+    );
     const second = svc.upsertProfileSample(
-      { contactName: 'Kurt', contactEmail: 'Kurt@X.com' }, new Float32Array([0.9, 0.1]), 60, 'm2');
+      { contactName: 'Kurt', contactEmail: 'Kurt@X.com' },
+      new Float32Array([0.9, 0.1]),
+      60,
+      'm2'
+    );
     expect(second.created).toBe(false);
     expect(second.profileId).toBe(first.profileId);
   });
 
   it('returns null gracefully when no email identity', () => {
     const svc = new VoiceProfileService(makeDb());
-    const r = svc.upsertProfileSample({ contactName: 'X', contactEmail: null }, new Float32Array([1]), 5, 'm');
+    const r = svc.upsertProfileSample(
+      { contactName: 'X', contactEmail: null },
+      new Float32Array([1]),
+      5,
+      'm'
+    );
     expect(r).toBeNull();
   });
 
@@ -771,8 +778,14 @@ describe('identifySpeakers anchor synergy', () => {
     const svc = new VoiceProfileService(makeDb());
     const results = await svc.identifySpeakers(
       'C:/x.mp3',
-      [{ speaker: 'SPEAKER_00', start: 0, end: 10 }, { speaker: 'SPEAKER_01', start: 10, end: 20 }],
-      [{ name: 'A', email: 'a@x.com' }, { name: 'B', email: 'b@x.com' }],
+      [
+        { speaker: 'SPEAKER_00', start: 0, end: 10 },
+        { speaker: 'SPEAKER_01', start: 10, end: 20 },
+      ],
+      [
+        { name: 'A', email: 'a@x.com' },
+        { name: 'B', email: 'b@x.com' },
+      ],
       'm',
       [
         { speakerLabel: 'SPEAKER_00', embedding: new Float32Array([1, 0]) },

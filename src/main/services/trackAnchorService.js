@@ -247,7 +247,17 @@ function decodeToRmsWindows(audioFilePath) {
       // -nostats/-loglevel error: keep stderr quiet; we still DRAIN it below —
       // an unread piped stderr can fill the OS pipe buffer on long decodes and
       // block FFmpeg, hanging this Promise.
-      ['-hide_banner', '-loglevel', 'error', '-nostdin', '-nostats', '-i', audioFilePath, ...DECODE_ARGS, 'pipe:1'],
+      [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+        '-nostdin',
+        '-nostats',
+        '-i',
+        audioFilePath,
+        ...DECODE_ARGS,
+        'pipe:1',
+      ],
       { windowsHide: true }
     );
     const rms = [];
@@ -279,7 +289,9 @@ function decodeToRmsWindows(audioFilePath) {
     ff.on('close', code => {
       if (code !== 0 && rms.length === 0) {
         reject(
-          new Error(`ffmpeg decode failed (code=${code}) for ${audioFilePath}: ${stderrTail.trim()}`)
+          new Error(
+            `ffmpeg decode failed (code=${code}) for ${audioFilePath}: ${stderrTail.trim()}`
+          )
         );
         return;
       }

@@ -1,6 +1,7 @@
 # v1.4.2 Release Notes
 
 ## Highlights
+
 Bug fix release that eliminates a race condition where clicking Record could immediately stop recording and trigger transcription of an empty meeting.
 
 ---
@@ -16,4 +17,5 @@ Bug fix release that eliminates a race condition where clicking Record could imm
 ---
 
 ## Files Changed
+
 3 files changed, ~17 additions, ~22 deletions (net -5 lines)

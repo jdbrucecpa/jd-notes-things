@@ -65,7 +65,9 @@ class KeyManagementService {
     // Check if we already have keys in safeStorage (migration already ran)
     const existingKeys = this.backend.listStoredKeys();
     if (existingKeys.length > 0) {
-      log.info(`[KeyManagement] safeStorage already has ${existingKeys.length} keys — skipping keytar migration`);
+      log.info(
+        `[KeyManagement] safeStorage already has ${existingKeys.length} keys — skipping keytar migration`
+      );
       return;
     }
 
@@ -88,7 +90,9 @@ class KeyManagementService {
         }
       }
 
-      log.info(`[KeyManagement] Migration complete: ${migrated} migrated, ${failed} failed out of ${credentials.length} total`);
+      log.info(
+        `[KeyManagement] Migration complete: ${migrated} migrated, ${failed} failed out of ${credentials.length} total`
+      );
     } catch (error) {
       log.error('[KeyManagement] keytar read failed during migration:', error.message);
     }

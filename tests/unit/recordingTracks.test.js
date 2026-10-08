@@ -28,12 +28,15 @@ describe('resolveRecordingTracks', () => {
     );
   });
 
-  it.each(['-mic.mp3', '-sys.mp3'])('switches to the mixed file when a %s stem was picked', suffix => {
-    const result = resolveRecordingTracks(`${base}${suffix}`, existsOnly(allThree));
-    expect(result.audioPath).toBe(`${base}.mp3`);
-    expect(result.micAudioFilePath).toBe(`${base}-mic.mp3`);
-    expect(result.systemAudioFilePath).toBe(`${base}-sys.mp3`);
-  });
+  it.each(['-mic.mp3', '-sys.mp3'])(
+    'switches to the mixed file when a %s stem was picked',
+    suffix => {
+      const result = resolveRecordingTracks(`${base}${suffix}`, existsOnly(allThree));
+      expect(result.audioPath).toBe(`${base}.mp3`);
+      expect(result.micAudioFilePath).toBe(`${base}-mic.mp3`);
+      expect(result.systemAudioFilePath).toBe(`${base}-sys.mp3`);
+    }
+  );
 
   it('keeps a picked stem when the mixed file is missing', () => {
     const files = [`${base}-mic.mp3`];

@@ -45,11 +45,13 @@ This release removes OpenAI and Azure OpenAI as LLM providers, replacing them wi
 ## Dependency Updates
 
 ### New Dependencies
-| Package | Version | Purpose |
-|---------|---------|---------|
+
+| Package                 | Version | Purpose           |
+| ----------------------- | ------- | ----------------- |
 | `@google/generative-ai` | ^0.24.1 | Google Gemini SDK |
 
 ### Removed
+
 - `openai` SDK — no longer needed (removed from imports, not from package.json as it was never a direct dependency)
 
 ---

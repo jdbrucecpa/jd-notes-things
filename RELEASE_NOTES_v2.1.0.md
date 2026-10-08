@@ -31,9 +31,9 @@ Major speaker-attribution accuracy release: upgraded diarization (PyAnnote commu
 
 ## Dependencies
 
-| Package | Change |
-| --- | --- |
-| `@google/genai` | Added (^2.20.0) |
+| Package                 | Change                   |
+| ----------------------- | ------------------------ |
+| `@google/genai`         | Added (^2.20.0)          |
 | `@google/generative-ai` | Removed (EOL 2025-11-30) |
 
 JD Audio Service bumped to v0.3.0 (model changes only — no Python dependency changes, no re-provisioning needed; new models download on first use).

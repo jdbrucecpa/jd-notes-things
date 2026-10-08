@@ -237,7 +237,12 @@ describe('transcribeWithLocal — error paths', () => {
   });
 
   it('throws with "not running" message when health check fetch throws (network error)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('ECONNREFUSED'); }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('ECONNREFUSED');
+      })
+    );
 
     await expect(
       transcriptionService.transcribeWithLocal('/fake/audio.mp3', {
@@ -263,7 +268,12 @@ describe('transcribeWithLocal — error paths', () => {
       'fetch',
       vi.fn(async url => {
         if (url.endsWith('/health')) return { ok: true, status: 200 };
-        return { ok: false, status: 500, statusText: 'Internal Server Error', text: async () => 'crash' };
+        return {
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+          text: async () => 'crash',
+        };
       })
     );
 

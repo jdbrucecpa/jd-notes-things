@@ -242,7 +242,10 @@ sections:
             type: 'general',
             cost_estimate: 0.01,
             sections: [
-              { title: 'Summary', prompt: 'Describe what this section should produce from the transcript.' },
+              {
+                title: 'Summary',
+                prompt: 'Describe what this section should produce from the transcript.',
+              },
             ],
           },
           null,
@@ -286,7 +289,8 @@ sections:
       fs.mkdirSync(this.templatesPath, { recursive: true });
     }
 
-    const body = content && String(content).trim() ? content : this._scaffold(String(name).trim(), format);
+    const body =
+      content && String(content).trim() ? content : this._scaffold(String(name).trim(), format);
     fs.writeFileSync(filePath, body, 'utf8');
     console.log(`[TemplateManager] Created template: ${id}${format}`);
 

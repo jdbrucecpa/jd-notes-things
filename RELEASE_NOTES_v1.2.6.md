@@ -52,40 +52,45 @@ This release fixes false-positive speaker matching, adds AssemblyAI speaker iden
 ## Dependency Updates
 
 ### Core SDKs
-| Package | From | To |
-|---------|------|----|
-| `@recallai/desktop-sdk` | 2.0.4 | 2.0.6 |
-| `@anthropic-ai/sdk` | 0.71.2 | 0.78.0 |
-| `openai` | 6.8.1 | 6.25.0 |
-| `googleapis` | 167.0.0 | 171.4.0 |
+
+| Package                 | From    | To      |
+| ----------------------- | ------- | ------- |
+| `@recallai/desktop-sdk` | 2.0.4   | 2.0.6   |
+| `@anthropic-ai/sdk`     | 0.71.2  | 0.78.0  |
+| `openai`                | 6.8.1   | 6.25.0  |
+| `googleapis`            | 167.0.0 | 171.4.0 |
 
 ### Runtime Dependencies
-| Package | From | To |
-|---------|------|----|
-| `axios` | 1.9.0 | 1.13.5 |
-| `dotenv` | 17.2.3 | 17.3.1 |
+
+| Package     | From   | To     |
+| ----------- | ------ | ------ |
+| `axios`     | 1.9.0  | 1.13.5 |
+| `dotenv`    | 17.2.3 | 17.3.1 |
 | `lru-cache` | 11.2.2 | 11.2.6 |
-| `marked` | 17.0.1 | 17.0.3 |
-| `react` | 19.1.0 | 19.2.4 |
+| `marked`    | 17.0.1 | 17.0.3 |
+| `react`     | 19.1.0 | 19.2.4 |
 | `react-dom` | 19.1.0 | 19.2.4 |
-| `svix` | 1.41.0 | 1.86.0 |
-| `zod` | 4.1.12 | 4.3.6 |
+| `svix`      | 1.41.0 | 1.86.0 |
+| `zod`       | 4.1.12 | 4.3.6  |
 
 ### Dev Dependencies
-| Package | From | To |
-|---------|------|----|
-| `electron` | 39.1.1 | 39.6.1 |
+
+| Package                          | From   | To     |
+| -------------------------------- | ------ | ------ |
+| `electron`                       | 39.1.1 | 39.6.1 |
 | `@electron-forge/*` (8 packages) | 7.10.2 | 7.11.1 |
-| `eslint` | 9.39.1 | 9.39.3 |
-| `@eslint/js` | 9.39.1 | 9.39.3 |
-| `prettier` | 3.6.2 | 3.8.1 |
-| `css-loader` | 7.1.2 | 7.1.4 |
-| `eslint-plugin-no-unsanitized` | 4.1.4 | 4.1.5 |
+| `eslint`                         | 9.39.1 | 9.39.3 |
+| `@eslint/js`                     | 9.39.1 | 9.39.3 |
+| `prettier`                       | 3.6.2  | 3.8.1  |
+| `css-loader`                     | 7.1.2  | 7.1.4  |
+| `eslint-plugin-no-unsanitized`   | 4.1.4  | 4.1.5  |
 
 ### Removed
+
 - `update-electron-app` (unused)
 
 ### Notable SDK Changes
+
 - **Recall SDK 2.0.6**: Fixes `recording-ended` event not firing on Windows; adds Chrome 145+ compatibility, auto mic detection, reduced CPU usage.
 - **Anthropic SDK 0.78.0**: Memory leak fixes for streaming, top-level automatic caching support, Claude Opus 4.6 / Sonnet 4.6 model support.
 - **OpenAI SDK 6.25.0**: New features for function call outputs and responses API.
@@ -99,9 +104,9 @@ This release fixes false-positive speaker matching, adds AssemblyAI speaker iden
 
 ## Known Intentionally Held-Back Dependencies
 
-| Package | Current | Available | Reason |
-|---------|---------|-----------|--------|
-| `electron` | 39.6.1 | 40.6.1 | Node 24 jump requires keytar rebuild; planned for v1.2.7 |
-| `eslint` | 9.39.3 | 10.0.2 | `eslint-plugin-react` has no ESLint 10-compatible release yet |
-| `eslint-plugin-security` | 3.0.1 | 4.0.0 | Requires ESLint 10 |
-| `globals` | 16.5.0 | 17.3.0 | Tied to ESLint 10 ecosystem |
+| Package                  | Current | Available | Reason                                                        |
+| ------------------------ | ------- | --------- | ------------------------------------------------------------- |
+| `electron`               | 39.6.1  | 40.6.1    | Node 24 jump requires keytar rebuild; planned for v1.2.7      |
+| `eslint`                 | 9.39.3  | 10.0.2    | `eslint-plugin-react` has no ESLint 10-compatible release yet |
+| `eslint-plugin-security` | 3.0.1   | 4.0.0     | Requires ESLint 10                                            |
+| `globals`                | 16.5.0  | 17.3.0    | Tied to ESLint 10 ecosystem                                   |

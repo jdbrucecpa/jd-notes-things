@@ -7,21 +7,24 @@ import { reconcileAiServicePath } from '../../src/renderer/servicePathSync.js';
 // reconcileAiServicePath decides which store wins at settings-UI startup.
 describe('reconcileAiServicePath', () => {
   it('pushes the renderer path to main when main has none (self-heal)', () => {
-    expect(
-      reconcileAiServicePath('', 'C:\\code\\jd-audio-service')
-    ).toEqual({ action: 'push', path: 'C:\\code\\jd-audio-service' });
+    expect(reconcileAiServicePath('', 'C:\\code\\jd-audio-service')).toEqual({
+      action: 'push',
+      path: 'C:\\code\\jd-audio-service',
+    });
   });
 
   it('treats a missing main value like an empty one', () => {
-    expect(
-      reconcileAiServicePath(undefined, 'C:\\code\\jd-audio-service')
-    ).toEqual({ action: 'push', path: 'C:\\code\\jd-audio-service' });
+    expect(reconcileAiServicePath(undefined, 'C:\\code\\jd-audio-service')).toEqual({
+      action: 'push',
+      path: 'C:\\code\\jd-audio-service',
+    });
   });
 
   it('pulls the main path into the renderer when they differ', () => {
-    expect(
-      reconcileAiServicePath('D:\\real\\install', 'C:\\stale\\localstorage')
-    ).toEqual({ action: 'pull', path: 'D:\\real\\install' });
+    expect(reconcileAiServicePath('D:\\real\\install', 'C:\\stale\\localstorage')).toEqual({
+      action: 'pull',
+      path: 'D:\\real\\install',
+    });
   });
 
   it('does nothing when both stores agree', () => {
@@ -46,21 +49,24 @@ describe('reconcileAiServicePath', () => {
   // silently undoing the migration on every Settings open.
   describe('with the bundled migration flag', () => {
     it('clears the stale renderer copy instead of pushing it back when main was migrated', () => {
-      expect(
-        reconcileAiServicePath('', 'C:\\code\\jd-audio-service', true)
-      ).toEqual({ action: 'clear', path: '' });
+      expect(reconcileAiServicePath('', 'C:\\code\\jd-audio-service', true)).toEqual({
+        action: 'clear',
+        path: '',
+      });
     });
 
     it('still pushes when main has no path and no migration has run', () => {
-      expect(
-        reconcileAiServicePath('', 'C:\\code\\jd-audio-service', false)
-      ).toEqual({ action: 'push', path: 'C:\\code\\jd-audio-service' });
+      expect(reconcileAiServicePath('', 'C:\\code\\jd-audio-service', false)).toEqual({
+        action: 'push',
+        path: 'C:\\code\\jd-audio-service',
+      });
     });
 
     it('defaults to push behavior when the migrated flag is omitted', () => {
-      expect(
-        reconcileAiServicePath('', 'C:\\code\\jd-audio-service')
-      ).toEqual({ action: 'push', path: 'C:\\code\\jd-audio-service' });
+      expect(reconcileAiServicePath('', 'C:\\code\\jd-audio-service')).toEqual({
+        action: 'push',
+        path: 'C:\\code\\jd-audio-service',
+      });
     });
 
     it('does nothing when migrated is true but the renderer has no stale value either', () => {
@@ -68,9 +74,10 @@ describe('reconcileAiServicePath', () => {
     });
 
     it('still pulls main path when migrated is true but main has a value (override configured post-migration)', () => {
-      expect(
-        reconcileAiServicePath('D:\\real\\install', 'C:\\stale\\localstorage', true)
-      ).toEqual({ action: 'pull', path: 'D:\\real\\install' });
+      expect(reconcileAiServicePath('D:\\real\\install', 'C:\\stale\\localstorage', true)).toEqual({
+        action: 'pull',
+        path: 'D:\\real\\install',
+      });
     });
   });
 });

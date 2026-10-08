@@ -14,7 +14,9 @@ function baseDeps(overrides = {}) {
   return {
     fileExists: () => true,
     recordingsDirs: ['C:/rec'],
-    embedSpeakers: vi.fn().mockResolvedValue([{ speakerLabel: 'S0', embedding: new Float32Array([1, 0]) }]),
+    embedSpeakers: vi
+      .fn()
+      .mockResolvedValue([{ speakerLabel: 'S0', embedding: new Float32Array([1, 0]) }]),
     upsertProfileSample: vi.fn().mockReturnValue({ profileId: 1, created: true }),
     log: () => {},
     warn: () => {},
@@ -49,7 +51,12 @@ describe('reembedCorrections', () => {
     const meeting = { transcript: [T('S0', 'S0', null, 0, 90000)] };
     const deps = baseDeps({ fileExists: () => false, embedSpeakers: vi.fn() });
 
-    const summary = await reembedCorrections(deps, meeting, [{ speakerLabel: 'S0', name: 'K', email: 'k@x.com' }], 'm1');
+    const summary = await reembedCorrections(
+      deps,
+      meeting,
+      [{ speakerLabel: 'S0', name: 'K', email: 'k@x.com' }],
+      'm1'
+    );
 
     expect(deps.embedSpeakers).not.toHaveBeenCalled();
     expect(deps.upsertProfileSample).not.toHaveBeenCalled();
@@ -60,7 +67,12 @@ describe('reembedCorrections', () => {
     const meeting = { videoFile: 'C:/rec/a.mp3', transcript: [T('S0', 'S0', null, 0, 90000)] };
     const deps = baseDeps({ embedSpeakers: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')) });
 
-    const summary = await reembedCorrections(deps, meeting, [{ speakerLabel: 'S0', name: 'K', email: 'k@x.com' }], 'm1');
+    const summary = await reembedCorrections(
+      deps,
+      meeting,
+      [{ speakerLabel: 'S0', name: 'K', email: 'k@x.com' }],
+      'm1'
+    );
 
     expect(deps.upsertProfileSample).not.toHaveBeenCalled();
     expect(summary).toMatchObject({ embedded: 0, error: 'ECONNREFUSED' });
@@ -69,10 +81,17 @@ describe('reembedCorrections', () => {
   it('counts poisoning-guard rejections separately', async () => {
     const meeting = { videoFile: 'C:/rec/a.mp3', transcript: [T('S0', 'S0', null, 0, 90000)] };
     const deps = baseDeps({
-      upsertProfileSample: vi.fn().mockReturnValue({ profileId: 1, created: false, rejected: true }),
+      upsertProfileSample: vi
+        .fn()
+        .mockReturnValue({ profileId: 1, created: false, rejected: true }),
     });
 
-    const summary = await reembedCorrections(deps, meeting, [{ speakerLabel: 'S0', name: 'K', email: 'k@x.com' }], 'm1');
+    const summary = await reembedCorrections(
+      deps,
+      meeting,
+      [{ speakerLabel: 'S0', name: 'K', email: 'k@x.com' }],
+      'm1'
+    );
 
     expect(summary).toMatchObject({ embedded: 1, samplesAdded: 0, samplesRejected: 1 });
   });

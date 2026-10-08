@@ -13,7 +13,7 @@ function mockNative() {
       handlers.set(pid, opts.onData);
       return pid;
     }),
-    stopAudioCapture: vi.fn((pid) => {
+    stopAudioCapture: vi.fn(pid => {
       handlers.delete(pid);
       return true;
     }),
@@ -30,7 +30,10 @@ describe('AppLoopbackCapture', () => {
     AppLoopbackCapture._setNativeModule(native);
     cap = new AppLoopbackCapture();
     cap._silenceTickMs = 10; // fast pacing in tests
-    wavPath = path.join(os.tmpdir(), `alc-test-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`);
+    wavPath = path.join(
+      os.tmpdir(),
+      `alc-test-${Date.now()}-${Math.random().toString(36).slice(2)}.wav`
+    );
     tmpFiles.push(wavPath);
   });
 
@@ -63,7 +66,7 @@ describe('AppLoopbackCapture', () => {
 
   it('pads silence to real-time byte rate when app is silent', async () => {
     await cap.start(1234, wavPath);
-    await new Promise((r) => setTimeout(r, 120)); // several silence ticks
+    await new Promise(r => setTimeout(r, 120)); // several silence ticks
     await cap.stop();
     const dataBytes = fs.readFileSync(wavPath).length - 44;
     // ≥ ~50ms of audio at the configured byte rate, from silence alone

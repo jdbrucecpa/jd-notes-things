@@ -78,7 +78,7 @@ describe('AIServiceManager', () => {
           (listeners[event] ||= []).push(cb);
         }),
         _emit: (event, ...args) => {
-          (listeners[event] || []).forEach((cb) => cb(...args));
+          (listeners[event] || []).forEach(cb => cb(...args));
         },
       };
     };
@@ -260,7 +260,7 @@ describe('AIServiceManager', () => {
       vi.useFakeTimers();
       let result;
       let rejection;
-      const onUnhandledRejection = (err) => {
+      const onUnhandledRejection = err => {
         rejection = err;
       };
       process.on('unhandledRejection', onUnhandledRejection);

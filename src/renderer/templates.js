@@ -316,7 +316,9 @@ function createNewTemplate() {
   nameInput.focus();
 
   // Clear the visual selection in the list
-  document.querySelectorAll('.template-list-item').forEach(item => item.classList.remove('selected'));
+  document
+    .querySelectorAll('.template-list-item')
+    .forEach(item => item.classList.remove('selected'));
 
   // Seed the editor with an editable Markdown scaffold
   const scaffold = `<!-- Template Metadata:

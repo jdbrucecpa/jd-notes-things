@@ -295,7 +295,11 @@ class GoogleContacts {
           score = 50;
         }
         // v1.2.2: If source has both first AND last name, require both to match
-        else if (sourceHasLastName && givenName === sourceFirstName && familyName === sourceLastName) {
+        else if (
+          sourceHasLastName &&
+          givenName === sourceFirstName &&
+          familyName === sourceLastName
+        ) {
           score = 85;
         }
 
@@ -398,15 +402,19 @@ class GoogleContacts {
     const requestBody = {
       // Simple first/last split — works for most Western names; mononyms or complex names
       // (e.g., "Dr. Jean-Pierre de la Croix") may not split correctly
-      names: name ? [{ givenName: name.split(' ')[0], familyName: name.split(' ').slice(1).join(' ') || '' }] : [],
+      names: name
+        ? [{ givenName: name.split(' ')[0], familyName: name.split(' ').slice(1).join(' ') || '' }]
+        : [],
       emailAddresses: email ? [{ value: email, type: 'work' }] : [],
     };
 
     if (organization || title) {
-      requestBody.organizations = [{
-        name: organization || undefined,
-        title: title || undefined,
-      }];
+      requestBody.organizations = [
+        {
+          name: organization || undefined,
+          title: title || undefined,
+        },
+      ];
     }
 
     const response = await this.people.people.createContact({
@@ -440,7 +448,8 @@ class GoogleContacts {
 
     const response = await this.people.people.get({
       resourceName,
-      personFields: 'names,emailAddresses,phoneNumbers,organizations,photos,biographies,urls,addresses,birthdays,userDefined',
+      personFields:
+        'names,emailAddresses,phoneNumbers,organizations,photos,biographies,urls,addresses,birthdays,userDefined',
     });
 
     const contact = this.processContact(response.data);
@@ -479,19 +488,23 @@ class GoogleContacts {
 
     if (updates.name !== undefined) {
       const parts = (updates.name || '').split(' ');
-      requestBody.names = [{
-        givenName: parts[0] || '',
-        familyName: parts.slice(1).join(' ') || '',
-      }];
+      requestBody.names = [
+        {
+          givenName: parts[0] || '',
+          familyName: parts.slice(1).join(' ') || '',
+        },
+      ];
       updateFields.push('names');
     }
 
     if (updates.organization !== undefined || updates.title !== undefined) {
       const currentOrg = current.data.organizations?.[0] || {};
-      requestBody.organizations = [{
-        name: updates.organization !== undefined ? updates.organization : currentOrg.name,
-        title: updates.title !== undefined ? updates.title : currentOrg.title,
-      }];
+      requestBody.organizations = [
+        {
+          name: updates.organization !== undefined ? updates.organization : currentOrg.name,
+          title: updates.title !== undefined ? updates.title : currentOrg.title,
+        },
+      ];
       updateFields.push('organizations');
     }
 

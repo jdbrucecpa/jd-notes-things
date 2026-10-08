@@ -174,10 +174,9 @@ export async function openSpeakerMappingModal(meetingId, transcript, onComplete,
         needsVerification: voiceData.needsVerification || existing.needsVerification || false,
         embedding: voiceData.embedding || existing.embedding || null,
         // Candidate attendees for manual assignment (from 'unmatched' entries)
-        candidateAttendees:
-          voiceData.candidates
-            ? voiceData.candidates.map(c => ({ name: c.contactName, email: c.contactEmail }))
-            : existing.candidateAttendees || null,
+        candidateAttendees: voiceData.candidates
+          ? voiceData.candidates.map(c => ({ name: c.contactName, email: c.contactEmail }))
+          : existing.candidateAttendees || null,
       };
     }
 
@@ -438,12 +437,14 @@ function createSpeakerRow(speakerId, suggestion, stats = {}) {
     const contactLabelEl = row.querySelector('.speaker-contact-label');
     if (contactLabelEl) {
       const isAutoEnrolled =
-        suggestion.method === 'voice-profile-auto-enrolled' || suggestion.status === 'auto-enrolled';
+        suggestion.method === 'voice-profile-auto-enrolled' ||
+        suggestion.status === 'auto-enrolled';
       const isHighConfidenceVoice =
         (suggestion.method === 'voice-profile' && suggestion.confidence === 'high') ||
         suggestion.status === 'auto-matched';
       const isTrackAnchor = suggestion.method === 'track-anchor';
-      const needsReview = suggestion.needsVerification === true || suggestion.status === 'pending-review';
+      const needsReview =
+        suggestion.needsVerification === true || suggestion.status === 'pending-review';
 
       if (isAutoEnrolled) {
         contactLabelEl.insertAdjacentHTML(

@@ -3,8 +3,16 @@ import { describe, it, expect } from 'vitest';
 import { resolveWasapiDevice } from '../../src/main/recording/resolveWasapiDevice.js';
 
 const DEVICES = [
-  { name: 'SteelSeries Sonar - Gaming (SteelSeries Sonar Virtual Audio Device)', deviceId: '{0.0.0.00000000}.{new-gaming}', isDefault: true },
-  { name: 'SteelSeries Sonar - Chat (SteelSeries Sonar Virtual Audio Device)', deviceId: '{0.0.0.00000000}.{new-chat}', isDefault: false },
+  {
+    name: 'SteelSeries Sonar - Gaming (SteelSeries Sonar Virtual Audio Device)',
+    deviceId: '{0.0.0.00000000}.{new-gaming}',
+    isDefault: true,
+  },
+  {
+    name: 'SteelSeries Sonar - Chat (SteelSeries Sonar Virtual Audio Device)',
+    deviceId: '{0.0.0.00000000}.{new-chat}',
+    isDefault: false,
+  },
   { name: 'Speakers (Atom DAC 2)', deviceId: '{0.0.0.00000000}.{atom}', isDefault: false },
 ];
 

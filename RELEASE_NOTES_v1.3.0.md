@@ -81,24 +81,28 @@ This release replaces the JSON file-based meeting store with a SQLite database, 
 ## Dependency Updates
 
 ### New Dependencies
-| Package | Version | Purpose |
-|---------|---------|---------|
+
+| Package          | Version | Purpose                                                       |
+| ---------------- | ------- | ------------------------------------------------------------- |
 | `better-sqlite3` | ^12.6.2 | Local SQLite database (v12.x required for Electron 40 V8 API) |
 
 ### New Dev Dependencies
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `vitest` | ^4.0.18 | Unit testing framework |
-| `@playwright/test` | ^1.58.2 | E2E testing framework |
-| `playwright` | ^1.58.2 | Browser automation (base package) |
-| `@rollup/rollup-win32-x64-msvc` | ^4.59.0 | Windows build support for Vitest |
+
+| Package                         | Version | Purpose                           |
+| ------------------------------- | ------- | --------------------------------- |
+| `vitest`                        | ^4.0.18 | Unit testing framework            |
+| `@playwright/test`              | ^1.58.2 | E2E testing framework             |
+| `playwright`                    | ^1.58.2 | Browser automation (base package) |
+| `@rollup/rollup-win32-x64-msvc` | ^4.59.0 | Windows build support for Vitest  |
 
 ### Core Framework
-| Package | From | To |
-|---------|------|-----|
+
+| Package    | From   | To     |
+| ---------- | ------ | ------ |
 | `electron` | 39.6.1 | 40.6.1 |
 
 ### Removed
+
 - `keytar` — removed from `dependencies` (kept as webpack external for migration period)
 
 ---
@@ -109,11 +113,11 @@ This release replaces the JSON file-based meeting store with a SQLite database, 
 
 ## Known Intentionally Held-Back Dependencies
 
-| Package | Current | Available | Reason |
-|---------|---------|-----------|--------|
-| `eslint` | 9.39.3 | 10.0.2 | `eslint-plugin-react` has no ESLint 10-compatible release yet |
-| `eslint-plugin-security` | 3.0.1 | 4.0.0 | Requires ESLint 10 |
-| `globals` | 16.5.0 | 17.3.0 | Tied to ESLint 10 ecosystem |
+| Package                  | Current | Available | Reason                                                        |
+| ------------------------ | ------- | --------- | ------------------------------------------------------------- |
+| `eslint`                 | 9.39.3  | 10.0.2    | `eslint-plugin-react` has no ESLint 10-compatible release yet |
+| `eslint-plugin-security` | 3.0.1   | 4.0.0     | Requires ESLint 10                                            |
+| `globals`                | 16.5.0  | 17.3.0    | Tied to ESLint 10 ecosystem                                   |
 
 ## Native Module Build Notes
 

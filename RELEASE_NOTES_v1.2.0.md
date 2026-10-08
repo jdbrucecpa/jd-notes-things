@@ -88,13 +88,13 @@ Manage your Azure OpenAI deployments directly in the app:
 
 Each deployment includes:
 
-| Field | Description |
-|-------|-------------|
-| Deployment Name | Exact name from Azure portal |
-| Display Name | How it appears in the UI |
-| Pricing Tier | For grouping in model selector |
-| Input Price | Cost per million input tokens |
-| Output Price | Cost per million output tokens |
+| Field           | Description                    |
+| --------------- | ------------------------------ |
+| Deployment Name | Exact name from Azure portal   |
+| Display Name    | How it appears in the UI       |
+| Pricing Tier    | For grouping in model selector |
+| Input Price     | Cost per million input tokens  |
+| Output Price    | Cost per million output tokens |
 
 ### Speaker Statistics
 
@@ -172,6 +172,7 @@ Analyzes meeting tone and relationships:
 Updated model options with latest releases:
 
 **OpenAI:**
+
 - GPT-5 nano ($0.05/$0.40 per MTok)
 - GPT-4.1 nano ($0.10/$0.40 per MTok)
 - GPT-4o mini ($0.15/$0.60 per MTok)
@@ -179,6 +180,7 @@ Updated model options with latest releases:
 - GPT-4.1 mini ($0.40/$1.60 per MTok)
 
 **Anthropic Claude:**
+
 - Claude Haiku 4.5 ($1.00/$5.00 per MTok)
 - Claude Sonnet 4 ($3.00/$15.00 per MTok)
 - Claude Sonnet 4.5 ($3.00/$15.00 per MTok)
@@ -230,6 +232,7 @@ Default AI provider changed from Azure to OpenAI for broader compatibility.
 ### Widget State Sync
 
 **Fixed:** Recording widget properly syncs state with main app when:
+
 - App is restarted during recording
 - Recording is started/stopped from main window
 - Widget is closed and reopened
@@ -245,6 +248,7 @@ Default AI provider changed from Azure to OpenAI for broader compatibility.
 ### Template Updates
 
 Removed outdated templates:
+
 - `board-meeting.txt`
 - `client-meeting.yaml`
 - `decisions-and-actions.txt`
@@ -258,6 +262,7 @@ These have been replaced with more specialized templates listed above.
 ### Documentation Cleanup
 
 Removed outdated research documents from `docs11/`:
+
 - Speaker diarization research
 - Speaker matching algorithm docs
 - Vocabulary best practices

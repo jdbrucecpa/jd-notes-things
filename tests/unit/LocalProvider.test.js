@@ -40,7 +40,10 @@ describe('LocalProvider', () => {
   });
 
   it('detectMeeting parses Teams window title', () => {
-    const result = provider._parseMeetingFromTitle('Weekly Standup | Microsoft Teams', 'ms-teams.exe');
+    const result = provider._parseMeetingFromTitle(
+      'Weekly Standup | Microsoft Teams',
+      'ms-teams.exe'
+    );
     expect(result).not.toBeNull();
     expect(result.platform).toBe('teams');
   });
@@ -76,7 +79,10 @@ describe('LocalProvider', () => {
     });
 
     it('detects a Meet tab in Edge (msedge)', () => {
-      const r = provider._parseMeetingFromTitle('Meet - xyz-abcd-efg - Work - Microsoft​ Edge', 'msedge');
+      const r = provider._parseMeetingFromTitle(
+        'Meet - xyz-abcd-efg - Work - Microsoft​ Edge',
+        'msedge'
+      );
       expect(r).not.toBeNull();
       expect(r.platform).toBe('google-meet');
     });
@@ -87,7 +93,10 @@ describe('LocalProvider', () => {
     });
 
     it('returns null for an unrelated "Meet notes" document tab', () => {
-      const r = provider._parseMeetingFromTitle('Meet notes - Google Docs - Google Chrome', 'chrome');
+      const r = provider._parseMeetingFromTitle(
+        'Meet notes - Google Docs - Google Chrome',
+        'chrome'
+      );
       expect(r).toBeNull();
     });
 
@@ -212,9 +221,9 @@ describe('LocalProvider', () => {
     provider._recording = true;
     provider._ffmpegProcess = fake;
     provider._activeRecording = { recordingId: 'rec-1', audioFilePath: 'rec-1.mp3' };
-    fake.on('close', (code) => provider._handleFfmpegClose('rec-1', 'rec-1.mp3', code));
+    fake.on('close', code => provider._handleFfmpegClose('rec-1', 'rec-1.mp3', code));
 
-    const ended = new Promise((resolve) => provider.once('recording-ended', resolve));
+    const ended = new Promise(resolve => provider.once('recording-ended', resolve));
 
     // Must resolve (not hang) despite 'q' being ignored.
     await provider.stopRecording('rec-1');
@@ -253,7 +262,9 @@ describe('LocalProvider', () => {
       await provider._pollForMeetings(); // still present — must not re-emit
 
       expect(detected).toHaveBeenCalledTimes(1);
-      expect(detected).toHaveBeenCalledWith(expect.objectContaining({ windowId: 'zoom-123', platform: 'zoom' }));
+      expect(detected).toHaveBeenCalledWith(
+        expect.objectContaining({ windowId: 'zoom-123', platform: 'zoom' })
+      );
     });
 
     it('does NOT emit meeting-closed on a single missed poll (flicker)', async () => {
@@ -466,7 +477,11 @@ describe('LocalProvider', () => {
       provider._recording = true;
       provider._ffmpegProcess = fake;
       provider._activeRecording = { recordingId: 'r.mp3', audioFilePath: 'r.mp3' };
-      provider._activeTrackPaths = { micAudioFilePath: 'r-mic.mp3', appAudioFilePath: null, systemAudioFilePath: null };
+      provider._activeTrackPaths = {
+        micAudioFilePath: 'r-mic.mp3',
+        appAudioFilePath: null,
+        systemAudioFilePath: null,
+      };
       fake.on('close', code => provider._handleFfmpegClose('r.mp3', 'r.mp3', code));
 
       const ended = new Promise(res => provider.once('recording-ended', res));
@@ -503,7 +518,15 @@ describe('LocalProvider', () => {
     it('awaits app-capture stop before emitting recording-ended', async () => {
       let stopResolved = false;
       provider._appCapture = {
-        stop: vi.fn(() => new Promise(r => setTimeout(() => { stopResolved = true; r(); }, 20))),
+        stop: vi.fn(
+          () =>
+            new Promise(r =>
+              setTimeout(() => {
+                stopResolved = true;
+                r();
+              }, 20)
+            )
+        ),
       };
       const ended = new Promise(res => provider.once('recording-ended', () => res(stopResolved)));
       await provider._handleFfmpegClose('r.mp3', 'r.mp3', 0);
@@ -523,8 +546,22 @@ describe('LocalProvider', () => {
 
     it('re-resolves a stale deviceId by name, mirrors it into config, and emits', async () => {
       provider.setAudioConfig([
-        { label: 'Mic', device: 'Sonar - Microphone (Virtual)', type: 'dshow', deviceId: null, volume: 100, enabled: true },
-        { label: 'System', device: 'Sonar - Gaming (Virtual)', type: 'wasapi', deviceId: 'stale-id', volume: 100, enabled: true },
+        {
+          label: 'Mic',
+          device: 'Sonar - Microphone (Virtual)',
+          type: 'dshow',
+          deviceId: null,
+          volume: 100,
+          enabled: true,
+        },
+        {
+          label: 'System',
+          device: 'Sonar - Gaming (Virtual)',
+          type: 'wasapi',
+          deviceId: 'stale-id',
+          volume: 100,
+          enabled: true,
+        },
       ]);
       const updated = vi.fn();
       provider.on('audio-sources-updated', updated);
@@ -542,12 +579,26 @@ describe('LocalProvider', () => {
 
     it('keeps a still-valid deviceId and does not emit', async () => {
       provider.setAudioConfig([
-        { label: 'System', device: 'Sonar - Gaming (Virtual)', type: 'wasapi', deviceId: 'new-gaming-id', volume: 100, enabled: true },
+        {
+          label: 'System',
+          device: 'Sonar - Gaming (Virtual)',
+          type: 'wasapi',
+          deviceId: 'new-gaming-id',
+          volume: 100,
+          enabled: true,
+        },
       ]);
       const updated = vi.fn();
       provider.on('audio-sources-updated', updated);
 
-      const enabled = [{ device: 'Sonar - Gaming (Virtual)', type: 'wasapi', deviceId: 'new-gaming-id', volume: 100 }];
+      const enabled = [
+        {
+          device: 'Sonar - Gaming (Virtual)',
+          type: 'wasapi',
+          deviceId: 'new-gaming-id',
+          volume: 100,
+        },
+      ];
       await provider._healWasapiDeviceIds(enabled);
 
       expect(enabled[0].deviceId).toBe('new-gaming-id');
@@ -555,7 +606,9 @@ describe('LocalProvider', () => {
     });
 
     it('throws a clear error when the device is gone under both id and name', async () => {
-      const enabled = [{ device: 'Unplugged Headset', type: 'wasapi', deviceId: 'gone-id', volume: 100 }];
+      const enabled = [
+        { device: 'Unplugged Headset', type: 'wasapi', deviceId: 'gone-id', volume: 100 },
+      ];
       await expect(provider._healWasapiDeviceIds(enabled)).rejects.toThrow(
         /Audio device "Unplugged Headset" not found/
       );

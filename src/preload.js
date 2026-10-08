@@ -45,7 +45,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRecordingStateChange: callback =>
     ipcRenderer.on('recording-state-change', (_, data) => callback(data)),
   onRecordingEnded: callback => ipcRenderer.on('recording-ended', (_, data) => callback(data)),
-  onMeetingUpdated: callback => ipcRenderer.on('meeting-updated', (_, meetingId) => callback(meetingId)),
+  onMeetingUpdated: callback =>
+    ipcRenderer.on('meeting-updated', (_, meetingId) => callback(meetingId)),
   // v1.2: Recording Widget IPC
   onWidgetCreateAndRecord: callback =>
     ipcRenderer.on('widget:create-and-record', (_, data) => callback(data)),
@@ -61,7 +62,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   widgetToggleAlwaysOnTop: enabled => ipcRenderer.invoke('widget:toggleAlwaysOnTop', enabled),
   widgetGetState: () => ipcRenderer.invoke('widget:getState'),
   // v1.2 fix: Notify main process when user views a meeting
-  notifyCurrentMeetingChanged: meetingInfo => ipcRenderer.send('renderer:current-meeting-changed', meetingInfo),
+  notifyCurrentMeetingChanged: meetingInfo =>
+    ipcRenderer.send('renderer:current-meeting-changed', meetingInfo),
   onParticipantsUpdated: callback =>
     ipcRenderer.on('participants-updated', (_, meetingId) => callback(meetingId)),
   onVideoFrame: callback => ipcRenderer.on('video-frame', (_, data) => callback(data)),
@@ -103,10 +105,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   gmailGetThreadsByContact: (email, maxResults) =>
     ipcRenderer.invoke('gmail:getThreadsByContact', email, maxResults),
   // v1.3.0: Database query shortcuts
-  dbGetMeetingsForContact: email =>
-    ipcRenderer.invoke('db:getMeetingsForContact', email),
-  dbGetMeetingCountForContact: email =>
-    ipcRenderer.invoke('db:getMeetingCountForContact', email),
+  dbGetMeetingsForContact: email => ipcRenderer.invoke('db:getMeetingsForContact', email),
+  dbGetMeetingCountForContact: email => ipcRenderer.invoke('db:getMeetingCountForContact', email),
   dbGetMeetingsInRange: (startDate, endDate, filters) =>
     ipcRenderer.invoke('db:getMeetingsInRange', startDate, endDate, filters),
   dbGetMeetingsForOrganization: organization =>
@@ -178,8 +178,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('contacts:rematchParticipants', meetingId),
   contactsGetByEmail: email => ipcRenderer.invoke('contacts:getByEmail', email),
   // Contact write capabilities
-  contactsCreateContact: contactData =>
-    ipcRenderer.invoke('contacts:createContact', contactData),
+  contactsCreateContact: contactData => ipcRenderer.invoke('contacts:createContact', contactData),
   speakersMatchSpeakers: (transcript, participantEmails, options) =>
     ipcRenderer.invoke('speakers:matchSpeakers', { transcript, participantEmails, options }),
   speakersUpdateMapping: (meetingId, speakerLabel, participantEmail) =>
@@ -305,8 +304,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   companiesSelectFolder: () => ipcRenderer.invoke('companies:selectFolder'),
 
   // Enhanced Contacts (v1.4)
-  contactsGetFullDetail: resourceName =>
-    ipcRenderer.invoke('contacts:getFullDetail', resourceName),
+  contactsGetFullDetail: resourceName => ipcRenderer.invoke('contacts:getFullDetail', resourceName),
   contactsUpdateContact: (resourceName, updates) =>
     ipcRenderer.invoke('contacts:updateContact', { resourceName, updates }),
   contactsGetCalendarEventsForContact: email =>
@@ -340,9 +338,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Voice profiles (v2.0)
   voiceProfileGetAll: () => ipcRenderer.invoke('voiceProfile:getAll'),
-  voiceProfileDelete: (id) => ipcRenderer.invoke('voiceProfile:delete', id),
-  voiceProfileAssign: (data) => ipcRenderer.invoke('voiceProfile:assign', data),
-  voiceProfileBackfill: (args) => ipcRenderer.invoke('voiceProfile:backfill', args),
+  voiceProfileDelete: id => ipcRenderer.invoke('voiceProfile:delete', id),
+  voiceProfileAssign: data => ipcRenderer.invoke('voiceProfile:assign', data),
+  voiceProfileBackfill: args => ipcRenderer.invoke('voiceProfile:backfill', args),
 
   // Audio device management (v2.0 mixer)
   audioDevicesList: () => ipcRenderer.invoke('audioDevices:list'),
@@ -355,7 +353,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   aiServiceRepair: () => ipcRenderer.invoke('aiService:repair'),
 
   // Local model discovery (v2.0 — dual endpoint)
-  listLocalModels: (baseUrl) => ipcRenderer.invoke('local:listModels', baseUrl),
+  listLocalModels: baseUrl => ipcRenderer.invoke('local:listModels', baseUrl),
 
   // Mock SDK test control (only functional in MOCK_SDK mode, safe no-ops otherwise)
   mockGetState: () => ipcRenderer.invoke('mock:getState'),

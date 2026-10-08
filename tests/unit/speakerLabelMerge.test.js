@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { mergeNearDuplicateLabels, MERGE_DISTANCE_THRESHOLD } from '../../src/main/services/speakerLabelMerge.js';
+import {
+  mergeNearDuplicateLabels,
+  MERGE_DISTANCE_THRESHOLD,
+} from '../../src/main/services/speakerLabelMerge.js';
 
 const emb = arr => ({ embedding: new Float32Array(arr) });
 
@@ -16,8 +19,11 @@ describe('mergeNearDuplicateLabels', () => {
       { speakerLabel: 'SPEAKER_01', ...emb([0, 1, 0]) },
       { speakerLabel: 'SPEAKER_02', ...emb([0.999, 0.01, 0]) }, // ~ same voice as 00
     ];
-    const { relabelMap, segments: merged, embeddings: keptEmbeddings } =
-      mergeNearDuplicateLabels(segments, embeddings);
+    const {
+      relabelMap,
+      segments: merged,
+      embeddings: keptEmbeddings,
+    } = mergeNearDuplicateLabels(segments, embeddings);
 
     expect(relabelMap).toEqual({ SPEAKER_02: 'SPEAKER_00' });
     expect(merged.every(s => s.speaker !== 'SPEAKER_02')).toBe(true);
@@ -66,9 +72,9 @@ describe('mergeNearDuplicateLabels', () => {
     // C can only reach A through B, so this exercises transitive resolution.
     // Durations: A (100s) > B (50s) > C (30s), so A is the ultimate survivor.
     const segments = [
-      { speaker: 'SPEAKER_A', start: 0, end: 100 },   // 100s duration
-      { speaker: 'SPEAKER_B', start: 100, end: 150 },  // 50s duration
-      { speaker: 'SPEAKER_C', start: 150, end: 180 },  // 30s duration
+      { speaker: 'SPEAKER_A', start: 0, end: 100 }, // 100s duration
+      { speaker: 'SPEAKER_B', start: 100, end: 150 }, // 50s duration
+      { speaker: 'SPEAKER_C', start: 150, end: 180 }, // 30s duration
     ];
     const embeddings = [
       { speakerLabel: 'SPEAKER_A', ...emb([1, 0, 0]) },
@@ -76,8 +82,11 @@ describe('mergeNearDuplicateLabels', () => {
       { speakerLabel: 'SPEAKER_C', ...emb([0.5, 0.8660254, 0]) }, // 60° from A, 30° from B
     ];
 
-    const { relabelMap, segments: merged, embeddings: keptEmbeddings } =
-      mergeNearDuplicateLabels(segments, embeddings);
+    const {
+      relabelMap,
+      segments: merged,
+      embeddings: keptEmbeddings,
+    } = mergeNearDuplicateLabels(segments, embeddings);
 
     // C maps to A (NOT to intermediate B) — proving multi-hop flattening
     expect(relabelMap).toEqual({ SPEAKER_B: 'SPEAKER_A', SPEAKER_C: 'SPEAKER_A' });

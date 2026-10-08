@@ -17,7 +17,10 @@ function fakeChild({ stdout = '', stderr = '', code = 0, error = null } = {}) {
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
   process.nextTick(() => {
-    if (error) { child.emit('error', error); return; }
+    if (error) {
+      child.emit('error', error);
+      return;
+    }
     if (stdout) child.stdout.emit('data', Buffer.from(stdout));
     if (stderr) child.stderr.emit('data', Buffer.from(stderr));
     child.emit('close', code);
@@ -50,7 +53,9 @@ describe('parseVideoId', () => {
     expect(parseVideoId('https://www.youtube.com/watch?v=dQw4w9WgXcQ')).toBe('dQw4w9WgXcQ');
   });
   it('parses watch URLs with extra query params', () => {
-    expect(parseVideoId('https://youtube.com/watch?v=dQw4w9WgXcQ&list=RD&t=42s')).toBe('dQw4w9WgXcQ');
+    expect(parseVideoId('https://youtube.com/watch?v=dQw4w9WgXcQ&list=RD&t=42s')).toBe(
+      'dQw4w9WgXcQ'
+    );
   });
   it('parses youtu.be short URLs', () => {
     expect(parseVideoId('https://youtu.be/dQw4w9WgXcQ?si=abc')).toBe('dQw4w9WgXcQ');
@@ -102,8 +107,9 @@ describe('buildDownloadArgs', () => {
 
 describe('parseDownloadProgress', () => {
   it('parses a fractional percentage', () => {
-    expect(parseDownloadProgress('[download]  42.3% of  10.50MiB at 1.20MiB/s ETA 00:05'))
-      .toEqual({ percent: 42.3 });
+    expect(parseDownloadProgress('[download]  42.3% of  10.50MiB at 1.20MiB/s ETA 00:05')).toEqual({
+      percent: 42.3,
+    });
   });
   it('parses 100%', () => {
     expect(parseDownloadProgress('[download] 100% of 10.50MiB in 00:08')).toEqual({ percent: 100 });
@@ -151,7 +157,8 @@ describe('winGetCandidates', () => {
       { LOCALAPPDATA },
       {
         fileExists: () => true,
-        listDir: (dir) => (dir === WINGET_PACKAGES_DIR ? [WINGET_PKG_ENTRY, 'Some.Other_Package'] : []),
+        listDir: dir =>
+          dir === WINGET_PACKAGES_DIR ? [WINGET_PKG_ENTRY, 'Some.Other_Package'] : [],
       }
     );
     expect(out).toEqual([WINGET_LINKS_EXE, WINGET_PKG_EXE]);
@@ -160,7 +167,7 @@ describe('winGetCandidates', () => {
     const out = winGetCandidates(
       { LOCALAPPDATA },
       {
-        fileExists: (p) => p !== WINGET_LINKS_EXE,
+        fileExists: p => p !== WINGET_LINKS_EXE,
         listDir: () => [WINGET_PKG_ENTRY],
       }
     );
@@ -170,19 +177,26 @@ describe('winGetCandidates', () => {
     const out = winGetCandidates(
       { LOCALAPPDATA },
       {
-        fileExists: (p) => p !== WINGET_LINKS_EXE,
+        fileExists: p => p !== WINGET_LINKS_EXE,
         listDir: () => ['Gyan.FFmpeg_abc', 'yt-dlp.yt-dlp-nightly_xyz', WINGET_PKG_ENTRY],
       }
     );
     expect(out).toEqual([WINGET_PKG_EXE]);
   });
   it('returns [] when LOCALAPPDATA is unset', () => {
-    expect(winGetCandidates({}, { fileExists: () => true, listDir: () => [WINGET_PKG_ENTRY] })).toEqual([]);
+    expect(
+      winGetCandidates({}, { fileExists: () => true, listDir: () => [WINGET_PKG_ENTRY] })
+    ).toEqual([]);
   });
   it('tolerates a listDir that throws', () => {
     const out = winGetCandidates(
       { LOCALAPPDATA },
-      { fileExists: (p) => p === WINGET_LINKS_EXE, listDir: () => { throw new Error('EPERM'); } }
+      {
+        fileExists: p => p === WINGET_LINKS_EXE,
+        listDir: () => {
+          throw new Error('EPERM');
+        },
+      }
     );
     expect(out).toEqual([WINGET_LINKS_EXE]);
   });
@@ -202,7 +216,7 @@ describe('binary resolution fallback', () => {
   const wingetOverrides = {
     env: { LOCALAPPDATA },
     fileExists: () => true,
-    listDir: (dir) => (dir === WINGET_PACKAGES_DIR ? [WINGET_PKG_ENTRY] : []),
+    listDir: dir => (dir === WINGET_PACKAGES_DIR ? [WINGET_PKG_ENTRY] : []),
   };
 
   it('checkBinary falls back to the WinGet Links exe when PATH spawn ENOENTs', async () => {
@@ -217,13 +231,15 @@ describe('binary resolution fallback', () => {
     const spawn = pathBrokenSpawn(WINGET_PKG_EXE);
     const yt = makeImporter(spawn, {
       ...wingetOverrides,
-      fileExists: (p) => p !== WINGET_LINKS_EXE,
+      fileExists: p => p !== WINGET_LINKS_EXE,
     });
     await expect(yt.checkBinary()).resolves.toBe(true);
     expect(spawn).toHaveBeenLastCalledWith(WINGET_PKG_EXE, ['--version'], expect.any(Object));
   });
   it('checkBinary is false when no candidate spawns', async () => {
-    const spawn = vi.fn(() => fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }));
+    const spawn = vi.fn(() =>
+      fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) })
+    );
     const yt = makeImporter(spawn, wingetOverrides);
     await expect(yt.checkBinary()).resolves.toBe(false);
   });
@@ -259,7 +275,9 @@ describe('checkBinary', () => {
     expect(spawn).toHaveBeenCalledWith('yt-dlp', ['--version'], expect.any(Object));
   });
   it('resolves false when spawn errors (binary missing)', async () => {
-    const spawn = vi.fn(() => fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }));
+    const spawn = vi.fn(() =>
+      fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) })
+    );
     const yt = makeImporter(spawn);
     await expect(yt.checkBinary()).resolves.toBe(false);
   });
@@ -267,13 +285,23 @@ describe('checkBinary', () => {
 
 describe('fetchMetadata', () => {
   it('spawns dump-json and returns mapped fields', async () => {
-    const json = JSON.stringify({ id: 'dQw4w9WgXcQ', title: 'T', upload_date: '20260710', duration: 5 });
+    const json = JSON.stringify({
+      id: 'dQw4w9WgXcQ',
+      title: 'T',
+      upload_date: '20260710',
+      duration: 5,
+    });
     const spawn = vi.fn(() => fakeChild({ stdout: json, code: 0 }));
     const yt = makeImporter(spawn);
     const meta = await yt.fetchMetadata('dQw4w9WgXcQ');
     expect(spawn).toHaveBeenCalledWith(
       'yt-dlp',
-      ['--dump-json', '--no-download', '--no-playlist', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'],
+      [
+        '--dump-json',
+        '--no-download',
+        '--no-playlist',
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      ],
       expect.any(Object)
     );
     expect(meta.title).toBe('T');
@@ -288,10 +316,11 @@ describe('fetchMetadata', () => {
 
 describe('downloadAudio', () => {
   it('spawns extraction argv, reports progress, returns the mp3 path', async () => {
-    const progressLines = '[download]   0.0% of 5MiB\n[download]  50.0% of 5MiB\n[download] 100% of 5MiB\n';
+    const progressLines =
+      '[download]   0.0% of 5MiB\n[download]  50.0% of 5MiB\n[download] 100% of 5MiB\n';
     const spawn = vi.fn(() => fakeChild({ stdout: progressLines, code: 0 }));
     const seen = [];
-    const yt = makeImporter(spawn, { onProgress: (p) => seen.push(p) });
+    const yt = makeImporter(spawn, { onProgress: p => seen.push(p) });
     const out = await yt.downloadAudio('dQw4w9WgXcQ');
     expect(out).toBe(path.join('C:/rec', 'youtube-dQw4w9WgXcQ.mp3'));
     expect(spawn).toHaveBeenCalledWith(
@@ -328,9 +357,13 @@ describe('importFromUrl', () => {
     expect(res.meta.title).toBe('T');
   });
   it('throws a binary-missing error when yt-dlp is absent', async () => {
-    const spawn = vi.fn(() => fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) }));
+    const spawn = vi.fn(() =>
+      fakeChild({ error: Object.assign(new Error('ENOENT'), { code: 'ENOENT' }) })
+    );
     const yt = makeImporter(spawn);
-    await expect(yt.importFromUrl('https://youtu.be/dQw4w9WgXcQ')).rejects.toMatchObject({ code: 'binary-missing' });
+    await expect(yt.importFromUrl('https://youtu.be/dQw4w9WgXcQ')).rejects.toMatchObject({
+      code: 'binary-missing',
+    });
   });
   it('throws for an unparseable URL before spawning', async () => {
     const spawn = vi.fn();

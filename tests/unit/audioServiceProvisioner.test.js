@@ -49,7 +49,10 @@ describe('AudioServiceProvisioner', () => {
 
   it('isProvisioned is false when the lock hash no longer matches', () => {
     fs.mkdirSync(envDir, { recursive: true });
-    fs.writeFileSync(path.join(envDir, 'provision-marker.json'), JSON.stringify({ lockHash: 'stale' }));
+    fs.writeFileSync(
+      path.join(envDir, 'provision-marker.json'),
+      JSON.stringify({ lockHash: 'stale' })
+    );
     expect(prov.isProvisioned()).toBe(false);
   });
 
@@ -67,7 +70,7 @@ describe('AudioServiceProvisioner', () => {
       return p;
     };
     const lines = [];
-    await prov.provision((l) => lines.push(l));
+    await prov.provision(l => lines.push(l));
 
     expect(calls[0].cmd).toContain('uv.exe');
     expect(calls[0].args).toEqual(['sync', '--frozen', '--no-dev']);

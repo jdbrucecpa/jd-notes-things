@@ -60,7 +60,10 @@ function calculateSpeakerStatsFromTranscript(transcript) {
 
     if (!speakerName || !text) continue;
 
-    const wordCount = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+    const wordCount = text
+      .trim()
+      .split(/\s+/)
+      .filter(w => w.length > 0).length;
     totalWords += wordCount;
 
     // Accumulate word count (normalize speaker name for matching)
@@ -453,15 +456,21 @@ function populateParticipants(meeting) {
     const name = participant.name || participant.email || 'Unknown';
     const initials = getInitials(name);
     const isLinked = !!(participant.email || participant.contactId);
-    const participantStats = findParticipantSpeakerStats(participant, speakerStats, meeting.appliedSpeakerMappings);
+    const participantStats = findParticipantSpeakerStats(
+      participant,
+      speakerStats,
+      meeting.appliedSpeakerMappings
+    );
     const organization = participant.company || participant.organization || '';
 
     // Status indicator
     let statusBadge;
     if (isLinked) {
-      statusBadge = '<span class="participant-status participant-status-matched" title="Matched to Google Contact"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>';
+      statusBadge =
+        '<span class="participant-status participant-status-matched" title="Matched to Google Contact"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>';
     } else {
-      statusBadge = '<span class="participant-status participant-status-unmatched" title="No Google Contact">?</span>';
+      statusBadge =
+        '<span class="participant-status participant-status-unmatched" title="No Google Contact">?</span>';
     }
 
     // Talk time badge
@@ -519,13 +528,15 @@ function populateParticipants(meeting) {
     `;
 
     // Unmatched CTA (shown for unmatched participants)
-    const unmatchedCta = !isLinked ? `
+    const unmatchedCta = !isLinked
+      ? `
       <div class="participant-unmatched-cta" data-index="${index}">
         <button class="btn btn-outline btn-xs add-to-contacts-btn" data-index="${index}" data-name="${escapeHtml(participant.originalName || name)}" data-email="${escapeHtml(participant.email || '')}">
           + Add to Google Contacts
         </button>
       </div>
-    ` : '';
+    `
+      : '';
 
     participantItem.innerHTML = collapsedHtml + unmatchedCta + expandedHtml;
     participantsList.appendChild(participantItem);
@@ -534,7 +545,8 @@ function populateParticipants(meeting) {
   // Add the "Add participant" row at the end
   const addRow = document.createElement('div');
   addRow.className = 'add-participant-row';
-  addRow.innerHTML = '<button class="btn btn-outline btn-sm add-participant-btn">+ Add Participant</button>';
+  addRow.innerHTML =
+    '<button class="btn btn-outline btn-sm add-participant-btn">+ Add Participant</button>';
   participantsList.appendChild(addRow);
 
   // Set up event listeners
@@ -626,7 +638,9 @@ function setupRefreshMatchingButton() {
 
         // Notify success
         const matchedCount = result.participants.filter(p => p.contactMatched).length;
-        console.log(`[MeetingDetail] Re-matched participants: ${matchedCount} of ${result.participants.length} matched`);
+        console.log(
+          `[MeetingDetail] Re-matched participants: ${matchedCount} of ${result.participants.length} matched`
+        );
       } else {
         console.error('[MeetingDetail] Failed to rematch participants:', result.error);
         alert('Failed to rematch participants: ' + result.error);
@@ -658,7 +672,7 @@ function setupExpandableCards(meeting) {
 
   // Expand/collapse toggles
   participantsList.querySelectorAll('.expand-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+    btn.addEventListener('click', e => {
       e.stopPropagation();
       const index = parseInt(btn.dataset.index);
       toggleExpandedCard(index, meeting);
@@ -667,7 +681,7 @@ function setupExpandableCards(meeting) {
 
   // Click on card header to expand
   participantsList.querySelectorAll('.participant-card-header').forEach(header => {
-    header.addEventListener('click', (e) => {
+    header.addEventListener('click', e => {
       // Don't expand if clicking buttons
       if (e.target.closest('.btn') || e.target.closest('.icon-btn')) return;
       const index = parseInt(header.dataset.index);
@@ -677,7 +691,7 @@ function setupExpandableCards(meeting) {
 
   // "Add to Google Contacts" buttons
   participantsList.querySelectorAll('.add-to-contacts-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    btn.addEventListener('click', async e => {
       e.stopPropagation();
       const name = btn.dataset.name;
       const email = btn.dataset.email;
@@ -701,13 +715,15 @@ function toggleExpandedCard(index, meeting) {
     el.style.display = 'none';
   });
   document.querySelectorAll('.expand-btn').forEach(btn => {
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>';
+    btn.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>';
   });
 
   if (!isVisible) {
     expandedEl.style.display = 'block';
     if (expandBtn) {
-      expandBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>';
+      expandBtn.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>';
     }
     // Load expanded content lazily
     loadExpandedContent(index, meeting);
@@ -752,7 +768,7 @@ async function loadExpandedContent(index, meeting) {
 
   // Set up click handlers for external links
   container.querySelectorAll('.external-link').forEach(link => {
-    link.addEventListener('click', (e) => {
+    link.addEventListener('click', e => {
       e.preventDefault();
       const url = link.dataset.url;
       if (url && window.electronAPI?.openExternal) {
@@ -785,25 +801,36 @@ function renderContactDetailsSection(participant, contact) {
   const org = contact?.organization || participant.organization || participant.company || '';
   const title = contact?.title || participant.title || '';
   // Backward compat: old data may have googleContactId instead of googleContactResource
-  const resourceName = contact?.resourceName || participant.googleContactResource || participant.googleContactId || '';
+  const resourceName =
+    contact?.resourceName || participant.googleContactResource || participant.googleContactId || '';
 
   if (email) {
-    items.push(`<div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">${escapeHtml(email)}</span></div>`);
+    items.push(
+      `<div class="detail-row"><span class="detail-label">Email</span><span class="detail-value">${escapeHtml(email)}</span></div>`
+    );
   }
   if (phones.length > 0) {
     for (const phone of phones) {
-      items.push(`<div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">${escapeHtml(phone)}</span></div>`);
+      items.push(
+        `<div class="detail-row"><span class="detail-label">Phone</span><span class="detail-value">${escapeHtml(phone)}</span></div>`
+      );
     }
   }
   if (org) {
-    items.push(`<div class="detail-row"><span class="detail-label">Organization</span><span class="detail-value">${escapeHtml(org)}</span></div>`);
+    items.push(
+      `<div class="detail-row"><span class="detail-label">Organization</span><span class="detail-value">${escapeHtml(org)}</span></div>`
+    );
   }
   if (title) {
-    items.push(`<div class="detail-row"><span class="detail-label">Title</span><span class="detail-value">${escapeHtml(title)}</span></div>`);
+    items.push(
+      `<div class="detail-row"><span class="detail-label">Title</span><span class="detail-value">${escapeHtml(title)}</span></div>`
+    );
   }
   if (resourceName) {
     const contactUrl = `https://contacts.google.com/person/${resourceName.replace('people/', '')}`;
-    items.push(`<div class="detail-row"><a href="#" class="external-link" data-url="${contactUrl}">Open in Google Contacts</a></div>`);
+    items.push(
+      `<div class="detail-row"><a href="#" class="external-link" data-url="${contactUrl}">Open in Google Contacts</a></div>`
+    );
   }
 
   if (items.length === 0) return '';
@@ -824,10 +851,12 @@ async function renderMeetingHistorySection(participant) {
     const meetings = meetingsResult?.meetings || [];
     const recentMeetings = meetings.slice(0, 5);
 
-    const listHtml = recentMeetings.map(m => {
-      const date = new Date(m.date).toLocaleDateString();
-      return `<div class="history-meeting-item" data-meeting-id="${escapeHtml(m.id)}">${escapeHtml(m.title)} <span class="history-date">${date}</span></div>`;
-    }).join('');
+    const listHtml = recentMeetings
+      .map(m => {
+        const date = new Date(m.date).toLocaleDateString();
+        return `<div class="history-meeting-item" data-meeting-id="${escapeHtml(m.id)}">${escapeHtml(m.title)} <span class="history-date">${date}</span></div>`;
+      })
+      .join('');
 
     return `
       <div class="expanded-section-group">
@@ -851,15 +880,17 @@ async function renderRecentEmailsSection(participant) {
     const result = await window.electronAPI.gmailGetThreadsByContact(participant.email, 5);
     if (!result?.success || !result.threads || result.threads.length === 0) return '';
 
-    const threadsHtml = result.threads.map(t => {
-      const date = t.lastMessageDate ? new Date(t.lastMessageDate).toLocaleDateString() : '';
-      return `
+    const threadsHtml = result.threads
+      .map(t => {
+        const date = t.lastMessageDate ? new Date(t.lastMessageDate).toLocaleDateString() : '';
+        return `
         <div class="email-thread-item">
           <a href="#" class="external-link email-subject" data-url="${escapeHtml(t.gmailLink)}">${escapeHtml(t.subject)}</a>
           <span class="email-meta">${date} (${t.messageCount})</span>
         </div>
       `;
-    }).join('');
+      })
+      .join('');
 
     return `
       <div class="expanded-section-group">
@@ -946,7 +977,11 @@ async function removeParticipantFromCard(index) {
 
   // Save to backend
   try {
-    await window.electronAPI.updateMeetingField(currentMeetingId, 'participants', currentMeeting.participants);
+    await window.electronAPI.updateMeetingField(
+      currentMeetingId,
+      'participants',
+      currentMeeting.participants
+    );
     populateParticipants(currentMeeting);
     updateParticipantCount();
 
@@ -970,34 +1005,31 @@ function showParticipantChangeInput(index, _buttonEl) {
   if (!participant) return;
 
   // Show contact search modal with custom title
-  showContactSearchModal(
-    async selectedContact => {
-      // Replace participant with selected contact
-      currentMeeting.participants[index] = {
-        name: selectedContact.name,
-        email: selectedContact.email || null,
-        company: selectedContact.company || selectedContact.organization || null,
-        contactId: selectedContact.contactId || null,
-      };
+  showContactSearchModal(async selectedContact => {
+    // Replace participant with selected contact
+    currentMeeting.participants[index] = {
+      name: selectedContact.name,
+      email: selectedContact.email || null,
+      company: selectedContact.company || selectedContact.organization || null,
+      contactId: selectedContact.contactId || null,
+    };
 
-      // Save to backend
-      try {
-        await window.electronAPI.updateMeetingField(
-          currentMeetingId,
-          'participants',
-          currentMeeting.participants
-        );
-        populateParticipants(currentMeeting);
+    // Save to backend
+    try {
+      await window.electronAPI.updateMeetingField(
+        currentMeetingId,
+        'participants',
+        currentMeeting.participants
+      );
+      populateParticipants(currentMeeting);
 
-        if (window._meetingDetailUpdateCallback) {
-          window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
-        }
-      } catch (error) {
-        console.error('[MeetingDetail] Failed to change participant:', error);
+      if (window._meetingDetailUpdateCallback) {
+        window._meetingDetailUpdateCallback(currentMeetingId, currentMeeting);
       }
-    },
-    `Replace "${participant.name}" with...`
-  );
+    } catch (error) {
+      console.error('[MeetingDetail] Failed to change participant:', error);
+    }
+  }, `Replace "${participant.name}" with...`);
 }
 
 /**
@@ -1105,7 +1137,9 @@ async function populateTranscript(meeting) {
       const provider = await showRerunProviderPicker();
       if (!provider) return;
 
-      console.log(`[RerunTranscription] Selected provider: ${provider}, meeting: ${currentMeetingId}`);
+      console.log(
+        `[RerunTranscription] Selected provider: ${provider}, meeting: ${currentMeetingId}`
+      );
       rerunBtn.disabled = true;
       rerunBtn.textContent = 'Re-running...';
 
@@ -1119,7 +1153,9 @@ async function populateTranscript(meeting) {
         }
 
         const result = await window.electronAPI.transcriptionRerun(
-          currentMeetingId, provider, fileResult.filePath
+          currentMeetingId,
+          provider,
+          fileResult.filePath
         );
         console.log('[RerunTranscription] Result:', result);
         if (result.success) {
@@ -1220,7 +1256,6 @@ async function populateTranscript(meeting) {
       exportBtn.style.display = 'none';
     }
   }
-
 }
 
 /**
@@ -1231,10 +1266,12 @@ function showRerunProviderPicker() {
   return new Promise(resolve => {
     // Create a simple overlay dialog
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
+    overlay.style.cssText =
+      'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;';
 
     const dialog = document.createElement('div');
-    dialog.style.cssText = 'background: var(--card-bg, #1e1e1e); border-radius: 12px; padding: 24px; min-width: 300px; border: 1px solid var(--border-color);';
+    dialog.style.cssText =
+      'background: var(--card-bg, #1e1e1e); border-radius: 12px; padding: 24px; min-width: 300px; border: 1px solid var(--border-color);';
 
     const title = document.createElement('h3');
     title.style.cssText = 'margin: 0 0 16px; font-size: 16px;';
@@ -1243,7 +1280,8 @@ function showRerunProviderPicker() {
 
     const desc = document.createElement('p');
     desc.style.cssText = 'color: var(--text-secondary); font-size: 13px; margin: 0 0 16px;';
-    desc.textContent = 'Select a transcription provider. If the original audio file is not found, you will be prompted to select one.';
+    desc.textContent =
+      'Select a transcription provider. If the original audio file is not found, you will be prompted to select one.';
     dialog.appendChild(desc);
 
     const providers = [
@@ -1255,7 +1293,8 @@ function showRerunProviderPicker() {
     for (const p of providers) {
       const btn = document.createElement('button');
       btn.className = 'btn btn-outline';
-      btn.style.cssText = 'display: block; width: 100%; margin-bottom: 8px; padding: 10px; text-align: left;';
+      btn.style.cssText =
+        'display: block; width: 100%; margin-bottom: 8px; padding: 10px; text-align: left;';
       btn.textContent = `${p.name} (${p.price})`;
       btn.addEventListener('click', () => {
         document.body.removeChild(overlay);
@@ -1472,9 +1511,11 @@ function populateTemplates(meeting) {
 
     // Allow clicking the title to toggle as well (but not the drag handle, copy, or delete buttons)
     header.addEventListener('click', e => {
-      if (!e.target.closest('.template-drag-handle') &&
-          !e.target.closest('.template-copy-btn') &&
-          !e.target.closest('.template-delete-btn')) {
+      if (
+        !e.target.closest('.template-drag-handle') &&
+        !e.target.closest('.template-copy-btn') &&
+        !e.target.closest('.template-delete-btn')
+      ) {
         toggleCollapse();
       }
     });
@@ -1545,8 +1586,12 @@ function updateTemplateSummaryOrder(templatesList) {
   const newOrder = Array.from(cards).map(card => parseInt(card.getAttribute('data-index'), 10));
 
   // Get only template summaries (non-auto-summary)
-  const templateSummaries = currentMeeting.summaries.filter(s => s.templateId !== 'auto-summary-prompt');
-  const autoSummaries = currentMeeting.summaries.filter(s => s.templateId === 'auto-summary-prompt');
+  const templateSummaries = currentMeeting.summaries.filter(
+    s => s.templateId !== 'auto-summary-prompt'
+  );
+  const autoSummaries = currentMeeting.summaries.filter(
+    s => s.templateId === 'auto-summary-prompt'
+  );
 
   // Reorder template summaries based on new order
   const reorderedTemplates = newOrder.map(oldIndex => templateSummaries[oldIndex]);
@@ -1569,8 +1614,12 @@ async function deleteTemplateSummary(index, _templatesList) {
   if (!currentMeeting || !currentMeeting.summaries) return;
 
   // Get only template summaries (non-auto-summary)
-  const templateSummaries = currentMeeting.summaries.filter(s => s.templateId !== 'auto-summary-prompt');
-  const autoSummaries = currentMeeting.summaries.filter(s => s.templateId === 'auto-summary-prompt');
+  const templateSummaries = currentMeeting.summaries.filter(
+    s => s.templateId !== 'auto-summary-prompt'
+  );
+  const autoSummaries = currentMeeting.summaries.filter(
+    s => s.templateId === 'auto-summary-prompt'
+  );
 
   // Remove the summary at the given index
   const deletedSummary = templateSummaries[index];
@@ -1579,11 +1628,17 @@ async function deleteTemplateSummary(index, _templatesList) {
   // Update meeting summaries
   currentMeeting.summaries = [...autoSummaries, ...templateSummaries];
 
-  console.log(`[MeetingDetail] Deleted template summary: ${deletedSummary?.templateName || deletedSummary?.templateId}`);
+  console.log(
+    `[MeetingDetail] Deleted template summary: ${deletedSummary?.templateName || deletedSummary?.templateId}`
+  );
 
   // Persist the deletion to disk using updateMeetingField
   try {
-    await window.electronAPI.updateMeetingField(currentMeeting.id, 'summaries', currentMeeting.summaries);
+    await window.electronAPI.updateMeetingField(
+      currentMeeting.id,
+      'summaries',
+      currentMeeting.summaries
+    );
     console.log(`[MeetingDetail] Template summary deletion persisted to disk`);
   } catch (err) {
     console.error('[MeetingDetail] Failed to persist deletion:', err);
@@ -1705,7 +1760,11 @@ async function saveMeetingInfo(onUpdate) {
   // Update title if changed
   if (newTitle !== currentMeeting.title) {
     try {
-      const result = await window.electronAPI.updateMeetingField(currentMeetingId, 'title', newTitle);
+      const result = await window.electronAPI.updateMeetingField(
+        currentMeetingId,
+        'title',
+        newTitle
+      );
       if (result.success) {
         currentMeeting.title = newTitle;
         changes.push('title');
@@ -1719,7 +1778,11 @@ async function saveMeetingInfo(onUpdate) {
   const currentPlatform = (currentMeeting.platform || 'unknown').toLowerCase();
   if (newPlatform !== currentPlatform) {
     try {
-      const result = await window.electronAPI.updateMeetingField(currentMeetingId, 'platform', newPlatform);
+      const result = await window.electronAPI.updateMeetingField(
+        currentMeetingId,
+        'platform',
+        newPlatform
+      );
       if (result.success) {
         currentMeeting.platform = newPlatform;
         changes.push('platform');
@@ -1733,7 +1796,11 @@ async function saveMeetingInfo(onUpdate) {
   const currentVaultPath = currentMeeting.vaultPath || currentMeeting.obsidianLink || '';
   if (newVaultPath !== currentVaultPath) {
     try {
-      const result = await window.electronAPI.updateMeetingField(currentMeetingId, 'vaultPath', newVaultPath);
+      const result = await window.electronAPI.updateMeetingField(
+        currentMeetingId,
+        'vaultPath',
+        newVaultPath
+      );
       if (result.success) {
         currentMeeting.vaultPath = newVaultPath;
         // Also update obsidianLink to keep them in sync
@@ -1756,7 +1823,8 @@ async function saveMeetingInfo(onUpdate) {
   // Explicitly update vault path display to ensure it's current
   const pathDisplayEl = document.getElementById('meetingDetailVaultPath');
   if (pathDisplayEl) {
-    pathDisplayEl.textContent = currentMeeting.vaultPath || currentMeeting.obsidianLink || 'Not saved to vault';
+    pathDisplayEl.textContent =
+      currentMeeting.vaultPath || currentMeeting.obsidianLink || 'Not saved to vault';
   }
 
   // Update sync status indicator
@@ -2212,7 +2280,9 @@ async function regenerateSummary(onUpdate) {
 async function performRegeneration(mode, model, _onUpdate) {
   const btn = document.getElementById('regenerateSummaryBtn');
 
-  console.log(`[MeetingDetail] Starting background summary regeneration for meeting: ${currentMeetingId}`);
+  console.log(
+    `[MeetingDetail] Starting background summary regeneration for meeting: ${currentMeetingId}`
+  );
   console.log(`[MeetingDetail] Mode: ${mode}, Model: ${model}`);
 
   // Brief button state change to indicate starting

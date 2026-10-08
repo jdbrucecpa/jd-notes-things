@@ -226,7 +226,7 @@ body.dark-theme .regenerate-option.selected {
   box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.2);
 }
 
-.regenerate-option input[type="radio"] {
+.regenerate-option input[type='radio'] {
   width: 18px;
   height: 18px;
   accent-color: var(--primary-color);
@@ -280,8 +280,13 @@ body.dark-theme .regenerate-option.selected {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 /* ============================================
@@ -5165,8 +5170,12 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .template-list-scroll {
@@ -5734,7 +5743,9 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 20px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 /* Editing state highlight for meeting info card */
@@ -6028,7 +6039,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .linked-check {
-  color: var(--color-success, #4CAF50);
+  color: var(--color-success, #4caf50);
   flex-shrink: 0;
 }
 
@@ -6150,7 +6161,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
 }
 
 .participant-status-matched {
-  background: var(--color-success, #4CAF50);
+  background: var(--color-success, #4caf50);
   color: #fff;
 }
 
@@ -6944,7 +6955,7 @@ body:not(.dark-theme) .titlebar-btn-close:hover {
   border-style: dashed;
 }
 
-.template-summary-card[draggable="true"] {
+.template-summary-card[draggable='true'] {
   touch-action: none;
 }
 

@@ -149,8 +149,16 @@ class BackupService {
       if (result.filesIncluded === 0) {
         // Nothing to back up — remove empty zip
         if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-        backgroundTaskManager.completeTask(taskId, { filesIncluded: 0, message: 'No changes since last backup' });
-        return { success: true, filesIncluded: 0, totalSize: 0, message: 'No changes since last backup' };
+        backgroundTaskManager.completeTask(taskId, {
+          filesIncluded: 0,
+          message: 'No changes since last backup',
+        });
+        return {
+          success: true,
+          filesIncluded: 0,
+          totalSize: 0,
+          message: 'No changes since last backup',
+        };
       }
 
       databaseService.logBackup({
@@ -302,12 +310,16 @@ class BackupService {
           // Build allow-list of known recording directories
           const userDataDir = path.resolve(app.getPath('userData'));
           for (const entry of audioFiles) {
-            const audioInfo = audioManifest.audio.find(a => entry.path.endsWith(path.basename(a.originalPath)));
+            const audioInfo = audioManifest.audio.find(a =>
+              entry.path.endsWith(path.basename(a.originalPath))
+            );
             if (audioInfo?.originalPath) {
               // Path traversal protection: only restore to userData or known recording paths
               const resolvedDest = path.resolve(audioInfo.originalPath);
               if (!resolvedDest.startsWith(userDataDir)) {
-                log.warn(`[Backup] Skipping audio restore outside userData: ${audioInfo.originalPath}`);
+                log.warn(
+                  `[Backup] Skipping audio restore outside userData: ${audioInfo.originalPath}`
+                );
                 continue;
               }
               const destDir = path.dirname(resolvedDest);
@@ -415,7 +427,11 @@ class BackupService {
         // Update progress for large audio collections
         if (audioAdded % 5 === 0) {
           const progress = 40 + Math.min(40, (audioAdded / audioFiles.length) * 40);
-          backgroundTaskManager.updateTask(taskId, Math.round(progress), `${audioAdded} audio files added`);
+          backgroundTaskManager.updateTask(
+            taskId,
+            Math.round(progress),
+            `${audioAdded} audio files added`
+          );
         }
       }
 
@@ -436,12 +452,10 @@ class BackupService {
    */
   _getAudioFilePaths() {
     try {
-      const rows = databaseService.db.prepare(
-        'SELECT video_file FROM meetings WHERE video_file IS NOT NULL'
-      ).all();
-      return rows
-        .map(r => r.video_file)
-        .filter(p => p && fs.existsSync(p));
+      const rows = databaseService.db
+        .prepare('SELECT video_file FROM meetings WHERE video_file IS NOT NULL')
+        .all();
+      return rows.map(r => r.video_file).filter(p => p && fs.existsSync(p));
     } catch {
       return [];
     }

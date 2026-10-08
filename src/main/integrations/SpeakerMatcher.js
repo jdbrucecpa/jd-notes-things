@@ -92,12 +92,9 @@ class SpeakerMatcher {
 
       // If no email yet, try contact lookup from participant emails
       if (!matchedEmail) {
-        matchedEmail = this.findEmailForParticipant(
-          speakerName,
-          participantEmails,
-          contacts,
-          { otherParticipantEmails: participantEmails }
-        );
+        matchedEmail = this.findEmailForParticipant(speakerName, participantEmails, contacts, {
+          otherParticipantEmails: participantEmails,
+        });
         if (matchedEmail) emailSource = 'contact-lookup';
       }
 
@@ -120,7 +117,8 @@ class SpeakerMatcher {
 
       // Speaker name confidence is high (from AssemblyAI), but email confidence depends
       // on how it was resolved. Emails from contacts are NEVER authoritative per data model.
-      const confidence = emailSource === 'participant-data' ? 'high' : matchedEmail ? 'medium' : 'high';
+      const confidence =
+        emailSource === 'participant-data' ? 'high' : matchedEmail ? 'medium' : 'high';
 
       mapping[speakerName] = {
         email: matchedEmail,
@@ -256,7 +254,8 @@ class SpeakerMatcher {
             email: result.contactEmail || null,
             name: result.contactName || result.speakerLabel,
             confidence: result.confidence,
-            method: result.status === 'auto-enrolled' ? 'voice-profile-auto-enrolled' : 'voice-profile',
+            method:
+              result.status === 'auto-enrolled' ? 'voice-profile-auto-enrolled' : 'voice-profile',
             distance: result.distance,
             status: result.status,
             needsVerification: result.confidence !== 'high',
@@ -518,7 +517,11 @@ class SpeakerMatcher {
       if (contact.name && contact.name.toLowerCase() === nameLower) {
         // Full name exact match - always include
         matches.push({ email, contact, matchType: 'full-name' });
-      } else if (!hasLastName && contact.givenName && contact.givenName.toLowerCase() === firstName) {
+      } else if (
+        !hasLastName &&
+        contact.givenName &&
+        contact.givenName.toLowerCase() === firstName
+      ) {
         // First-name-only matching - ONLY allowed when source name has no last name
         // This prevents "Jonathan Fass" from matching to "Jonathan Satovsky"
         matches.push({ email, contact, matchType: 'first-name' });
@@ -834,15 +837,16 @@ class SpeakerMatcher {
     const hostParticipant = participants.find(p => p.isHost) || null;
     let userParticipant = null;
     if (this.userProfile?.email || this.userProfile?.name) {
-      userParticipant = participants.find(p => {
-        if (this.userProfile.email && p.email) {
-          return p.email.toLowerCase() === this.userProfile.email.toLowerCase();
-        }
-        if (this.userProfile.name) {
-          return this.nameMatchStrict(this.userProfile.name, p.originalName || p.name);
-        }
-        return false;
-      }) || null;
+      userParticipant =
+        participants.find(p => {
+          if (this.userProfile.email && p.email) {
+            return p.email.toLowerCase() === this.userProfile.email.toLowerCase();
+          }
+          if (this.userProfile.name) {
+            return this.nameMatchStrict(this.userProfile.name, p.originalName || p.name);
+          }
+          return false;
+        }) || null;
       // If user IS the host, don't double-assign
       if (userParticipant && hostParticipant && userParticipant === hostParticipant) {
         userParticipant = null;
@@ -856,7 +860,7 @@ class SpeakerMatcher {
 
     const assignedSpeakers = new Set();
     const assignedParticipantKeys = new Set();
-    const participantKey = (p) => p.email?.toLowerCase() || p.name?.toLowerCase();
+    const participantKey = p => p.email?.toLowerCase() || p.name?.toLowerCase();
 
     // Step 2: Assign earliest-appearing speakers to known participants
     if (hostParticipant && speakersByAppearance.length > 0) {
@@ -864,7 +868,10 @@ class SpeakerMatcher {
       // (proven not to be the user) can never receive this assignment.
       const hostIsUser =
         this.userProfile?.name &&
-        this.nameMatchStrict(this.userProfile.name, hostParticipant.originalName || hostParticipant.name);
+        this.nameMatchStrict(
+          this.userProfile.name,
+          hostParticipant.originalName || hostParticipant.name
+        );
       const earliest = hostIsUser
         ? speakersByAppearance.find(s => !remoteLabels.has(s.label))
         : speakersByAppearance[0];
@@ -878,7 +885,9 @@ class SpeakerMatcher {
         };
         assignedSpeakers.add(earliest.label);
         assignedParticipantKeys.add(participantKey(hostParticipant));
-        console.log(`[SpeakerMatcher] Assigned earliest speaker ${earliest.label} -> host "${hostParticipant.name}"`);
+        console.log(
+          `[SpeakerMatcher] Assigned earliest speaker ${earliest.label} -> host "${hostParticipant.name}"`
+        );
       }
     }
 
@@ -895,7 +904,9 @@ class SpeakerMatcher {
         };
         assignedSpeakers.add(nextSpeaker.label);
         assignedParticipantKeys.add(participantKey(userParticipant));
-        console.log(`[SpeakerMatcher] Assigned next speaker ${nextSpeaker.label} -> user "${userParticipant.name}"`);
+        console.log(
+          `[SpeakerMatcher] Assigned next speaker ${nextSpeaker.label} -> user "${userParticipant.name}"`
+        );
       }
     }
 
@@ -910,7 +921,7 @@ class SpeakerMatcher {
     // (proven not to be the user). If the user participant is the candidate for
     // a remote label, skip them for that label — they stay available for a later
     // non-remote label. Pairing stays deterministic (alphabetical pool + findIndex).
-    const isUserByProfile = (p) => {
+    const isUserByProfile = p => {
       if (!this.userProfile) return false;
       if (this.userProfile.email && p.email) {
         return p.email.toLowerCase() === this.userProfile.email.toLowerCase();
@@ -950,7 +961,9 @@ class SpeakerMatcher {
       }
     }
 
-    console.log(`[SpeakerMatcher] Unified heuristic assigned ${Object.keys(mapping).length} speakers`);
+    console.log(
+      `[SpeakerMatcher] Unified heuristic assigned ${Object.keys(mapping).length} speakers`
+    );
 
     return mapping;
   }

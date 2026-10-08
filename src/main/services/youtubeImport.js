@@ -169,7 +169,9 @@ function runYtDlp(spawn, binary, args, { onLine } = {}) {
         }
       }
     });
-    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    child.stderr.on('data', chunk => {
+      stderr += chunk.toString();
+    });
     child.on('close', code => resolve({ stdout, stderr, code }));
   });
 }
@@ -262,9 +264,18 @@ function createYoutubeImporter(deps) {
     // Download progress occupies the 15–90% band of the overall task.
     const onLine = line => {
       const p = parseDownloadProgress(line);
-      if (p) onProgress(15 + Math.round((p.percent / 100) * 75), `Downloading audio ${Math.round(p.percent)}%`);
+      if (p)
+        onProgress(
+          15 + Math.round((p.percent / 100) * 75),
+          `Downloading audio ${Math.round(p.percent)}%`
+        );
     };
-    const { stderr, code } = await runYtDlp(spawn, binaryPath, buildDownloadArgs(videoId, outPath), { onLine });
+    const { stderr, code } = await runYtDlp(
+      spawn,
+      binaryPath,
+      buildDownloadArgs(videoId, outPath),
+      { onLine }
+    );
     if (code !== 0) {
       throw new Error(`yt-dlp download failed: ${stderrTail(stderr) || 'unknown error'}`);
     }

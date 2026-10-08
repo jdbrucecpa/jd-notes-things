@@ -58,8 +58,10 @@ function setupEventListeners() {
   // Companies/Contacts toggle
   const contactsModeBtn = document.getElementById('contactsModeBtn');
   const companiesModeBtn = document.getElementById('companiesModeBtn');
-  if (contactsModeBtn) contactsModeBtn.addEventListener('click', () => switchContactsMode('contacts'));
-  if (companiesModeBtn) companiesModeBtn.addEventListener('click', () => switchContactsMode('companies'));
+  if (contactsModeBtn)
+    contactsModeBtn.addEventListener('click', () => switchContactsMode('contacts'));
+  if (companiesModeBtn)
+    companiesModeBtn.addEventListener('click', () => switchContactsMode('companies'));
 
   // Filter chips for companies
   document.querySelectorAll('.companies-filters .filter-chip').forEach(chip => {
@@ -227,11 +229,13 @@ function switchContactsMode(mode) {
   const companiesContainer = document.getElementById('companiesListContainer');
 
   if (contactsModeBtn) {
-    contactsModeBtn.style.background = mode === 'contacts' ? 'var(--primary-color)' : 'var(--bg-secondary)';
+    contactsModeBtn.style.background =
+      mode === 'contacts' ? 'var(--primary-color)' : 'var(--bg-secondary)';
     contactsModeBtn.style.color = mode === 'contacts' ? 'white' : 'var(--text-primary)';
   }
   if (companiesModeBtn) {
-    companiesModeBtn.style.background = mode === 'companies' ? 'var(--primary-color)' : 'var(--bg-secondary)';
+    companiesModeBtn.style.background =
+      mode === 'companies' ? 'var(--primary-color)' : 'var(--bg-secondary)';
     companiesModeBtn.style.color = mode === 'companies' ? 'white' : 'var(--text-primary)';
   }
 
@@ -277,7 +281,8 @@ function renderCompaniesList() {
   let filtered = allCompanies;
   if (companiesFilter === 'has-folder') filtered = allCompanies.filter(c => c.vaultPath);
   else if (companiesFilter === 'no-folder') filtered = allCompanies.filter(c => !c.vaultPath);
-  else if (companiesFilter === 'client') filtered = allCompanies.filter(c => c.category === 'Client');
+  else if (companiesFilter === 'client')
+    filtered = allCompanies.filter(c => c.category === 'Client');
 
   const searchInput = document.getElementById('contactSearchInput');
   const search = searchInput?.value?.toLowerCase() || '';
@@ -289,10 +294,12 @@ function renderCompaniesList() {
     const item = document.createElement('div');
     item.className = 'contact-item company-item';
     item.dataset.company = c.name;
-    item.style.cssText = 'padding: 10px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px;';
+    item.style.cssText =
+      'padding: 10px 12px; cursor: pointer; display: flex; align-items: center; gap: 10px;';
 
     const avatar = document.createElement('div');
-    avatar.style.cssText = 'width: 32px; height: 32px; border-radius: 6px; background: var(--primary-color); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex-shrink: 0;';
+    avatar.style.cssText =
+      'width: 32px; height: 32px; border-radius: 6px; background: var(--primary-color); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex-shrink: 0;';
     avatar.textContent = (c.name[0] || '?').toUpperCase();
     item.appendChild(avatar);
 
@@ -300,14 +307,16 @@ function renderCompaniesList() {
     info.style.cssText = 'flex: 1; min-width: 0;';
 
     const nameRow = document.createElement('div');
-    nameRow.style.cssText = 'font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 6px;';
+    nameRow.style.cssText =
+      'font-weight: 500; font-size: 14px; display: flex; align-items: center; gap: 6px;';
     const nameText = document.createElement('span');
     nameText.textContent = c.name;
     nameRow.appendChild(nameText);
 
     if (c.category === 'Client') {
       const badge = document.createElement('span');
-      badge.style.cssText = 'font-size: 11px; padding: 1px 6px; border-radius: 10px; background: var(--primary-color); color: white;';
+      badge.style.cssText =
+        'font-size: 11px; padding: 1px 6px; border-radius: 10px; background: var(--primary-color); color: white;';
       badge.textContent = 'Client';
       nameRow.appendChild(badge);
     }
@@ -618,16 +627,19 @@ function openContactEditForm(contact) {
         name: document.getElementById('editContactName')?.value?.trim(),
         organization: document.getElementById('editContactOrg')?.value?.trim(),
         title: document.getElementById('editContactTitle')?.value?.trim(),
-        emails: document.getElementById('editContactEmails')?.value
-          ?.split(',').map(e => e.trim()).filter(Boolean),
-        phones: document.getElementById('editContactPhones')?.value
-          ?.split(',').map(p => p.trim()).filter(Boolean),
+        emails: document
+          .getElementById('editContactEmails')
+          ?.value?.split(',')
+          .map(e => e.trim())
+          .filter(Boolean),
+        phones: document
+          .getElementById('editContactPhones')
+          ?.value?.split(',')
+          .map(p => p.trim())
+          .filter(Boolean),
       };
 
-      const result = await window.electronAPI.contactsUpdateContact(
-        contact.resourceName,
-        updates
-      );
+      const result = await window.electronAPI.contactsUpdateContact(contact.resourceName, updates);
 
       if (result.success) {
         // Refresh the contact detail with updated data

@@ -74,7 +74,8 @@ function renderCompanyDetail(organization, contacts, meetings, dbData) {
 
   // ── Header ──
   const header = document.createElement('div');
-  header.style.cssText = 'display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;';
+  header.style.cssText =
+    'display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;';
 
   const headerLeft = document.createElement('div');
   const h2 = document.createElement('h2');
@@ -103,10 +104,12 @@ function renderCompanyDetail(organization, contacts, meetings, dbData) {
 
   // ── Configuration Section ──
   const configSection = document.createElement('div');
-  configSection.style.cssText = 'margin-bottom: 24px; padding: 16px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px;';
+  configSection.style.cssText =
+    'margin-bottom: 24px; padding: 16px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px;';
 
   const configTitle = document.createElement('h3');
-  configTitle.style.cssText = 'font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);';
+  configTitle.style.cssText =
+    'font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);';
   configTitle.textContent = 'Configuration';
   configSection.appendChild(configTitle);
 
@@ -191,7 +194,10 @@ function renderCompanyDetail(organization, contacts, meetings, dbData) {
     await window.electronAPI.companiesUpdate({ name: organization, vaultPath, category });
 
     saveBtn.textContent = 'Saved!';
-    setTimeout(() => { saveBtn.textContent = 'Save'; saveBtn.disabled = false; }, 1500);
+    setTimeout(() => {
+      saveBtn.textContent = 'Save';
+      saveBtn.disabled = false;
+    }, 1500);
   });
   btnRow.appendChild(saveBtn);
 
@@ -203,7 +209,10 @@ function renderCompanyDetail(organization, contacts, meetings, dbData) {
     syncBtn.textContent = 'Syncing...';
     const result = await window.electronAPI.companiesSyncContacts(organization);
     syncBtn.textContent = result.success ? `Synced (${result.added} new)` : 'Sync Failed';
-    setTimeout(() => { syncBtn.textContent = 'Sync Contacts'; syncBtn.disabled = false; }, 2000);
+    setTimeout(() => {
+      syncBtn.textContent = 'Sync Contacts';
+      syncBtn.disabled = false;
+    }, 2000);
   });
   btnRow.appendChild(syncBtn);
   configGrid.appendChild(btnRow);
@@ -216,7 +225,8 @@ function renderCompanyDetail(organization, contacts, meetings, dbData) {
   contactsSection.style.cssText = 'margin-bottom: 24px;';
 
   const contactsTitle = document.createElement('h3');
-  contactsTitle.style.cssText = 'font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);';
+  contactsTitle.style.cssText =
+    'font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);';
   contactsTitle.textContent = `Contacts (${contacts.length})`;
   contactsSection.appendChild(contactsTitle);
 
@@ -229,10 +239,12 @@ function renderCompanyDetail(organization, contacts, meetings, dbData) {
 
     const card = document.createElement('div');
     card.className = 'company-contact-card';
-    card.style.cssText = 'padding: 12px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px;';
+    card.style.cssText =
+      'padding: 12px; background: var(--bg-secondary, #f5f5f5); border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 12px;';
 
     const avatar = document.createElement('div');
-    avatar.style.cssText = 'width: 36px; height: 36px; border-radius: 50%; background: var(--primary-color); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; flex-shrink: 0;';
+    avatar.style.cssText =
+      'width: 36px; height: 36px; border-radius: 50%; background: var(--primary-color); color: white; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 14px; flex-shrink: 0;';
     avatar.textContent = (contact.name || '?')[0].toUpperCase();
     card.appendChild(avatar);
 
@@ -244,7 +256,8 @@ function renderCompanyDetail(organization, contacts, meetings, dbData) {
     info.appendChild(nameDiv);
 
     const detailDiv = document.createElement('div');
-    detailDiv.style.cssText = 'font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+    detailDiv.style.cssText =
+      'font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
     detailDiv.textContent = title ? `${title} \u00b7 ${email}` : email;
     info.appendChild(detailDiv);
     card.appendChild(info);
@@ -264,7 +277,8 @@ function renderCompanyDetail(organization, contacts, meetings, dbData) {
   const meetingsSection = document.createElement('div');
 
   const meetingsTitle = document.createElement('h3');
-  meetingsTitle.style.cssText = 'font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);';
+  meetingsTitle.style.cssText =
+    'font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary);';
   meetingsTitle.textContent = `Meeting History (${meetings.length})`;
   meetingsSection.appendChild(meetingsTitle);
 
@@ -278,13 +292,18 @@ function renderCompanyDetail(organization, contacts, meetings, dbData) {
     meetingsGrid.style.cssText = 'display: grid; gap: 8px;';
 
     for (const meeting of meetings.slice(0, 50)) {
-      const date = meeting.date ? new Date(meeting.date).toLocaleDateString('en-US', {
-        month: 'short', day: 'numeric', year: 'numeric',
-      }) : 'Unknown';
+      const date = meeting.date
+        ? new Date(meeting.date).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          })
+        : 'Unknown';
 
       const card = document.createElement('div');
       card.className = 'company-meeting-card';
-      card.style.cssText = 'padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;';
+      card.style.cssText =
+        'padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer;';
 
       const titleDiv = document.createElement('div');
       titleDiv.style.cssText = 'font-weight: 500; font-size: 14px;';

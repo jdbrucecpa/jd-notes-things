@@ -75,12 +75,13 @@ function loadScenario(scenarioName) {
   const scenarioPath = path.join(scenarioDir, `${scenarioName}.json`);
 
   if (!fs.existsSync(scenarioPath)) {
-    const available = fs.readdirSync(scenarioDir)
+    const available = fs
+      .readdirSync(scenarioDir)
       .filter(f => f.endsWith('.json'))
       .map(f => f.replace('.json', ''));
     throw new Error(
       `[MockSDK] Scenario "${scenarioName}" not found at ${scenarioPath}\n` +
-      `Available scenarios: ${available.join(', ')}`
+        `Available scenarios: ${available.join(', ')}`
     );
   }
 
@@ -176,7 +177,9 @@ function runTimeline(scenario, windowId) {
   const speed = parseFloat(process.env.MOCK_SPEED) || 1;
   const timeline = scenario.timeline || [];
 
-  console.log(`[MockSDK] Running scenario "${scenario.name}" with ${timeline.length} events (speed: ${speed}x)`);
+  console.log(
+    `[MockSDK] Running scenario "${scenario.name}" with ${timeline.length} events (speed: ${speed}x)`
+  );
 
   for (const entry of timeline) {
     const delay = Math.round(entry.delayMs / speed);
@@ -200,14 +203,18 @@ function runTimeline(scenario, windowId) {
 
         case 'speech-on':
           if (mockState === 'recording') {
-            console.log(`[MockSDK] → speech_on: ${entry.data.name} @ ${entry.data.timestamp?.relative}s`);
+            console.log(
+              `[MockSDK] → speech_on: ${entry.data.name} @ ${entry.data.timestamp?.relative}s`
+            );
             emit('realtime-event', buildSpeechOnEvent(windowId, entry.data));
           }
           break;
 
         case 'speech-off':
           if (mockState === 'recording') {
-            console.log(`[MockSDK] → speech_off: ${entry.data.name} @ ${entry.data.timestamp?.relative}s`);
+            console.log(
+              `[MockSDK] → speech_off: ${entry.data.name} @ ${entry.data.timestamp?.relative}s`
+            );
             emit('realtime-event', buildSpeechOffEvent(windowId, entry.data));
           }
           break;
@@ -225,7 +232,9 @@ function runTimeline(scenario, windowId) {
     const stopDelay = Math.round(scenario.autoStopAfterMs / speed);
     const stopTimer = setTimeout(() => {
       if (mockState === 'recording') {
-        console.log(`[MockSDK] Auto-stopping recording after ${scenario.autoStopAfterMs}ms (scenario timer)`);
+        console.log(
+          `[MockSDK] Auto-stopping recording after ${scenario.autoStopAfterMs}ms (scenario timer)`
+        );
         stopRecording({ windowId });
       }
     }, stopDelay);
@@ -266,7 +275,9 @@ function copyAudioFixture(scenario, windowId) {
 
   const destPath = path.join(recordingPath, `windows-desktop-${windowId}.mp3`);
   fs.copyFileSync(fixturePath, destPath);
-  console.log(`[MockSDK] Copied audio fixture → ${destPath} (${(fs.statSync(destPath).size / 1024).toFixed(1)}KB)`);
+  console.log(
+    `[MockSDK] Copied audio fixture → ${destPath} (${(fs.statSync(destPath).size / 1024).toFixed(1)}KB)`
+  );
 }
 
 // ─── SDK API (matches @recallai/desktop-sdk interface) ───────────────────────
@@ -315,7 +326,9 @@ async function prepareDesktopAudioRecording() {
 }
 
 async function startRecording({ windowId, uploadToken }) {
-  console.log(`[MockSDK] startRecording(windowId: ${windowId}, uploadToken: ${uploadToken ? '***' : 'none'})`);
+  console.log(
+    `[MockSDK] startRecording(windowId: ${windowId}, uploadToken: ${uploadToken ? '***' : 'none'})`
+  );
   mockState = 'recording';
 
   // Copy the audio fixture to the expected location
@@ -330,18 +343,22 @@ async function startRecording({ windowId, uploadToken }) {
   // (The real SDK fires participant events only during an active recording)
   if (currentScenario) {
     const speed = parseFloat(process.env.MOCK_SPEED) || 1;
-    const participantEvents = (currentScenario.timeline || [])
-      .filter(e => e.event === 'participant-join');
+    const participantEvents = (currentScenario.timeline || []).filter(
+      e => e.event === 'participant-join'
+    );
 
     for (const entry of participantEvents) {
       // Fire immediately if their scheduled time has already passed,
       // otherwise they'll fire from the main timeline
-      const timer = setTimeout(() => {
-        if (mockState === 'recording') {
-          console.log(`[MockSDK] → participant join (post-record-start): ${entry.data.name}`);
-          emit('realtime-event', buildParticipantJoinEvent(windowId, entry.data));
-        }
-      }, Math.round(100 / speed)); // Small delay to ensure recording state is propagated
+      const timer = setTimeout(
+        () => {
+          if (mockState === 'recording') {
+            console.log(`[MockSDK] → participant join (post-record-start): ${entry.data.name}`);
+            emit('realtime-event', buildParticipantJoinEvent(windowId, entry.data));
+          }
+        },
+        Math.round(100 / speed)
+      ); // Small delay to ensure recording state is propagated
       activeTimers.push(timer);
     }
   }
@@ -375,12 +392,15 @@ async function uploadRecording({ windowId }) {
   const steps = [10, 25, 50, 75, 90, 100];
 
   for (let i = 0; i < steps.length; i++) {
-    const timer = setTimeout(() => {
-      emit('upload-progress', {
-        progress: steps[i],
-        window: { id: windowId },
-      });
-    }, Math.round((i + 1) * 500 / speed));
+    const timer = setTimeout(
+      () => {
+        emit('upload-progress', {
+          progress: steps[i],
+          window: { id: windowId },
+        });
+      },
+      Math.round(((i + 1) * 500) / speed)
+    );
     activeTimers.push(timer);
   }
 
@@ -433,7 +453,8 @@ function getMockState() {
     windowId: currentWindowId,
     scenario: currentScenario?.name || null,
     listenerCount: Array.from(listeners.entries()).reduce(
-      (acc, [k, v]) => ({ ...acc, [k]: v.length }), {}
+      (acc, [k, v]) => ({ ...acc, [k]: v.length }),
+      {}
     ),
   };
 }

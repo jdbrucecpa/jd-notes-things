@@ -16,7 +16,11 @@ function describeHttpError(label, error) {
     } else if (typeof data.error === 'string') {
       body = data.error;
     } else {
-      try { body = JSON.stringify(data); } catch { body = String(data); }
+      try {
+        body = JSON.stringify(data);
+      } catch {
+        body = String(data);
+      }
     }
   }
   if (status) {
@@ -177,7 +181,7 @@ class TranscriptionService {
 
       // Estimate timeout from file size (rough: 1 MB ≈ 1 min of audio at 128 kbps)
       const stats = fs.statSync(audioFilePath);
-      const estimatedDurationSec = stats.size / (128 * 1024 / 8); // bytes → seconds
+      const estimatedDurationSec = stats.size / ((128 * 1024) / 8); // bytes → seconds
       const timeoutMs = Math.round((estimatedDurationSec * 0.5 + 60) * 1000);
       console.log(
         `[Local] File size: ${(stats.size / 1024).toFixed(2)} KB, estimated duration: ${estimatedDurationSec.toFixed(0)}s, timeout: ${(timeoutMs / 1000).toFixed(0)}s`
@@ -222,7 +226,10 @@ class TranscriptionService {
         speaker: entry.speaker,
         speakerId: entry.speakerId ?? entry.speaker_id ?? entry.speaker,
         text: entry.text,
-        timestamp: typeof entry.timestamp === 'number' ? Math.round(entry.timestamp * 1000) : entry.timestamp,
+        timestamp:
+          typeof entry.timestamp === 'number'
+            ? Math.round(entry.timestamp * 1000)
+            : entry.timestamp,
         words: entry.words || [],
         speakerIdentified: false,
       }));
@@ -358,7 +365,9 @@ class TranscriptionService {
     // We prioritize keyterms_prompt for better vocabulary/terminology accuracy
     if (options.keyterms_prompt && options.keyterms_prompt.length > 0) {
       requestBody.keyterms_prompt = options.keyterms_prompt;
-      console.log(`[AssemblyAI] Using ${options.keyterms_prompt.length} keyterms for Universal-3-Pro`);
+      console.log(
+        `[AssemblyAI] Using ${options.keyterms_prompt.length} keyterms for Universal-3-Pro`
+      );
     } else if (options.custom_spelling && options.custom_spelling.length > 0) {
       // Legacy fallback: convert custom_spelling to keyterms
       const legacyKeyterms = options.custom_spelling.map(item => item.to).filter(Boolean);
@@ -483,7 +492,9 @@ class TranscriptionService {
     }
 
     if (hasIdentifiedSpeakers) {
-      console.log('[AssemblyAI] speech_understanding speaker identification was used - real names found in transcript');
+      console.log(
+        '[AssemblyAI] speech_understanding speaker identification was used - real names found in transcript'
+      );
     }
 
     return {

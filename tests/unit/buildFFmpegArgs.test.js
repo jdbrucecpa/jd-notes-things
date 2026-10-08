@@ -147,7 +147,13 @@ describe('buildFFmpegArgs', () => {
   // WASAPI source type tests
   it('wasapi source -- uses PCM format args instead of dshow', () => {
     const sources = [
-      { device: '\\\\.\\pipe\\jdnotes_wasapi_0', volume: 100, type: 'wasapi', sampleRate: 48000, channels: 2 },
+      {
+        device: '\\\\.\\pipe\\jdnotes_wasapi_0',
+        volume: 100,
+        type: 'wasapi',
+        sampleRate: 48000,
+        channels: 2,
+      },
     ];
     const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
 
@@ -164,7 +170,13 @@ describe('buildFFmpegArgs', () => {
   it('mixed dshow + wasapi sources -- correct args for both', () => {
     const sources = [
       { device: 'Mic (USB)', volume: 100, type: 'dshow' },
-      { device: '\\\\.\\pipe\\jdnotes_wasapi_0', volume: 80, type: 'wasapi', sampleRate: 48000, channels: 2 },
+      {
+        device: '\\\\.\\pipe\\jdnotes_wasapi_0',
+        volume: 80,
+        type: 'wasapi',
+        sampleRate: 48000,
+        channels: 2,
+      },
     ];
     const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
 
@@ -191,8 +203,20 @@ describe('buildFFmpegArgs', () => {
 
   it('all wasapi sources -- no dshow args at all', () => {
     const sources = [
-      { device: '\\\\.\\pipe\\jdnotes_wasapi_0', volume: 100, type: 'wasapi', sampleRate: 48000, channels: 2 },
-      { device: '\\\\.\\pipe\\jdnotes_wasapi_1', volume: 100, type: 'wasapi', sampleRate: 44100, channels: 2 },
+      {
+        device: '\\\\.\\pipe\\jdnotes_wasapi_0',
+        volume: 100,
+        type: 'wasapi',
+        sampleRate: 48000,
+        channels: 2,
+      },
+      {
+        device: '\\\\.\\pipe\\jdnotes_wasapi_1',
+        volume: 100,
+        type: 'wasapi',
+        sampleRate: 44100,
+        channels: 2,
+      },
     ];
     const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
 
@@ -202,7 +226,13 @@ describe('buildFFmpegArgs', () => {
 
   it('wasapi source includes -ar and -ac before pipe path', () => {
     const sources = [
-      { device: '\\\\.\\pipe\\jdnotes_wasapi_0', volume: 100, type: 'wasapi', sampleRate: 44100, channels: 1 },
+      {
+        device: '\\\\.\\pipe\\jdnotes_wasapi_0',
+        volume: 100,
+        type: 'wasapi',
+        sampleRate: 44100,
+        channels: 1,
+      },
     ];
     const args = buildFFmpegArgs(sources, defaultMixer, 'output.mp3');
 
@@ -252,7 +282,9 @@ describe('buildFFmpegArgs track outputs', () => {
     const fc = args[args.indexOf('-filter_complex') + 1];
     expect(fc).toContain('[1:a]asplit=2[sys_src0][w_in1]');
     expect(fc).toContain('[2:a]asplit=2[sys_src1][w_in2]');
-    expect(fc).toContain('[sys_src0][sys_src1]amix=inputs=2:duration=longest:normalize=0[sys_solo]');
+    expect(fc).toContain(
+      '[sys_src0][sys_src1]amix=inputs=2:duration=longest:normalize=0[sys_solo]'
+    );
     expect(args).toContain('[sys_solo]');
   });
 

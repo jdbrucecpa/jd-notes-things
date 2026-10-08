@@ -24,8 +24,8 @@ test.beforeAll(async () => {
   } catch (err) {
     throw new Error(
       `Could not connect to Electron app on port ${CDP_PORT}.\n` +
-      `Start the app first with: npm run start:mock\n` +
-      `Error: ${err.message}`
+        `Start the app first with: npm run start:mock\n` +
+        `Error: ${err.message}`
     );
   }
 
@@ -76,7 +76,14 @@ async function ensureMainView() {
   });
   await mainPage.waitForTimeout(200);
 
-  const closeButtons = ['#homeButton', '#settingsBackBtn', '#closeSettings', '#closeContacts', '#closeReports', '#closeClientSetup'];
+  const closeButtons = [
+    '#homeButton',
+    '#settingsBackBtn',
+    '#closeSettings',
+    '#closeContacts',
+    '#closeReports',
+    '#closeClientSetup',
+  ];
   for (const btn of closeButtons) {
     const el = mainPage.locator(btn);
     if (await el.isVisible().catch(() => false)) {
@@ -86,7 +93,10 @@ async function ensureMainView() {
   }
 
   // Fallback: force close settings via DOM
-  const settingsOpen = await mainPage.locator('#settingsView').isVisible().catch(() => false);
+  const settingsOpen = await mainPage
+    .locator('#settingsView')
+    .isVisible()
+    .catch(() => false);
   if (settingsOpen) {
     await mainPage.evaluate(() => {
       const sv = document.getElementById('settingsView');
@@ -97,7 +107,10 @@ async function ensureMainView() {
     await mainPage.waitForTimeout(300);
   }
 
-  await mainPage.locator('#mainView').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  await mainPage
+    .locator('#mainView')
+    .waitFor({ state: 'visible', timeout: 5000 })
+    .catch(() => {});
 }
 
 async function openSettings() {
@@ -170,23 +183,33 @@ test.describe('1. Recording Provider Settings', () => {
     await select.scrollIntoViewIfNeeded().catch(() => {});
 
     // Listen for toast elements appearing in the DOM
-    const toastPromise = mainPage.waitForFunction(() => {
-      // showToast appends a div with the message directly to document.body
-      const toasts = document.querySelectorAll('body > div');
-      for (const t of toasts) {
-        if (t.textContent.includes('Restart') || t.textContent.includes('Recording provider changed')) {
-          return t.textContent;
-        }
-      }
-      return false;
-    }, { timeout: 5000 }).catch(() => null);
+    const toastPromise = mainPage
+      .waitForFunction(
+        () => {
+          // showToast appends a div with the message directly to document.body
+          const toasts = document.querySelectorAll('body > div');
+          for (const t of toasts) {
+            if (
+              t.textContent.includes('Restart') ||
+              t.textContent.includes('Recording provider changed')
+            ) {
+              return t.textContent;
+            }
+          }
+          return false;
+        },
+        { timeout: 5000 }
+      )
+      .catch(() => null);
 
     // Change to 'local'
     await select.selectOption('local');
     await mainPage.waitForTimeout(500);
 
     const toastResult = await toastPromise;
-    console.log(`Toast notification: ${toastResult ? toastResult.jsonValue?.() || 'detected' : 'not detected'}`);
+    console.log(
+      `Toast notification: ${toastResult ? toastResult.jsonValue?.() || 'detected' : 'not detected'}`
+    );
 
     if (toastResult) {
       const toastText = await toastResult.jsonValue();
@@ -394,7 +417,7 @@ test.describe('3. Recording Lifecycle via RecordingManager', () => {
     }
 
     // Stop recording via IPC (goes through RecordingManager -> RecallProvider)
-    const result = await mainPage.evaluate(async (recId) => {
+    const result = await mainPage.evaluate(async recId => {
       return await window.electronAPI.stopManualRecording(recId);
     }, recordingId);
 
@@ -408,7 +431,7 @@ test.describe('3. Recording Lifecycle via RecordingManager', () => {
   test('RecordingManager cleans up after recording ends', async () => {
     if (!recordingMeetingId) return;
 
-    const meeting = await mainPage.evaluate(async (id) => {
+    const meeting = await mainPage.evaluate(async id => {
       const result = await window.electronAPI.loadMeetingsData();
       const meetings = result?.data?.pastMeetings || result?.pastMeetings || [];
       return meetings.find(m => m.id === id) || null;
@@ -516,9 +539,11 @@ test.describe('5. Error Resilience', () => {
       if (msg.type() === 'error') {
         const text = msg.text();
         // Filter expected messages
-        if (!text.includes('[MockSDK]') &&
-            !text.includes('Failed to send log to Desktop SDK') &&
-            !text.includes('net::ERR_')) {
+        if (
+          !text.includes('[MockSDK]') &&
+          !text.includes('Failed to send log to Desktop SDK') &&
+          !text.includes('net::ERR_')
+        ) {
           errors.push(text);
         }
       }
@@ -528,11 +553,12 @@ test.describe('5. Error Resilience', () => {
     await mainPage.waitForTimeout(3000);
     mainPage.off('console', handler);
 
-    const criticalErrors = errors.filter(e =>
-      e.includes('FATAL') ||
-      e.includes('Uncaught') ||
-      e.includes('Cannot read properties of null') ||
-      e.includes('Cannot read properties of undefined')
+    const criticalErrors = errors.filter(
+      e =>
+        e.includes('FATAL') ||
+        e.includes('Uncaught') ||
+        e.includes('Cannot read properties of null') ||
+        e.includes('Cannot read properties of undefined')
     );
 
     if (criticalErrors.length > 0) {
@@ -585,7 +611,7 @@ test.describe('6. Local Provider Recording Path', () => {
     console.log('Testing Local recording start with meeting:', meetingId);
 
     // Try to start recording — this should NOT crash with null SDK reference
-    const result = await mainPage.evaluate(async (id) => {
+    const result = await mainPage.evaluate(async id => {
       try {
         return await window.electronAPI.startManualRecording(id, 'assemblyai', 'new');
       } catch (e) {

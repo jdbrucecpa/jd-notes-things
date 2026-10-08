@@ -83,7 +83,8 @@ function mergeNearDuplicateLabels(segments, embeddings) {
         // Absorb shorter into longer by duration
         const aDuration = durations.get(aResolved) || 0;
         const bDuration = durations.get(bResolved) || 0;
-        const [survivor, absorbed] = aDuration >= bDuration ? [aResolved, bResolved] : [bResolved, aResolved];
+        const [survivor, absorbed] =
+          aDuration >= bDuration ? [aResolved, bResolved] : [bResolved, aResolved];
 
         relabelMap[absorbed] = survivor;
       }

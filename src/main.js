@@ -1,9 +1,9 @@
 // Prevent EPIPE crashes when stdout/stderr pipe breaks (e.g., parent terminal closes)
-process.stdout?.on('error', (err) => {
+process.stdout?.on('error', err => {
   if (err.code === 'EPIPE') return;
   throw err;
 });
-process.stderr?.on('error', (err) => {
+process.stderr?.on('error', err => {
   if (err.code === 'EPIPE') return;
   throw err;
 });
@@ -53,11 +53,11 @@ const { buildYoutubeRoute } = require('./main/routing/youtubeRoute');
 const ImportManager = require('./main/import/ImportManager');
 const TranscriptParser = require('./main/import/TranscriptParser');
 const PatternConfigLoader = require('./main/import/PatternConfigLoader');
-const { formatTranscriptForExport, generateExportFilename } = require('./main/export/transcriptExporter');
 const {
-  createLLMServiceFromCredentials,
-  fetchLocalModels,
-} = require('./main/services/llmService');
+  formatTranscriptForExport,
+  generateExportFilename,
+} = require('./main/export/transcriptExporter');
+const { createLLMServiceFromCredentials, fetchLocalModels } = require('./main/services/llmService');
 const transcriptionService = require('./main/services/transcriptionService');
 const keyManagementService = require('./main/services/keyManagementService');
 const speakerMappingService = require('./main/services/speakerMappingService');
@@ -77,9 +77,7 @@ const backupService = require('./main/services/backupService');
 const clientService = require('./main/services/clientService');
 const { VoiceProfileService } = require('./main/services/voiceProfileService');
 const { CorrectionTelemetry, diffCorrections } = require('./main/services/correctionTelemetry');
-const {
-  resolveMeetingClosedTarget,
-} = require('./main/services/recordingAutoStopResolver');
+const { resolveMeetingClosedTarget } = require('./main/services/recordingAutoStopResolver');
 const { isGenericSpeakerName } = require('./shared/speakerValidation');
 const { RecordingManager, RecallProvider, LocalProvider } = require('./main/recording');
 const { AIServiceManager } = require('./main/services/aiServiceManager');
@@ -853,7 +851,9 @@ function updateSystemTrayMenu() {
   try {
     const isDev = process.env.NODE_ENV === 'development';
     const appLabel = isDev ? 'JD Notes Things Dev' : 'JD Notes Things';
-    const contextMenu = Menu.buildFromTemplate(buildTrayMenu(recordingManager?.isRecording ?? false));
+    const contextMenu = Menu.buildFromTemplate(
+      buildTrayMenu(recordingManager?.isRecording ?? false)
+    );
 
     tray.setContextMenu(contextMenu);
     tray.setToolTip(recordingManager?.isRecording ? `${appLabel} - Recording` : appLabel);
@@ -1278,7 +1278,6 @@ const createWindow = () => {
   if (process.env.NODE_ENV === 'development') {
     // mainWindow.webContents.openDevTools();
   }
-
 };
 
 // Listen for navigation events (registered once, outside createWindow to prevent duplicate listeners)
@@ -1412,7 +1411,12 @@ function hideRecordingWidget() {
  * @param {string|null} meetingId - Meeting ID (v1.2 fix)
  * @param {object|null} meetingInfo - Full meeting info object (v1.2 fix)
  */
-function updateWidgetRecordingState(recording, meetingTitle = null, meetingId = null, meetingInfo = null) {
+function updateWidgetRecordingState(
+  recording,
+  meetingTitle = null,
+  meetingId = null,
+  meetingInfo = null
+) {
   if (recordingWidget && !recordingWidget.isDestroyed()) {
     if (recording) {
       recordingWidget.webContents.send('widget:update', {
@@ -1587,9 +1591,7 @@ function finishStopConfirmation(shouldStop) {
     if (recordingManager.hasActiveRecording(recordingId)) {
       executeAutoStop(recordingId);
     } else {
-      console.log(
-        `[stop-confirm] Recording ${recordingId} already inactive — nothing to stop`
-      );
+      console.log(`[stop-confirm] Recording ${recordingId} already inactive — nothing to stop`);
     }
   } else {
     console.log(`[stop-confirm] User chose Keep Recording — ${recordingId} continues`);
@@ -1874,10 +1876,10 @@ app.whenReady().then(async () => {
     logger.main.info('[AIService] Auto-starting at launch...');
     if (needsProvision) aiServiceProvisionInFlight = true;
     aiServiceManager
-      .ensureRunning((line) => {
+      .ensureRunning(line => {
         if (taskId) backgroundTaskManager.updateTask(taskId, null, line.trim().slice(0, 120));
       })
-      .then(async (healthy) => {
+      .then(async healthy => {
         if (needsProvision) aiServiceProvisionInFlight = false;
         if (taskId) {
           if (healthy) backgroundTaskManager.completeTask(taskId);
@@ -2301,9 +2303,7 @@ app.on('before-quit', async event => {
     // WAV header gets patched (both happen before 'recording-ended' fires).
     event.preventDefault();
     recordingsStoppedForQuit = true;
-    console.log(
-      `[App] Stopping ${activeRecordingIds.length} active recording(s) before quit...`
-    );
+    console.log(`[App] Stopping ${activeRecordingIds.length} active recording(s) before quit...`);
 
     // Resolves once the manager has no active recordings left ('recording-ended'
     // fires after the provider fully finishes and the manager removes the entry).
@@ -2672,7 +2672,7 @@ async function initSDK() {
 
     // Persist WASAPI deviceIds the provider healed at record-start (Windows
     // regenerates endpoint GUIDs on audio-driver updates, stranding stored ids).
-    recordingProvider.on('audio-sources-updated', (sources) => {
+    recordingProvider.on('audio-sources-updated', sources => {
       appSettings.audioSources = sources;
       saveAppSettings();
       logger.main.info('[Recording] Saved re-resolved audio source deviceIds');
@@ -2744,7 +2744,9 @@ async function initSDK() {
       logger.main.error('[SDK] Error during SDK initialization:', error);
       // Still mark ready so the app isn't permanently stuck
       sdkReady = true;
-      logger.main.warn('[SDK] Initialization completed with errors — recording may miss already-open meetings');
+      logger.main.warn(
+        '[SDK] Initialization completed with errors — recording may miss already-open meetings'
+      );
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('sdk-ready');
       }
@@ -2754,7 +2756,7 @@ async function initSDK() {
   // Event listeners registered below
 
   // Notify renderer of recording state changes (works for both Recall and Local providers)
-  recordingManager.on('recording-started', (data) => {
+  recordingManager.on('recording-started', data => {
     console.log('[Recording] recording-started event:', data.recordingId);
     if (mainWindow && !mainWindow.isDestroyed()) {
       // Find the noteId for this recording
@@ -2768,7 +2770,7 @@ async function initSDK() {
   });
 
   // Listen for meeting detected events (via RecordingManager abstraction)
-  recordingManager.on('meeting-detected', (data) => {
+  recordingManager.on('meeting-detected', data => {
     console.log('Meeting detected:', data);
 
     // Log the meeting detected event
@@ -2853,7 +2855,7 @@ async function initSDK() {
   });
 
   // Listen for meeting closed events (via RecordingManager abstraction)
-  recordingManager.on('meeting-closed', (data) => {
+  recordingManager.on('meeting-closed', data => {
     console.log('Meeting closed:', data);
 
     // Log the SDK meeting-closed event
@@ -2929,7 +2931,7 @@ async function initSDK() {
   });
 
   // Listen for recording ended events (via RecordingManager abstraction)
-  recordingManager.on('recording-ended', async (data) => {
+  recordingManager.on('recording-ended', async data => {
     console.log('Recording ended:', data);
 
     const windowId = data.recordingId;
@@ -3075,7 +3077,8 @@ async function initSDK() {
         // Check if recording file exists
         // LocalProvider provides audioFilePath directly; Recall SDK uses windows-desktop-{id}.mp3
         const fs = require('fs');
-        const recordingPath = data.audioFilePath || path.join(RECORDING_PATH, `windows-desktop-${windowId}.mp3`);
+        const recordingPath =
+          data.audioFilePath || path.join(RECORDING_PATH, `windows-desktop-${windowId}.mp3`);
         console.log('[Transcription] Checking for recording file:', recordingPath);
 
         if (fs.existsSync(recordingPath)) {
@@ -3209,18 +3212,19 @@ async function initSDK() {
 
             // v2.0: Pass AI service URL for local transcription provider
             if (transcriptionProvider === 'local') {
-              const aiServiceUrl =
-                voiceProfileService?.aiServiceUrl || 'http://localhost:8374';
+              const aiServiceUrl = voiceProfileService?.aiServiceUrl || 'http://localhost:8374';
               vocabularyOptions.aiServiceUrl = aiServiceUrl;
-              console.log(
-                `[Transcription] Local provider using AI service at: ${aiServiceUrl}`
-              );
+              console.log(`[Transcription] Local provider using AI service at: ${aiServiceUrl}`);
 
               // Ensure the service is running before transcription
               const serviceReady = await aiServiceManager.ensureRunning();
               if (!serviceReady) {
                 console.error('[Transcription] JD Audio Service failed to start');
-                backgroundTaskManager.updateTask(recordingTaskId, 15, 'Starting AI service failed — transcription may fail');
+                backgroundTaskManager.updateTask(
+                  recordingTaskId,
+                  15,
+                  'Starting AI service failed — transcription may fail'
+                );
               }
             }
 
@@ -3232,7 +3236,11 @@ async function initSDK() {
               vocabularyOptions
             );
 
-            backgroundTaskManager.updateTask(recordingTaskId, 60, 'Transcription complete, saving...');
+            backgroundTaskManager.updateTask(
+              recordingTaskId,
+              60,
+              'Transcription complete, saving...'
+            );
             console.log(`[Transcription] ✓ ${transcriptionProvider} transcription complete`);
             console.log(`[Transcription] Transcript object:`, JSON.stringify(transcript, null, 2));
             console.log(
@@ -3336,13 +3344,25 @@ async function initSDK() {
                     attendeesForMatching.push(a);
                   };
                   for (const a of meetingForMatching.calendarAttendees || []) {
-                    pushAttendee({ name: a.name, email: a.email, googleContactId: a.google_contact_resource || null });
+                    pushAttendee({
+                      name: a.name,
+                      email: a.email,
+                      googleContactId: a.google_contact_resource || null,
+                    });
                   }
                   for (const p of participants) {
-                    pushAttendee({ name: p.originalName || p.name, email: p.email || null, googleContactId: p.googleContactResource || null });
+                    pushAttendee({
+                      name: p.originalName || p.name,
+                      email: p.email || null,
+                      googleContactId: p.googleContactResource || null,
+                    });
                   }
                   if (userProfile?.name) {
-                    pushAttendee({ name: userProfile.name, email: userProfile.email || null, googleContactId: null });
+                    pushAttendee({
+                      name: userProfile.name,
+                      email: userProfile.email || null,
+                      googleContactId: null,
+                    });
                   }
 
                   // Resolve raw-email display names via Google Contacts so
@@ -3353,22 +3373,37 @@ async function initSDK() {
                         .filter(a => a.name && a.name.includes('@') && a.email)
                         .map(a => a.email);
                       if (emailsNeedingNames.length > 0) {
-                        const contactMap = await googleContacts.findContactsByEmails(emailsNeedingNames);
+                        const contactMap =
+                          await googleContacts.findContactsByEmails(emailsNeedingNames);
                         for (const a of attendeesForMatching) {
                           const c = a.email ? contactMap.get(a.email) : null;
                           if (a.name && a.name.includes('@') && c?.name) a.name = c.name;
                         }
                       }
                     } catch (nameErr) {
-                      console.warn('[Waterfall] Attendee name enrichment skipped:', nameErr.message);
+                      console.warn(
+                        '[Waterfall] Attendee name enrichment skipped:',
+                        nameErr.message
+                      );
                     }
                   }
 
-                  if (transcriptionProvider === 'local' && rawSegments.length > 0 && voiceProfileService) {
+                  if (
+                    transcriptionProvider === 'local' &&
+                    rawSegments.length > 0 &&
+                    voiceProfileService
+                  ) {
                     // Stage 0: embed once, merge over-split diarization labels.
-                    backgroundTaskManager.updateTask(recordingTaskId, 72, 'Analyzing voice tracks...');
+                    backgroundTaskManager.updateTask(
+                      recordingTaskId,
+                      72,
+                      'Analyzing voice tracks...'
+                    );
                     try {
-                      const embeddings = await voiceProfileService.embedSpeakers(recordingPath, rawSegments);
+                      const embeddings = await voiceProfileService.embedSpeakers(
+                        recordingPath,
+                        rawSegments
+                      );
                       // Pass through even when empty — identifySpeakers' contract treats []
                       // as "provided", so matchSpeakers skips a redundant second GPU embed fetch.
                       precomputedEmbeddings = embeddings;
@@ -3379,10 +3414,13 @@ async function initSDK() {
                         if (Object.keys(merged.relabelMap).length > 0) {
                           console.log('[Waterfall] Stage 0 merged labels:', merged.relabelMap);
                           meetingForMatching.transcript = meetingForMatching.transcript.map(u =>
-                            merged.relabelMap[u.speaker] ? { ...u, speaker: merged.relabelMap[u.speaker] } : u
+                            merged.relabelMap[u.speaker]
+                              ? { ...u, speaker: merged.relabelMap[u.speaker] }
+                              : u
                           );
                           // same object ref — explicit for readability; persistence happens at the later writeData
-                          meetingsData.pastMeetings[meetingIndex].transcript = meetingForMatching.transcript;
+                          meetingsData.pastMeetings[meetingIndex].transcript =
+                            meetingForMatching.transcript;
                           meetingsData.pastMeetings[meetingIndex].segments = waterfallSegments;
                         }
                       }
@@ -3450,7 +3488,9 @@ async function initSDK() {
                   // results aren't silently discarded — matchSpeakers early-returns
                   // on an empty identifier list.
                   if (matchIdentifiers.length === 0 && attendeesForMatching.length > 0) {
-                    matchIdentifiers = attendeesForMatching.map(a => a.email || a.name).filter(Boolean);
+                    matchIdentifiers = attendeesForMatching
+                      .map(a => a.email || a.name)
+                      .filter(Boolean);
                     console.log(
                       `[Transcription] SM-1: Falling back to ${matchIdentifiers.length} waterfall attendees as match identifiers`
                     );
@@ -3493,7 +3533,9 @@ async function initSDK() {
                         speakerMapping
                       );
                       meetingsData.pastMeetings[meetingIndex].participants =
-                        deduplicateParticipants(meetingsData.pastMeetings[meetingIndex].participants || []);
+                        deduplicateParticipants(
+                          meetingsData.pastMeetings[meetingIndex].participants || []
+                        );
 
                       // Write updated data with speaker names
                       await fileOperationManager.writeData(meetingsData);
@@ -3608,7 +3650,7 @@ async function initSDK() {
   const lastLoggedProgress = new Map();
 
   // Track upload progress (via RecordingManager abstraction)
-  recordingManager.on('upload-progress', (data) => {
+  recordingManager.on('upload-progress', data => {
     const { progress, raw } = data;
     const windowId = raw?.window?.id;
 
@@ -3643,7 +3685,7 @@ async function initSDK() {
   });
 
   // Track SDK state changes (via RecordingManager abstraction)
-  recordingManager.on('sdk-state-change', (data) => {
+  recordingManager.on('sdk-state-change', data => {
     const { raw } = data;
     const code = raw?.sdk?.state?.code || data.state;
     const window = raw?.window;
@@ -3670,7 +3712,8 @@ async function initSDK() {
           // If recording started, add it to our active recordings
           recordingManager.addRecording(window.id, noteId, window.platform || 'unknown');
           const meetingRecord = databaseService.getMeeting(noteId);
-          recordingManager.currentMeetingTitle = meetingRecord?.title ?? recordingManager.currentMeetingTitle;
+          recordingManager.currentMeetingTitle =
+            meetingRecord?.title ?? recordingManager.currentMeetingTitle;
           recordingManager.currentMeetingId = noteId;
         }
       } else if (code === 'paused') {
@@ -3699,36 +3742,36 @@ async function initSDK() {
   // Registered unconditionally — handler checks current provider to avoid
   // processing events when using Local recording mode.
   RecallAiSdk.addEventListener('realtime-event', async evt => {
-      // Skip when using local provider (SDK events are irrelevant)
-      if (appSettings.recordingProvider === 'local') return;
-      // Only log non-video frame events to prevent flooding the logger
-      if (evt.event !== 'video_separate_png.data') {
-        console.log('Received realtime event:', evt.event);
+    // Skip when using local provider (SDK events are irrelevant)
+    if (appSettings.recordingProvider === 'local') return;
+    // Only log non-video frame events to prevent flooding the logger
+    if (evt.event !== 'video_separate_png.data') {
+      console.log('Received realtime event:', evt.event);
 
-        // Log the SDK realtime-event event
-        sdkLogger.logEvent('realtime-event', {
-          eventType: evt.event,
-          windowId: evt.window?.id,
-        });
-      }
+      // Log the SDK realtime-event event
+      sdkLogger.logEvent('realtime-event', {
+        eventType: evt.event,
+        windowId: evt.window?.id,
+      });
+    }
 
-      // Handle participant join events (needed for speaker matching later)
-      if (evt.event === 'participant_events.join' && evt.data && evt.data.data) {
-        await processParticipantJoin(evt);
-      } else if (evt.event === 'participant_events.speech_on' && evt.data && evt.data.data) {
-        // SM-1: Track when participants start speaking
-        processSpeechOn(evt);
-      } else if (evt.event === 'participant_events.speech_off' && evt.data && evt.data.data) {
-        // SM-1: Track when participants stop speaking
-        processSpeechOff(evt);
-      } else if (evt.event === 'video_separate_png.data' && evt.data && evt.data.data) {
-        await processVideoFrame(evt);
-      }
-      // Real-time transcript events removed - using async transcription instead
-    });
+    // Handle participant join events (needed for speaker matching later)
+    if (evt.event === 'participant_events.join' && evt.data && evt.data.data) {
+      await processParticipantJoin(evt);
+    } else if (evt.event === 'participant_events.speech_on' && evt.data && evt.data.data) {
+      // SM-1: Track when participants start speaking
+      processSpeechOn(evt);
+    } else if (evt.event === 'participant_events.speech_off' && evt.data && evt.data.data) {
+      // SM-1: Track when participants stop speaking
+      processSpeechOff(evt);
+    } else if (evt.event === 'video_separate_png.data' && evt.data && evt.data.data) {
+      await processVideoFrame(evt);
+    }
+    // Real-time transcript events removed - using async transcription instead
+  });
 
   // Handle errors (via RecordingManager abstraction)
-  recordingManager.on('error', (data) => {
+  recordingManager.on('error', data => {
     console.error('RecallAI SDK Error:', data);
     const { type, message } = data;
 
@@ -3792,10 +3835,14 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
         let resolvedName = speakerInfo.name || (contact ? contact.name : speakerInfo.email);
         if (resolvedName && resolvedName.includes('@')) {
           const contactName = contact?.name || contactsMap.get(speakerInfo.email)?.name;
-          resolvedName = contactName || (speakerMatcher
-            ? speakerMatcher.extractNameFromEmail(resolvedName)
-            : resolvedName.split('@')[0]);
-          console.log(`[ParticipantPopulation] Resolved email-as-name "${speakerInfo.name}" -> "${resolvedName}"`);
+          resolvedName =
+            contactName ||
+            (speakerMatcher
+              ? speakerMatcher.extractNameFromEmail(resolvedName)
+              : resolvedName.split('@')[0]);
+          console.log(
+            `[ParticipantPopulation] Resolved email-as-name "${speakerInfo.name}" -> "${resolvedName}"`
+          );
         }
 
         // CRM Phase 1: Include googleContactResource (resourceName) from Google Contacts
@@ -3819,7 +3866,9 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
           };
         } else {
           // v1.3: Don't add new participants — SDK list is source of truth
-          console.log(`[ParticipantPopulation] Skipping new participant "${participantData.name}" (enrich-only)`);
+          console.log(
+            `[ParticipantPopulation] Skipping new participant "${participantData.name}" (enrich-only)`
+          );
         }
       } else if (speakerInfo.name && typeof googleContacts.findContactByName === 'function') {
         // v1.1: Speaker has name but no email - try name-based contact lookup
@@ -3901,8 +3950,8 @@ async function populateParticipantsFromSpeakerMapping(meeting, participantEmails
 function sanitizeParticipantName(name) {
   if (!name || typeof name !== 'string') return name;
   return name
-    .replace(/[,.\s]+$/, '')  // Trim trailing commas, periods, whitespace
-    .replace(/\s{2,}/g, ' ')  // Collapse multiple spaces
+    .replace(/[,.\s]+$/, '') // Trim trailing commas, periods, whitespace
+    .replace(/\s{2,}/g, ' ') // Collapse multiple spaces
     .trim();
 }
 
@@ -3943,7 +3992,9 @@ function reconcileParticipantsAfterMatching(participants, speakerMapping) {
       // Update email if participant didn't have one and mapping resolved it
       if (!p.email && mapping.email) {
         p.email = mapping.email;
-        console.log(`[Reconciliation] Added email ${mapping.email} to participant "${p.originalName || p.name}"`);
+        console.log(
+          `[Reconciliation] Added email ${mapping.email} to participant "${p.originalName || p.name}"`
+        );
       }
     }
   }
@@ -3964,7 +4015,7 @@ function deduplicateParticipants(participants) {
    * Score a participant entry by richness: real name, org, contact resource.
    * Higher score = richer entry that should be preferred.
    */
-  const richness = (p) => {
+  const richness = p => {
     let score = 0;
     if (p.name && !p.name.includes('@')) score += 2; // real name, not email-as-name
     if (p.organization) score += 1;
@@ -3983,7 +4034,9 @@ function deduplicateParticipants(participants) {
       // Prefer the richer entry (real name, org, googleContactResource)
       const existingIdx = seen.get(key);
       if (richness(participant) > richness(result[existingIdx])) {
-        console.log(`[Deduplication] Replacing "${result[existingIdx].name}" with richer "${participant.name}" for key "${key}"`);
+        console.log(
+          `[Deduplication] Replacing "${result[existingIdx].name}" with richer "${participant.name}" for key "${key}"`
+        );
         result[existingIdx] = participant;
       }
     } else {
@@ -4043,7 +4096,9 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
     // Perform speaker matching if available (Phase 6)
     // IMPORTANT: Only re-match speakers if user hasn't already applied mappings
     // Check if transcript already has non-generic speaker names applied
-    const hasUserAppliedMappings = meeting.transcript && meeting.transcript.length > 0 &&
+    const hasUserAppliedMappings =
+      meeting.transcript &&
+      meeting.transcript.length > 0 &&
       meeting.transcript.some(segment => {
         const name = segment.speakerName || segment.speakerDisplayName;
         // If segment has a speakerName that isn't generic (like "Speaker 1"), user has applied mappings
@@ -4055,7 +4110,7 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
       meeting.transcript &&
       meeting.transcript.length > 0 &&
       participantEmails.length > 0 &&
-      !hasUserAppliedMappings  // Skip if user already applied speaker mappings
+      !hasUserAppliedMappings // Skip if user already applied speaker mappings
     ) {
       try {
         console.log('[ObsidianExport] Attempting speaker matching (no existing mappings found)...');
@@ -4145,7 +4200,12 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
 
     // CRM Phase 1: Enrich participants with googleContactResource from contacts cache
     // This is the ROBUST approach - always look up from cache, don't rely on capture at every code path
-    if (meeting.participants && meeting.participants.length > 0 && googleContacts && googleContacts.isAuthenticated()) {
+    if (
+      meeting.participants &&
+      meeting.participants.length > 0 &&
+      googleContacts &&
+      googleContacts.isAuthenticated()
+    ) {
       for (const participant of meeting.participants) {
         // If participant has email but no googleContactResource, look it up from cache
         if (participant.email && !participant.googleContactResource) {
@@ -4153,7 +4213,9 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
             const contact = await googleContacts.findContactByEmail(participant.email);
             if (contact && contact.resourceName) {
               participant.googleContactResource = contact.resourceName;
-              console.log(`[ObsidianExport] Enriched "${participant.name}" with googleContactResource: ${contact.resourceName}`);
+              console.log(
+                `[ObsidianExport] Enriched "${participant.name}" with googleContactResource: ${contact.resourceName}`
+              );
             }
           } catch (_err) {
             // Silently continue - this is just enrichment
@@ -4244,7 +4306,7 @@ async function exportMeetingToObsidian(meeting, routingOverride = null, options 
           'C:\\PROGRAM FILES (X86)',
           'C:\\PROGRAMDATA',
         ];
-        if (blockedPrefixes.some((prefix) => normalizedUpper.startsWith(prefix))) {
+        if (blockedPrefixes.some(prefix => normalizedUpper.startsWith(prefix))) {
           console.error(`[ObsidianExport] Refusing to write to system directory: ${resolved}`);
           throw new Error(`Cannot export to system directory: ${resolved}`);
         }
@@ -4395,7 +4457,8 @@ function generateSummaryMarkdown(meeting, baseFilename, route = null) {
           // Also add to structured attendees
           const attendee = { name };
           if (email) attendee.email = email;
-          if (mapping.googleContactResource) attendee.google_contact_id = mapping.googleContactResource;
+          if (mapping.googleContactResource)
+            attendee.google_contact_id = mapping.googleContactResource;
           if (!attendees.some(a => a.name === name)) {
             attendees.push(attendee);
           }
@@ -4717,7 +4780,9 @@ async function generateTemplateSummaries(meeting, templateIds = null) {
       }
 
       // Estimate tokens per request (rough estimate: 1 token ≈ 4 chars)
-      console.log(`[TemplateSummary] Transcript: ~${Math.ceil(transcriptText.length / 4) + LLM_PROMPT_TOKEN_BUFFER} tokens/request (est.)`);
+      console.log(
+        `[TemplateSummary] Transcript: ~${Math.ceil(transcriptText.length / 4) + LLM_PROMPT_TOKEN_BUFFER} tokens/request (est.)`
+      );
       console.log(
         `[TemplateSummary] Processing ${sectionTasks.length} sections SEQUENTIALLY to avoid memory issues...`
       );
@@ -5163,16 +5228,13 @@ ipcMain.handle('google:openAuthWindow', async () => {
 
     return new Promise(resolve => {
       // Timeout after 5 minutes to prevent hanging and memory leaks
-      timeout = setTimeout(
-        () => {
-          if (authWindow && !authWindow.isDestroyed()) {
-            console.log('[Google OAuth] Authentication timeout');
-            cleanup();
-            resolve({ success: false, error: 'Authentication timeout (5 minutes)' });
-          }
-        },
-        OAUTH_TIMEOUT_MS
-      );
+      timeout = setTimeout(() => {
+        if (authWindow && !authWindow.isDestroyed()) {
+          console.log('[Google OAuth] Authentication timeout');
+          cleanup();
+          resolve({ success: false, error: 'Authentication timeout (5 minutes)' });
+        }
+      }, OAUTH_TIMEOUT_MS);
 
       // Define redirect handler
       redirectHandler = async (event, url) => {
@@ -5235,14 +5297,19 @@ ipcMain.handle(
       console.log(`[Calendar IPC] Fetching upcoming meetings (${hoursAhead} hours ahead)`);
       console.log(`[Calendar IPC] googleCalendar exists: ${!!googleCalendar}`);
       if (googleCalendar) {
-        console.log(`[Calendar IPC] googleCalendar.isAuthenticated(): ${googleCalendar.isAuthenticated()}`);
+        console.log(
+          `[Calendar IPC] googleCalendar.isAuthenticated(): ${googleCalendar.isAuthenticated()}`
+        );
       }
 
       // Check if calendar is initialized and authenticated
       if (!googleCalendar || !googleCalendar.isAuthenticated()) {
         console.log('[Calendar IPC] Calendar not authenticated - returning empty array');
         console.log('[Calendar IPC] googleAuth exists:', !!googleAuth);
-        console.log('[Calendar IPC] googleAuth.isAuthenticated:', !!googleAuth?.isAuthenticated?.());
+        console.log(
+          '[Calendar IPC] googleAuth.isAuthenticated:',
+          !!googleAuth?.isAuthenticated?.()
+        );
         return { success: true, meetings: [] };
       }
 
@@ -5436,7 +5503,6 @@ ipcMain.handle('contacts:getByEmail', async (event, email) => {
   }
 });
 
-
 // Google Contacts & Speaker Matching Service-Specific IPC Handlers
 // ===================================================================
 
@@ -5533,170 +5599,193 @@ ipcMain.handle(
 // Re-match participants to contacts for a meeting
 // v1.2.2: Rebuild from TRANSCRIPT speaker names (the true source of truth)
 // The participants array may already be corrupted - transcript is authoritative
-ipcMain.handle('contacts:rematchParticipants', withValidation(stringIdSchema, async (event, meetingId) => {
-  try {
-    console.log(`[Contacts IPC] Re-matching participants for meeting ${meetingId}`);
+ipcMain.handle(
+  'contacts:rematchParticipants',
+  withValidation(stringIdSchema, async (event, meetingId) => {
+    try {
+      console.log(`[Contacts IPC] Re-matching participants for meeting ${meetingId}`);
 
-    if (!googleContacts || !googleContacts.isAuthenticated()) {
-      throw new Error('Google Contacts not authenticated');
-    }
+      if (!googleContacts || !googleContacts.isAuthenticated()) {
+        throw new Error('Google Contacts not authenticated');
+      }
 
-    // Find the meeting
-    let meeting = null;
-    await fileOperationManager.scheduleOperation(async data => {
-      meeting = data.pastMeetings.find(m => m.id === meetingId);
-      return data; // Don't modify yet, just read
-    });
+      // Find the meeting
+      let meeting = null;
+      await fileOperationManager.scheduleOperation(async data => {
+        meeting = data.pastMeetings.find(m => m.id === meetingId);
+        return data; // Don't modify yet, just read
+      });
 
-    if (!meeting) {
-      throw new Error(`Meeting ${meetingId} not found`);
-    }
+      if (!meeting) {
+        throw new Error(`Meeting ${meetingId} not found`);
+      }
 
-    // v1.2.2: Try multiple sources to find original participant names
-    // Priority: speakerMapping names > participants array > transcript speakers
-    // The participants array may have been corrupted by bad contact matching
+      // v1.2.2: Try multiple sources to find original participant names
+      // Priority: speakerMapping names > participants array > transcript speakers
+      // The participants array may have been corrupted by bad contact matching
 
-    const rebuiltParticipants = [];
-    const seenNames = new Set();
-    const seenEmails = new Set();
+      const rebuiltParticipants = [];
+      const seenNames = new Set();
+      const seenEmails = new Set();
 
-    // Log available sources for debugging
-    console.log(`[Contacts IPC] Available sources:`);
-    console.log(`  - participants: ${meeting.participants?.length || 0}`);
-    console.log(`  - speakerMapping keys: ${meeting.speakerMapping ? Object.keys(meeting.speakerMapping).length : 0}`);
-    console.log(`  - transcript entries: ${meeting.transcript?.length || 0}`);
+      // Log available sources for debugging
+      console.log(`[Contacts IPC] Available sources:`);
+      console.log(`  - participants: ${meeting.participants?.length || 0}`);
+      console.log(
+        `  - speakerMapping keys: ${meeting.speakerMapping ? Object.keys(meeting.speakerMapping).length : 0}`
+      );
+      console.log(`  - transcript entries: ${meeting.transcript?.length || 0}`);
 
-    // PRIMARY SOURCE (processed FIRST): SDK participants array — source of truth
-    if (meeting.participants && meeting.participants.length > 0) {
-      console.log(`[Contacts IPC] v1.3: Using ${meeting.participants.length} participants from SDK (source of truth)`);
+      // PRIMARY SOURCE (processed FIRST): SDK participants array — source of truth
+      if (meeting.participants && meeting.participants.length > 0) {
+        console.log(
+          `[Contacts IPC] v1.3: Using ${meeting.participants.length} participants from SDK (source of truth)`
+        );
 
-      for (const participant of meeting.participants) {
-        // v1.2.2: Prefer originalName (immutable) over name (may be corrupted)
-        const originalName = participant.originalName || participant.name;
-        if (!originalName) continue;
+        for (const participant of meeting.participants) {
+          // v1.2.2: Prefer originalName (immutable) over name (may be corrupted)
+          const originalName = participant.originalName || participant.name;
+          if (!originalName) continue;
 
-        // Skip generic names
-        if (originalName.match(/^(Speaker\s*[A-Z0-9]|SPK[-_]|spk_|SPEAKER_|Unknown|Host|Guest)/i)) continue;
+          // Skip generic names
+          if (originalName.match(/^(Speaker\s*[A-Z0-9]|SPK[-_]|spk_|SPEAKER_|Unknown|Host|Guest)/i))
+            continue;
 
-        const normalizedName = originalName.toLowerCase().trim();
-        if (seenNames.has(normalizedName)) continue;
-        // Also skip if this participant's email was already seen (email-based dedup)
-        if (participant.email && seenEmails.has(participant.email.toLowerCase())) continue;
-        seenNames.add(normalizedName);
+          const normalizedName = originalName.toLowerCase().trim();
+          if (seenNames.has(normalizedName)) continue;
+          // Also skip if this participant's email was already seen (email-based dedup)
+          if (participant.email && seenEmails.has(participant.email.toLowerCase())) continue;
+          seenNames.add(normalizedName);
 
-        // Preserve original Zoom name, clear potentially wrong email, re-match fresh
-        const rebuiltParticipant = {
-          id: participant.id,
-          name: originalName, // KEEP the original Zoom name!
-          originalName: originalName,
-          isHost: participant.isHost,
-          platform: participant.platform,
-          joinTime: participant.joinTime,
-        };
+          // Preserve original Zoom name, clear potentially wrong email, re-match fresh
+          const rebuiltParticipant = {
+            id: participant.id,
+            name: originalName, // KEEP the original Zoom name!
+            originalName: originalName,
+            isHost: participant.isHost,
+            platform: participant.platform,
+            joinTime: participant.joinTime,
+          };
 
-        // Try to find contact info (email, org) but NEVER change the name
-        try {
-          const contact = await googleContacts.findContactByName(originalName);
-          if (contact && contact.emails && contact.emails.length > 0) {
-            const resolvedEmail = contact.emails[0].toLowerCase();
-            // Skip if this email was already seen from another source
-            if (seenEmails.has(resolvedEmail)) {
-              console.log(`[Contacts IPC] "${originalName}" -> email ${resolvedEmail} already seen, skipping`);
-              continue;
+          // Try to find contact info (email, org) but NEVER change the name
+          try {
+            const contact = await googleContacts.findContactByName(originalName);
+            if (contact && contact.emails && contact.emails.length > 0) {
+              const resolvedEmail = contact.emails[0].toLowerCase();
+              // Skip if this email was already seen from another source
+              if (seenEmails.has(resolvedEmail)) {
+                console.log(
+                  `[Contacts IPC] "${originalName}" -> email ${resolvedEmail} already seen, skipping`
+                );
+                continue;
+              }
+              rebuiltParticipant.email = contact.emails[0];
+              rebuiltParticipant.organization = contact.organization || null;
+              rebuiltParticipant.googleContactResource = contact.resourceName || null;
+              rebuiltParticipant.contactMatched = true;
+              seenEmails.add(resolvedEmail);
+              console.log(
+                `[Contacts IPC] "${originalName}" -> email: ${contact.emails[0]} (name preserved)${contact.resourceName ? ` [${contact.resourceName}]` : ''}`
+              );
+            } else {
+              rebuiltParticipant.email = null;
+              rebuiltParticipant.contactMatched = false;
+              console.log(`[Contacts IPC] "${originalName}" - no contact match (name preserved)`);
             }
-            rebuiltParticipant.email = contact.emails[0];
-            rebuiltParticipant.organization = contact.organization || null;
-            rebuiltParticipant.googleContactResource = contact.resourceName || null;
-            rebuiltParticipant.contactMatched = true;
-            seenEmails.add(resolvedEmail);
-            console.log(`[Contacts IPC] "${originalName}" -> email: ${contact.emails[0]} (name preserved)${contact.resourceName ? ` [${contact.resourceName}]` : ''}`);
-          } else {
+          } catch (err) {
+            console.warn(
+              `[Contacts IPC] Error looking up contact for "${originalName}":`,
+              err.message
+            );
             rebuiltParticipant.email = null;
             rebuiltParticipant.contactMatched = false;
-            console.log(`[Contacts IPC] "${originalName}" - no contact match (name preserved)`);
           }
-        } catch (err) {
-          console.warn(`[Contacts IPC] Error looking up contact for "${originalName}":`, err.message);
-          rebuiltParticipant.email = null;
-          rebuiltParticipant.contactMatched = false;
+
+          rebuiltParticipants.push(rebuiltParticipant);
         }
 
-        rebuiltParticipants.push(rebuiltParticipant);
+        console.log(
+          `[Contacts IPC] Rebuilt ${rebuiltParticipants.length} participants from SDK names`
+        );
       }
 
-      console.log(`[Contacts IPC] Rebuilt ${rebuiltParticipants.length} participants from SDK names`);
-    }
+      // ENRICHMENT SOURCE: speakerMapping — only enrich existing participants, never add new ones
+      if (meeting.speakerMapping && typeof meeting.speakerMapping === 'object') {
+        console.log(`[Contacts IPC] Enriching participants from speakerMapping (enrich-only)...`);
+        let enriched = 0;
 
-    // ENRICHMENT SOURCE: speakerMapping — only enrich existing participants, never add new ones
-    if (meeting.speakerMapping && typeof meeting.speakerMapping === 'object') {
-      console.log(`[Contacts IPC] Enriching participants from speakerMapping (enrich-only)...`);
-      let enriched = 0;
+        for (const [_label, info] of Object.entries(meeting.speakerMapping)) {
+          if (!info.name) continue;
 
-      for (const [_label, info] of Object.entries(meeting.speakerMapping)) {
-        if (!info.name) continue;
-
-        // Find existing participant that matches this speakerMapping entry
-        const matchIdx = rebuiltParticipants.findIndex(p => {
-          const pName = (p.originalName || p.name || '').toLowerCase().trim();
-          const mName = info.name.toLowerCase().trim();
-          if (pName === mName) return true;
-          // Multi-word substring match
-          const pWords = pName.split(/\s+/);
-          const mWords = mName.split(/\s+/);
-          if (pWords.length >= 2 && mWords.length >= 2) {
-            return pName.includes(mName) || mName.includes(pName);
-          }
-          return false;
-        });
-
-        if (matchIdx !== -1) {
-          const existing = rebuiltParticipants[matchIdx];
-          // Enrich with email/org/contactResource if missing
-          if (!existing.email && info.email) {
-            const normalizedEmail = info.email.toLowerCase();
-            if (!seenEmails.has(normalizedEmail)) {
-              existing.email = info.email;
-              existing.contactMatched = true;
-              seenEmails.add(normalizedEmail);
-              enriched++;
-              console.log(`[Contacts IPC] Enriched "${existing.name}" with email ${info.email} from speakerMapping`);
+          // Find existing participant that matches this speakerMapping entry
+          const matchIdx = rebuiltParticipants.findIndex(p => {
+            const pName = (p.originalName || p.name || '').toLowerCase().trim();
+            const mName = info.name.toLowerCase().trim();
+            if (pName === mName) return true;
+            // Multi-word substring match
+            const pWords = pName.split(/\s+/);
+            const mWords = mName.split(/\s+/);
+            if (pWords.length >= 2 && mWords.length >= 2) {
+              return pName.includes(mName) || mName.includes(pName);
             }
+            return false;
+          });
+
+          if (matchIdx !== -1) {
+            const existing = rebuiltParticipants[matchIdx];
+            // Enrich with email/org/contactResource if missing
+            if (!existing.email && info.email) {
+              const normalizedEmail = info.email.toLowerCase();
+              if (!seenEmails.has(normalizedEmail)) {
+                existing.email = info.email;
+                existing.contactMatched = true;
+                seenEmails.add(normalizedEmail);
+                enriched++;
+                console.log(
+                  `[Contacts IPC] Enriched "${existing.name}" with email ${info.email} from speakerMapping`
+                );
+              }
+            }
+            if (!existing.googleContactResource && info.googleContactResource) {
+              existing.googleContactResource = info.googleContactResource;
+            }
+          } else {
+            console.log(
+              `[Contacts IPC] speakerMapping name "${info.name}" not in SDK participants — skipped (enrich-only)`
+            );
           }
-          if (!existing.googleContactResource && info.googleContactResource) {
-            existing.googleContactResource = info.googleContactResource;
-          }
-        } else {
-          console.log(`[Contacts IPC] speakerMapping name "${info.name}" not in SDK participants — skipped (enrich-only)`);
         }
+        console.log(`[Contacts IPC] Enriched ${enriched} participants from speakerMapping`);
       }
-      console.log(`[Contacts IPC] Enriched ${enriched} participants from speakerMapping`);
+
+      // NOTE: Transcript speakers are NOT added as participants (v1.3).
+      // SDK participant list is the sole source of truth for who was in the meeting.
+
+      // Save rebuilt participants
+      await fileOperationManager.scheduleOperation(async data => {
+        const meetingIndex = data.pastMeetings.findIndex(m => m.id === meetingId);
+        if (meetingIndex !== -1) {
+          data.pastMeetings[meetingIndex].participants = rebuiltParticipants;
+
+          // Rebuild participantEmails from fresh matches only
+          const emails = rebuiltParticipants
+            .filter(p => p.email && p.contactMatched)
+            .map(p => p.email.toLowerCase());
+          data.pastMeetings[meetingIndex].participantEmails = [...new Set(emails)];
+        }
+        return data;
+      });
+
+      console.log(
+        `[Contacts IPC] Rebuild complete. ${rebuiltParticipants.length} participants (${rebuiltParticipants.filter(p => p.contactMatched).length} matched).`
+      );
+      return { success: true, participants: rebuiltParticipants };
+    } catch (error) {
+      console.error('[Contacts IPC] Failed to rematch participants:', error);
+      return { success: false, error: error.message };
     }
-
-    // NOTE: Transcript speakers are NOT added as participants (v1.3).
-    // SDK participant list is the sole source of truth for who was in the meeting.
-
-    // Save rebuilt participants
-    await fileOperationManager.scheduleOperation(async data => {
-      const meetingIndex = data.pastMeetings.findIndex(m => m.id === meetingId);
-      if (meetingIndex !== -1) {
-        data.pastMeetings[meetingIndex].participants = rebuiltParticipants;
-
-        // Rebuild participantEmails from fresh matches only
-        const emails = rebuiltParticipants
-          .filter(p => p.email && p.contactMatched)
-          .map(p => p.email.toLowerCase());
-        data.pastMeetings[meetingIndex].participantEmails = [...new Set(emails)];
-      }
-      return data;
-    });
-
-    console.log(`[Contacts IPC] Rebuild complete. ${rebuiltParticipants.length} participants (${rebuiltParticipants.filter(p => p.contactMatched).length} matched).`);
-    return { success: true, participants: rebuiltParticipants };
-  } catch (error) {
-    console.error('[Contacts IPC] Failed to rematch participants:', error);
-    return { success: false, error: error.message };
-  }
-}));
+  })
+);
 
 // Get meetings for a specific contact (CS-1)
 ipcMain.handle(
@@ -5776,118 +5865,127 @@ ipcMain.handle(
 // Match speakers to participants
 ipcMain.handle(
   'speakers:matchSpeakers',
-  withValidation(speakersMatchSchema, async (event, { transcript, participantEmails, options, recordingId }) => {
-    try {
-      console.log('[Speakers IPC] Matching speakers to participants');
-      if (!speakerMatcher) {
-        throw new Error('Speaker matcher not initialized');
-      }
+  withValidation(
+    speakersMatchSchema,
+    async (event, { transcript, participantEmails, options, recordingId }) => {
+      try {
+        console.log('[Speakers IPC] Matching speakers to participants');
+        if (!speakerMatcher) {
+          throw new Error('Speaker matcher not initialized');
+        }
 
-      // SM-1: Get speech timeline for high-confidence matching if recordingId provided
-      const speechTimeline = recordingId ? getSpeechTimeline(recordingId) : null;
-      if (speechTimeline) {
-        console.log(
-          `[Speakers IPC] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`
+        // SM-1: Get speech timeline for high-confidence matching if recordingId provided
+        const speechTimeline = recordingId ? getSpeechTimeline(recordingId) : null;
+        if (speechTimeline) {
+          console.log(
+            `[Speakers IPC] SM-1: Found speech timeline with ${speechTimeline.participants.length} SDK participants`
+          );
+        }
+
+        // Speaker matching: short-circuits via speaker identification if available,
+        // otherwise falls through to SM-1 timeline + heuristics
+        const speakerMapping = await speakerMatcher.matchSpeakers(transcript, participantEmails, {
+          ...options,
+          speechTimeline,
+          segments: options?.segments || [],
+          meetingId: options?.meetingId || null,
+          calendarAttendees: options?.calendarAttendees || [],
+        });
+
+        // Apply mapping to transcript
+        const updatedTranscript = speakerMatcher.applyMappingToTranscript(
+          transcript,
+          speakerMapping
         );
+
+        // Get speaker statistics
+        const speakerStats = speakerMatcher.analyzeSpeakers(transcript);
+        const speakerSummary = speakerMatcher.getSpeakerSummary(speakerStats);
+
+        return {
+          success: true,
+          speakerMapping,
+          updatedTranscript,
+          speakerSummary,
+        };
+      } catch (error) {
+        console.error('[Speakers IPC] Failed to match speakers:', error);
+        return { success: false, error: error.message };
       }
-
-      // Speaker matching: short-circuits via speaker identification if available,
-      // otherwise falls through to SM-1 timeline + heuristics
-      const speakerMapping = await speakerMatcher.matchSpeakers(transcript, participantEmails, {
-        ...options,
-        speechTimeline,
-        segments: options?.segments || [],
-        meetingId: options?.meetingId || null,
-        calendarAttendees: options?.calendarAttendees || [],
-      });
-
-      // Apply mapping to transcript
-      const updatedTranscript = speakerMatcher.applyMappingToTranscript(transcript, speakerMapping);
-
-      // Get speaker statistics
-      const speakerStats = speakerMatcher.analyzeSpeakers(transcript);
-      const speakerSummary = speakerMatcher.getSpeakerSummary(speakerStats);
-
-      return {
-        success: true,
-        speakerMapping,
-        updatedTranscript,
-        speakerSummary,
-      };
-    } catch (error) {
-      console.error('[Speakers IPC] Failed to match speakers:', error);
-      return { success: false, error: error.message };
     }
-  })
+  )
 );
 
 // Update speaker mapping manually (for corrections)
 ipcMain.handle(
   'speakers:updateMapping',
-  withValidation(speakersUpdateMappingSchema, async (event, { meetingId, speakerLabel, participantEmail }) => {
-    try {
-      console.log(
-        `[Speakers IPC] Updating speaker mapping: ${speakerLabel} -> ${participantEmail}`
-      );
-
-      // Load meeting data
-      const data = await fileOperationManager.readMeetingsData();
-
-      // Find meeting in either upcomingMeetings or pastMeetings
-      let meeting = data.upcomingMeetings?.find(m => m.id === meetingId);
-      if (!meeting) {
-        meeting = data.pastMeetings?.find(m => m.id === meetingId);
-      }
-
-      if (!meeting) {
-        throw new Error(`Meeting ${meetingId} not found`);
-      }
-
-      if (!meeting.transcript) {
-        throw new Error(`Meeting ${meetingId} has no transcript`);
-      }
-
-      // Update the speaker mapping
-      if (!meeting.speakerMapping) {
-        meeting.speakerMapping = {};
-      }
-
-      // Find contact info for the participant email
-      let participantName = participantEmail;
-      let googleContactResource = null;
-      if (googleContacts && googleContacts.isAuthenticated()) {
-        const contact = await googleContacts.findContactByEmail(participantEmail);
-        if (contact) {
-          participantName = contact.name;
-          googleContactResource = contact.resourceName || null;
-        }
-      }
-
-      meeting.speakerMapping[speakerLabel] = {
-        email: participantEmail,
-        name: participantName,
-        googleContactResource: googleContactResource,
-        confidence: 'manual',
-        method: 'user-correction',
-      };
-
-      // Apply the updated mapping to transcript
-      if (speakerMatcher) {
-        meeting.transcript = speakerMatcher.applyMappingToTranscript(
-          meeting.transcript,
-          meeting.speakerMapping
+  withValidation(
+    speakersUpdateMappingSchema,
+    async (event, { meetingId, speakerLabel, participantEmail }) => {
+      try {
+        console.log(
+          `[Speakers IPC] Updating speaker mapping: ${speakerLabel} -> ${participantEmail}`
         );
+
+        // Load meeting data
+        const data = await fileOperationManager.readMeetingsData();
+
+        // Find meeting in either upcomingMeetings or pastMeetings
+        let meeting = data.upcomingMeetings?.find(m => m.id === meetingId);
+        if (!meeting) {
+          meeting = data.pastMeetings?.find(m => m.id === meetingId);
+        }
+
+        if (!meeting) {
+          throw new Error(`Meeting ${meetingId} not found`);
+        }
+
+        if (!meeting.transcript) {
+          throw new Error(`Meeting ${meetingId} has no transcript`);
+        }
+
+        // Update the speaker mapping
+        if (!meeting.speakerMapping) {
+          meeting.speakerMapping = {};
+        }
+
+        // Find contact info for the participant email
+        let participantName = participantEmail;
+        let googleContactResource = null;
+        if (googleContacts && googleContacts.isAuthenticated()) {
+          const contact = await googleContacts.findContactByEmail(participantEmail);
+          if (contact) {
+            participantName = contact.name;
+            googleContactResource = contact.resourceName || null;
+          }
+        }
+
+        meeting.speakerMapping[speakerLabel] = {
+          email: participantEmail,
+          name: participantName,
+          googleContactResource: googleContactResource,
+          confidence: 'manual',
+          method: 'user-correction',
+        };
+
+        // Apply the updated mapping to transcript
+        if (speakerMatcher) {
+          meeting.transcript = speakerMatcher.applyMappingToTranscript(
+            meeting.transcript,
+            meeting.speakerMapping
+          );
+        }
+
+        // Save updated meeting data
+        await fileOperationManager.writeData(data);
+
+        return { success: true, speakerMapping: meeting.speakerMapping };
+      } catch (error) {
+        console.error('[Speakers IPC] Failed to update mapping:', error);
+        return { success: false, error: error.message };
       }
-
-      // Save updated meeting data
-      await fileOperationManager.writeData(data);
-
-      return { success: true, speakerMapping: meeting.speakerMapping };
-    } catch (error) {
-      console.error('[Speakers IPC] Failed to update mapping:', error);
-      return { success: false, error: error.message };
     }
-  })
+  )
 );
 
 // ===================================================================
@@ -5992,19 +6090,22 @@ ipcMain.handle(
 // Apply mappings to a transcript
 ipcMain.handle(
   'speakerMapping:applyToTranscript',
-  withValidation(speakerMappingApplyToTranscriptSchema, async (event, { transcript, mappings, options }) => {
-    try {
-      const updatedTranscript = speakerMappingService.applyMappingsToTranscript(
-        transcript,
-        mappings,
-        options
-      );
-      return { success: true, transcript: updatedTranscript };
-    } catch (error) {
-      console.error('[SpeakerMapping IPC] Failed to apply mappings:', error);
-      return { success: false, error: error.message };
+  withValidation(
+    speakerMappingApplyToTranscriptSchema,
+    async (event, { transcript, mappings, options }) => {
+      try {
+        const updatedTranscript = speakerMappingService.applyMappingsToTranscript(
+          transcript,
+          mappings,
+          options
+        );
+        return { success: true, transcript: updatedTranscript };
+      } catch (error) {
+        console.error('[SpeakerMapping IPC] Failed to apply mappings:', error);
+        return { success: false, error: error.message };
+      }
     }
-  })
+  )
 );
 
 // Apply mappings to a meeting and save
@@ -6014,380 +6115,402 @@ ipcMain.handle(
     try {
       console.log(`[SpeakerMapping IPC] Applying mappings to meeting ${meetingId}`);
 
-    // Load meeting data
-    const data = await fileOperationManager.readMeetingsData();
+      // Load meeting data
+      const data = await fileOperationManager.readMeetingsData();
 
-    // Find meeting in either upcomingMeetings or pastMeetings
-    let meeting = data.upcomingMeetings?.find(m => m.id === meetingId);
-    let meetingList = 'upcomingMeetings';
+      // Find meeting in either upcomingMeetings or pastMeetings
+      let meeting = data.upcomingMeetings?.find(m => m.id === meetingId);
+      let meetingList = 'upcomingMeetings';
 
-    if (!meeting) {
-      meeting = data.pastMeetings?.find(m => m.id === meetingId);
-      meetingList = 'pastMeetings';
-    }
-
-    if (!meeting) {
-      throw new Error(`Meeting ${meetingId} not found`);
-    }
-
-    if (!meeting.transcript) {
-      throw new Error(`Meeting ${meetingId} has no transcript`);
-    }
-
-    // Snapshot the pipeline's own guess before we overwrite it, so we can
-    // diff against the user's correction after mappings are applied.
-    const prevMapping = meeting.speakerMapping || {};
-
-    // Apply mappings to transcript
-    console.log(`[SpeakerMapping IPC] Mappings to apply:`, JSON.stringify(mappings, null, 2));
-    console.log(
-      `[SpeakerMapping IPC] Transcript before (first 2):`,
-      meeting.transcript?.slice(0, 2)
-    );
-
-    meeting.transcript = speakerMappingService.applyMappingsToTranscript(
-      meeting.transcript,
-      mappings,
-      options
-    );
-
-    console.log(
-      `[SpeakerMapping IPC] Transcript after (first 2):`,
-      meeting.transcript?.slice(0, 2)
-    );
-
-    // Store the applied mappings for reference
-    meeting.appliedSpeakerMappings = mappings;
-
-    // Update participants list - replace speaker IDs with mapped contacts and deduplicate
-    if (mappings) {
-      // Initialize participants array if it doesn't exist
-      if (!meeting.participants) {
-        meeting.participants = [];
-      }
-      if (!meeting.participantEmails) {
-        meeting.participantEmails = [];
+      if (!meeting) {
+        meeting = data.pastMeetings?.find(m => m.id === meetingId);
+        meetingList = 'pastMeetings';
       }
 
-      // First pass: Collect all "from" speakers that should be removed (merged into others)
-      const speakersToRemove = new Set();
-      for (const [speakerId, mapping] of Object.entries(mappings)) {
-        // If this is a merge (speakerId maps to another speaker name that's different),
-        // mark the speakerId for removal
-        if (mapping.merged || mapping.autoMerged) {
-          speakersToRemove.add(speakerId);
+      if (!meeting) {
+        throw new Error(`Meeting ${meetingId} not found`);
+      }
+
+      if (!meeting.transcript) {
+        throw new Error(`Meeting ${meetingId} has no transcript`);
+      }
+
+      // Snapshot the pipeline's own guess before we overwrite it, so we can
+      // diff against the user's correction after mappings are applied.
+      const prevMapping = meeting.speakerMapping || {};
+
+      // Apply mappings to transcript
+      console.log(`[SpeakerMapping IPC] Mappings to apply:`, JSON.stringify(mappings, null, 2));
+      console.log(
+        `[SpeakerMapping IPC] Transcript before (first 2):`,
+        meeting.transcript?.slice(0, 2)
+      );
+
+      meeting.transcript = speakerMappingService.applyMappingsToTranscript(
+        meeting.transcript,
+        mappings,
+        options
+      );
+
+      console.log(
+        `[SpeakerMapping IPC] Transcript after (first 2):`,
+        meeting.transcript?.slice(0, 2)
+      );
+
+      // Store the applied mappings for reference
+      meeting.appliedSpeakerMappings = mappings;
+
+      // Update participants list - replace speaker IDs with mapped contacts and deduplicate
+      if (mappings) {
+        // Initialize participants array if it doesn't exist
+        if (!meeting.participants) {
+          meeting.participants = [];
         }
-      }
+        if (!meeting.participantEmails) {
+          meeting.participantEmails = [];
+        }
 
-      // Second pass: Remove merged speakers from participants
-      if (speakersToRemove.size > 0) {
-        meeting.participants = meeting.participants.filter(p => {
-          if (speakersToRemove.has(p.name)) {
-            console.log(`[SpeakerMapping IPC] Removing merged participant: ${p.name}`);
-            return false;
+        // First pass: Collect all "from" speakers that should be removed (merged into others)
+        const speakersToRemove = new Set();
+        for (const [speakerId, mapping] of Object.entries(mappings)) {
+          // If this is a merge (speakerId maps to another speaker name that's different),
+          // mark the speakerId for removal
+          if (mapping.merged || mapping.autoMerged) {
+            speakersToRemove.add(speakerId);
           }
-          return true;
-        });
-      }
-
-      // Third pass: Update/add participants based on mappings
-      for (const [speakerId, mapping] of Object.entries(mappings)) {
-        const contactName = mapping.contactName;
-        const contactEmail = mapping.contactEmail;
-
-        // Skip if this speaker was merged into another (already removed)
-        if (speakersToRemove.has(speakerId)) {
-          continue;
         }
 
-        // Find existing participant with this speaker ID as name and replace it
-        const existingIndex = meeting.participants.findIndex(p => p.name === speakerId);
-
-        if (existingIndex !== -1) {
-          // Replace the speaker ID participant with the contact
-          meeting.participants[existingIndex] = {
-            name: contactName,
-            email: contactEmail || meeting.participants[existingIndex].email || null,
-            mappedFromSpeakerId: speakerId,
-          };
-          console.log(`[SpeakerMapping IPC] Replaced participant ${speakerId} with ${contactName}`);
-        } else {
-          // v1.3: Don't add new participants — SDK list is source of truth.
-          // Try to find existing participant by fuzzy name match to enrich.
-          const fuzzyIdx = meeting.participants.findIndex(p => {
-            const pName = (p.originalName || p.name || '').toLowerCase().trim();
-            const cName = contactName.toLowerCase().trim();
-            if (pName === cName) return true;
-            const pWords = pName.split(/\s+/);
-            const cWords = cName.split(/\s+/);
-            if (pWords.length >= 2 && cWords.length >= 2) {
-              return pName.includes(cName) || cName.includes(pName);
+        // Second pass: Remove merged speakers from participants
+        if (speakersToRemove.size > 0) {
+          meeting.participants = meeting.participants.filter(p => {
+            if (speakersToRemove.has(p.name)) {
+              console.log(`[SpeakerMapping IPC] Removing merged participant: ${p.name}`);
+              return false;
             }
-            return false;
+            return true;
           });
+        }
 
-          if (fuzzyIdx !== -1) {
-            meeting.participants[fuzzyIdx] = {
-              ...meeting.participants[fuzzyIdx],
-              email: contactEmail || meeting.participants[fuzzyIdx].email || null,
+        // Third pass: Update/add participants based on mappings
+        for (const [speakerId, mapping] of Object.entries(mappings)) {
+          const contactName = mapping.contactName;
+          const contactEmail = mapping.contactEmail;
+
+          // Skip if this speaker was merged into another (already removed)
+          if (speakersToRemove.has(speakerId)) {
+            continue;
+          }
+
+          // Find existing participant with this speaker ID as name and replace it
+          const existingIndex = meeting.participants.findIndex(p => p.name === speakerId);
+
+          if (existingIndex !== -1) {
+            // Replace the speaker ID participant with the contact
+            meeting.participants[existingIndex] = {
+              name: contactName,
+              email: contactEmail || meeting.participants[existingIndex].email || null,
               mappedFromSpeakerId: speakerId,
             };
-            console.log(`[SpeakerMapping IPC] Enriched existing participant "${meeting.participants[fuzzyIdx].name}" from speaker ${speakerId}`);
+            console.log(
+              `[SpeakerMapping IPC] Replaced participant ${speakerId} with ${contactName}`
+            );
           } else {
-            console.log(`[SpeakerMapping IPC] Skipping new participant "${contactName}" (enrich-only, SDK is source of truth)`);
-          }
-        }
+            // v1.3: Don't add new participants — SDK list is source of truth.
+            // Try to find existing participant by fuzzy name match to enrich.
+            const fuzzyIdx = meeting.participants.findIndex(p => {
+              const pName = (p.originalName || p.name || '').toLowerCase().trim();
+              const cName = contactName.toLowerCase().trim();
+              if (pName === cName) return true;
+              const pWords = pName.split(/\s+/);
+              const cWords = cName.split(/\s+/);
+              if (pWords.length >= 2 && cWords.length >= 2) {
+                return pName.includes(cName) || cName.includes(pName);
+              }
+              return false;
+            });
 
-        // Add email to participantEmails if not already present
-        if (contactEmail && !meeting.participantEmails.includes(contactEmail)) {
-          meeting.participantEmails.push(contactEmail);
-        }
-      }
-
-      // Final pass: Deduplicate participants by name (case-insensitive)
-      // Keep the entry with the most information (email, longer name)
-      const seenNames = new Map();
-      const deduped = [];
-
-      for (const p of meeting.participants) {
-        const normalizedName = p.name?.toLowerCase().trim();
-        if (!normalizedName) continue;
-
-        if (seenNames.has(normalizedName)) {
-          const existingIdx = seenNames.get(normalizedName);
-          const existing = deduped[existingIdx];
-          // Prefer entry with email, or longer original name
-          if (
-            (!existing.email && p.email) ||
-            (p.name.length > existing.name.length && !existing.email)
-          ) {
-            deduped[existingIdx] = p;
-            console.log(`[SpeakerMapping IPC] Dedup: replaced "${existing.name}" with "${p.name}"`);
-          } else {
-            console.log(`[SpeakerMapping IPC] Dedup: skipping duplicate "${p.name}"`);
-          }
-        } else {
-          seenNames.set(normalizedName, deduped.length);
-          deduped.push(p);
-        }
-      }
-
-      // Second dedup pass: email-based (catches entries with different names but same email)
-      const seenEmails = new Map();
-      const emailDeduped = [];
-
-      for (const p of deduped) {
-        if (p.email) {
-          const normalizedEmail = p.email.toLowerCase();
-          if (seenEmails.has(normalizedEmail)) {
-            const existingIdx = seenEmails.get(normalizedEmail);
-            const existing = emailDeduped[existingIdx];
-            // Prefer entry with real name (no @) over email-as-name
-            const pHasRealName = p.name && !p.name.includes('@');
-            const existingHasRealName = existing.name && !existing.name.includes('@');
-            if (pHasRealName && !existingHasRealName) {
-              emailDeduped[existingIdx] = p;
-              console.log(`[SpeakerMapping IPC] Email dedup: replaced "${existing.name}" with "${p.name}" (same email ${normalizedEmail})`);
+            if (fuzzyIdx !== -1) {
+              meeting.participants[fuzzyIdx] = {
+                ...meeting.participants[fuzzyIdx],
+                email: contactEmail || meeting.participants[fuzzyIdx].email || null,
+                mappedFromSpeakerId: speakerId,
+              };
+              console.log(
+                `[SpeakerMapping IPC] Enriched existing participant "${meeting.participants[fuzzyIdx].name}" from speaker ${speakerId}`
+              );
             } else {
-              console.log(`[SpeakerMapping IPC] Email dedup: skipping "${p.name}" (same email as "${existing.name}")`);
+              console.log(
+                `[SpeakerMapping IPC] Skipping new participant "${contactName}" (enrich-only, SDK is source of truth)`
+              );
+            }
+          }
+
+          // Add email to participantEmails if not already present
+          if (contactEmail && !meeting.participantEmails.includes(contactEmail)) {
+            meeting.participantEmails.push(contactEmail);
+          }
+        }
+
+        // Final pass: Deduplicate participants by name (case-insensitive)
+        // Keep the entry with the most information (email, longer name)
+        const seenNames = new Map();
+        const deduped = [];
+
+        for (const p of meeting.participants) {
+          const normalizedName = p.name?.toLowerCase().trim();
+          if (!normalizedName) continue;
+
+          if (seenNames.has(normalizedName)) {
+            const existingIdx = seenNames.get(normalizedName);
+            const existing = deduped[existingIdx];
+            // Prefer entry with email, or longer original name
+            if (
+              (!existing.email && p.email) ||
+              (p.name.length > existing.name.length && !existing.email)
+            ) {
+              deduped[existingIdx] = p;
+              console.log(
+                `[SpeakerMapping IPC] Dedup: replaced "${existing.name}" with "${p.name}"`
+              );
+            } else {
+              console.log(`[SpeakerMapping IPC] Dedup: skipping duplicate "${p.name}"`);
             }
           } else {
-            seenEmails.set(normalizedEmail, emailDeduped.length);
+            seenNames.set(normalizedName, deduped.length);
+            deduped.push(p);
+          }
+        }
+
+        // Second dedup pass: email-based (catches entries with different names but same email)
+        const seenEmails = new Map();
+        const emailDeduped = [];
+
+        for (const p of deduped) {
+          if (p.email) {
+            const normalizedEmail = p.email.toLowerCase();
+            if (seenEmails.has(normalizedEmail)) {
+              const existingIdx = seenEmails.get(normalizedEmail);
+              const existing = emailDeduped[existingIdx];
+              // Prefer entry with real name (no @) over email-as-name
+              const pHasRealName = p.name && !p.name.includes('@');
+              const existingHasRealName = existing.name && !existing.name.includes('@');
+              if (pHasRealName && !existingHasRealName) {
+                emailDeduped[existingIdx] = p;
+                console.log(
+                  `[SpeakerMapping IPC] Email dedup: replaced "${existing.name}" with "${p.name}" (same email ${normalizedEmail})`
+                );
+              } else {
+                console.log(
+                  `[SpeakerMapping IPC] Email dedup: skipping "${p.name}" (same email as "${existing.name}")`
+                );
+              }
+            } else {
+              seenEmails.set(normalizedEmail, emailDeduped.length);
+              emailDeduped.push(p);
+            }
+          } else {
             emailDeduped.push(p);
           }
-        } else {
-          emailDeduped.push(p);
+        }
+
+        meeting.participants = emailDeduped;
+        console.log(`[SpeakerMapping IPC] Final participant count: ${meeting.participants.length}`);
+
+        // Deduplicate participantEmails
+        if (meeting.participantEmails?.length > 0) {
+          meeting.participantEmails = [
+            ...new Set(meeting.participantEmails.map(e => e?.toLowerCase().trim()).filter(Boolean)),
+          ];
         }
       }
 
-      meeting.participants = emailDeduped;
-      console.log(`[SpeakerMapping IPC] Final participant count: ${meeting.participants.length}`);
-
-      // Deduplicate participantEmails
-      if (meeting.participantEmails?.length > 0) {
-        meeting.participantEmails = [
-          ...new Set(meeting.participantEmails.map(e => e?.toLowerCase().trim()).filter(Boolean)),
-        ];
-      }
-    }
-
-    // Update summary content if it exists - replace speaker IDs with names
-    if (meeting.content && mappings) {
-      let updatedContent = meeting.content;
-      for (const [speakerId, mapping] of Object.entries(mappings)) {
-        // Replace speaker ID with contact name in summary
-        const regex = new RegExp(speakerId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-        updatedContent = updatedContent.replace(regex, mapping.contactName);
-      }
-      meeting.content = updatedContent;
-    }
-
-    // Learning loop (spec §8): telemetry + enrollment from corrections.
-    try {
-      const corrections = diffCorrections(meetingId, prevMapping, mappings);
-      if (corrections.length > 0 && correctionTelemetry) {
-        correctionTelemetry.record(corrections);
-        console.log(
-          `[CorrectionTelemetry] Recorded ${corrections.length} correction(s):`,
-          corrections
-            .map(c => `${c.speakerLabel}: ${c.fromMethod}(${c.fromName}) -> ${c.toName}`)
-            .join('; ')
-        );
-      }
-
-      // Correction-driven enrollment: when the corrected label still carries
-      // its match-time embedding (rehydration keeps these across reloads),
-      // the correction becomes a voice sample for the RIGHT person.
-      if (voiceProfileService) {
-        const reembedTargets = [];
-        for (const c of corrections) {
-          const entry = prevMapping[c.speakerLabel];
-          if (entry?.embedding?.length > 0 && c.toEmail) {
-            // Weight the correction by how long this speaker actually spoke —
-            // recompute weights samples by duration, so a 0 here would make the
-            // correction essentially weightless against anchor samples.
-            const correctionDuration = (meeting.segments || [])
-              .filter(s => s.speaker === c.speakerLabel)
-              .reduce((sum, s) => sum + Math.max(0, s.end - s.start), 0);
-            const upsert = voiceProfileService.upsertProfileSample(
-              { contactName: c.toName, contactEmail: c.toEmail, googleContactId: null },
-              new Float32Array(entry.embedding),
-              correctionDuration,
-              meetingId
-            );
-            if (upsert?.rejected) {
-              console.log(
-                `[CorrectionEnroll] Sample for ${c.toName} rejected by poisoning guard (embedding does not match their established profile)`
-              );
-            } else if (upsert) {
-              console.log(
-                `[CorrectionEnroll] ${c.toName} ${upsert.created ? 'enrolled' : 'strengthened'} from correction of ${c.speakerLabel}`
-              );
-            }
-          } else if (c.toEmail) {
-            // F1: no persisted embedding for this label. Re-embed the meeting
-            // audio for the corrected label so the correction still teaches the
-            // right person's profile. Collected here, run fire-and-forget below.
-            reembedTargets.push({ speakerLabel: c.speakerLabel, name: c.toName, email: c.toEmail });
-          }
+      // Update summary content if it exists - replace speaker IDs with names
+      if (meeting.content && mappings) {
+        let updatedContent = meeting.content;
+        for (const [speakerId, mapping] of Object.entries(mappings)) {
+          // Replace speaker ID with contact name in summary
+          const regex = new RegExp(speakerId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+          updatedContent = updatedContent.replace(regex, mapping.contactName);
         }
-
-        // Fire-and-forget re-embed (spec F1): the correction is already applied
-        // and about to be saved — embedding work must never block or fail it.
-        if (reembedTargets.length > 0) {
-          const reembedDeps = {
-            fileExists: p => fs.existsSync(p),
-            recordingsDirs: [
-              path.join(app.getPath('userData'), 'recordings'),
-              path.join(app.getPath('appData'), 'jd-notes-things', 'recordings'),
-            ],
-            embedSpeakers: (audioPath, segments) => voiceProfileService.embedSpeakers(audioPath, segments),
-            upsertProfileSample: (contact, embedding, dur, mid) =>
-              voiceProfileService.upsertProfileSample(contact, embedding, dur, mid),
-            log: msg => console.log(msg),
-            warn: msg => console.warn(msg),
-          };
-          reembedCorrections(reembedDeps, meeting, reembedTargets, meetingId).catch(err =>
-            console.warn('[CorrectionReembed] Unexpected re-embed failure (correction still applied):', err.message)
-          );
-        }
+        meeting.content = updatedContent;
       }
 
-      // Keep meeting.speakerMapping in sync with the correction so future
-      // reloads and telemetry diffs see the corrected state.
-      meeting.speakerMapping = meeting.speakerMapping || {};
-      for (const [label, next] of Object.entries(mappings)) {
-        if (!next || typeof next !== 'object') continue;
-        meeting.speakerMapping[label] = {
-          ...(meeting.speakerMapping[label] || {}),
-          email: next.contactEmail || null,
-          name: next.contactName,
-          confidence: 'manual',
-          method: 'user-correction',
-        };
-      }
-    } catch (learnErr) {
-      console.warn(
-        '[CorrectionTelemetry] Learning hook failed (correction still applied):',
-        learnErr.message
-      );
-    }
-
-    // Save updated meeting data
-    await fileOperationManager.writeData(data);
-
-    // Persist each mapping to the service for future auto-suggest
-    // But skip generic speaker IDs like "Speaker A", "Speaker B" which are not consistent across transcripts
-    if (mappings) {
-      for (const [speakerId, mapping] of Object.entries(mappings)) {
-        // Skip saving mappings for generic speaker IDs
-        if (isGenericSpeakerName(speakerId)) {
-          console.log(`[SpeakerMapping IPC] Not persisting mapping for generic speaker: ${speakerId}`);
-          continue;
-        }
-        await speakerMappingService.addMapping(
-          speakerId,
-          {
-            name: mapping.contactName,
-            email: mapping.contactEmail,
-          },
-          {
-            meetingId,
-            meetingTitle: meeting.title,
-          }
-        );
-      }
-    }
-
-    console.log(
-      `[SpeakerMapping IPC] Applied ${Object.keys(mappings || {}).length} mappings to meeting (in ${meetingList})`
-    );
-
-    // SM-3.5/SM-3.6: Update Obsidian files if meeting was already exported
-    let obsidianUpdated = false;
-    if (meeting.obsidianLink && vaultStructure) {
+      // Learning loop (spec §8): telemetry + enrollment from corrections.
       try {
-        const vaultBasePath = vaultStructure.getAbsolutePath('');
-
-        // Derive file paths from obsidianLink
-        // obsidianLink is vault-relative path to summary file (e.g., "clients/acme/meetings/2024-01-15-meeting.md")
-        const summaryPath = path.join(vaultBasePath, meeting.obsidianLink);
-        const transcriptPath = summaryPath.replace(/\.md$/, '-transcript.md');
-
-        // Extract base filename for markdown generation
-        const baseFilename = path.basename(meeting.obsidianLink, '.md');
-
-        // Check if files exist before updating
-        if (fs.existsSync(summaryPath)) {
-          console.log(`[SpeakerMapping IPC] Updating Obsidian summary: ${summaryPath}`);
-          const summaryContent = generateSummaryMarkdown(meeting, baseFilename);
-          fs.writeFileSync(summaryPath, summaryContent, 'utf8');
-          obsidianUpdated = true;
-        }
-
-        if (fs.existsSync(transcriptPath)) {
-          console.log(`[SpeakerMapping IPC] Updating Obsidian transcript: ${transcriptPath}`);
-          const transcriptContent = generateTranscriptMarkdown(meeting, baseFilename);
-          fs.writeFileSync(transcriptPath, transcriptContent, 'utf8');
-          obsidianUpdated = true;
-        }
-
-        if (obsidianUpdated) {
+        const corrections = diffCorrections(meetingId, prevMapping, mappings);
+        if (corrections.length > 0 && correctionTelemetry) {
+          correctionTelemetry.record(corrections);
           console.log(
-            `[SpeakerMapping IPC] Successfully updated Obsidian files for meeting ${meetingId}`
+            `[CorrectionTelemetry] Recorded ${corrections.length} correction(s):`,
+            corrections
+              .map(c => `${c.speakerLabel}: ${c.fromMethod}(${c.fromName}) -> ${c.toName}`)
+              .join('; ')
           );
         }
-      } catch (obsidianError) {
-        // Log error but don't fail the whole operation - meeting data was already saved
-        console.error('[SpeakerMapping IPC] Failed to update Obsidian files:', obsidianError);
-      }
-    }
 
-    return { success: true, meeting, obsidianUpdated };
-  } catch (error) {
-    console.error('[SpeakerMapping IPC] Failed to apply mappings to meeting:', error);
-    return { success: false, error: error.message };
-  }
+        // Correction-driven enrollment: when the corrected label still carries
+        // its match-time embedding (rehydration keeps these across reloads),
+        // the correction becomes a voice sample for the RIGHT person.
+        if (voiceProfileService) {
+          const reembedTargets = [];
+          for (const c of corrections) {
+            const entry = prevMapping[c.speakerLabel];
+            if (entry?.embedding?.length > 0 && c.toEmail) {
+              // Weight the correction by how long this speaker actually spoke —
+              // recompute weights samples by duration, so a 0 here would make the
+              // correction essentially weightless against anchor samples.
+              const correctionDuration = (meeting.segments || [])
+                .filter(s => s.speaker === c.speakerLabel)
+                .reduce((sum, s) => sum + Math.max(0, s.end - s.start), 0);
+              const upsert = voiceProfileService.upsertProfileSample(
+                { contactName: c.toName, contactEmail: c.toEmail, googleContactId: null },
+                new Float32Array(entry.embedding),
+                correctionDuration,
+                meetingId
+              );
+              if (upsert?.rejected) {
+                console.log(
+                  `[CorrectionEnroll] Sample for ${c.toName} rejected by poisoning guard (embedding does not match their established profile)`
+                );
+              } else if (upsert) {
+                console.log(
+                  `[CorrectionEnroll] ${c.toName} ${upsert.created ? 'enrolled' : 'strengthened'} from correction of ${c.speakerLabel}`
+                );
+              }
+            } else if (c.toEmail) {
+              // F1: no persisted embedding for this label. Re-embed the meeting
+              // audio for the corrected label so the correction still teaches the
+              // right person's profile. Collected here, run fire-and-forget below.
+              reembedTargets.push({
+                speakerLabel: c.speakerLabel,
+                name: c.toName,
+                email: c.toEmail,
+              });
+            }
+          }
+
+          // Fire-and-forget re-embed (spec F1): the correction is already applied
+          // and about to be saved — embedding work must never block or fail it.
+          if (reembedTargets.length > 0) {
+            const reembedDeps = {
+              fileExists: p => fs.existsSync(p),
+              recordingsDirs: [
+                path.join(app.getPath('userData'), 'recordings'),
+                path.join(app.getPath('appData'), 'jd-notes-things', 'recordings'),
+              ],
+              embedSpeakers: (audioPath, segments) =>
+                voiceProfileService.embedSpeakers(audioPath, segments),
+              upsertProfileSample: (contact, embedding, dur, mid) =>
+                voiceProfileService.upsertProfileSample(contact, embedding, dur, mid),
+              log: msg => console.log(msg),
+              warn: msg => console.warn(msg),
+            };
+            reembedCorrections(reembedDeps, meeting, reembedTargets, meetingId).catch(err =>
+              console.warn(
+                '[CorrectionReembed] Unexpected re-embed failure (correction still applied):',
+                err.message
+              )
+            );
+          }
+        }
+
+        // Keep meeting.speakerMapping in sync with the correction so future
+        // reloads and telemetry diffs see the corrected state.
+        meeting.speakerMapping = meeting.speakerMapping || {};
+        for (const [label, next] of Object.entries(mappings)) {
+          if (!next || typeof next !== 'object') continue;
+          meeting.speakerMapping[label] = {
+            ...(meeting.speakerMapping[label] || {}),
+            email: next.contactEmail || null,
+            name: next.contactName,
+            confidence: 'manual',
+            method: 'user-correction',
+          };
+        }
+      } catch (learnErr) {
+        console.warn(
+          '[CorrectionTelemetry] Learning hook failed (correction still applied):',
+          learnErr.message
+        );
+      }
+
+      // Save updated meeting data
+      await fileOperationManager.writeData(data);
+
+      // Persist each mapping to the service for future auto-suggest
+      // But skip generic speaker IDs like "Speaker A", "Speaker B" which are not consistent across transcripts
+      if (mappings) {
+        for (const [speakerId, mapping] of Object.entries(mappings)) {
+          // Skip saving mappings for generic speaker IDs
+          if (isGenericSpeakerName(speakerId)) {
+            console.log(
+              `[SpeakerMapping IPC] Not persisting mapping for generic speaker: ${speakerId}`
+            );
+            continue;
+          }
+          await speakerMappingService.addMapping(
+            speakerId,
+            {
+              name: mapping.contactName,
+              email: mapping.contactEmail,
+            },
+            {
+              meetingId,
+              meetingTitle: meeting.title,
+            }
+          );
+        }
+      }
+
+      console.log(
+        `[SpeakerMapping IPC] Applied ${Object.keys(mappings || {}).length} mappings to meeting (in ${meetingList})`
+      );
+
+      // SM-3.5/SM-3.6: Update Obsidian files if meeting was already exported
+      let obsidianUpdated = false;
+      if (meeting.obsidianLink && vaultStructure) {
+        try {
+          const vaultBasePath = vaultStructure.getAbsolutePath('');
+
+          // Derive file paths from obsidianLink
+          // obsidianLink is vault-relative path to summary file (e.g., "clients/acme/meetings/2024-01-15-meeting.md")
+          const summaryPath = path.join(vaultBasePath, meeting.obsidianLink);
+          const transcriptPath = summaryPath.replace(/\.md$/, '-transcript.md');
+
+          // Extract base filename for markdown generation
+          const baseFilename = path.basename(meeting.obsidianLink, '.md');
+
+          // Check if files exist before updating
+          if (fs.existsSync(summaryPath)) {
+            console.log(`[SpeakerMapping IPC] Updating Obsidian summary: ${summaryPath}`);
+            const summaryContent = generateSummaryMarkdown(meeting, baseFilename);
+            fs.writeFileSync(summaryPath, summaryContent, 'utf8');
+            obsidianUpdated = true;
+          }
+
+          if (fs.existsSync(transcriptPath)) {
+            console.log(`[SpeakerMapping IPC] Updating Obsidian transcript: ${transcriptPath}`);
+            const transcriptContent = generateTranscriptMarkdown(meeting, baseFilename);
+            fs.writeFileSync(transcriptPath, transcriptContent, 'utf8');
+            obsidianUpdated = true;
+          }
+
+          if (obsidianUpdated) {
+            console.log(
+              `[SpeakerMapping IPC] Successfully updated Obsidian files for meeting ${meetingId}`
+            );
+          }
+        } catch (obsidianError) {
+          // Log error but don't fail the whole operation - meeting data was already saved
+          console.error('[SpeakerMapping IPC] Failed to update Obsidian files:', obsidianError);
+        }
+      }
+
+      return { success: true, meeting, obsidianUpdated };
+    } catch (error) {
+      console.error('[SpeakerMapping IPC] Failed to apply mappings to meeting:', error);
+      return { success: false, error: error.message };
+    }
   })
 );
 
@@ -6493,22 +6616,25 @@ ipcMain.handle(
 // Estimate cost for templates
 ipcMain.handle(
   'templates:estimateCost',
-  withValidation(templatesEstimateCostSchema, async (event, { templateIds, transcript, provider }) => {
-    try {
-      console.log(
-        '[Template IPC] Estimating cost for',
-        templateIds.length,
-        'templates',
-        'with provider:',
-        provider
-      );
-      const estimate = templateManager.estimateCost(templateIds, transcript, provider);
-      return { success: true, estimate };
-    } catch (error) {
-      console.error('[Template IPC] Failed to estimate cost:', error);
-      return { success: false, error: error.message };
+  withValidation(
+    templatesEstimateCostSchema,
+    async (event, { templateIds, transcript, provider }) => {
+      try {
+        console.log(
+          '[Template IPC] Estimating cost for',
+          templateIds.length,
+          'templates',
+          'with provider:',
+          provider
+        );
+        const estimate = templateManager.estimateCost(templateIds, transcript, provider);
+        return { success: true, estimate };
+      } catch (error) {
+        console.error('[Template IPC] Failed to estimate cost:', error);
+        return { success: false, error: error.message };
+      }
     }
-  })
+  )
 );
 
 // Generate summaries using multiple templates
@@ -6602,7 +6728,9 @@ ipcMain.handle(
 
         // Auto-trigger export to Obsidian after template generation
         console.log('[Template IPC] Auto-triggering Obsidian export...');
-        const exportResult = await exportMeetingToObsidian(meeting, routingOverride, { forceReroute: true });
+        const exportResult = await exportMeetingToObsidian(meeting, routingOverride, {
+          forceReroute: true,
+        });
 
         if (exportResult.success && exportResult.obsidianLink) {
           meeting.obsidianLink = exportResult.obsidianLink;
@@ -6712,135 +6840,135 @@ ipcMain.handle(
     try {
       console.log('[Routing IPC] Preview routing for meeting:', meetingId);
 
-    if (!routingEngine) {
-      console.error('[Routing IPC] Routing engine not initialized');
-      // Return a fallback unfiled route instead of throwing
-      return {
-        routes: [
-          {
-            path: '_unfiled/',
-            type: 'unfiled',
-            organization: null,
-            reason: 'Routing engine not initialized - defaulting to unfiled',
-          },
-        ],
-        multiOrg: false,
-        orgCount: 0,
-        participantEmails: [],
-        matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
-      };
-    }
-
-    // Load meeting from database
-    const meeting = databaseService.getMeeting(meetingId);
-    if (!meeting) {
-      console.error('[Routing IPC] Meeting not found:', meetingId);
-      return {
-        routes: [
-          {
-            path: '_unfiled/',
-            type: 'unfiled',
-            organization: null,
-            reason: 'Meeting not found - defaulting to unfiled',
-          },
-        ],
-        multiOrg: false,
-        orgCount: 0,
-        participantEmails: [],
-        matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
-      };
-    }
-
-    // Get participant emails from various possible sources
-    const participantEmails = [];
-
-    // Check participantEmails array
-    if (meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
-      meeting.participantEmails.forEach(email => {
-        if (email && !participantEmails.includes(email)) {
-          participantEmails.push(email);
-        }
-      });
-    }
-
-    // Check participants array
-    if (meeting.participants && Array.isArray(meeting.participants)) {
-      meeting.participants.forEach(p => {
-        if (p && p.email && !participantEmails.includes(p.email)) {
-          participantEmails.push(p.email);
-        }
-      });
-    }
-
-    // Check attendees array (from calendar events)
-    if (meeting.attendees && Array.isArray(meeting.attendees)) {
-      meeting.attendees.forEach(a => {
-        if (a && a.email && !participantEmails.includes(a.email)) {
-          participantEmails.push(a.email);
-        }
-      });
-    }
-
-    console.log('[Routing IPC] Found participant emails:', participantEmails);
-
-    // Create meeting data for routing
-    const routingData = {
-      participantEmails,
-      participants: meeting.participants || [],
-      meetingTitle: meeting.title,
-      meetingDate: new Date(meeting.date),
-    };
-
-    // Get routing decision
-    const decision = routingEngine.route(routingData);
-
-    // Helper to get organization name from route
-    const getOrgName = route => {
-      if (route.organizationName) return route.organizationName;
-      if (route.slug) return route.slug;
-      if (route.type === 'internal') return 'Internal';
-      return null;
-    };
-
-    // Build preview info
-    const preview = {
-      routes: decision.routes.map(r => {
-        const orgName = getOrgName(r);
+      if (!routingEngine) {
+        console.error('[Routing IPC] Routing engine not initialized');
+        // Return a fallback unfiled route instead of throwing
         return {
-          path: r.fullPath || r.folderPath,
-          type: r.type,
-          organization: orgName,
-          reason: buildRoutingReason(r, decision.matchResults, participantEmails, orgName),
+          routes: [
+            {
+              path: '_unfiled/',
+              type: 'unfiled',
+              organization: null,
+              reason: 'Routing engine not initialized - defaulting to unfiled',
+            },
+          ],
+          multiOrg: false,
+          orgCount: 0,
+          participantEmails: [],
+          matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
         };
-      }),
-      multiOrg: decision.multiOrg,
-      orgCount: decision.orgCount,
-      participantEmails,
-      matchResults: {
-        clients: Object.keys(decision.matchResults.clients || {}),
-        industry: Object.keys(decision.matchResults.industry || {}),
-        internal: decision.matchResults.internal?.length || 0,
-        unfiled: decision.matchResults.unfiled?.length || 0,
-      },
-    };
+      }
 
-    return preview;
-  } catch (error) {
-    console.error('[Routing IPC] Error previewing route:', error);
-    // Return a fallback unfiled route on any error
-    return {
-      routes: [
-        {
-          path: '_unfiled/',
-          type: 'unfiled',
-          organization: null,
-          reason: `Error: ${error.message || 'Unknown error'} - defaulting to unfiled`,
+      // Load meeting from database
+      const meeting = databaseService.getMeeting(meetingId);
+      if (!meeting) {
+        console.error('[Routing IPC] Meeting not found:', meetingId);
+        return {
+          routes: [
+            {
+              path: '_unfiled/',
+              type: 'unfiled',
+              organization: null,
+              reason: 'Meeting not found - defaulting to unfiled',
+            },
+          ],
+          multiOrg: false,
+          orgCount: 0,
+          participantEmails: [],
+          matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
+        };
+      }
+
+      // Get participant emails from various possible sources
+      const participantEmails = [];
+
+      // Check participantEmails array
+      if (meeting.participantEmails && Array.isArray(meeting.participantEmails)) {
+        meeting.participantEmails.forEach(email => {
+          if (email && !participantEmails.includes(email)) {
+            participantEmails.push(email);
+          }
+        });
+      }
+
+      // Check participants array
+      if (meeting.participants && Array.isArray(meeting.participants)) {
+        meeting.participants.forEach(p => {
+          if (p && p.email && !participantEmails.includes(p.email)) {
+            participantEmails.push(p.email);
+          }
+        });
+      }
+
+      // Check attendees array (from calendar events)
+      if (meeting.attendees && Array.isArray(meeting.attendees)) {
+        meeting.attendees.forEach(a => {
+          if (a && a.email && !participantEmails.includes(a.email)) {
+            participantEmails.push(a.email);
+          }
+        });
+      }
+
+      console.log('[Routing IPC] Found participant emails:', participantEmails);
+
+      // Create meeting data for routing
+      const routingData = {
+        participantEmails,
+        participants: meeting.participants || [],
+        meetingTitle: meeting.title,
+        meetingDate: new Date(meeting.date),
+      };
+
+      // Get routing decision
+      const decision = routingEngine.route(routingData);
+
+      // Helper to get organization name from route
+      const getOrgName = route => {
+        if (route.organizationName) return route.organizationName;
+        if (route.slug) return route.slug;
+        if (route.type === 'internal') return 'Internal';
+        return null;
+      };
+
+      // Build preview info
+      const preview = {
+        routes: decision.routes.map(r => {
+          const orgName = getOrgName(r);
+          return {
+            path: r.fullPath || r.folderPath,
+            type: r.type,
+            organization: orgName,
+            reason: buildRoutingReason(r, decision.matchResults, participantEmails, orgName),
+          };
+        }),
+        multiOrg: decision.multiOrg,
+        orgCount: decision.orgCount,
+        participantEmails,
+        matchResults: {
+          clients: Object.keys(decision.matchResults.clients || {}),
+          industry: Object.keys(decision.matchResults.industry || {}),
+          internal: decision.matchResults.internal?.length || 0,
+          unfiled: decision.matchResults.unfiled?.length || 0,
         },
-      ],
-      multiOrg: false,
-      orgCount: 0,
-      participantEmails: [],
-      matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
+      };
+
+      return preview;
+    } catch (error) {
+      console.error('[Routing IPC] Error previewing route:', error);
+      // Return a fallback unfiled route on any error
+      return {
+        routes: [
+          {
+            path: '_unfiled/',
+            type: 'unfiled',
+            organization: null,
+            reason: `Error: ${error.message || 'Unknown error'} - defaulting to unfiled`,
+          },
+        ],
+        multiOrg: false,
+        orgCount: 0,
+        participantEmails: [],
+        matchResults: { clients: [], industry: [], internal: 0, unfiled: 0 },
       };
     }
   })
@@ -7088,15 +7216,18 @@ ipcMain.handle(
 // Add client keyword boost
 ipcMain.handle(
   'vocabulary:addClientKeyword',
-  withValidation(vocabularyClientKeywordSchema, async (event, { clientSlug, word, intensifier }) => {
-    try {
-      vocabularyService.addClientKeywordBoost(clientSlug, word, intensifier || 5);
-      return { success: true };
-    } catch (error) {
-      console.error('[Vocabulary IPC] Error adding client keyword:', error);
-      return { success: false, error: error.message };
+  withValidation(
+    vocabularyClientKeywordSchema,
+    async (event, { clientSlug, word, intensifier }) => {
+      try {
+        vocabularyService.addClientKeywordBoost(clientSlug, word, intensifier || 5);
+        return { success: true };
+      } catch (error) {
+        console.error('[Vocabulary IPC] Error adding client keyword:', error);
+        return { success: false, error: error.message };
+      }
     }
-  })
+  )
 );
 
 // Remove global spelling correction
@@ -7342,7 +7473,9 @@ ipcMain.handle(
               if (contact?.name && !contact.name.includes('@')) {
                 voiceProfileService.saveProfile({ ...p, contactName: contact.name });
                 namesRepaired++;
-                console.log(`[Backfill] Renamed profile ${p.id}: ${p.contactEmail} -> ${contact.name}`);
+                console.log(
+                  `[Backfill] Renamed profile ${p.id}: ${p.contactEmail} -> ${contact.name}`
+                );
               }
             }
           }
@@ -7471,7 +7604,7 @@ ipcMain.handle('aiService:repair', async () => {
     // shutdown()'s taskkill is async, and rmSync on a still-dying python.exe's
     // handles throws EPERM on Windows (the root cause of the repair-race bug).
     await aiServiceManager.shutdown();
-    await audioServiceProvisioner.repair((line) =>
+    await audioServiceProvisioner.repair(line =>
       backgroundTaskManager.updateTask(taskId, null, line.trim().slice(0, 120))
     );
     const healthy = await aiServiceManager.ensureRunning();
@@ -7500,28 +7633,30 @@ ipcMain.handle(
     try {
       console.log('[Obsidian IPC] Export requested for meeting:', meetingId);
 
-    // Load meeting data
-    const data = await fileOperationManager.readMeetingsData();
-    const meeting = [...data.upcomingMeetings, ...data.pastMeetings].find(m => m.id === meetingId);
+      // Load meeting data
+      const data = await fileOperationManager.readMeetingsData();
+      const meeting = [...data.upcomingMeetings, ...data.pastMeetings].find(
+        m => m.id === meetingId
+      );
 
-    if (!meeting) {
-      return { success: false, error: 'Meeting not found' };
-    }
+      if (!meeting) {
+        return { success: false, error: 'Meeting not found' };
+      }
 
-    // Export to Obsidian — forceReroute so the engine re-evaluates against the
-    // current client/routing config on every click instead of reusing a
-    // previously cached meeting.obsidianLink. This means newly added
-    // clients/folders take effect on the next Export without an Unlink first.
-    const result = await exportMeetingToObsidian(meeting, null, { forceReroute: true });
+      // Export to Obsidian — forceReroute so the engine re-evaluates against the
+      // current client/routing config on every click instead of reusing a
+      // previously cached meeting.obsidianLink. This means newly added
+      // clients/folders take effect on the next Export without an Unlink first.
+      const result = await exportMeetingToObsidian(meeting, null, { forceReroute: true });
 
-    // If successful, save obsidianLink back to meeting object
-    if (result.success && result.obsidianLink) {
-      meeting.obsidianLink = result.obsidianLink;
-      console.log('[Obsidian IPC] Saved obsidianLink to meeting:', result.obsidianLink);
+      // If successful, save obsidianLink back to meeting object
+      if (result.success && result.obsidianLink) {
+        meeting.obsidianLink = result.obsidianLink;
+        console.log('[Obsidian IPC] Saved obsidianLink to meeting:', result.obsidianLink);
 
-      // Save updated meeting data
-      await fileOperationManager.writeData(data);
-    }
+        // Save updated meeting data
+        await fileOperationManager.writeData(data);
+      }
 
       return result;
     } catch (error) {
@@ -7633,24 +7768,24 @@ ipcMain.handle(
       return { success: false, error: 'Import manager not initialized' };
     }
 
-  try {
-    const result = await importManager.importFile(filePath, {
-      ...options,
-      onProgress: progress => {
-        event.sender.send('import:progress', progress);
-      },
-    });
+    try {
+      const result = await importManager.importFile(filePath, {
+        ...options,
+        onProgress: progress => {
+          event.sender.send('import:progress', progress);
+        },
+      });
 
-    // If successful, save meeting to database
-    if (result.success) {
-      databaseService.saveMeeting(result.meeting, 'past');
+      // If successful, save meeting to database
+      if (result.success) {
+        databaseService.saveMeeting(result.meeting, 'past');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[Import] Import file failed:', error);
+      return { success: false, error: error.message };
     }
-
-    return result;
-  } catch (error) {
-    console.error('[Import] Import file failed:', error);
-    return { success: false, error: error.message };
-  }
   })
 );
 
@@ -7663,18 +7798,48 @@ ipcMain.handle(
         success: false,
         error: 'Import manager not initialized',
         total: filePaths.length,
-      successful: 0,
-      failed: filePaths.length,
-      meetings: [],
-      errors: filePaths.map(fp => ({ file: fp, error: 'Import manager not initialized' })),
-    };
-  }
+        successful: 0,
+        failed: filePaths.length,
+        meetings: [],
+        errors: filePaths.map(fp => ({ file: fp, error: 'Import manager not initialized' })),
+      };
+    }
 
-  // Only switch provider if we're actually generating summaries
-  if (options.generateAutoSummary) {
-    return await withProviderSwitch(
-      'auto',
-      async () => {
+    // Only switch provider if we're actually generating summaries
+    if (options.generateAutoSummary) {
+      return await withProviderSwitch(
+        'auto',
+        async () => {
+          const result = await importManager.importBatch(filePaths, {
+            ...options,
+            onProgress: progress => {
+              event.sender.send('import:progress', progress);
+            },
+          });
+
+          // Save all successful meetings to database
+          for (const meeting of result.meetings) {
+            databaseService.saveMeeting(meeting, 'past');
+          }
+
+          return result;
+        },
+        '[Import]'
+      ).catch(error => {
+        console.error('[Import] Batch import failed:', error);
+        return {
+          success: false,
+          error: error.message,
+          total: filePaths.length,
+          successful: 0,
+          failed: filePaths.length,
+          meetings: [],
+          errors: [],
+        };
+      });
+    } else {
+      // No provider switching needed if not generating summaries
+      try {
         const result = await importManager.importBatch(filePaths, {
           ...options,
           onProgress: progress => {
@@ -7682,61 +7847,31 @@ ipcMain.handle(
           },
         });
 
-        // Save all successful meetings to database
-        for (const meeting of result.meetings) {
-          databaseService.saveMeeting(meeting, 'past');
+        // Add all successful meetings to database
+        // Note: Auto-labeling of single speakers is now handled inside ImportManager
+        // before summary generation (v1.1)
+        if (result.meetings.length > 0) {
+          const data = await fileOperationManager.readMeetingsData();
+          result.meetings.forEach(meeting => {
+            data.pastMeetings.unshift(meeting);
+          });
+          await fileOperationManager.writeData(data);
         }
 
         return result;
-      },
-      '[Import]'
-    ).catch(error => {
-      console.error('[Import] Batch import failed:', error);
-      return {
-        success: false,
-        error: error.message,
-        total: filePaths.length,
-        successful: 0,
-        failed: filePaths.length,
-        meetings: [],
-        errors: [],
-      };
-    });
-  } else {
-    // No provider switching needed if not generating summaries
-    try {
-      const result = await importManager.importBatch(filePaths, {
-        ...options,
-        onProgress: progress => {
-          event.sender.send('import:progress', progress);
-        },
-      });
-
-      // Add all successful meetings to database
-      // Note: Auto-labeling of single speakers is now handled inside ImportManager
-      // before summary generation (v1.1)
-      if (result.meetings.length > 0) {
-        const data = await fileOperationManager.readMeetingsData();
-        result.meetings.forEach(meeting => {
-          data.pastMeetings.unshift(meeting);
-        });
-        await fileOperationManager.writeData(data);
+      } catch (error) {
+        console.error('[Import] Batch import failed:', error);
+        return {
+          success: false,
+          error: error.message,
+          total: filePaths.length,
+          successful: 0,
+          failed: filePaths.length,
+          meetings: [],
+          errors: [],
+        };
       }
-
-      return result;
-    } catch (error) {
-      console.error('[Import] Batch import failed:', error);
-      return {
-        success: false,
-        error: error.message,
-        total: filePaths.length,
-        successful: 0,
-        failed: filePaths.length,
-        meetings: [],
-        errors: [],
-      };
     }
-  }
   })
 );
 
@@ -7752,334 +7887,344 @@ ipcMain.handle('import:getStatus', async () => {
 // IM-1.4: Transcribe audio file using selected provider
 ipcMain.handle(
   'import:transcribeAudio',
-  withValidation(importTranscribeAudioSchema, async (event, { filePath, provider, options = {} }) => {
-    console.log(`[Import] Transcribing audio file: ${filePath} with provider: ${provider}`);
+  withValidation(
+    importTranscribeAudioSchema,
+    async (event, { filePath, provider, options = {} }) => {
+      console.log(`[Import] Transcribing audio file: ${filePath} with provider: ${provider}`);
 
-    // Create background task for progress tracking (v1.2.5 Phase 7)
-    const taskId = backgroundTaskManager.addTask({
-      type: 'import-transcribe',
-      description: `Importing: ${path.basename(filePath)}`,
-      metadata: { filePath, provider },
-    });
+      // Create background task for progress tracking (v1.2.5 Phase 7)
+      const taskId = backgroundTaskManager.addTask({
+        type: 'import-transcribe',
+        description: `Importing: ${path.basename(filePath)}`,
+        metadata: { filePath, provider },
+      });
 
-    if (!transcriptionService) {
-      backgroundTaskManager.failTask(taskId, 'Transcription service not initialized');
-      return { success: false, error: 'Transcription service not initialized' };
-    }
-
-  // Validate provider
-  const validProviders = ['assemblyai', 'deepgram', 'local'];
-  if (!validProviders.includes(provider)) {
-    backgroundTaskManager.failTask(taskId, `Invalid provider: ${provider}`);
-    return {
-      success: false,
-      error: `Invalid provider: ${provider}. Use one of: ${validProviders.join(', ')}`,
-    };
-  }
-
-  // Validate file exists
-  if (!fs.existsSync(filePath)) {
-    backgroundTaskManager.failTask(taskId, `File not found: ${filePath}`);
-    return { success: false, error: `File not found: ${filePath}` };
-  }
-
-  try {
-    backgroundTaskManager.updateTask(taskId, 10, 'Starting transcription...');
-
-    // Send progress update
-    event.sender.send('import:progress', {
-      step: 'transcribing',
-      file: path.basename(filePath),
-      provider,
-    });
-
-    // VC-3: Get vocabulary for transcription (user can specify clientSlug in options)
-    let vocabularyOptions = {};
-    try {
-      const clientSlug = options.clientSlug || null;
-      vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
-      const vocabCount =
-        vocabularyOptions.keyterms_prompt?.length ||
-        vocabularyOptions.custom_spelling?.length ||
-        vocabularyOptions.keywords?.length ||
-        0;
-      if (vocabCount > 0) {
-        console.log(
-          `[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`
-        );
+      if (!transcriptionService) {
+        backgroundTaskManager.failTask(taskId, 'Transcription service not initialized');
+        return { success: false, error: 'Transcription service not initialized' };
       }
-    } catch (vocabError) {
-      console.warn('[Import] VC-3: Failed to load vocabulary:', vocabError.message);
+
+      // Validate provider
+      const validProviders = ['assemblyai', 'deepgram', 'local'];
+      if (!validProviders.includes(provider)) {
+        backgroundTaskManager.failTask(taskId, `Invalid provider: ${provider}`);
+        return {
+          success: false,
+          error: `Invalid provider: ${provider}. Use one of: ${validProviders.join(', ')}`,
+        };
+      }
+
+      // Validate file exists
+      if (!fs.existsSync(filePath)) {
+        backgroundTaskManager.failTask(taskId, `File not found: ${filePath}`);
+        return { success: false, error: `File not found: ${filePath}` };
+      }
+
+      try {
+        backgroundTaskManager.updateTask(taskId, 10, 'Starting transcription...');
+
+        // Send progress update
+        event.sender.send('import:progress', {
+          step: 'transcribing',
+          file: path.basename(filePath),
+          provider,
+        });
+
+        // VC-3: Get vocabulary for transcription (user can specify clientSlug in options)
+        let vocabularyOptions = {};
+        try {
+          const clientSlug = options.clientSlug || null;
+          vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
+          const vocabCount =
+            vocabularyOptions.keyterms_prompt?.length ||
+            vocabularyOptions.custom_spelling?.length ||
+            vocabularyOptions.keywords?.length ||
+            0;
+          if (vocabCount > 0) {
+            console.log(
+              `[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`
+            );
+          }
+        } catch (vocabError) {
+          console.warn('[Import] VC-3: Failed to load vocabulary:', vocabError.message);
+        }
+
+        // Transcribe the audio file with vocabulary
+        const transcribeOptions = { ...options, ...vocabularyOptions };
+        const transcript = await transcriptionService.transcribe(
+          provider,
+          filePath,
+          transcribeOptions
+        );
+
+        console.log(
+          `[Import] Transcription complete. Got ${transcript.utterances?.length || 0} utterances`
+        );
+
+        // Complete the background task (Phase 7)
+        backgroundTaskManager.completeTask(taskId, {
+          utterances: transcript.utterances?.length || 0,
+          duration: transcript.audio_duration || null,
+        });
+
+        return {
+          success: true,
+          transcript: transcript.utterances || [],
+          metadata: {
+            provider,
+            duration: transcript.audio_duration || null,
+            confidence: transcript.confidence || null,
+            words: transcript.words?.length || 0,
+          },
+        };
+      } catch (error) {
+        console.error('[Import] Audio transcription failed:', error);
+        backgroundTaskManager.failTask(taskId, error.message);
+        return { success: false, error: error.message };
+      }
     }
-
-    // Transcribe the audio file with vocabulary
-    const transcribeOptions = { ...options, ...vocabularyOptions };
-    const transcript = await transcriptionService.transcribe(provider, filePath, transcribeOptions);
-
-    console.log(
-      `[Import] Transcription complete. Got ${transcript.utterances?.length || 0} utterances`
-    );
-
-    // Complete the background task (Phase 7)
-    backgroundTaskManager.completeTask(taskId, {
-      utterances: transcript.utterances?.length || 0,
-      duration: transcript.audio_duration || null,
-    });
-
-    return {
-      success: true,
-      transcript: transcript.utterances || [],
-      metadata: {
-        provider,
-        duration: transcript.audio_duration || null,
-        confidence: transcript.confidence || null,
-        words: transcript.words?.length || 0,
-      },
-    };
-  } catch (error) {
-    console.error('[Import] Audio transcription failed:', error);
-    backgroundTaskManager.failTask(taskId, error.message);
-    return { success: false, error: error.message };
-  }
-  })
+  )
 );
 
 // IM-1.5: Import audio file (transcribe then import as meeting)
 ipcMain.handle(
   'import:importAudioFile',
   withValidation(importAudioFileSchema, async (event, { filePath, provider, options = {} }) => {
-  console.log(`[Import] Importing audio file: ${filePath}`);
+    console.log(`[Import] Importing audio file: ${filePath}`);
 
-  // Create background task for full import progress tracking (v1.2.5 Phase 7)
-  const taskId = backgroundTaskManager.addTask({
-    type: 'import-audio',
-    description: `Importing audio: ${path.basename(filePath)}`,
-    metadata: { filePath, provider },
-  });
-
-  if (!importManager) {
-    backgroundTaskManager.failTask(taskId, 'Import manager not initialized');
-    return { success: false, error: 'Import manager not initialized' };
-  }
-
-  if (!transcriptionService) {
-    backgroundTaskManager.failTask(taskId, 'Transcription service not initialized');
-    return { success: false, error: 'Transcription service not initialized' };
-  }
-
-  const {
-    generateAutoSummary = false,
-    templateIds = null,
-    autoExport = false,
-    clientSlug = null, // VC-3: Optional client for vocabulary
-    platform = 'unknown', // UI-1.6: Meeting platform
-  } = options;
-
-  try {
-    // Step 1: Transcribe the audio file
-    backgroundTaskManager.updateTask(taskId, 5, 'Starting transcription...');
-    event.sender.send('import:progress', {
-      step: 'transcribing',
-      file: path.basename(filePath),
-      provider,
+    // Create background task for full import progress tracking (v1.2.5 Phase 7)
+    const taskId = backgroundTaskManager.addTask({
+      type: 'import-audio',
+      description: `Importing audio: ${path.basename(filePath)}`,
+      metadata: { filePath, provider },
     });
 
-    // VC-3: Get vocabulary for transcription
-    let vocabularyOptions = {};
+    if (!importManager) {
+      backgroundTaskManager.failTask(taskId, 'Import manager not initialized');
+      return { success: false, error: 'Import manager not initialized' };
+    }
+
+    if (!transcriptionService) {
+      backgroundTaskManager.failTask(taskId, 'Transcription service not initialized');
+      return { success: false, error: 'Transcription service not initialized' };
+    }
+
+    const {
+      generateAutoSummary = false,
+      templateIds = null,
+      autoExport = false,
+      clientSlug = null, // VC-3: Optional client for vocabulary
+      platform = 'unknown', // UI-1.6: Meeting platform
+    } = options;
+
     try {
-      vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
-      const vocabCount =
-        vocabularyOptions.keyterms_prompt?.length ||
-        vocabularyOptions.custom_spelling?.length ||
-        vocabularyOptions.keywords?.length ||
-        0;
-      if (vocabCount > 0) {
-        console.log(
-          `[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`
-        );
-      }
-    } catch (vocabError) {
-      console.warn('[Import] VC-3: Failed to load vocabulary:', vocabError.message);
-    }
-
-    const transcriptResult = await transcriptionService.transcribe(
-      provider,
-      filePath,
-      vocabularyOptions
-    );
-
-    // Transcription service returns 'entries' not 'utterances'
-    const entries = transcriptResult.entries || transcriptResult.utterances || [];
-    if (entries.length === 0) {
-      backgroundTaskManager.failTask(taskId, 'Transcription returned no content');
-      return { success: false, error: 'Transcription returned no content' };
-    }
-
-    console.log(`[Import] Transcription complete. Got ${entries.length} entries`);
-    backgroundTaskManager.updateTask(taskId, 40, 'Transcription complete, creating meeting...');
-
-    // Step 2: Create a meeting object from the transcription
-    event.sender.send('import:progress', {
-      step: 'creating-meeting',
-      file: path.basename(filePath),
-    });
-
-    const meetingId = 'imported-audio-' + Date.now();
-    const fileName = path.basename(filePath, path.extname(filePath));
-    const fileStats = fs.statSync(filePath);
-
-    // Extract metadata from filename (basic parsing)
-    const dateMatch = fileName.match(/(\d{4}[-_]\d{2}[-_]\d{2})/);
-    const meetingDate = dateMatch ? new Date(dateMatch[1].replace(/_/g, '-')) : fileStats.mtime;
-
-    // Detect UUID-like filenames (e.g., windows-desktop-032c0723-9059-4218-956e-68b6654d3ebd)
-    const isUuidFilename =
-      /^[a-z-]+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileName) ||
-      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(fileName);
-
-    // Generate a friendly title
-    const dateStr = meetingDate.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-    const timeStr = meetingDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    const friendlyTitle = isUuidFilename
-      ? `Imported Recording - ${dateStr} ${timeStr}`
-      : fileName.replace(/[-_]/g, ' ').trim() || 'Imported Audio';
-
-    // Convert entries to transcript format
-    const transcript = entries.map(u => ({
-      speaker: u.speaker || 'Speaker',
-      speakerName: u.speaker || 'Speaker',
-      text: u.text || '',
-      timestamp: formatTimestamp(u.timestamp || u.start || 0),
-      start: u.timestamp || u.start || 0,
-      end: u.end || 0,
-      confidence: u.confidence || null,
-    }));
-
-    // Build participants list from unique speakers
-    const uniqueSpeakers = [...new Set(transcript.map(t => t.speaker))];
-    const participants = uniqueSpeakers.map(speaker => ({
-      name: speaker,
-      email: null,
-    }));
-
-    const meeting = {
-      id: meetingId,
-      type: 'document',
-      title: friendlyTitle,
-      date: meetingDate.toISOString(),
-      participants,
-      participantEmails: [],
-      transcript,
-      content: `# ${friendlyTitle}\n\n**Source:** Imported from audio file\n**Duration:** ${formatDuration(transcriptResult.audio_duration || 0)}\n`,
-      platform, // UI-1.6: Use selected platform from options
-      duration: transcriptResult.audio_duration || null,
-      source: 'audio-import',
-      importedFrom: path.basename(filePath),
-      importedAt: new Date().toISOString(),
-      status: 'needs_verification',
-      metadata: {
-        originalFormat: 'audio',
-        hasSpeakers: true,
-        hasTimestamps: true,
-        transcriptionProvider: provider,
-        audioConfidence: transcriptResult.confidence || null,
-      },
-    };
-
-    // Step 3: Auto-label single speakers as user
-    if (importManager.autoLabelFunction && meeting.transcript && meeting.transcript.length > 0) {
-      try {
-        const labelResult = await importManager.autoLabelFunction(meeting);
-        if (labelResult?.applied) {
-          meeting.transcript = labelResult.transcript;
-          if (labelResult.userProfile) {
-            meeting.participants = [
-              {
-                name: labelResult.userProfile.name,
-                email: labelResult.userProfile.email || null,
-                isHost: true,
-              },
-            ];
-          }
-          console.log('[Import] Auto-labeled single speaker as:', labelResult.userProfile?.name);
-        }
-      } catch (labelError) {
-        console.warn('[Import] Auto-label failed:', labelError.message);
-      }
-    }
-
-    // Step 4: Generate auto-summary if requested
-    if (generateAutoSummary && meeting.transcript.length > 0) {
-      backgroundTaskManager.updateTask(taskId, 50, 'Generating auto-summary...');
+      // Step 1: Transcribe the audio file
+      backgroundTaskManager.updateTask(taskId, 5, 'Starting transcription...');
       event.sender.send('import:progress', {
-        step: 'generating-auto-summary',
+        step: 'transcribing',
         file: path.basename(filePath),
-      });
-      try {
-        await importManager.generateSummary(meeting);
-      } catch (err) {
-        console.warn('[Import] Auto-summary generation failed:', err.message);
-      }
-    }
-
-    // Step 5: Generate template summaries if requested
-    if (templateIds && templateIds.length > 0 && meeting.transcript.length > 0) {
-      backgroundTaskManager.updateTask(taskId, 65, 'Generating template summaries...');
-      event.sender.send('import:progress', {
-        step: 'generating-template-summaries',
-        file: path.basename(filePath),
-      });
-      try {
-        await importManager.generateTemplateSummaries(meeting, templateIds);
-      } catch (err) {
-        console.warn('[Import] Template summary generation failed:', err.message);
-      }
-    }
-
-    // Step 6: Export to Obsidian if requested
-    if (autoExport) {
-      backgroundTaskManager.updateTask(taskId, 80, 'Exporting to Obsidian...');
-      event.sender.send('import:progress', { step: 'exporting', file: path.basename(filePath) });
-      try {
-        await importManager.exportToObsidian(meeting);
-      } catch (err) {
-        console.warn('[Import] Export to Obsidian failed:', err.message);
-      }
-    }
-
-    // Step 7: Save to database
-    backgroundTaskManager.updateTask(taskId, 90, 'Saving meeting data...');
-    event.sender.send('import:progress', { step: 'saving', file: path.basename(filePath) });
-    const data = await fileOperationManager.readMeetingsData();
-    data.pastMeetings.unshift(meeting);
-    await fileOperationManager.writeData(data);
-
-    // Complete the background task (Phase 7)
-    backgroundTaskManager.completeTask(taskId, {
-      meetingId: meeting.id,
-      title: meeting.title,
-      utteranceCount: entries.length,
-      duration: transcriptResult.audio_duration,
-    });
-
-    return {
-      success: true,
-      meeting,
-      metadata: {
         provider,
-        duration: transcriptResult.audio_duration,
+      });
+
+      // VC-3: Get vocabulary for transcription
+      let vocabularyOptions = {};
+      try {
+        vocabularyOptions = vocabularyService.getVocabularyForProvider(provider, clientSlug);
+        const vocabCount =
+          vocabularyOptions.keyterms_prompt?.length ||
+          vocabularyOptions.custom_spelling?.length ||
+          vocabularyOptions.keywords?.length ||
+          0;
+        if (vocabCount > 0) {
+          console.log(
+            `[Import] VC-3: Using ${vocabCount} vocabulary entries for ${provider}${clientSlug ? ` (client: ${clientSlug})` : ' (global)'}`
+          );
+        }
+      } catch (vocabError) {
+        console.warn('[Import] VC-3: Failed to load vocabulary:', vocabError.message);
+      }
+
+      const transcriptResult = await transcriptionService.transcribe(
+        provider,
+        filePath,
+        vocabularyOptions
+      );
+
+      // Transcription service returns 'entries' not 'utterances'
+      const entries = transcriptResult.entries || transcriptResult.utterances || [];
+      if (entries.length === 0) {
+        backgroundTaskManager.failTask(taskId, 'Transcription returned no content');
+        return { success: false, error: 'Transcription returned no content' };
+      }
+
+      console.log(`[Import] Transcription complete. Got ${entries.length} entries`);
+      backgroundTaskManager.updateTask(taskId, 40, 'Transcription complete, creating meeting...');
+
+      // Step 2: Create a meeting object from the transcription
+      event.sender.send('import:progress', {
+        step: 'creating-meeting',
+        file: path.basename(filePath),
+      });
+
+      const meetingId = 'imported-audio-' + Date.now();
+      const fileName = path.basename(filePath, path.extname(filePath));
+      const fileStats = fs.statSync(filePath);
+
+      // Extract metadata from filename (basic parsing)
+      const dateMatch = fileName.match(/(\d{4}[-_]\d{2}[-_]\d{2})/);
+      const meetingDate = dateMatch ? new Date(dateMatch[1].replace(/_/g, '-')) : fileStats.mtime;
+
+      // Detect UUID-like filenames (e.g., windows-desktop-032c0723-9059-4218-956e-68b6654d3ebd)
+      const isUuidFilename =
+        /^[a-z-]+-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fileName) ||
+        /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(fileName);
+
+      // Generate a friendly title
+      const dateStr = meetingDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
+      const timeStr = meetingDate.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+      const friendlyTitle = isUuidFilename
+        ? `Imported Recording - ${dateStr} ${timeStr}`
+        : fileName.replace(/[-_]/g, ' ').trim() || 'Imported Audio';
+
+      // Convert entries to transcript format
+      const transcript = entries.map(u => ({
+        speaker: u.speaker || 'Speaker',
+        speakerName: u.speaker || 'Speaker',
+        text: u.text || '',
+        timestamp: formatTimestamp(u.timestamp || u.start || 0),
+        start: u.timestamp || u.start || 0,
+        end: u.end || 0,
+        confidence: u.confidence || null,
+      }));
+
+      // Build participants list from unique speakers
+      const uniqueSpeakers = [...new Set(transcript.map(t => t.speaker))];
+      const participants = uniqueSpeakers.map(speaker => ({
+        name: speaker,
+        email: null,
+      }));
+
+      const meeting = {
+        id: meetingId,
+        type: 'document',
+        title: friendlyTitle,
+        date: meetingDate.toISOString(),
+        participants,
+        participantEmails: [],
+        transcript,
+        content: `# ${friendlyTitle}\n\n**Source:** Imported from audio file\n**Duration:** ${formatDuration(transcriptResult.audio_duration || 0)}\n`,
+        platform, // UI-1.6: Use selected platform from options
+        duration: transcriptResult.audio_duration || null,
+        source: 'audio-import',
+        importedFrom: path.basename(filePath),
+        importedAt: new Date().toISOString(),
+        status: 'needs_verification',
+        metadata: {
+          originalFormat: 'audio',
+          hasSpeakers: true,
+          hasTimestamps: true,
+          transcriptionProvider: provider,
+          audioConfidence: transcriptResult.confidence || null,
+        },
+      };
+
+      // Step 3: Auto-label single speakers as user
+      if (importManager.autoLabelFunction && meeting.transcript && meeting.transcript.length > 0) {
+        try {
+          const labelResult = await importManager.autoLabelFunction(meeting);
+          if (labelResult?.applied) {
+            meeting.transcript = labelResult.transcript;
+            if (labelResult.userProfile) {
+              meeting.participants = [
+                {
+                  name: labelResult.userProfile.name,
+                  email: labelResult.userProfile.email || null,
+                  isHost: true,
+                },
+              ];
+            }
+            console.log('[Import] Auto-labeled single speaker as:', labelResult.userProfile?.name);
+          }
+        } catch (labelError) {
+          console.warn('[Import] Auto-label failed:', labelError.message);
+        }
+      }
+
+      // Step 4: Generate auto-summary if requested
+      if (generateAutoSummary && meeting.transcript.length > 0) {
+        backgroundTaskManager.updateTask(taskId, 50, 'Generating auto-summary...');
+        event.sender.send('import:progress', {
+          step: 'generating-auto-summary',
+          file: path.basename(filePath),
+        });
+        try {
+          await importManager.generateSummary(meeting);
+        } catch (err) {
+          console.warn('[Import] Auto-summary generation failed:', err.message);
+        }
+      }
+
+      // Step 5: Generate template summaries if requested
+      if (templateIds && templateIds.length > 0 && meeting.transcript.length > 0) {
+        backgroundTaskManager.updateTask(taskId, 65, 'Generating template summaries...');
+        event.sender.send('import:progress', {
+          step: 'generating-template-summaries',
+          file: path.basename(filePath),
+        });
+        try {
+          await importManager.generateTemplateSummaries(meeting, templateIds);
+        } catch (err) {
+          console.warn('[Import] Template summary generation failed:', err.message);
+        }
+      }
+
+      // Step 6: Export to Obsidian if requested
+      if (autoExport) {
+        backgroundTaskManager.updateTask(taskId, 80, 'Exporting to Obsidian...');
+        event.sender.send('import:progress', { step: 'exporting', file: path.basename(filePath) });
+        try {
+          await importManager.exportToObsidian(meeting);
+        } catch (err) {
+          console.warn('[Import] Export to Obsidian failed:', err.message);
+        }
+      }
+
+      // Step 7: Save to database
+      backgroundTaskManager.updateTask(taskId, 90, 'Saving meeting data...');
+      event.sender.send('import:progress', { step: 'saving', file: path.basename(filePath) });
+      const data = await fileOperationManager.readMeetingsData();
+      data.pastMeetings.unshift(meeting);
+      await fileOperationManager.writeData(data);
+
+      // Complete the background task (Phase 7)
+      backgroundTaskManager.completeTask(taskId, {
+        meetingId: meeting.id,
+        title: meeting.title,
         utteranceCount: entries.length,
-      },
-    };
-  } catch (error) {
-    console.error('[Import] Audio import failed:', error);
-    backgroundTaskManager.failTask(taskId, error.message);
-    return { success: false, error: error.message };
-  }
+        duration: transcriptResult.audio_duration,
+      });
+
+      return {
+        success: true,
+        meeting,
+        metadata: {
+          provider,
+          duration: transcriptResult.audio_duration,
+          utteranceCount: entries.length,
+        },
+      };
+    } catch (error) {
+      console.error('[Import] Audio import failed:', error);
+      backgroundTaskManager.failTask(taskId, error.message);
+      return { success: false, error: error.message };
+    }
   })
 );
 
@@ -8142,9 +8287,7 @@ function fuzzyMatchName(name, candidates) {
   const normalizedName = name.toLowerCase().trim();
 
   // Try exact match first
-  const exactMatch = candidates.find(
-    c => c.name && c.name.toLowerCase().trim() === normalizedName
-  );
+  const exactMatch = candidates.find(c => c.name && c.name.toLowerCase().trim() === normalizedName);
   if (exactMatch) return exactMatch;
 
   // Try partial match (name contains candidate or vice versa)
@@ -8216,7 +8359,10 @@ async function resolveSpeakerNames(zoomParticipants, calendarAttendees, googleCo
           }
           // else: keep Zoom name
         } catch (contactError) {
-          console.warn(`[SpeakerNames] Contact lookup failed for ${calendarMatch.email}:`, contactError.message);
+          console.warn(
+            `[SpeakerNames] Contact lookup failed for ${calendarMatch.email}:`,
+            contactError.message
+          );
           // Use calendar displayName as fallback
           if (calendarMatch.name && calendarMatch.name !== calendarMatch.email) {
             resolvedName = calendarMatch.name;
@@ -8225,7 +8371,9 @@ async function resolveSpeakerNames(zoomParticipants, calendarAttendees, googleCo
       } else if (calendarMatch.name && calendarMatch.name !== calendarMatch.email) {
         // No Google Contacts service, use calendar displayName
         resolvedName = calendarMatch.name;
-        console.log(`[SpeakerNames] Resolved "${zoomName}" → Calendar "${resolvedName}" (no contacts service)`);
+        console.log(
+          `[SpeakerNames] Resolved "${zoomName}" → Calendar "${resolvedName}" (no contacts service)`
+        );
       }
     } else {
       // No calendar match (party crasher) - keep Zoom display name
@@ -8392,282 +8540,306 @@ ipcMain.handle('transcription:selectAudioFile', async () => {
  * @param {{meetingId:string, provider?:?string, audioPath?:?string, sender:object}} args
  *   sender = a webContents used for import:progress events.
  */
-async function rerunTranscriptionForMeeting({ meetingId, provider = null, audioPath = null, sender }) {
-    const meeting = databaseService.getMeeting(meetingId);
-    if (!meeting) {
-      return { success: false, error: 'Meeting not found' };
-    }
+async function rerunTranscriptionForMeeting({
+  meetingId,
+  provider = null,
+  audioPath = null,
+  sender,
+}) {
+  const meeting = databaseService.getMeeting(meetingId);
+  if (!meeting) {
+    return { success: false, error: 'Meeting not found' };
+  }
 
-    // Determine audio file path. Local recordings keep their audio path in
-    // recordingId (videoFile is only set by earlier re-runs/imports).
-    const knownPaths = [audioPath, meeting.videoFile, meeting.recordingId];
-    let filePath = knownPaths.find(p => p && path.isAbsolute(p) && fs.existsSync(p)) || null;
+  // Determine audio file path. Local recordings keep their audio path in
+  // recordingId (videoFile is only set by earlier re-runs/imports).
+  const knownPaths = [audioPath, meeting.videoFile, meeting.recordingId];
+  let filePath = knownPaths.find(p => p && path.isAbsolute(p) && fs.existsSync(p)) || null;
 
-    // If no audio file path or file doesn't exist, prompt user
-    if (!filePath) {
-      const { dialog } = require('electron');
-      const result = await dialog.showOpenDialog(mainWindow, {
-        title: 'Select Audio File for Re-transcription',
-        filters: [
-          { name: 'Audio Files', extensions: ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'flac', 'aac'] },
-        ],
-        properties: ['openFile'],
-      });
-
-      if (result.canceled || !result.filePaths.length) {
-        return { success: false, error: 'No audio file selected' };
-      }
-      filePath = result.filePaths[0];
-    }
-
-    // A local recording is a mixed file plus -mic/-sys(/-app) isolation stems.
-    // Transcribe the mixed file (even if a stem was picked) and pick up the
-    // stems so the re-run gets the same Stage 1 track anchor as the original.
-    const tracks = resolveRecordingTracks(filePath, fs.existsSync);
-    if (tracks.audioPath !== filePath) {
-      console.log(
-        `[Transcription Rerun] ${path.basename(filePath)} is an isolation stem — transcribing ${path.basename(tracks.audioPath)} instead`
-      );
-      filePath = tracks.audioPath;
-    }
-    const existingOr = (stored, sibling) => (stored && fs.existsSync(stored) ? stored : sibling);
-    const trackPaths = {
-      micAudioFilePath: existingOr(meeting.micAudioFilePath, tracks.micAudioFilePath),
-      appAudioFilePath: existingOr(meeting.appAudioFilePath, tracks.appAudioFilePath),
-      systemAudioFilePath: existingOr(meeting.systemAudioFilePath, tracks.systemAudioFilePath),
-    };
-    console.log('[Transcription Rerun] Isolation tracks:', trackPaths);
-
-    const taskId = backgroundTaskManager.addTask({
-      type: 'transcription-rerun',
-      description: `Re-running transcription: ${meeting.title}`,
-      meetingId,
+  // If no audio file path or file doesn't exist, prompt user
+  if (!filePath) {
+    const { dialog } = require('electron');
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Select Audio File for Re-transcription',
+      filters: [
+        { name: 'Audio Files', extensions: ['mp3', 'wav', 'm4a', 'ogg', 'webm', 'flac', 'aac'] },
+      ],
+      properties: ['openFile'],
     });
 
-    try {
-      // Read provider preference from renderer's localStorage via webContents
-      let storedProvider = null;
-      if (!provider && !meeting.transcriptionProvider && mainWindow && !mainWindow.isDestroyed()) {
-        try {
-          storedProvider = await mainWindow.webContents.executeJavaScript(
-            // Same key the renderer writes (camelCase) — a hyphenated key here
-            // previously read a key that never exists.
-            "localStorage.getItem('transcriptionProvider')"
-          );
-        } catch { /* ignore if renderer not ready */ }
+    if (result.canceled || !result.filePaths.length) {
+      return { success: false, error: 'No audio file selected' };
+    }
+    filePath = result.filePaths[0];
+  }
+
+  // A local recording is a mixed file plus -mic/-sys(/-app) isolation stems.
+  // Transcribe the mixed file (even if a stem was picked) and pick up the
+  // stems so the re-run gets the same Stage 1 track anchor as the original.
+  const tracks = resolveRecordingTracks(filePath, fs.existsSync);
+  if (tracks.audioPath !== filePath) {
+    console.log(
+      `[Transcription Rerun] ${path.basename(filePath)} is an isolation stem — transcribing ${path.basename(tracks.audioPath)} instead`
+    );
+    filePath = tracks.audioPath;
+  }
+  const existingOr = (stored, sibling) => (stored && fs.existsSync(stored) ? stored : sibling);
+  const trackPaths = {
+    micAudioFilePath: existingOr(meeting.micAudioFilePath, tracks.micAudioFilePath),
+    appAudioFilePath: existingOr(meeting.appAudioFilePath, tracks.appAudioFilePath),
+    systemAudioFilePath: existingOr(meeting.systemAudioFilePath, tracks.systemAudioFilePath),
+  };
+  console.log('[Transcription Rerun] Isolation tracks:', trackPaths);
+
+  const taskId = backgroundTaskManager.addTask({
+    type: 'transcription-rerun',
+    description: `Re-running transcription: ${meeting.title}`,
+    meetingId,
+  });
+
+  try {
+    // Read provider preference from renderer's localStorage via webContents
+    let storedProvider = null;
+    if (!provider && !meeting.transcriptionProvider && mainWindow && !mainWindow.isDestroyed()) {
+      try {
+        storedProvider = await mainWindow.webContents.executeJavaScript(
+          // Same key the renderer writes (camelCase) — a hyphenated key here
+          // previously read a key that never exists.
+          "localStorage.getItem('transcriptionProvider')"
+        );
+      } catch {
+        /* ignore if renderer not ready */
       }
-      const transcriptionProvider = provider ||
-        meeting.transcriptionProvider ||
-        storedProvider ||
-        'local';
+    }
+    const transcriptionProvider =
+      provider || meeting.transcriptionProvider || storedProvider || 'local';
 
-      // Local transcription needs the JD Audio Service up (mirrors the
-      // recording pipeline's ensureRunning call).
-      if (transcriptionProvider === 'local') {
-        const serviceReady = await aiServiceManager.ensureRunning();
-        if (!serviceReady) {
-          backgroundTaskManager.failTask(taskId, 'JD Audio Service failed to start');
-          return { success: false, error: 'JD Audio Service failed to start — check the local AI service.' };
-        }
+    // Local transcription needs the JD Audio Service up (mirrors the
+    // recording pipeline's ensureRunning call).
+    if (transcriptionProvider === 'local') {
+      const serviceReady = await aiServiceManager.ensureRunning();
+      if (!serviceReady) {
+        backgroundTaskManager.failTask(taskId, 'JD Audio Service failed to start');
+        return {
+          success: false,
+          error: 'JD Audio Service failed to start — check the local AI service.',
+        };
       }
+    }
 
-      backgroundTaskManager.updateTask(taskId, 10, 'Starting transcription...');
-      sender.send('import:progress', {
-        step: 'transcribing',
-        file: path.basename(filePath),
-        provider: transcriptionProvider,
-      });
+    backgroundTaskManager.updateTask(taskId, 10, 'Starting transcription...');
+    sender.send('import:progress', {
+      step: 'transcribing',
+      file: path.basename(filePath),
+      provider: transcriptionProvider,
+    });
 
-      const transcript = await transcriptionService.transcribe(
-        transcriptionProvider,
-        filePath,
-        {}
-      );
+    const transcript = await transcriptionService.transcribe(transcriptionProvider, filePath, {});
 
-      backgroundTaskManager.updateTask(taskId, 50, 'Updating meeting...');
+    backgroundTaskManager.updateTask(taskId, 50, 'Updating meeting...');
 
-      // Update the meeting with new transcript
-      meeting.transcript = transcript.entries || [];
-      meeting.transcriptionProvider = transcriptionProvider;
-      meeting.transcriptConfidence = transcript.confidence || null;
-      meeting.videoFile = filePath;
-      Object.assign(meeting, trackPaths);
-      // Fresh diarization segments (local provider) — without this the
-      // speaker-matching call below would use the PREVIOUS transcription's
-      // segments (or none, for pre-v2.0 meetings), starving voice-profile
-      // matching of the data it needs.
-      if (transcript.segments && transcript.segments.length > 0) {
-        meeting.segments = transcript.segments;
-      }
+    // Update the meeting with new transcript
+    meeting.transcript = transcript.entries || [];
+    meeting.transcriptionProvider = transcriptionProvider;
+    meeting.transcriptConfidence = transcript.confidence || null;
+    meeting.videoFile = filePath;
+    Object.assign(meeting, trackPaths);
+    // Fresh diarization segments (local provider) — without this the
+    // speaker-matching call below would use the PREVIOUS transcription's
+    // segments (or none, for pre-v2.0 meetings), starving voice-profile
+    // matching of the data it needs.
+    if (transcript.segments && transcript.segments.length > 0) {
+      meeting.segments = transcript.segments;
+    }
 
-      // v2.0 speaker-waterfall pre-stages for re-runs (mirrors the recording
-      // pipeline): Stage 0 label merge + Stage 1 track anchor. Meetings
-      // recorded before the isolation tracks existed simply skip Stage 1.
-      let rerunWaterfallSegments = meeting.segments || [];
-      let rerunPrecomputedEmbeddings = null;
-      let rerunTrackAnchor = null;
-      if (transcriptionProvider === 'local' && rerunWaterfallSegments.length > 0 && voiceProfileService) {
-        try {
-          const embeddings = await voiceProfileService.embedSpeakers(filePath, rerunWaterfallSegments);
-          rerunPrecomputedEmbeddings = embeddings;
-          if (embeddings.length > 0) {
-            const merged = mergeNearDuplicateLabels(rerunWaterfallSegments, embeddings);
-            rerunWaterfallSegments = merged.segments;
-            rerunPrecomputedEmbeddings = merged.embeddings;
-            if (Object.keys(merged.relabelMap).length > 0) {
-              console.log('[Waterfall:Rerun] Stage 0 merged labels:', merged.relabelMap);
-              meeting.transcript = meeting.transcript.map(u =>
-                merged.relabelMap[u.speaker] ? { ...u, speaker: merged.relabelMap[u.speaker] } : u
-              );
-              meeting.segments = rerunWaterfallSegments;
-            }
-          }
-        } catch (stage0Err) {
-          console.warn('[Waterfall:Rerun] Stage 0 skipped:', stage0Err.message);
-        }
-
-        try {
-          const anchored = await computeTrackAnchorWithOverrides(
-            trackPaths,
-            rerunWaterfallSegments,
-            meeting.transcript
-          );
-          rerunTrackAnchor = anchored.anchor;
-          if (anchored.overrides.length > 0) {
-            for (const o of anchored.overrides) {
-              meeting.transcript[o.index] = { ...meeting.transcript[o.index], speaker: o.to };
-            }
-            console.log(
-              `[Waterfall:Rerun] Stage 1.5 flipped ${anchored.overrides.length} utterance(s):`,
-              anchored.overrides.map(o => `#${o.index} ${o.from}→${o.to}`).join(', ')
+    // v2.0 speaker-waterfall pre-stages for re-runs (mirrors the recording
+    // pipeline): Stage 0 label merge + Stage 1 track anchor. Meetings
+    // recorded before the isolation tracks existed simply skip Stage 1.
+    let rerunWaterfallSegments = meeting.segments || [];
+    let rerunPrecomputedEmbeddings = null;
+    let rerunTrackAnchor = null;
+    if (
+      transcriptionProvider === 'local' &&
+      rerunWaterfallSegments.length > 0 &&
+      voiceProfileService
+    ) {
+      try {
+        const embeddings = await voiceProfileService.embedSpeakers(
+          filePath,
+          rerunWaterfallSegments
+        );
+        rerunPrecomputedEmbeddings = embeddings;
+        if (embeddings.length > 0) {
+          const merged = mergeNearDuplicateLabels(rerunWaterfallSegments, embeddings);
+          rerunWaterfallSegments = merged.segments;
+          rerunPrecomputedEmbeddings = merged.embeddings;
+          if (Object.keys(merged.relabelMap).length > 0) {
+            console.log('[Waterfall:Rerun] Stage 0 merged labels:', merged.relabelMap);
+            meeting.transcript = meeting.transcript.map(u =>
+              merged.relabelMap[u.speaker] ? { ...u, speaker: merged.relabelMap[u.speaker] } : u
             );
+            meeting.segments = rerunWaterfallSegments;
           }
-        } catch (stage1Err) {
-          console.warn('[Waterfall:Rerun] Stage 1 skipped:', stage1Err.message);
         }
+      } catch (stage0Err) {
+        console.warn('[Waterfall:Rerun] Stage 0 skipped:', stage0Err.message);
       }
 
-      // Speaker matching: try to map speakers to contacts
-      if (speakerMatcher && meeting.transcript.length > 0) {
-        backgroundTaskManager.updateTask(taskId, 60, 'Matching speakers...');
-        try {
-          const participantEmails = meeting.participantEmails || [];
+      try {
+        const anchored = await computeTrackAnchorWithOverrides(
+          trackPaths,
+          rerunWaterfallSegments,
+          meeting.transcript
+        );
+        rerunTrackAnchor = anchored.anchor;
+        if (anchored.overrides.length > 0) {
+          for (const o of anchored.overrides) {
+            meeting.transcript[o.index] = { ...meeting.transcript[o.index], speaker: o.to };
+          }
+          console.log(
+            `[Waterfall:Rerun] Stage 1.5 flipped ${anchored.overrides.length} utterance(s):`,
+            anchored.overrides.map(o => `#${o.index} ${o.from}→${o.to}`).join(', ')
+          );
+        }
+      } catch (stage1Err) {
+        console.warn('[Waterfall:Rerun] Stage 1 skipped:', stage1Err.message);
+      }
+    }
 
-          // Enriched attendee list with dedup + user inclusion (mirrors the
-          // recording pipeline's waterfall attendee plumbing) so re-runs on
-          // meetings without participant emails still reach speaker matching
-          // and voice-profile auto-enroll can pair speaker ↔ attendee.
-          const rerunAttendees = [];
-          const seenRerunKeys = new Set();
-          const pushRerunAttendee = a => {
-            const key = (a.email || a.name || '').toLowerCase();
-            if (!key || seenRerunKeys.has(key)) return;
-            seenRerunKeys.add(key);
-            rerunAttendees.push(a);
-          };
-          for (const a of meeting.calendarAttendees || []) {
-            pushRerunAttendee({ name: a.name, email: a.email, googleContactId: a.google_contact_resource || null });
-          }
-          for (const p of meeting.participants || []) {
-            pushRerunAttendee({ name: p.originalName || p.name, email: p.email || null, googleContactId: p.googleContactResource || null });
-          }
-          if (userProfile?.name) {
-            pushRerunAttendee({ name: userProfile.name, email: userProfile.email || null, googleContactId: null });
-          }
+    // Speaker matching: try to map speakers to contacts
+    if (speakerMatcher && meeting.transcript.length > 0) {
+      backgroundTaskManager.updateTask(taskId, 60, 'Matching speakers...');
+      try {
+        const participantEmails = meeting.participantEmails || [];
 
-          // Resolve raw-email display names via Google Contacts so
-          // auto-enrolled profiles get human names, not addresses.
-          if (googleContacts) {
-            try {
-              const emailsNeedingNames = rerunAttendees
-                .filter(a => a.name && a.name.includes('@') && a.email)
-                .map(a => a.email);
-              if (emailsNeedingNames.length > 0) {
-                const contactMap = await googleContacts.findContactsByEmails(emailsNeedingNames);
-                for (const a of rerunAttendees) {
-                  const c = a.email ? contactMap.get(a.email) : null;
-                  if (a.name && a.name.includes('@') && c?.name) a.name = c.name;
-                }
+        // Enriched attendee list with dedup + user inclusion (mirrors the
+        // recording pipeline's waterfall attendee plumbing) so re-runs on
+        // meetings without participant emails still reach speaker matching
+        // and voice-profile auto-enroll can pair speaker ↔ attendee.
+        const rerunAttendees = [];
+        const seenRerunKeys = new Set();
+        const pushRerunAttendee = a => {
+          const key = (a.email || a.name || '').toLowerCase();
+          if (!key || seenRerunKeys.has(key)) return;
+          seenRerunKeys.add(key);
+          rerunAttendees.push(a);
+        };
+        for (const a of meeting.calendarAttendees || []) {
+          pushRerunAttendee({
+            name: a.name,
+            email: a.email,
+            googleContactId: a.google_contact_resource || null,
+          });
+        }
+        for (const p of meeting.participants || []) {
+          pushRerunAttendee({
+            name: p.originalName || p.name,
+            email: p.email || null,
+            googleContactId: p.googleContactResource || null,
+          });
+        }
+        if (userProfile?.name) {
+          pushRerunAttendee({
+            name: userProfile.name,
+            email: userProfile.email || null,
+            googleContactId: null,
+          });
+        }
+
+        // Resolve raw-email display names via Google Contacts so
+        // auto-enrolled profiles get human names, not addresses.
+        if (googleContacts) {
+          try {
+            const emailsNeedingNames = rerunAttendees
+              .filter(a => a.name && a.name.includes('@') && a.email)
+              .map(a => a.email);
+            if (emailsNeedingNames.length > 0) {
+              const contactMap = await googleContacts.findContactsByEmails(emailsNeedingNames);
+              for (const a of rerunAttendees) {
+                const c = a.email ? contactMap.get(a.email) : null;
+                if (a.name && a.name.includes('@') && c?.name) a.name = c.name;
               }
-            } catch (nameErr) {
-              console.warn('[Waterfall] Attendee name enrichment skipped:', nameErr.message);
             }
+          } catch (nameErr) {
+            console.warn('[Waterfall] Attendee name enrichment skipped:', nameErr.message);
           }
+        }
 
-          const matchIdentifiers = participantEmails.length > 0
+        const matchIdentifiers =
+          participantEmails.length > 0
             ? participantEmails
             : rerunAttendees.map(a => a.email || a.name).filter(Boolean);
 
-          const speakerMapping = await speakerMatcher.matchSpeakers(
-            meeting.transcript,
-            matchIdentifiers,
-            {
-              includeOrganizer: true,
-              useWordCount: true,
-              participantData: meeting.participants || [],
-              audioFilePath: filePath || null,
-              segments: rerunWaterfallSegments,
-              meetingId: meeting.id || meetingId,
-              calendarAttendees: rerunAttendees,
-              trackAnchor: rerunTrackAnchor,
-              precomputedEmbeddings: rerunPrecomputedEmbeddings,
-            }
-          );
+        const speakerMapping = await speakerMatcher.matchSpeakers(
+          meeting.transcript,
+          matchIdentifiers,
+          {
+            includeOrganizer: true,
+            useWordCount: true,
+            participantData: meeting.participants || [],
+            audioFilePath: filePath || null,
+            segments: rerunWaterfallSegments,
+            meetingId: meeting.id || meetingId,
+            calendarAttendees: rerunAttendees,
+            trackAnchor: rerunTrackAnchor,
+            precomputedEmbeddings: rerunPrecomputedEmbeddings,
+          }
+        );
 
-          // Apply mapping to transcript
-          meeting.transcript = speakerMatcher.applyMappingToTranscript(
-            meeting.transcript,
-            speakerMapping
-          );
-          meeting.speakerMapping = speakerMapping;
+        // Apply mapping to transcript
+        meeting.transcript = speakerMatcher.applyMappingToTranscript(
+          meeting.transcript,
+          speakerMapping
+        );
+        meeting.speakerMapping = speakerMapping;
 
-          console.log('[Transcription Rerun] Speaker matching applied');
-        } catch (matchError) {
-          console.warn('[Transcription Rerun] Speaker matching failed:', matchError.message);
-        }
+        console.log('[Transcription Rerun] Speaker matching applied');
+      } catch (matchError) {
+        console.warn('[Transcription Rerun] Speaker matching failed:', matchError.message);
       }
-
-      // Save updated transcript/mapping first — the auto-summary path below
-      // reloads the meeting from the database. Patch only what the re-run
-      // produced: `meeting` was read before transcription (minutes ago), so a
-      // whole-row save would revert anything else changed on it meanwhile.
-      const rerunFields = {
-        transcript: meeting.transcript,
-        transcriptionProvider: meeting.transcriptionProvider,
-        transcriptConfidence: meeting.transcriptConfidence,
-        videoFile: meeting.videoFile,
-        ...trackPaths,
-      };
-      if (meeting.segments) rerunFields.segments = meeting.segments;
-      if (meeting.speakerMapping) rerunFields.speakerMapping = meeting.speakerMapping;
-      databaseService.patchMeeting(meeting.id || meetingId, rerunFields);
-
-      // Always regenerate the exec (auto) summary after a rerun. This also runs
-      // the Stage 3 content pass (speaker review + meeting renaming) and
-      // persists summary/title/mapping/transcript itself.
-      backgroundTaskManager.updateTask(taskId, 80, 'Regenerating summary...');
-      await generateAndSaveAutoSummary(meeting.id || meetingId, '[Transcription Rerun]');
-
-      backgroundTaskManager.completeTask(taskId, {
-        utterances: meeting.transcript.length,
-        provider: transcriptionProvider,
-      });
-
-      // Notify renderer to refresh the meeting
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('meeting-updated', meetingId);
-      }
-
-      return {
-        success: true,
-        transcript: meeting.transcript,
-        provider: transcriptionProvider,
-      };
-    } catch (error) {
-      backgroundTaskManager.failTask(taskId, error.message);
-      console.error('[Transcription Rerun] Failed:', error);
-      return { success: false, error: error.message };
     }
+
+    // Save updated transcript/mapping first — the auto-summary path below
+    // reloads the meeting from the database. Patch only what the re-run
+    // produced: `meeting` was read before transcription (minutes ago), so a
+    // whole-row save would revert anything else changed on it meanwhile.
+    const rerunFields = {
+      transcript: meeting.transcript,
+      transcriptionProvider: meeting.transcriptionProvider,
+      transcriptConfidence: meeting.transcriptConfidence,
+      videoFile: meeting.videoFile,
+      ...trackPaths,
+    };
+    if (meeting.segments) rerunFields.segments = meeting.segments;
+    if (meeting.speakerMapping) rerunFields.speakerMapping = meeting.speakerMapping;
+    databaseService.patchMeeting(meeting.id || meetingId, rerunFields);
+
+    // Always regenerate the exec (auto) summary after a rerun. This also runs
+    // the Stage 3 content pass (speaker review + meeting renaming) and
+    // persists summary/title/mapping/transcript itself.
+    backgroundTaskManager.updateTask(taskId, 80, 'Regenerating summary...');
+    await generateAndSaveAutoSummary(meeting.id || meetingId, '[Transcription Rerun]');
+
+    backgroundTaskManager.completeTask(taskId, {
+      utterances: meeting.transcript.length,
+      provider: transcriptionProvider,
+    });
+
+    // Notify renderer to refresh the meeting
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('meeting-updated', meetingId);
+    }
+
+    return {
+      success: true,
+      transcript: meeting.transcript,
+      provider: transcriptionProvider,
+    };
+  } catch (error) {
+    backgroundTaskManager.failTask(taskId, error.message);
+    console.error('[Transcription Rerun] Failed:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 ipcMain.handle(
@@ -8696,7 +8868,8 @@ ipcMain.handle(
         listDir: dir => fsMod.readdirSync(dir),
         recordingsDir: RECORDING_PATH,
         log: msg => console.log(msg),
-        onProgress: (percent, message) => backgroundTaskManager.updateTask(taskId, percent, message),
+        onProgress: (percent, message) =>
+          backgroundTaskManager.updateTask(taskId, percent, message),
       });
 
       // Ensure the recordings dir exists (first-run safety).
@@ -8910,44 +9083,44 @@ ipcMain.handle(
     try {
       const parser = new TranscriptParser();
 
-    // Parse the content (determine format from file extension or content)
-    let result;
-    if (filePath && filePath.endsWith('.md')) {
-      result = await parser.parseMarkdown(content, filePath);
-    } else {
-      result = await parser.parsePlainText(content, filePath || 'sample.txt');
+      // Parse the content (determine format from file extension or content)
+      let result;
+      if (filePath && filePath.endsWith('.md')) {
+        result = await parser.parseMarkdown(content, filePath);
+      } else {
+        result = await parser.parsePlainText(content, filePath || 'sample.txt');
+      }
+
+      // Calculate statistics
+      const speakers = parser.getSpeakers(result);
+      const totalEntries = result.entries.length;
+      const unknownCount = result.entries.filter(e => e.speaker === 'Unknown').length;
+      const matchRate = totalEntries > 0 ? ((totalEntries - unknownCount) / totalEntries) * 100 : 0;
+
+      // Get speaker distribution
+      const speakerDistribution = speakers.map(speaker => ({
+        speaker,
+        count: result.entries.filter(e => e.speaker === speaker).length,
+      }));
+
+      return {
+        success: true,
+        result: {
+          format: result.format,
+          entries: result.entries,
+          totalEntries,
+          speakers,
+          speakerDistribution,
+          matchRate: matchRate.toFixed(1),
+          unknownCount,
+          hasSpeakers: result.hasSpeakers,
+          hasTimestamps: result.hasTimestamps,
+        },
+      };
+    } catch (error) {
+      logger.main.error('[Patterns] Failed to test parse:', error);
+      return { success: false, error: error.message };
     }
-
-    // Calculate statistics
-    const speakers = parser.getSpeakers(result);
-    const totalEntries = result.entries.length;
-    const unknownCount = result.entries.filter(e => e.speaker === 'Unknown').length;
-    const matchRate = totalEntries > 0 ? ((totalEntries - unknownCount) / totalEntries) * 100 : 0;
-
-    // Get speaker distribution
-    const speakerDistribution = speakers.map(speaker => ({
-      speaker,
-      count: result.entries.filter(e => e.speaker === speaker).length,
-    }));
-
-    return {
-      success: true,
-      result: {
-        format: result.format,
-        entries: result.entries,
-        totalEntries,
-        speakers,
-        speakerDistribution,
-        matchRate: matchRate.toFixed(1),
-        unknownCount,
-        hasSpeakers: result.hasSpeakers,
-        hasTimestamps: result.hasTimestamps,
-      },
-    };
-  } catch (error) {
-    logger.main.error('[Patterns] Failed to test parse:', error);
-    return { success: false, error: error.message };
-  }
   })
 );
 
@@ -9032,55 +9205,55 @@ ipcMain.handle(
     try {
       const configPath = path.join(app.getPath('userData'), 'config', 'transcript-patterns.yaml');
 
-    // Parse YAML to validate syntax
-    let parsedConfig;
-    try {
-      parsedConfig = yaml.load(configYaml);
-    } catch (yamlError) {
-      return {
-        success: false,
-        error: `Invalid YAML syntax: ${yamlError.message}`,
-      };
-    }
-
-    // Validate structure using PatternConfigLoader
-    try {
-      // Validate each pattern
-      if (parsedConfig.patterns && Array.isArray(parsedConfig.patterns)) {
-        for (const pattern of parsedConfig.patterns) {
-          PatternConfigLoader.validatePattern(pattern);
-        }
-      } else {
+      // Parse YAML to validate syntax
+      let parsedConfig;
+      try {
+        parsedConfig = yaml.load(configYaml);
+      } catch (yamlError) {
         return {
           success: false,
-          error: 'Config must have a "patterns" array',
+          error: `Invalid YAML syntax: ${yamlError.message}`,
         };
       }
-    } catch (validationError) {
-      return {
-        success: false,
-        error: `Validation failed: ${validationError.message}`,
-      };
+
+      // Validate structure using PatternConfigLoader
+      try {
+        // Validate each pattern
+        if (parsedConfig.patterns && Array.isArray(parsedConfig.patterns)) {
+          for (const pattern of parsedConfig.patterns) {
+            PatternConfigLoader.validatePattern(pattern);
+          }
+        } else {
+          return {
+            success: false,
+            error: 'Config must have a "patterns" array',
+          };
+        }
+      } catch (validationError) {
+        return {
+          success: false,
+          error: `Validation failed: ${validationError.message}`,
+        };
+      }
+
+      // Ensure config directory exists
+      const configDir = path.dirname(configPath);
+      if (!fs.existsSync(configDir)) {
+        fs.mkdirSync(configDir, { recursive: true });
+      }
+
+      // Write the file
+      fs.writeFileSync(configPath, configYaml, 'utf8');
+
+      // Force reload the config
+      await PatternConfigLoader.loadConfig(true);
+
+      logger.main.info('[Patterns] Saved pattern configuration');
+      return { success: true };
+    } catch (error) {
+      logger.main.error('[Patterns] Failed to save config:', error);
+      return { success: false, error: error.message };
     }
-
-    // Ensure config directory exists
-    const configDir = path.dirname(configPath);
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
-    }
-
-    // Write the file
-    fs.writeFileSync(configPath, configYaml, 'utf8');
-
-    // Force reload the config
-    await PatternConfigLoader.loadConfig(true);
-
-    logger.main.info('[Patterns] Saved pattern configuration');
-    return { success: true };
-  } catch (error) {
-    logger.main.error('[Patterns] Failed to save config:', error);
-    return { success: false, error: error.message };
-  }
   })
 );
 
@@ -9383,120 +9556,123 @@ ipcMain.handle(
     try {
       // Merge updates into current settings
       if (updates.recordingQuality) {
-      appSettings.recordingQuality = {
-        ...appSettings.recordingQuality,
-        ...updates.recordingQuality,
-      };
-    }
-    if (updates.notifications) {
-      appSettings.notifications = { ...appSettings.notifications, ...updates.notifications };
-    }
-    if (updates.shortcuts) {
-      // Unregister old shortcuts
-      unregisterGlobalShortcuts();
+        appSettings.recordingQuality = {
+          ...appSettings.recordingQuality,
+          ...updates.recordingQuality,
+        };
+      }
+      if (updates.notifications) {
+        appSettings.notifications = { ...appSettings.notifications, ...updates.notifications };
+      }
+      if (updates.shortcuts) {
+        // Unregister old shortcuts
+        unregisterGlobalShortcuts();
 
-      // Update shortcuts
-      appSettings.shortcuts = { ...appSettings.shortcuts, ...updates.shortcuts };
+        // Update shortcuts
+        appSettings.shortcuts = { ...appSettings.shortcuts, ...updates.shortcuts };
 
-      // Register new shortcuts
-      registerGlobalShortcuts();
-    }
-    // v1.2: Stream Deck settings
-    if (updates.streamDeck) {
-      appSettings.streamDeck = { ...appSettings.streamDeck, ...updates.streamDeck };
-      // Enable/disable Stream Deck WebSocket integration
-      expressApp.setStreamDeckEnabled(appSettings.streamDeck.enabled);
-      logger.ipc.info(
-        `[IPC] Stream Deck integration ${appSettings.streamDeck.enabled ? 'enabled' : 'disabled'}`
-      );
-    }
+        // Register new shortcuts
+        registerGlobalShortcuts();
+      }
+      // v1.2: Stream Deck settings
+      if (updates.streamDeck) {
+        appSettings.streamDeck = { ...appSettings.streamDeck, ...updates.streamDeck };
+        // Enable/disable Stream Deck WebSocket integration
+        expressApp.setStreamDeckEnabled(appSettings.streamDeck.enabled);
+        logger.ipc.info(
+          `[IPC] Stream Deck integration ${appSettings.streamDeck.enabled ? 'enabled' : 'disabled'}`
+        );
+      }
 
-    // v1.2: Top-level boolean settings (from General settings tab)
-    if (updates.showRecordingWidget !== undefined) {
-      appSettings.showRecordingWidget = updates.showRecordingWidget;
-    }
-    if (updates.autoStartRecording !== undefined) {
-      appSettings.autoStartRecording = updates.autoStartRecording;
-    }
-    // v2.0: Recording provider — hot-swap without restart
-    if (updates.recordingProvider !== undefined && updates.recordingProvider !== appSettings.recordingProvider) {
-      const oldProvider = appSettings.recordingProvider;
-      appSettings.recordingProvider = updates.recordingProvider;
-      logger.ipc.info(`[IPC] Switching recording provider: ${oldProvider} → ${updates.recordingProvider}`);
+      // v1.2: Top-level boolean settings (from General settings tab)
+      if (updates.showRecordingWidget !== undefined) {
+        appSettings.showRecordingWidget = updates.showRecordingWidget;
+      }
+      if (updates.autoStartRecording !== undefined) {
+        appSettings.autoStartRecording = updates.autoStartRecording;
+      }
+      // v2.0: Recording provider — hot-swap without restart
+      if (
+        updates.recordingProvider !== undefined &&
+        updates.recordingProvider !== appSettings.recordingProvider
+      ) {
+        const oldProvider = appSettings.recordingProvider;
+        appSettings.recordingProvider = updates.recordingProvider;
+        logger.ipc.info(
+          `[IPC] Switching recording provider: ${oldProvider} → ${updates.recordingProvider}`
+        );
 
-      // Hot-swap the provider
-      try {
-        let newProvider;
-        let config;
-        if (updates.recordingProvider === 'local') {
-          newProvider = new LocalProvider();
-          config = {
-            recordingPath: RECORDING_PATH,
-            audioSources: appSettings.audioSources,
-            audioMixer: appSettings.audioMixer,
-          };
-        } else {
-          newProvider = new RecallProvider(RecallAiSdk);
-          recallProvider = newProvider;
-          const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } = await getRecallCredentials();
-          config = {
-            sdkConfig: {
-              access_token: RECALLAI_API_KEY,
-              user_id: require('os').hostname(),
-              config: { recording_path: RECORDING_PATH },
-              recording_path: RECORDING_PATH,
-              api_url: RECALLAI_API_URL,
-            },
-          };
+        // Hot-swap the provider
+        try {
+          let newProvider;
+          let config;
+          if (updates.recordingProvider === 'local') {
+            newProvider = new LocalProvider();
+            config = {
+              recordingPath: RECORDING_PATH,
+              audioSources: appSettings.audioSources,
+              audioMixer: appSettings.audioMixer,
+            };
+          } else {
+            newProvider = new RecallProvider(RecallAiSdk);
+            recallProvider = newProvider;
+            const { apiUrl: RECALLAI_API_URL, apiKey: RECALLAI_API_KEY } =
+              await getRecallCredentials();
+            config = {
+              sdkConfig: {
+                access_token: RECALLAI_API_KEY,
+                user_id: require('os').hostname(),
+                config: { recording_path: RECORDING_PATH },
+                recording_path: RECORDING_PATH,
+                api_url: RECALLAI_API_URL,
+              },
+            };
+          }
+          recordingProvider = newProvider;
+          await recordingManager.switchProvider(newProvider, config);
+          sdkReady = true;
+          logger.ipc.info(`[IPC] Recording provider switched to: ${updates.recordingProvider}`);
+        } catch (error) {
+          logger.ipc.error(`[IPC] Failed to switch recording provider: ${error.message}`);
+          // Revert setting on failure
+          appSettings.recordingProvider = oldProvider;
         }
-        recordingProvider = newProvider;
-        await recordingManager.switchProvider(newProvider, config);
-        sdkReady = true;
-        logger.ipc.info(`[IPC] Recording provider switched to: ${updates.recordingProvider}`);
-      } catch (error) {
-        logger.ipc.error(`[IPC] Failed to switch recording provider: ${error.message}`);
-        // Revert setting on failure
-        appSettings.recordingProvider = oldProvider;
       }
-    }
 
-    // v2.0: Audio source config for local recording mixer
-    if (updates.audioSources !== undefined) {
-      appSettings.audioSources = updates.audioSources;
-      if (recordingProvider && typeof recordingProvider.setAudioConfig === 'function') {
-        recordingProvider.setAudioConfig(
-          updates.audioSources,
-          updates.audioMixer || appSettings.audioMixer || { autoBalance: false }
-        );
+      // v2.0: Audio source config for local recording mixer
+      if (updates.audioSources !== undefined) {
+        appSettings.audioSources = updates.audioSources;
+        if (recordingProvider && typeof recordingProvider.setAudioConfig === 'function') {
+          recordingProvider.setAudioConfig(
+            updates.audioSources,
+            updates.audioMixer || appSettings.audioMixer || { autoBalance: false }
+          );
+        }
       }
-    }
-    if (updates.audioMixer !== undefined) {
-      appSettings.audioMixer = updates.audioMixer;
-      if (recordingProvider && typeof recordingProvider.setAudioConfig === 'function') {
-        recordingProvider.setAudioConfig(
-          appSettings.audioSources || [],
-          updates.audioMixer
-        );
+      if (updates.audioMixer !== undefined) {
+        appSettings.audioMixer = updates.audioMixer;
+        if (recordingProvider && typeof recordingProvider.setAudioConfig === 'function') {
+          recordingProvider.setAudioConfig(appSettings.audioSources || [], updates.audioMixer);
+        }
       }
-    }
 
-    // v2.0: AI service URL for voice profile service
-    if (updates.aiServiceUrl) {
-      appSettings.aiServiceUrl = updates.aiServiceUrl;
-      if (voiceProfileService) {
-        voiceProfileService.setAIServiceUrl(updates.aiServiceUrl);
+      // v2.0: AI service URL for voice profile service
+      if (updates.aiServiceUrl) {
+        appSettings.aiServiceUrl = updates.aiServiceUrl;
+        if (voiceProfileService) {
+          voiceProfileService.setAIServiceUrl(updates.aiServiceUrl);
+        }
+        aiServiceManager.setServiceUrl(updates.aiServiceUrl);
       }
-      aiServiceManager.setServiceUrl(updates.aiServiceUrl);
-    }
 
-    if (updates.aiServicePath !== undefined) {
-      appSettings.aiServicePath = updates.aiServicePath;
-      aiServiceManager.setServicePath(updates.aiServicePath || null);
-    }
+      if (updates.aiServicePath !== undefined) {
+        appSettings.aiServicePath = updates.aiServicePath;
+        aiServiceManager.setServicePath(updates.aiServicePath || null);
+      }
 
-    // Save to disk
-    saveAppSettings();
-    logger.ipc.info('[IPC] app:updateSettings - Settings updated successfully');
+      // Save to disk
+      saveAppSettings();
+      logger.ipc.info('[IPC] app:updateSettings - Settings updated successfully');
 
       return { success: true, data: appSettings };
     } catch (error) {
@@ -9542,10 +9718,7 @@ ipcMain.handle('audioDevices:test', async () => {
       return { success: false, error: 'No audio sources configured' };
     }
 
-    const testFile = path.join(
-      RECORDING_PATH,
-      `test-recording-${Date.now()}.mp3`
-    );
+    const testFile = path.join(RECORDING_PATH, `test-recording-${Date.now()}.mp3`);
 
     // Heal stale WASAPI deviceIds by name before starting captures (endpoint
     // GUIDs change on audio-driver updates; same logic as LocalProvider).
@@ -9601,15 +9774,21 @@ ipcMain.handle('audioDevices:test', async () => {
     ffmpegArgs.splice(insertIdx, 0, '-t', '3');
 
     const { getFfmpegPath } = require('./main/recording/ffmpegPath');
-    return new Promise((resolve) => {
+    return new Promise(resolve => {
       const ff = spawn(getFfmpegPath(), ffmpegArgs, { windowsHide: true });
       let ffmpegStderr = '';
-      ff.stderr.on('data', (chunk) => { ffmpegStderr += chunk; });
+      ff.stderr.on('data', chunk => {
+        ffmpegStderr += chunk;
+      });
 
-      ff.on('close', async (code) => {
+      ff.on('close', async code => {
         // Clean up WASAPI captures
         for (const c of wasapiCaptures) {
-          try { await c.stop(); } catch { /* ignore */ }
+          try {
+            await c.stop();
+          } catch {
+            /* ignore */
+          }
         }
 
         if (code === 0) {
@@ -9620,9 +9799,13 @@ ipcMain.handle('audioDevices:test', async () => {
         }
       });
 
-      ff.on('error', async (err) => {
+      ff.on('error', async err => {
         for (const c of wasapiCaptures) {
-          try { await c.stop(); } catch { /* ignore */ }
+          try {
+            await c.stop();
+          } catch {
+            /* ignore */
+          }
         }
         resolve({ success: false, error: err.message });
       });
@@ -9692,34 +9875,34 @@ ipcMain.handle(
     try {
       const { limit = LOG_ENTRIES_DEFAULT_LIMIT, level = 'all' } = options || {};
 
-    // Read log file
-    const logPath = log.transports.file.getFile().path;
+      // Read log file
+      const logPath = log.transports.file.getFile().path;
 
-    if (!fs.existsSync(logPath)) {
-      return { success: true, data: { logs: [], logPath } };
-    }
+      if (!fs.existsSync(logPath)) {
+        return { success: true, data: { logs: [], logPath } };
+      }
 
-    const logContent = fs.readFileSync(logPath, 'utf8');
-    const logLines = logContent.split('\n').filter(line => line.trim().length > 0);
+      const logContent = fs.readFileSync(logPath, 'utf8');
+      const logLines = logContent.split('\n').filter(line => line.trim().length > 0);
 
-    // Filter by level if specified
-    let filteredLogs = logLines;
-    if (level !== 'all') {
-      filteredLogs = logLines.filter(line => line.includes(`[${level}]`));
-    }
+      // Filter by level if specified
+      let filteredLogs = logLines;
+      if (level !== 'all') {
+        filteredLogs = logLines.filter(line => line.includes(`[${level}]`));
+      }
 
-    // Get last N lines
-    const recentLogs = filteredLogs.slice(-limit);
+      // Get last N lines
+      const recentLogs = filteredLogs.slice(-limit);
 
-    return {
-      success: true,
-      data: {
-        logs: recentLogs,
-        logPath,
-        totalLines: logLines.length,
-        filteredLines: filteredLogs.length,
-      },
-    };
+      return {
+        success: true,
+        data: {
+          logs: recentLogs,
+          logPath,
+          totalLines: logLines.length,
+          filteredLines: filteredLogs.length,
+        },
+      };
     } catch (error) {
       logger.ipc.error('[IPC] app:getLogs failed:', error);
       return { success: false, error: error.message };
@@ -9818,24 +10001,24 @@ ipcMain.handle(
       const { dialog } = require('electron');
       const settingsExportService = require('./main/services/settingsExportService');
 
-    // Show open dialog
-    const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Import Settings',
-      filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
-      properties: ['openFile'],
-    });
+      // Show open dialog
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Import Settings',
+        filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+        properties: ['openFile'],
+      });
 
-    if (result.canceled || result.filePaths.length === 0) {
-      return { success: false, canceled: true };
-    }
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, canceled: true };
+      }
 
-    const zipPath = result.filePaths[0];
+      const zipPath = result.filePaths[0];
 
-    // Validate before import
-    const validation = await settingsExportService.validateImportFile(zipPath);
-    if (!validation.valid) {
-      return { success: false, error: `Invalid settings file: ${validation.error}` };
-    }
+      // Validate before import
+      const validation = await settingsExportService.validateImportFile(zipPath);
+      if (!validation.valid) {
+        return { success: false, error: `Invalid settings file: ${validation.error}` };
+      }
 
       // Import with provided options
       const importResult = await settingsExportService.importFromZip(zipPath, options || {});
@@ -10146,9 +10329,11 @@ ipcMain.handle(
             ? event.start.dateTime.split('T')[0]
             : event.start.date;
           const meetings = databaseService.getMeetingsInRange(eventDate, eventDate);
-          meeting = meetings.find(m =>
-            m.title && event.summary &&
-            m.title.toLowerCase().includes(event.summary.toLowerCase().substring(0, 20))
+          meeting = meetings.find(
+            m =>
+              m.title &&
+              event.summary &&
+              m.title.toLowerCase().includes(event.summary.toLowerCase().substring(0, 20))
           );
         }
 
@@ -10172,9 +10357,8 @@ ipcMain.handle(
         }
       }
 
-      const coveragePercent = events.length > 0
-        ? Math.round((covered.length / events.length) * 100)
-        : 100;
+      const coveragePercent =
+        events.length > 0 ? Math.round((covered.length / events.length) * 100) : 100;
 
       return {
         success: true,
@@ -10192,32 +10376,35 @@ ipcMain.handle(
 
 ipcMain.handle(
   'meeting:createPlaceholder',
-  withValidation(meetingPlaceholderSchema, async (_event, { title, date, calendarEventId, participants }) => {
-    try {
-      const crypto = require('crypto');
-      const meetingId = 'placeholder-' + crypto.randomUUID();
-      const meeting = {
-        id: meetingId,
-        type: 'document',
-        title,
-        date,
-        status: 'past',
-        calendarEventId: calendarEventId || null,
-        participants: (participants || []).map(p => ({
-          name: p.name || p.email || 'Unknown',
-          originalName: p.name || 'Unknown',
-          email: p.email || null,
-        })),
-      };
+  withValidation(
+    meetingPlaceholderSchema,
+    async (_event, { title, date, calendarEventId, participants }) => {
+      try {
+        const crypto = require('crypto');
+        const meetingId = 'placeholder-' + crypto.randomUUID();
+        const meeting = {
+          id: meetingId,
+          type: 'document',
+          title,
+          date,
+          status: 'past',
+          calendarEventId: calendarEventId || null,
+          participants: (participants || []).map(p => ({
+            name: p.name || p.email || 'Unknown',
+            originalName: p.name || 'Unknown',
+            email: p.email || null,
+          })),
+        };
 
-      databaseService.saveMeeting(meeting, 'past');
+        databaseService.saveMeeting(meeting, 'past');
 
-      return { success: true, meetingId, meeting };
-    } catch (error) {
-      console.error('[Meeting] Create placeholder failed:', error);
-      return { success: false, error: error.message };
+        return { success: true, meetingId, meeting };
+      } catch (error) {
+        console.error('[Meeting] Create placeholder failed:', error);
+        return { success: false, error: error.message };
+      }
     }
-  })
+  )
 );
 
 // ===================================================================
@@ -10278,8 +10465,8 @@ ipcMain.handle(
       return { success: false, error: 'Google Contacts not authenticated' };
     }
     const allContacts = await googleContacts.fetchAllContacts();
-    const companyContacts = allContacts.filter(c =>
-      c.organization && c.organization.toLowerCase() === organization.toLowerCase()
+    const companyContacts = allContacts.filter(
+      c => c.organization && c.organization.toLowerCase() === organization.toLowerCase()
     );
     return { contacts: companyContacts };
   })
@@ -10314,7 +10501,8 @@ ipcMain.handle('companies:getAll', async () => {
 
 ipcMain.handle('companies:update', async (_event, { name, vaultPath, category }) => {
   try {
-    let client = clientService.getAllClients()
+    let client = clientService
+      .getAllClients()
       .find(c => c.name.toLowerCase() === name.toLowerCase());
 
     if (client) {
@@ -10349,7 +10537,8 @@ ipcMain.handle('companies:update', async (_event, { name, vaultPath, category })
 
 ipcMain.handle('companies:remove', async (_event, name) => {
   try {
-    const client = clientService.getAllClients()
+    const client = clientService
+      .getAllClients()
       .find(c => c.name.toLowerCase() === name.toLowerCase());
     if (client) {
       clientService.updateClient(client.id, { vault_path: null, category: null });
@@ -10401,14 +10590,18 @@ ipcMain.handle(
     const prodMcpPath = path.join(process.resourcesPath || __dirname, 'src', 'mcp-server.js');
     const actualPath = fs.existsSync(mcpServerPath) ? mcpServerPath : prodMcpPath;
 
-    const configSnippet = JSON.stringify({
-      mcpServers: {
-        'jd-notes': {
-          command: 'node',
-          args: [actualPath, '--db-path', dbPath],
+    const configSnippet = JSON.stringify(
+      {
+        mcpServers: {
+          'jd-notes': {
+            command: 'node',
+            args: [actualPath, '--db-path', dbPath],
+          },
         },
       },
-    }, null, 2);
+      null,
+      2
+    );
 
     return {
       dbPath,
@@ -10450,8 +10643,11 @@ ipcMain.on('widget:open-meeting', (_event, meetingId) => {
 
   // If the meetingId is a placeholder (detected-*, calendar-*) or null/undefined,
   // try to use the current recording meeting ID or currently viewed meeting ID
-  if (!meetingId ||
-      (typeof meetingId === 'string' && (meetingId.startsWith('detected-') || meetingId.startsWith('calendar-')))) {
+  if (
+    !meetingId ||
+    (typeof meetingId === 'string' &&
+      (meetingId.startsWith('detected-') || meetingId.startsWith('calendar-')))
+  ) {
     // Priority: current recording > currently viewed meeting
     if (recordingManager?.currentMeetingId) {
       realMeetingId = recordingManager.currentMeetingId;
@@ -10460,7 +10656,10 @@ ipcMain.on('widget:open-meeting', (_event, meetingId) => {
       realMeetingId = currentViewedMeetingId;
       logger.main.info('[Widget] Using currentViewedMeetingId:', realMeetingId);
     } else {
-      logger.main.warn('[Widget] No valid meeting ID available for open-meeting. Original:', meetingId);
+      logger.main.warn(
+        '[Widget] No valid meeting ID available for open-meeting. Original:',
+        meetingId
+      );
       // Still show and focus the main window even without a meeting
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.show();
@@ -10490,10 +10689,14 @@ ipcMain.on('widget:open-meeting', (_event, meetingId) => {
 ipcMain.on('widget:request-sync', _event => {
   if (recordingWidget && !recordingWidget.isDestroyed()) {
     // v1.2 fix: Include meeting ID and currently viewed meeting info
-    const meetingInfo = currentViewedMeetingInfo || (recordingManager?.currentMeetingId ? {
-      id: recordingManager.currentMeetingId,
-      title: recordingManager.currentMeetingTitle,
-    } : null);
+    const meetingInfo =
+      currentViewedMeetingInfo ||
+      (recordingManager?.currentMeetingId
+        ? {
+            id: recordingManager.currentMeetingId,
+            title: recordingManager.currentMeetingTitle,
+          }
+        : null);
 
     recordingWidget.webContents.send('widget:update', {
       type: 'sync-state',
@@ -10646,7 +10849,10 @@ ipcMain.on('widget:show', (event, meetingInfo) => {
     try {
       validateIpcInput(widgetMeetingInfoSchema, meetingInfo);
     } catch (validationError) {
-      logger.main.warn('[Widget] Invalid meetingInfo, showing without context:', validationError.message);
+      logger.main.warn(
+        '[Widget] Invalid meetingInfo, showing without context:',
+        validationError.message
+      );
       showRecordingWidget(null);
       return;
     }
@@ -10708,7 +10914,11 @@ ipcMain.on('renderer:current-meeting-changed', (_event, meetingInfo) => {
   if (meetingInfo) {
     currentViewedMeetingId = meetingInfo.id || null;
     currentViewedMeetingInfo = meetingInfo;
-    logger.main.info('[Widget] Current viewed meeting changed:', currentViewedMeetingId, meetingInfo.title);
+    logger.main.info(
+      '[Widget] Current viewed meeting changed:',
+      currentViewedMeetingId,
+      meetingInfo.title
+    );
 
     // Update the widget with the new meeting info if it's visible
     if (recordingWidget && !recordingWidget.isDestroyed()) {
@@ -10735,12 +10945,14 @@ ipcMain.handle('widget:get-recording-context', async () => {
       currentRecordingMeetingTitle: recordingManager?.currentMeetingTitle ?? null,
 
       // Detected platform meeting
-      detectedMeeting: detectedMeeting ? {
-        id: `detected-${detectedMeeting.window?.id}`,
-        platform: detectedMeeting.window?.platform || 'unknown',
-        title: detectedMeeting.window?.title || 'Meeting',
-        isDetectedMeeting: true,
-      } : null,
+      detectedMeeting: detectedMeeting
+        ? {
+            id: `detected-${detectedMeeting.window?.id}`,
+            platform: detectedMeeting.window?.platform || 'unknown',
+            title: detectedMeeting.window?.title || 'Meeting',
+            isDetectedMeeting: true,
+          }
+        : null,
 
       // Currently viewed meeting in app (with transcript info)
       currentViewedMeeting: currentViewedMeetingInfo,
@@ -10756,19 +10968,21 @@ ipcMain.handle('widget:get-recording-context', async () => {
         const now = new Date();
 
         // Filter to events starting within 10 minutes (or already started within last 5 min)
-        context.upcomingCalendarEvents = meetings.filter(m => {
-          const startTime = new Date(m.startTime);
-          const minutesUntilStart = (startTime - now) / (1000 * 60);
-          return minutesUntilStart >= -5 && minutesUntilStart <= 10;
-        }).map(m => ({
-          id: m.id,
-          title: m.title,
-          startTime: m.startTime,
-          endTime: m.endTime,
-          platform: m.platform || 'calendar',
-          participants: m.participants || [],
-          isCalendarEvent: true,
-        }));
+        context.upcomingCalendarEvents = meetings
+          .filter(m => {
+            const startTime = new Date(m.startTime);
+            const minutesUntilStart = (startTime - now) / (1000 * 60);
+            return minutesUntilStart >= -5 && minutesUntilStart <= 10;
+          })
+          .map(m => ({
+            id: m.id,
+            title: m.title,
+            startTime: m.startTime,
+            endTime: m.endTime,
+            platform: m.platform || 'calendar',
+            participants: m.participants || [],
+            isCalendarEvent: true,
+          }));
       } catch (calendarError) {
         logger.main.warn('[Widget] Failed to fetch calendar events:', calendarError.message);
       }
@@ -11037,23 +11251,21 @@ ipcMain.handle(
 
       // Find the meeting in either pastMeetings or upcomingMeetings
       let meeting = null;
-      let pastMeetingIndex = meetingsData.pastMeetings.findIndex(
-        m => m.id === validatedId
-      );
+      let pastMeetingIndex = meetingsData.pastMeetings.findIndex(m => m.id === validatedId);
 
       if (pastMeetingIndex !== -1) {
         meeting = meetingsData.pastMeetings[pastMeetingIndex];
       } else {
         // Check upcomingMeetings - calendar-imported or auto-started meetings may be here
-        const upcomingIndex = meetingsData.upcomingMeetings.findIndex(
-          m => m.id === validatedId
-        );
+        const upcomingIndex = meetingsData.upcomingMeetings.findIndex(m => m.id === validatedId);
         if (upcomingIndex !== -1) {
           // Move from upcomingMeetings to pastMeetings since recording is starting
           meeting = meetingsData.upcomingMeetings.splice(upcomingIndex, 1)[0];
           meetingsData.pastMeetings.unshift(meeting);
           pastMeetingIndex = 0;
-          console.log(`[Recording] Moved meeting ${validatedId} from upcomingMeetings to pastMeetings`);
+          console.log(
+            `[Recording] Moved meeting ${validatedId} from upcomingMeetings to pastMeetings`
+          );
         }
       }
 
@@ -11582,53 +11794,53 @@ ipcMain.handle(
 ipcMain.handle(
   'fetchTranscript',
   withValidation(stringIdSchema, async (event, meetingId) => {
-  try {
-    console.log(`[IPC] Manual transcript fetch requested for meeting: ${meetingId}`);
+    try {
+      console.log(`[IPC] Manual transcript fetch requested for meeting: ${meetingId}`);
 
-    // Read current meetings data
-    const data = await fileOperationManager.readMeetingsData();
+      // Read current meetings data
+      const data = await fileOperationManager.readMeetingsData();
 
-    // Find the meeting
-    const meeting = data.pastMeetings.find(m => m.id === meetingId);
+      // Find the meeting
+      const meeting = data.pastMeetings.find(m => m.id === meetingId);
 
-    if (!meeting) {
-      throw new Error(`Meeting not found: ${meetingId}`);
-    }
+      if (!meeting) {
+        throw new Error(`Meeting not found: ${meetingId}`);
+      }
 
-    if (!meeting.recordingId) {
-      throw new Error('Meeting does not have a recording ID - no recording was made');
-    }
+      if (!meeting.recordingId) {
+        throw new Error('Meeting does not have a recording ID - no recording was made');
+      }
 
-    if (!meeting.uploadToken) {
-      throw new Error('Meeting does not have an upload token - upload not completed');
-    }
+      if (!meeting.uploadToken) {
+        throw new Error('Meeting does not have an upload token - upload not completed');
+      }
 
-    // Check if transcript already exists
-    if (meeting.transcript && meeting.transcript.length > 0) {
-      console.log('[IPC] Transcript already exists for this meeting');
+      // Check if transcript already exists
+      if (meeting.transcript && meeting.transcript.length > 0) {
+        console.log('[IPC] Transcript already exists for this meeting');
+        return {
+          success: true,
+          message: 'Transcript already exists',
+          hasTranscript: true,
+        };
+      }
+
+      console.log(`[IPC] Starting transcript fetch for recordingId: ${meeting.recordingId}`);
+
+      // Start polling for transcript in background
+      // We don't await this - let it run async
+      pollRecallAITranscript(meeting.recordingId, meeting.recordingId, null, meetingId)
+        .then(() => {
+          console.log(`[IPC] Transcript fetch completed for meeting: ${meetingId}`);
+        })
+        .catch(error => {
+          console.error(`[IPC] Transcript fetch failed for meeting ${meetingId}:`, error);
+        });
+
       return {
         success: true,
-        message: 'Transcript already exists',
-        hasTranscript: true,
+        message: 'Transcript fetch started - check logs for progress',
       };
-    }
-
-    console.log(`[IPC] Starting transcript fetch for recordingId: ${meeting.recordingId}`);
-
-    // Start polling for transcript in background
-    // We don't await this - let it run async
-    pollRecallAITranscript(meeting.recordingId, meeting.recordingId, null, meetingId)
-      .then(() => {
-        console.log(`[IPC] Transcript fetch completed for meeting: ${meetingId}`);
-      })
-      .catch(error => {
-        console.error(`[IPC] Transcript fetch failed for meeting ${meetingId}:`, error);
-      });
-
-    return {
-      success: true,
-      message: 'Transcript fetch started - check logs for progress',
-    };
     } catch (error) {
       console.error('[IPC] Error starting transcript fetch:', error);
       return { success: false, error: error.message };
@@ -12227,7 +12439,7 @@ function initializeSpeechTimeline(windowId, recordingStartTime) {
     recordingStartTime,
     participants: new Map(),
     usingSdkTimestamps: false, // Set to true when first SDK relative timestamp is seen
-    lastSdkTimestampMs: 0,    // Track last SDK timestamp for closing open segments
+    lastSdkTimestampMs: 0, // Track last SDK timestamp for closing open segments
   });
   console.log(`[SpeechTimeline] Initialized for window: ${windowId}`);
 }
@@ -12301,7 +12513,9 @@ function processSpeechOn(evt) {
     }
     participant.currentStart = relativeTimeMs;
 
-    console.log(`[SpeechTimeline] ${participantName} started speaking at ${relativeTimeMs}ms${evtTimestamp?.relative != null ? ' (SDK timestamp)' : ' (Date.now fallback)'}`);
+    console.log(
+      `[SpeechTimeline] ${participantName} started speaking at ${relativeTimeMs}ms${evtTimestamp?.relative != null ? ' (SDK timestamp)' : ' (Date.now fallback)'}`
+    );
   } catch (error) {
     console.error('[SpeechTimeline] Error processing speech_on:', error);
   }
@@ -12381,7 +12595,7 @@ function getSpeechTimeline(windowId) {
     // Close any open speech segments using consistent timestamp basis
     if (data.currentStart !== null) {
       const closeTime = timeline.usingSdkTimestamps
-        ? timeline.lastSdkTimestampMs  // Use last known SDK timestamp to avoid mixed basis
+        ? timeline.lastSdkTimestampMs // Use last known SDK timestamp to avoid mixed basis
         : Date.now() - timeline.recordingStartTime;
       // Guard against negative-duration segments (e.g., lastSdkTimestampMs still 0)
       const safeCloseTime = Math.max(closeTime, data.currentStart);
@@ -12573,7 +12787,9 @@ async function pollRecallAITranscript(recordingId, transcriptId, windowId, meeti
     }
   }
 
-  throw new Error(`Recall.ai transcript polling timed out after ${MAX_POLL_ATTEMPTS * 5} seconds for recording ${recordingId}`);
+  throw new Error(
+    `Recall.ai transcript polling timed out after ${MAX_POLL_ATTEMPTS * 5} seconds for recording ${recordingId}`
+  );
 }
 
 /**
@@ -12980,7 +13196,8 @@ function loadAutoSummaryPrompt(needsTitleSuggestion) {
 
   // 3. Minimal fallback — should never reach here in normal operation
   console.warn('[AutoSummary] No template file found, using minimal fallback');
-  let fallback = 'You are an AI assistant that summarizes meeting transcripts. Format your response with markdown headings.\n\n';
+  let fallback =
+    'You are an AI assistant that summarizes meeting transcripts. Format your response with markdown headings.\n\n';
   if (needsTitleSuggestion) {
     fallback += '# Suggested Title\n[5-8 word specific title]\n\n';
   }
@@ -13056,13 +13273,22 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
     let renamedByContentPass = false;
     try {
       const roster = (meeting.participants || []).map(p => ({
-        name: p.name, email: p.email || null, organization: p.organization || null,
+        name: p.name,
+        email: p.email || null,
+        organization: p.organization || null,
       }));
       if (userProfile?.name) {
-        roster.push({ name: userProfile.name, email: userProfile.email || null, organization: null });
+        roster.push({
+          name: userProfile.name,
+          email: userProfile.email || null,
+          organization: null,
+        });
       }
       const pass = await runContentAwarePass(
-        { generateCompletion: opts => llmService.generateCompletion(opts), log: msg => console.log(msg) },
+        {
+          generateCompletion: opts => llmService.generateCompletion(opts),
+          log: msg => console.log(msg),
+        },
         {
           transcript: meeting.transcript,
           speakerMapping: meeting.speakerMapping || {},
@@ -13074,7 +13300,10 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       if (pass.changed.length > 0) {
         meeting.speakerMapping = pass.updatedMapping;
         if (speakerMatcher) {
-          meeting.transcript = speakerMatcher.applyMappingToTranscript(meeting.transcript, pass.updatedMapping);
+          meeting.transcript = speakerMatcher.applyMappingToTranscript(
+            meeting.transcript,
+            pass.updatedMapping
+          );
         }
         // Rare path — accepts a prompt-cache miss so the summary prose
         // matches the corrected transcript (speaker names changed).
@@ -13084,7 +13313,13 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
       // Rename only meetings not yet synced to Obsidian: renaming a synced
       // meeting creates a DUPLICATE vault file on next export (filenames are
       // recomputed from the title; old files are never removed).
-      if (shouldRenameFromContentPass({ passTitle: pass.title, obsidianLink: meeting.obsidianLink, platform: meeting.platform })) {
+      if (
+        shouldRenameFromContentPass({
+          passTitle: pass.title,
+          obsidianLink: meeting.obsidianLink,
+          platform: meeting.platform,
+        })
+      ) {
         console.log(`[ContentPass] Renaming meeting: "${meeting.title}" -> "${pass.title}"`);
         meeting.title = pass.title;
         renamedByContentPass = true;
@@ -13113,7 +13348,8 @@ async function generateMeetingSummary(meeting, progressCallback = null) {
     const systemMessage = loadAutoSummaryPrompt(needsTitleSuggestion);
 
     // Dynamic user prompt - only the instruction (changes per call type)
-    const userPrompt = 'Summarize the following meeting transcript with the EXACT format specified in your instructions.';
+    const userPrompt =
+      'Summarize the following meeting transcript with the EXACT format specified in your instructions.';
 
     console.log(
       `[AutoSummary] Using prompt caching: ${cacheableContent.length} chars cacheable, ${userPrompt.length} chars dynamic`
