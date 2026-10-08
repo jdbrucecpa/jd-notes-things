@@ -32,7 +32,7 @@ const { spawn } = require('child_process');
 const crypto = require('crypto');
 const RecallAiSdk = require('@recallai/desktop-sdk');
 const axios = require('axios');
-const { updateElectronApp } = require('update-electron-app');
+const { updateElectronApp, UpdateSourceType } = require('update-electron-app');
 const sdkLogger = require('./sdk-logger');
 const {
   MeetingsDataSchema,
@@ -431,7 +431,7 @@ let gmail = null;
 
 let mainWindow;
 // Set once Squirrel has downloaded an update (applied on next launch). Later
-// hourly checks report 'update-not-available' because the package is already
+// periodic checks report 'update-not-available' because the package is already
 // local — without this, they overwrite the "Restart Now" banner with
 // "up to date" and the update silently waits until the next manual restart.
 let downloadedUpdate = null;
@@ -2144,12 +2144,26 @@ app.whenReady().then(async () => {
   // got stuck multiple versions behind. Restoring update-electron-app fixes
   // that: it sets the feedURL with the correct headers/serverType, polls on
   // an interval, and cooperates with Squirrel.Windows.
+  //
+  // The feed is GitHub's releases/latest/download rather than the default
+  // update.electronjs.org, whose cache kept serving the previous release for
+  // a while after publishing (so "Check Now" said "latest version") and has
+  // served corrupt RELEASES files. Squirrel fetches <feed>/RELEASES and then
+  // the .nupkg it names relative to the feed, and latest/download redirects
+  // both to the newest release's assets. Safe because the release workflow
+  // only publishes a release after its installer assets are attached.
+  //
+  // Checks run at launch, once a day while the app stays open, and on demand
+  // via Settings → Check Now; more frequent polling isn't needed.
   if (!process.env.ELECTRON_IS_DEV && app.isPackaged) {
     logger.main.info('[AutoUpdater] Initializing auto-updater...');
     try {
       updateElectronApp({
-        repo: 'jdbrucecpa/jd-notes-things',
-        updateInterval: '1 hour',
+        updateSource: {
+          type: UpdateSourceType.StaticStorage,
+          baseUrl: 'https://github.com/jdbrucecpa/jd-notes-things/releases/latest/download',
+        },
+        updateInterval: '1 day',
         notifyUser: false, // Custom in-app banner replaces the default dialog
         logger: {
           log: (...args) => logger.main.info('[AutoUpdater]', ...args),
@@ -9094,8 +9108,9 @@ ipcMain.handle('settings:getAppVersion', async () => {
  * Map raw autoUpdater errors to a short user-facing message. Squirrel.Windows
  * errors are often full .NET stack traces (e.g. "Command failed: 4294967295
  * System.AggregateException ... Remote release File is empty or corrupted"),
- * which happens when update.electronjs.org serves a transiently poisoned
- * cache — it resolves on its own, and update-electron-app retries hourly.
+ * which happens when the feed serves an empty or corrupt RELEASES file (seen
+ * from update.electronjs.org's cache before the feed moved to GitHub) — it
+ * resolves on its own, and update-electron-app retries daily and at launch.
  * Callers must still log the full error via logger.main.error.
  */
 function friendlyUpdateErrorMessage(error) {
