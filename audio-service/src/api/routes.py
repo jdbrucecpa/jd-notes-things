@@ -11,9 +11,10 @@ from api.schemas import (
     IdentifySpeakersRequest, IdentifySpeakersResponse,
     HealthResponse, ModelsResponse, UnloadResponse, WarmupResponse,
     TranscriptEntry, DiarizationSegment, SpeakerEmbedding,
-    QualityInfo,
+    QualityInfo, ModelStatusResponse, ModelCacheStatus, PrefetchRequest,
 )
 from config import VERSION
+from models import hub
 from pipeline.identifier import identify_speakers
 
 logger = logging.getLogger(__name__)
@@ -77,28 +78,34 @@ def warmup(request: Request):
     doesn't pay the multi-minute load/download cost."""
     mgr = get_model_manager(request)
 
+    def _transcriber():
+        from models.transcriber import Transcriber
+        return Transcriber()
+
+    def _diarizer():
+        from models.diarizer import Diarizer
+        return Diarizer()
+
+    def _embedder():
+        from models.embedder import Embedder
+        return Embedder()
+
+    loaders = {"transcriber": _transcriber, "diarizer": _diarizer, "embedder": _embedder}
+    # With one model resident at a time, the first stage evicts the rest —
+    # warming them would only cost VRAM and load time.
+    if mgr.low_vram:
+        loaders = {"transcriber": _transcriber}
+
     def _load_all():
         with _gpu_lock:
-            try:
-                from models.transcriber import Transcriber
-                mgr.get_or_load("transcriber", lambda: Transcriber())
-            except Exception:
-                logger.exception("Warmup failed loading transcriber")
-
-            try:
-                from models.diarizer import Diarizer
-                mgr.get_or_load("diarizer", lambda: Diarizer())
-            except Exception:
-                logger.exception("Warmup failed loading diarizer")
-
-            try:
-                from models.embedder import Embedder
-                mgr.get_or_load("embedder", lambda: Embedder())
-            except Exception:
-                logger.exception("Warmup failed loading embedder")
+            for name, loader in loaders.items():
+                try:
+                    mgr.get_or_load(name, loader)
+                except Exception:
+                    logger.exception(f"Warmup failed loading {name}")
 
     threading.Thread(target=_load_all, daemon=True).start()
-    return WarmupResponse(loading=["transcriber", "diarizer", "embedder"])
+    return WarmupResponse(loading=list(loaders))
 
 
 @router.get("/models", response_model=ModelsResponse)
@@ -108,6 +115,21 @@ def models():
         diarization=["pyannote-community-1"],
         embedding=["wespeaker-voxceleb-resnet34-LM"],
     )
+
+
+@router.get("/models/status", response_model=ModelStatusResponse)
+def models_status():
+    """Whether each gated model is in the local Hugging Face cache."""
+    return ModelStatusResponse(models=[ModelCacheStatus(**m) for m in hub.model_status()])
+
+
+@router.post("/models/prefetch", response_model=ModelStatusResponse)
+def models_prefetch(req: PrefetchRequest):
+    """Download any uncached gated model. The app passes the token in the
+    body so a token saved after the service started is used without a
+    restart; falls back to the token the service was launched with."""
+    token = req.token or os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+    return ModelStatusResponse(models=[ModelCacheStatus(**m) for m in hub.prefetch_models(token)])
 
 
 @router.post("/process", response_model=ProcessResponse)
@@ -199,10 +221,11 @@ def embed_speakers(req: EmbedSpeakersRequest, request: Request):
         from models.embedder import Embedder
         return Embedder()
 
-    embedder = mgr.get_or_load("embedder", _load_embedder)
     segments_raw = [{"speaker": s.speaker, "start": s.start, "end": s.end} for s in req.segments]
 
     with _gpu_lock:
+        mgr.make_room_for("embedder")
+        embedder = mgr.get_or_load("embedder", _load_embedder)
         results = embedder.embed_segments(req.audioPath, segments_raw)
 
     return EmbedSpeakersResponse(

@@ -157,6 +157,7 @@ export function initializeSettingsUI() {
   const aiServicePathInput = document.getElementById('aiServicePathInput');
   const hfTokenInput = document.getElementById('hfTokenInput');
   const hfTokenSaveBtn = document.getElementById('hfTokenSaveBtn');
+  const aiModelDownloadBtn = document.getElementById('aiModelDownloadBtn');
   const localLLMUrlInput = document.getElementById('localLLMUrlInput');
   const fullyLocalPresetBtn = document.getElementById('fullyLocalPresetBtn');
   // Audio source controls (v2.0 mixer)
@@ -488,6 +489,7 @@ export function initializeSettingsUI() {
       aiServiceStartBtn.textContent = 'Start';
       aiServiceStartBtn.disabled = false;
       await refreshAiServiceStatus();
+      await refreshModelReadiness();
     });
   }
 
@@ -511,6 +513,7 @@ export function initializeSettingsUI() {
       aiServiceRepairBtn.textContent = 'Repair local AI';
       aiServiceRepairBtn.disabled = false;
       await refreshAiServiceStatus();
+      await refreshModelReadiness();
     });
   }
 
@@ -528,6 +531,9 @@ export function initializeSettingsUI() {
           if (hfTokenInput) hfTokenInput.value = '';
           notifySuccess('Hugging Face token saved');
           await refreshHfTokenHint();
+          // Saving the token starts the model download in the main process;
+          // joining it here keeps the readiness line in step with it.
+          await downloadModels();
         } else {
           notifyError('Failed to save Hugging Face token: ' + (result?.error || 'unknown error'));
         }
@@ -535,6 +541,10 @@ export function initializeSettingsUI() {
         notifyError('Failed to save Hugging Face token: ' + (error?.message || 'unknown error'));
       }
     });
+  }
+
+  if (aiModelDownloadBtn) {
+    aiModelDownloadBtn.addEventListener('click', () => downloadModels());
   }
 
   // AI Service Path
@@ -871,6 +881,69 @@ export function initializeSettingsUI() {
     } catch {
       hint.textContent = '';
     }
+  }
+
+  const MODEL_LABELS = { diarizer: 'speaker detection', embedder: 'voice profiles' };
+
+  function setModelReadiness(text, state, { showDownload = false } = {}) {
+    const el = document.getElementById('aiModelReadiness');
+    if (el) {
+      el.textContent = text;
+      el.className = state ? `service-status ${state}` : '';
+    }
+    if (aiModelDownloadBtn)
+      aiModelDownloadBtn.style.display = showDownload ? 'inline-block' : 'none';
+  }
+
+  /**
+   * Show whether the gated speaker models are downloaded, so a fresh machine
+   * learns it needs a token here instead of from a failed transcription.
+   */
+  async function refreshModelReadiness() {
+    try {
+      const s = await window.electronAPI.aiServiceModelStatus();
+      if (!s?.success) {
+        setModelReadiness('Speaker models: status unavailable', null);
+      } else if (!s.running) {
+        setModelReadiness('Speaker models: start the local AI service to check', null);
+      } else if (!s.supported) {
+        // Older service (custom path override) without /models/status.
+        setModelReadiness('', null);
+      } else if (s.downloading) {
+        setModelReadiness('Speaker models: downloading…', 'checking');
+      } else {
+        const missing = s.models.filter(m => !m.cached);
+        if (missing.length === 0) {
+          setModelReadiness('Speaker models: ready', 'connected');
+        } else {
+          const names = missing.map(m => MODEL_LABELS[m.name] || m.name).join(', ');
+          setModelReadiness(
+            s.hasToken
+              ? `Speaker models not downloaded (${names})`
+              : `Speaker models not downloaded (${names}) — save a token to download them`,
+            'disconnected',
+            { showDownload: s.hasToken }
+          );
+        }
+      }
+    } catch {
+      setModelReadiness('Speaker models: status unavailable', null);
+    }
+  }
+
+  async function downloadModels() {
+    setModelReadiness('Speaker models: downloading…', 'checking');
+    try {
+      const result = await window.electronAPI.aiServicePrefetchModels();
+      if (result?.success) {
+        if (result.supported !== false) notifySuccess('Speaker models ready');
+      } else if (result?.error) {
+        notifyError('Speaker model download failed: ' + result.error);
+      }
+    } catch (error) {
+      notifyError('Speaker model download failed: ' + (error?.message || 'unknown error'));
+    }
+    await refreshModelReadiness();
   }
 
   /**
@@ -1283,6 +1356,7 @@ export function initializeSettingsUI() {
     checkLocalLLMStatus();
     refreshAiServiceStatus();
     refreshHfTokenHint();
+    refreshModelReadiness();
 
     // v2.0: Show/hide audio sources section based on recording provider
     setTimeout(() => updateAudioSourcesVisibility(), 100);

@@ -4,7 +4,7 @@ from models.manager import ModelManager
 
 
 def test_warmup_reports_models_and_returns_immediately(monkeypatch):
-    mgr = ModelManager()
+    mgr = ModelManager(low_vram=False)
     loaded = []
     # get_or_load is called from a background thread; stub it to record names
     monkeypatch.setattr(
@@ -36,7 +36,7 @@ def test_warmup_reports_models_and_returns_immediately(monkeypatch):
 
 def test_warmup_continues_on_per_model_failure(monkeypatch):
     """Verify that if one model fails to load, the others are still attempted."""
-    mgr = ModelManager()
+    mgr = ModelManager(low_vram=False)
     loaded = []
     failed = []
 
@@ -72,3 +72,21 @@ def test_warmup_continues_on_per_model_failure(monkeypatch):
     # transcriber and embedder should load despite diarizer failure
     assert set(loaded) == {"transcriber", "embedder"}
     assert set(failed) == {"diarizer"}
+
+
+def test_warmup_low_vram_only_warms_transcriber(monkeypatch):
+    """With one model resident at a time, warming the others is wasted work."""
+    mgr = ModelManager(low_vram=True)
+    loaded = []
+    monkeypatch.setattr(mgr, "get_or_load", lambda name, loader: loaded.append(name))
+    monkeypatch.setattr("models.transcriber.Transcriber", type("MockTranscriber", (), {}))
+
+    resp = TestClient(create_app(mgr)).post("/warmup")
+
+    assert resp.json()["loading"] == ["transcriber"]
+    import time
+    for _ in range(50):
+        if loaded:
+            break
+        time.sleep(0.05)
+    assert loaded == ["transcriber"]

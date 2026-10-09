@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'path';
 
 vi.mock('child_process', () => ({
@@ -327,6 +327,54 @@ describe('AIServiceManager', () => {
       expect(result).toBe(false);
       expect(manager.lastError).toMatch(/uv sync failed/);
       expect(manager._spawn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('gated model status / prefetch', () => {
+    // CJS require so the spy lands on the same module instance the manager uses.
+    const audioServiceHttp = require('../../src/main/utils/audioServiceHttp.js');
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    it('prefetch sends the stored token in the body', async () => {
+      manager.setHfTokenGetter(async () => 'hf_saved');
+      const spy = vi
+        .spyOn(audioServiceHttp, 'postJsonWhileHealthy')
+        .mockResolvedValue({ models: [{ name: 'diarizer', cached: true }] });
+
+      const result = await manager.prefetchModels();
+
+      expect(spy).toHaveBeenCalledWith('http://localhost:8374', '/models/prefetch', {
+        token: 'hf_saved',
+      });
+      expect(result).toEqual({ supported: true, models: [{ name: 'diarizer', cached: true }] });
+    });
+
+    it('prefetch reports an older service (404) as unsupported', async () => {
+      vi.spyOn(audioServiceHttp, 'postJsonWhileHealthy').mockRejectedValue(
+        new audioServiceHttp.AudioServiceHttpError('JD Audio Service returned 404: Not Found', 404)
+      );
+      await expect(manager.prefetchModels()).resolves.toEqual({ supported: false, models: [] });
+    });
+
+    it('status reports an older service (404) as unsupported', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({ ok: false, status: 404 }))
+      );
+      await expect(manager.getModelStatus()).resolves.toEqual({ supported: false, models: [] });
+    });
+
+    it('status returns the per-model cache list', async () => {
+      const models = [{ name: 'diarizer', repo: 'pyannote/x', cached: false, error: null }];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ models }) }))
+      );
+      await expect(manager.getModelStatus()).resolves.toEqual({ supported: true, models });
     });
   });
 });

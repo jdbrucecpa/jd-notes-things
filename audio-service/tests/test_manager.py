@@ -87,3 +87,45 @@ class TestModelManager:
             unloaded = mgr.collect_idle()
             assert unloaded == ["test"]
             mock_free.assert_called_once()
+
+
+class TestGpuMemoryMode:
+    def _loaded(self, manager, *names):
+        for name in names:
+            manager.get_or_load(name, MagicMock(return_value=MagicMock()))
+
+    def test_low_vram_keeps_only_the_requested_model(self):
+        manager = ModelManager(low_vram=True)
+        self._loaded(manager, "transcriber", "aligner", "embedder")
+        with patch.object(ModelManager, "_free_gpu_memory"):
+            manager.make_room_for("diarizer")
+        assert manager.loaded_model_names() == []
+
+        self._loaded(manager, "transcriber", "aligner")
+        with patch.object(ModelManager, "_free_gpu_memory"):
+            manager.make_room_for("aligner")
+        assert manager.loaded_model_names() == ["aligner"]
+
+    def test_high_vram_leaves_models_resident(self):
+        manager = ModelManager(low_vram=False)
+        self._loaded(manager, "transcriber", "aligner")
+        manager.make_room_for("diarizer")
+        assert set(manager.loaded_model_names()) == {"transcriber", "aligner"}
+
+    @pytest.mark.parametrize("mode,expected", [("low", True), ("high", False)])
+    def test_mode_override(self, monkeypatch, mode, expected):
+        monkeypatch.setattr("config.GPU_MEMORY_MODE", mode)
+        assert ModelManager().low_vram is expected
+
+    @pytest.mark.parametrize("total_gb,expected", [(8, True), (12, True), (24, False)])
+    def test_auto_detects_from_gpu_size(self, monkeypatch, total_gb, expected):
+        monkeypatch.setattr("config.GPU_MEMORY_MODE", "auto")
+        props = MagicMock(total_memory=total_gb * 2**30)
+        with patch("torch.cuda.is_available", return_value=True), \
+             patch("torch.cuda.get_device_properties", return_value=props):
+            assert ModelManager().low_vram is expected
+
+    def test_auto_without_cuda_is_not_low_vram(self, monkeypatch):
+        monkeypatch.setattr("config.GPU_MEMORY_MODE", "auto")
+        with patch("torch.cuda.is_available", return_value=False):
+            assert ModelManager().low_vram is False

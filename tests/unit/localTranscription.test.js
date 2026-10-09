@@ -16,38 +16,34 @@ const { describe, it, expect, vi, beforeEach, afterEach } = await import('vitest
 // The service is a singleton — require directly.
 // ============================================================
 const transcriptionService = require('../../src/main/services/transcriptionService.js');
+// /process goes over plain http (fetch caps responses at 300s), so it's
+// mocked by spying on the helper rather than stubbing fetch.
+const audioServiceHttp = require('../../src/main/utils/audioServiceHttp.js');
 
 // ============================================================
 // Helpers / fixtures
 // ============================================================
 
-function makeMockFetch({ healthOk = true, processData = null } = {}) {
+const PROCESS_RESPONSE = {
+  text: 'Hello world',
+  entries: [
+    {
+      speaker: 'Speaker A',
+      speakerId: 'spk_0',
+      text: 'Hello world',
+      timestamp: 1.5, // seconds
+      words: [{ word: 'Hello', start: 1.5, end: 1.8 }],
+    },
+  ],
+  segments: null,
+  confidence: 0.92,
+  duration: 45.0, // real JD Audio Service field name; normalizer maps it to result.audio_duration
+};
+
+function makeMockFetch({ healthOk = true } = {}) {
   return vi.fn(async (url, _opts) => {
     if (url.endsWith('/health')) {
       return { ok: healthOk, status: healthOk ? 200 : 503 };
-    }
-    if (url.endsWith('/process')) {
-      const body = processData ?? {
-        text: 'Hello world',
-        entries: [
-          {
-            speaker: 'Speaker A',
-            speakerId: 'spk_0',
-            text: 'Hello world',
-            timestamp: 1.5, // seconds
-            words: [{ word: 'Hello', start: 1.5, end: 1.8 }],
-          },
-        ],
-        segments: null,
-        confidence: 0.92,
-        duration: 45.0, // real JD Audio Service field name; normalizer maps it to result.audio_duration
-      };
-      return {
-        ok: true,
-        status: 200,
-        json: async () => body,
-        text: async () => JSON.stringify(body),
-      };
     }
     throw new Error(`Unexpected fetch URL: ${url}`);
   });
@@ -88,17 +84,18 @@ describe('TranscriptionService — provider map', () => {
 
 describe('transcribeWithLocal — success path', () => {
   let mockFetch;
+  let postJsonSpy;
   let mockTaskManager;
 
   beforeEach(() => {
     mockFetch = makeMockFetch();
     vi.stubGlobal('fetch', mockFetch);
+    postJsonSpy = vi
+      .spyOn(audioServiceHttp, 'postJsonWhileHealthy')
+      .mockResolvedValue(PROCESS_RESPONSE);
 
     mockTaskManager = makeMockTaskManager();
     transcriptionService.setBackgroundTaskManager(mockTaskManager);
-
-    // Stub fs.statSync so the file doesn't need to exist
-    vi.spyOn(require('fs'), 'statSync').mockReturnValue({ size: 5 * 1024 * 1024 }); // 5 MB
   });
 
   afterEach(() => {
@@ -126,14 +123,14 @@ describe('transcribeWithLocal — success path', () => {
       vocabulary: ['Acme', 'TPS'],
     });
 
-    const processCall = mockFetch.mock.calls.find(([url]) => url.endsWith('/process'));
-    expect(processCall).toBeDefined();
+    expect(postJsonSpy).toHaveBeenCalledTimes(1);
+    const [baseUrl, route, body, opts] = postJsonSpy.mock.calls[0];
+    expect(baseUrl).toBe('http://localhost:8374');
+    expect(route).toBe('/process');
+    // Local GPU work has no deadline — only a health heartbeat.
+    expect(opts).not.toHaveProperty('timeoutMs');
+    expect(typeof opts.onHeartbeat).toBe('function');
 
-    const [url, reqOpts] = processCall;
-    expect(url).toBe('http://localhost:8374/process');
-    expect(reqOpts.method).toBe('POST');
-
-    const body = JSON.parse(reqOpts.body);
     expect(body.audioPath).toBe('/fake/audio.mp3');
     expect(body.options.speakerNames).toEqual(['Alice', 'Bob']);
     expect(body.options.minSpeakers).toBe(2);
@@ -217,7 +214,6 @@ describe('transcribeWithLocal — error paths', () => {
   beforeEach(() => {
     mockTaskManager = makeMockTaskManager();
     transcriptionService.setBackgroundTaskManager(mockTaskManager);
-    vi.spyOn(require('fs'), 'statSync').mockReturnValue({ size: 1 * 1024 * 1024 });
   });
 
   afterEach(() => {
@@ -264,17 +260,9 @@ describe('transcribeWithLocal — error paths', () => {
   });
 
   it('throws when /process returns a non-ok status', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async url => {
-        if (url.endsWith('/health')) return { ok: true, status: 200 };
-        return {
-          ok: false,
-          status: 500,
-          statusText: 'Internal Server Error',
-          text: async () => 'crash',
-        };
-      })
+    vi.stubGlobal('fetch', makeMockFetch());
+    vi.spyOn(audioServiceHttp, 'postJsonWhileHealthy').mockRejectedValue(
+      new audioServiceHttp.AudioServiceHttpError('JD Audio Service returned 500: crash', 500)
     );
 
     await expect(
@@ -282,6 +270,10 @@ describe('transcribeWithLocal — error paths', () => {
         aiServiceUrl: 'http://localhost:8374',
       })
     ).rejects.toThrow('JD Audio Service returned 500');
+    expect(mockTaskManager.failTask).toHaveBeenCalledWith(
+      'task-001',
+      expect.stringContaining('500')
+    );
   });
 });
 

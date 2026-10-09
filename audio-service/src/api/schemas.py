@@ -130,3 +130,18 @@ class UnloadResponse(BaseModel):
 
 class WarmupResponse(BaseModel):
     loading: list[str]
+
+
+class ModelCacheStatus(BaseModel):
+    name: str
+    repo: str
+    cached: bool
+    error: str | None = None
+
+
+class ModelStatusResponse(BaseModel):
+    models: list[ModelCacheStatus]
+
+
+class PrefetchRequest(BaseModel):
+    token: str | None = None

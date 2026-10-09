@@ -127,3 +127,32 @@ class TestProcessor:
         result = self.processor.process("test.mp3")
         assert result["text"] == "Hello"
 
+
+    def test_process_makes_room_before_each_stage_and_frees_alignment_cache(self):
+        transcription = {
+            "text": "Hi", "words": [{"word": "Hi", "start": 0.0, "end": 0.5}],
+            "segments": [{"text": "Hi", "start": 0.0, "end": 0.5}],
+            "duration": 0.5, "quality": None,
+        }
+        models = {
+            "transcriber": MagicMock(**{"transcribe.return_value": transcription}),
+            "aligner": MagicMock(**{"align.return_value": transcription}),
+            "diarizer": MagicMock(**{"diarize.return_value": [
+                {"speaker": "SPEAKER_00", "start": 0.0, "end": 0.5},
+            ]}),
+        }
+        self.mock_manager.get_or_load.side_effect = lambda name, loader: models[name]
+
+        self.processor.process("test.mp3")
+
+        order = [
+            (c[0], c[1][0] if c[1] else None)
+            for c in self.mock_manager.mock_calls
+            if c[0] in ("make_room_for", "get_or_load", "release_cached_memory")
+        ]
+        assert order == [
+            ("make_room_for", "transcriber"), ("get_or_load", "transcriber"),
+            ("make_room_for", "aligner"), ("get_or_load", "aligner"),
+            ("release_cached_memory", None),
+            ("make_room_for", "diarizer"), ("get_or_load", "diarizer"),
+        ]

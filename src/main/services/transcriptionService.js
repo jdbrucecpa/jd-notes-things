@@ -2,6 +2,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const { audioServiceGpuQueue } = require('./gpuQueue');
+const audioServiceHttp = require('../utils/audioServiceHttp');
 
 // Axios sets error.message to "Request failed with status code 400" and discards
 // the response body. Surface the body so toasts/logs show the real cause
@@ -179,27 +180,22 @@ class TranscriptionService {
       }
       console.log('[Local] JD Audio Service is healthy');
 
-      // Estimate timeout from file size (rough: 1 MB ≈ 1 min of audio at 128 kbps)
-      const stats = fs.statSync(audioFilePath);
-      const estimatedDurationSec = stats.size / ((128 * 1024) / 8); // bytes → seconds
-      const timeoutMs = Math.round((estimatedDurationSec * 0.5 + 60) * 1000);
-      console.log(
-        `[Local] File size: ${(stats.size / 1024).toFixed(2)} KB, estimated duration: ${estimatedDurationSec.toFixed(0)}s, timeout: ${(timeoutMs / 1000).toFixed(0)}s`
-      );
-
-      // POST /process — queued behind any other meeting's GPU work so the
-      // timeout only starts once this request is actually sent.
+      // POST /process — queued behind any other meeting's GPU work. No time
+      // limit: local transcription runs as long as the GPU needs, and only
+      // fails if the service crashes or stops answering health checks (see
+      // audioServiceHttp.js). Not fetch, which gives up on any response
+      // slower than 300s.
       if (audioServiceGpuQueue.pending > 0) {
         this.updateTaskProgress(taskId, 8, 'Waiting for another meeting to finish processing...');
         console.log(`[Local] Waiting behind ${audioServiceGpuQueue.pending} queued GPU job(s)`);
       }
-      const response = await audioServiceGpuQueue.run(() => {
-        this.updateTaskProgress(taskId, 10, 'Sending audio to JD Audio Service...');
+      const data = await audioServiceGpuQueue.run(() => {
+        this.updateTaskProgress(taskId, 10, 'Transcribing on JD Audio Service...');
         console.log('[Local] POSTing to /process...');
-        return fetch(`${aiServiceUrl}/process`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        return audioServiceHttp.postJsonWhileHealthy(
+          aiServiceUrl,
+          '/process',
+          {
             audioPath: audioFilePath,
             options: {
               speakerNames: options.speakerNames,
@@ -207,18 +203,21 @@ class TranscriptionService {
               maxSpeakers: options.maxSpeakers,
               vocabulary: options.vocabulary,
             },
-          }),
-          signal: AbortSignal.timeout(timeoutMs),
-        });
+          },
+          {
+            onHeartbeat: elapsedMs => {
+              const minutes = Math.floor(elapsedMs / 60000);
+              this.updateTaskProgress(
+                taskId,
+                10,
+                `Transcribing on JD Audio Service... (${minutes} min elapsed)`
+              );
+            },
+          }
+        );
       });
 
-      if (!response.ok) {
-        const errText = await response.text().catch(() => response.statusText);
-        throw new Error(`JD Audio Service returned ${response.status}: ${errText}`);
-      }
-
       this.updateTaskProgress(taskId, 80, 'Processing transcript...');
-      const data = await response.json();
 
       // Normalize to standard shape
       // Service returns timestamps in seconds; convert to milliseconds

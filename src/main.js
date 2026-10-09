@@ -467,6 +467,74 @@ let audioServiceProvisioner = null;
 // provisioning path and the aiService:repair IPC handler so a manual repair
 // can't race a first-run provision (or vice versa).
 let aiServiceProvisionInFlight = false;
+// Shared promise for an in-progress gated-model download, so launch, a token
+// save, and the Settings button all join one download instead of racing.
+let gatedModelPrefetchInFlight = null;
+
+/**
+ * Download any gated PyAnnote model missing from the audio service's
+ * Hugging Face cache. Without this a fresh machine only finds out the token
+ * is missing when diarization 500s minutes into the first transcription.
+ * Never throws; resolves { success, supported, models, error }.
+ *
+ * @param {object} [opts]
+ * @param {boolean} [opts.requireStoredToken] - skip (no task, no error
+ *   toast) when no token is saved — used at launch, where a cloud-only user
+ *   shouldn't get a failed background task every startup.
+ */
+function prefetchGatedModels({ requireStoredToken = false } = {}) {
+  if (!gatedModelPrefetchInFlight) {
+    gatedModelPrefetchInFlight = runGatedModelPrefetch(requireStoredToken).finally(() => {
+      gatedModelPrefetchInFlight = null;
+    });
+  }
+  return gatedModelPrefetchInFlight;
+}
+
+async function runGatedModelPrefetch(requireStoredToken) {
+  let taskId = null;
+  try {
+    if (!(await aiServiceManager.checkHealth())) {
+      return { success: false, error: 'Local AI service is not running' };
+    }
+    const status = await aiServiceManager.getModelStatus();
+    if (!status.supported) return { success: true, supported: false, models: [] };
+
+    const missing = status.models.filter(m => !m.cached);
+    if (missing.length === 0) return { success: true, supported: true, models: status.models };
+
+    if (requireStoredToken && !(await keyManagementService.getKey('HF_TOKEN'))) {
+      logger.main.warn(
+        `[AIService] Gated models not cached and no HF token saved: ${missing.map(m => m.repo).join(', ')}`
+      );
+      return {
+        success: false,
+        supported: true,
+        models: status.models,
+        error: 'Hugging Face token required',
+      };
+    }
+
+    taskId = backgroundTaskManager.addTask({
+      type: 'ai-model-download',
+      description: 'Downloading local AI speaker models',
+    });
+    logger.main.info(`[AIService] Prefetching ${missing.map(m => m.repo).join(', ')}`);
+    const result = await aiServiceManager.prefetchModels();
+    const failed = result.models.find(m => m.error);
+    if (failed) {
+      logger.main.warn(`[AIService] Model prefetch failed for ${failed.repo}: ${failed.error}`);
+      backgroundTaskManager.failTask(taskId, failed.error);
+      return { success: false, supported: true, models: result.models, error: failed.error };
+    }
+    backgroundTaskManager.completeTask(taskId);
+    return { success: true, supported: true, models: result.models };
+  } catch (error) {
+    logger.main.warn(`[AIService] Model prefetch error: ${error.message}`);
+    if (taskId) backgroundTaskManager.failTask(taskId, error.message);
+    return { success: false, error: error.message };
+  }
+}
 
 // Meeting monitor state
 const notifiedMeetings = new Set(); // Track meetings we've shown notifications for
@@ -1827,8 +1895,9 @@ app.whenReady().then(async () => {
       uvPath: bundledUvPath,
     });
     aiServiceManager.setProvisioner(audioServiceProvisioner);
-    aiServiceManager.setHfTokenGetter(() => keyManagementService.getKey('HF_TOKEN'));
   }
+  // Used for the bundled launch env and for model prefetch (either mode).
+  aiServiceManager.setHfTokenGetter(() => keyManagementService.getKey('HF_TOKEN'));
 
   // One-time migration: the bundled service replaces the old "point Settings
   // at a manual jd-audio-service checkout" flow. Clear the stale path so the
@@ -1886,6 +1955,10 @@ app.whenReady().then(async () => {
           else backgroundTaskManager.failTask(taskId, aiServiceManager.lastError || 'setup failed');
         }
         if (healthy) {
+          // Fetch gated models before warmup so warmup can load them on a
+          // fresh machine. Skipped without a token — Settings shows what's
+          // missing instead of failing a background task on every launch.
+          await prefetchGatedModels({ requireStoredToken: true });
           // Preload models so the first transcription is instant.
           try {
             await audioServiceGpuQueue.run(() =>
@@ -7618,6 +7691,28 @@ ipcMain.handle('aiService:repair', async () => {
   }
 });
 
+// Gated speaker-model readiness for the AI Services tab.
+ipcMain.handle('aiService:modelStatus', async () => {
+  try {
+    const hasToken = Boolean(await keyManagementService.getKey('HF_TOKEN'));
+    if (!(await aiServiceManager.checkHealth())) {
+      return { success: true, running: false, hasToken };
+    }
+    const status = await aiServiceManager.getModelStatus();
+    return {
+      success: true,
+      running: true,
+      hasToken,
+      downloading: gatedModelPrefetchInFlight !== null,
+      ...status,
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('aiService:prefetchModels', () => prefetchGatedModels());
+
 // ===================================================================
 // End LLM Provider Management
 // ===================================================================
@@ -10090,6 +10185,10 @@ ipcMain.handle(
       }
 
       await keyManagementService.setKey(keyName, value);
+      // A new HF token is what a fresh machine is usually waiting on — fetch
+      // the gated models now (from either Settings tab) rather than at the
+      // first transcription. Fire-and-forget; progress is a background task.
+      if (keyName === 'HF_TOKEN') prefetchGatedModels();
       return { success: true };
     } catch (error) {
       log.error(`[IPC] keys:set failed for ${keyName}:`, error);

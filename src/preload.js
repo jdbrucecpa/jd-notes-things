@@ -351,6 +351,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   aiServiceStart: () => ipcRenderer.invoke('aiService:start'),
   aiServiceStatus: () => ipcRenderer.invoke('aiService:status'),
   aiServiceRepair: () => ipcRenderer.invoke('aiService:repair'),
+  aiServiceModelStatus: () => ipcRenderer.invoke('aiService:modelStatus'),
+  aiServicePrefetchModels: () => ipcRenderer.invoke('aiService:prefetchModels'),
 
   // Local model discovery (v2.0 — dual endpoint)
   listLocalModels: baseUrl => ipcRenderer.invoke('local:listModels', baseUrl),

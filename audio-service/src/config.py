@@ -12,6 +12,15 @@ MODEL_CACHE_DIR = Path(os.getenv(
 # Auto-unload models after this many seconds of inactivity
 IDLE_TIMEOUT_SECONDS = int(os.getenv("JD_AUDIO_IDLE_TIMEOUT", "300"))
 
+# GPU memory strategy. "low" keeps only the current pipeline stage's model
+# on the GPU; "high" keeps every model resident between requests. "auto"
+# picks "low" on GPUs with <= LOW_VRAM_THRESHOLD_GB. On an 8 GB laptop GPU,
+# keeping everything resident overflowed VRAM during diarization and the
+# Windows driver silently spilled into system RAM — an hour-long meeting
+# took 20+ minutes instead of ~6.
+GPU_MEMORY_MODE = os.getenv("JD_AUDIO_GPU_MEMORY_MODE", "auto").lower()
+LOW_VRAM_THRESHOLD_GB = float(os.getenv("JD_AUDIO_LOW_VRAM_GB", "12"))
+
 # Whisper model config (CTranslate2)
 TRANSCRIPTION_MODEL = "large-v3-turbo"
 TRANSCRIPTION_DEVICE = os.getenv("JD_AUDIO_DEVICE", "cuda")

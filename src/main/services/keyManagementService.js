@@ -21,6 +21,7 @@ const API_KEY_TYPES = {
   GOOGLE_API_KEY: 'Google API Key (Gemini)',
   GOOGLE_CALENDAR_CLIENT_ID: 'Google Calendar Client ID',
   GOOGLE_CALENDAR_CLIENT_SECRET: 'Google Calendar Client Secret',
+  HF_TOKEN: 'Hugging Face Token (local diarization models)',
   OLLAMA_BASE_URL: 'Ollama Server URL',
   OLLAMA_MODEL: 'Ollama Default Model',
   TUNNEL_SUBDOMAIN: 'Localtunnel Subdomain (not recommended)',
@@ -303,6 +304,12 @@ class KeyManagementService {
       case 'GOOGLE_CALENDAR_CLIENT_SECRET':
         if (!value.startsWith('GOCSPX-')) {
           return { valid: false, message: 'Google Client Secret should start with "GOCSPX-"' };
+        }
+        break;
+
+      case 'HF_TOKEN':
+        if (!value.startsWith('hf_')) {
+          return { valid: false, message: 'Hugging Face tokens should start with "hf_"' };
         }
         break;
 

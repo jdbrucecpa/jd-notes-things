@@ -18,21 +18,30 @@ class Processor:
         min_speakers: int | None = None,
         max_speakers: int | None = None,
     ) -> dict:
-        """Full pipeline: transcribe → align → diarize → merge."""
+        """Full pipeline: transcribe → align → diarize → merge.
+
+        Each stage first makes room on the GPU (a no-op unless VRAM is
+        tight — see ModelManager.make_room_for)."""
         # Step 1: Transcribe
         logger.info(f"Transcribing: {audio_path}")
+        self.manager.make_room_for("transcriber")
         transcriber = self.manager.get_or_load("transcriber", self._load_transcriber)
         transcription = transcriber.transcribe(audio_path)
 
         # Step 2: Align (optional — improves word timestamp precision)
         try:
+            self.manager.make_room_for("aligner")
             aligner = self.manager.get_or_load("aligner", self._load_aligner)
             transcription = aligner.align(audio_path, transcription)
         except Exception:
             logger.warning("Alignment unavailable, using native timestamps")
+        # Alignment stages the whole meeting's audio on the GPU; without this
+        # PyTorch keeps those GBs reserved through diarization.
+        self.manager.release_cached_memory()
 
         # Step 3: Diarize
         logger.info(f"Diarizing: {audio_path}")
+        self.manager.make_room_for("diarizer")
         diarizer = self.manager.get_or_load("diarizer", self._load_diarizer)
         segments = diarizer.diarize(
             audio_path,

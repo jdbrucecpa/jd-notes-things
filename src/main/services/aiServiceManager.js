@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const log = require('electron-log');
+const audioServiceHttp = require('../utils/audioServiceHttp');
 
 const DEFAULT_SERVICE_URL = 'http://localhost:8374';
 const HEALTH_POLL_INTERVAL_MS = 500;
@@ -11,6 +12,7 @@ const HEALTH_POLL_TIMEOUT_MS = 30000;
 // process handle to actually be released (e.g. repair(), which deletes the
 // venv directory right after) should await this; it must never hang forever.
 const SHUTDOWN_EXIT_TIMEOUT_MS = 5000;
+const MODEL_STATUS_TIMEOUT_MS = 10000;
 
 class AIServiceManager {
   constructor() {
@@ -72,6 +74,56 @@ class AIServiceManager {
       }
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Ask the service to download any uncached gated model. The token travels
+   * in the body so one saved after the service started is used without a
+   * restart. Per-model failures come back in `models[].error`.
+   */
+  async prefetchModels() {
+    let token = null;
+    if (this._getHfToken) {
+      try {
+        token = await this._getHfToken();
+      } catch (err) {
+        log.warn(`[AIService] HF token read failed: ${err.message}`);
+      }
+    }
+    // No deadline — a slow connection just takes longer. Not fetch, which
+    // gives up on any response slower than 300s.
+    try {
+      const body = await audioServiceHttp.postJsonWhileHealthy(
+        this.serviceUrl,
+        '/models/prefetch',
+        { token: token || null }
+      );
+      return { supported: true, models: body.models || [] };
+    } catch (err) {
+      if (err.status === 404) return { supported: false, models: [] };
+      throw err;
+    }
+  }
+
+  /**
+   * Whether each gated model (diarizer, embedder) is in the service's
+   * Hugging Face cache. Resolves { supported: false } against a service that
+   * predates /models/status (e.g. an old checkout via the path override).
+   */
+  async getModelStatus() {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), MODEL_STATUS_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${this.serviceUrl}/models/status`, {
+        signal: controller.signal,
+      });
+      if (response.status === 404) return { supported: false, models: [] };
+      if (!response.ok) throw new Error(`JD Audio Service returned ${response.status}`);
+      const body = await response.json();
+      return { supported: true, models: body.models || [] };
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
