@@ -566,6 +566,7 @@ let appSettings = {
   windowBounds: null, // Will store {x, y, width, height, displayId}
   transcriptionProvider: 'local', // v2.0: Default transcription provider (local-first)
   recordingProvider: 'local', // v2.0: 'local' (FFmpeg + Window Monitoring, default) or 'recall' (Recall.ai SDK)
+  useClaudeSubscription: true, // Claude models run through Claude Code (subscription) when logged in; API key as fallback
   streamDeck: {
     enabled: false, // v1.2: Enable Stream Deck WebSocket integration
   },
@@ -1870,7 +1871,9 @@ app.whenReady().then(async () => {
 
   // Initialize LLM service from Windows Credential Manager (with .env fallback)
   try {
-    llmService = await createLLMServiceFromCredentials(keyManagementService);
+    llmService = await createLLMServiceFromCredentials(keyManagementService, {
+      claudeCliEnabled: appSettings.useClaudeSubscription !== false,
+    });
     logger.main.info(`LLM Service initialized with provider: ${llmService.getProviderName()}`);
   } catch (error) {
     logger.main.warn('LLM Service not initialized - no API keys configured yet:', error.message);
@@ -7412,6 +7415,21 @@ ipcMain.handle(
   })
 );
 
+// Whether Claude models are running on the Claude subscription (via Claude Code)
+// or the API key. refresh: re-check the login now and clear any error pause.
+ipcMain.handle('llm:getClaudeCliStatus', async (_event, options) => {
+  try {
+    if (!llmService) {
+      return { success: false, error: 'LLM service not initialized' };
+    }
+    const status = await llmService.getClaudeCliStatus({ refresh: options?.refresh === true });
+    return { success: true, status };
+  } catch (error) {
+    console.error('[LLM] Error checking Claude Code status:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // ===================================================================
 // v2.0: Local model discovery (dual endpoint — Ollama + OpenAI-compatible)
 // ===================================================================
@@ -9685,6 +9703,10 @@ ipcMain.handle(
       }
       if (updates.autoStartRecording !== undefined) {
         appSettings.autoStartRecording = updates.autoStartRecording;
+      }
+      if (updates.useClaudeSubscription !== undefined) {
+        appSettings.useClaudeSubscription = updates.useClaudeSubscription !== false;
+        if (llmService) llmService.setClaudeCliEnabled(appSettings.useClaudeSubscription);
       }
       // v2.0: Recording provider — hot-swap without restart
       if (

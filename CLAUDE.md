@@ -142,6 +142,7 @@ Multi-provider support with 85-90% cost reduction:
 
 - **Cloud:** Azure OpenAI, OpenAI, Anthropic Claude, Google Gemini — all support automatic prompt caching
 - **Local:** Ollama or LM Studio via LocalLLMAdapter (auto-discovers models from either `/api/tags` or `/v1/models`)
+- **Claude subscription:** Claude models run through Claude Code (`claude -p`, `src/main/services/claudeCli.js`) when it's installed and logged in to a Claude plan, so they bill the subscription instead of API credits. Falls back to the Anthropic API key when the CLI is unavailable or a call fails (the CLI then pauses for 10 min). The transcript is the whole system prompt and per-call instructions go on stdin, so every call for a meeting hits Claude Code's prompt cache. Toggle: `useClaudeSubscription` in app-settings.json (Settings → AI Model Configuration).
 - Separate static content (transcript) from dynamic content (section prompts)
 - Token budgets: 50,000 for auto-summary, 15,000 per template section
 - Cache verification logging with performance metrics

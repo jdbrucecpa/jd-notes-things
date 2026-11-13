@@ -16,6 +16,7 @@ import {
 import { initializeTabs } from './utils/tabHelper.js';
 import { notifySuccess, notifyError, notifyInfo } from './utils/notificationHelper.js';
 import { reconcileAiServicePath } from './servicePathSync.js';
+import { describeClaudeCliStatus } from './claudeCliStatus.js';
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -141,6 +142,8 @@ export function initializeSettingsUI() {
   const darkModeToggle = document.getElementById('darkModeToggle');
   const autoStartToggle = document.getElementById('autoStartToggle');
   const showRecordingWidgetToggle = document.getElementById('showRecordingWidgetToggle');
+  const useClaudeSubscriptionToggle = document.getElementById('useClaudeSubscriptionToggle');
+  const claudeCliRecheckBtn = document.getElementById('claudeCliRecheckBtn');
   const debugModeToggle = document.getElementById('debugModeToggle');
   const vaultPathInput = document.getElementById('vaultPathInput');
   const browseVaultPathBtn = document.getElementById('browseVaultPathBtn');
@@ -310,6 +313,20 @@ export function initializeSettingsUI() {
         window.electronAPI.appUpdateSettings({ showRecordingWidget: isActive });
       }
     });
+  }
+
+  // Claude subscription toggle (setting lives in main's app-settings.json)
+  if (useClaudeSubscriptionToggle) {
+    useClaudeSubscriptionToggle.addEventListener('click', async () => {
+      const isActive = useClaudeSubscriptionToggle.classList.toggle('active');
+      if (window.electronAPI?.appUpdateSettings) {
+        await window.electronAPI.appUpdateSettings({ useClaudeSubscription: isActive });
+      }
+      refreshClaudeCliStatus();
+    });
+  }
+  if (claudeCliRecheckBtn) {
+    claudeCliRecheckBtn.addEventListener('click', () => refreshClaudeCliStatus({ refresh: true }));
   }
 
   // Debug mode toggle
@@ -869,6 +886,40 @@ export function initializeSettingsUI() {
   }
 
   /**
+   * Show whether Claude models run on the Claude subscription (Claude Code) or
+   * the API key. refresh: re-check the login now and clear any error pause.
+   */
+  async function refreshClaudeCliStatus({ refresh = false } = {}) {
+    const el = document.getElementById('claudeCliStatus');
+    if (!el || !window.electronAPI?.getClaudeCliStatus) return;
+    el.textContent = 'Checking…';
+    el.className = 'service-status checking';
+    let result;
+    try {
+      result = await window.electronAPI.getClaudeCliStatus({ refresh });
+    } catch {
+      result = null;
+    }
+    const { text, state } = describeClaudeCliStatus(result);
+    el.textContent = text;
+    el.className = state ? `service-status ${state}` : 'service-status';
+  }
+
+  /** Sync the subscription toggle with main's app-settings.json, then show its status. */
+  async function loadClaudeSubscriptionSetting() {
+    if (useClaudeSubscriptionToggle && window.electronAPI?.appGetSettings) {
+      try {
+        const result = await window.electronAPI.appGetSettings();
+        const enabled = !result?.success || result.data?.useClaudeSubscription !== false;
+        useClaudeSubscriptionToggle.classList.toggle('active', enabled);
+      } catch {
+        // keep the markup default (on)
+      }
+    }
+    await refreshClaudeCliStatus();
+  }
+
+  /**
    * Show a "configured" hint next to the Hugging Face token field without
    * ever displaying the stored value itself.
    */
@@ -1357,6 +1408,7 @@ export function initializeSettingsUI() {
     refreshAiServiceStatus();
     refreshHfTokenHint();
     refreshModelReadiness();
+    loadClaudeSubscriptionSetting();
 
     // v2.0: Show/hide audio sources section based on recording provider
     setTimeout(() => updateAudioSourcesVisibility(), 100);
