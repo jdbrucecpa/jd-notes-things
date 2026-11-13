@@ -1547,6 +1547,22 @@
 
               <div class="settings-item">
                 <div class="settings-item-info">
+                  <div class="settings-item-label">Use Claude Subscription</div>
+                  <div class="settings-item-description">
+                    Run Claude models through Claude Code when it's logged in on this computer, so summaries count against your Claude plan instead of API credits. Falls back to your Anthropic API key when Claude Code isn't available or a call fails.
+                    <div id="claudeCliStatus" class="service-status checking" style="margin-top: 6px;">Checking…</div>
+                  </div>
+                </div>
+                <div class="settings-item-control">
+                  <div class="toggle-switch active" id="useClaudeSubscriptionToggle">
+                    <div class="toggle-switch-thumb"></div>
+                  </div>
+                  <button class="btn-secondary" id="claudeCliRecheckBtn" style="margin-left: 8px;">Recheck</button>
+                </div>
+              </div>
+
+              <div class="settings-item">
+                <div class="settings-item-info">
                   <div class="settings-item-label">Auto Summary Provider</div>
                   <div class="settings-item-description">AI model for quick summaries after recording (faster, cheaper)</div>
                 </div>

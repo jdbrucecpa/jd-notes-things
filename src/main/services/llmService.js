@@ -1,12 +1,15 @@
 /**
  * LLM Service - Unified interface for multiple LLM providers
  * v1.3.2: Supports Anthropic Claude, Google Gemini, and Ollama (local)
+ * Claude models run through Claude Code (`claude -p`, subscription billing)
+ * when it's logged in on this machine, else through the Anthropic API.
  */
 
 const { AsyncLocalStorage } = require('node:async_hooks');
 const Anthropic = require('@anthropic-ai/sdk');
 const { GoogleGenAI } = require('@google/genai');
 const { OpenAI } = require('openai');
+const { ClaudeCliAvailability, runClaudeCli, DEFAULT_WORK_DIR } = require('./claudeCli');
 
 /**
  * Base LLM Adapter Interface
@@ -330,6 +333,99 @@ class AnthropicAdapter extends LLMAdapter {
   }
 }
 
+const CLAUDE_CLI_PROVIDER_NAME = 'Claude Code (subscription)';
+
+/**
+ * Claude via the user's subscription, with the Anthropic API as fallback.
+ * Each call runs `claude -p` when Claude Code is installed and logged in to a
+ * subscription; otherwise, or when the CLI call fails, the same request goes
+ * to the API (if a key is configured). A failed CLI call pauses the CLI for a
+ * while (see ClaudeCliAvailability) so the remaining sections don't each wait
+ * on a failing process first.
+ */
+class ClaudeSubscriptionAdapter extends LLMAdapter {
+  /**
+   * @param {Object} opts
+   * @param {string} opts.model
+   * @param {ClaudeCliAvailability} opts.availability - Shared across adapters
+   * @param {AnthropicAdapter|null} opts.apiAdapter - null when no API key is configured
+   * @param {string} [opts.workDir]
+   * @param {Function} [opts.runCli] - Injectable for tests
+   */
+  constructor({
+    model,
+    availability,
+    apiAdapter,
+    workDir = DEFAULT_WORK_DIR,
+    runCli = runClaudeCli,
+  }) {
+    super();
+    this.model = model;
+    this.availability = availability;
+    this.apiAdapter = apiAdapter;
+    this.workDir = workDir;
+    this.runCli = runCli;
+    this._lastProvider = null;
+  }
+
+  /** @returns {Promise<Object|null>} CLI result, or null when the API should handle the call */
+  async _tryCli(options, onText) {
+    const status = await this.availability.check();
+    if (!status.usable) {
+      if (!this.apiAdapter) {
+        throw new Error(
+          `No Anthropic API key is configured and Claude Code can't be used (${status.reason}). ` +
+            'Run `claude` in a terminal and log in with your Claude subscription, or add an API key in Settings.'
+        );
+      }
+      return null;
+    }
+
+    try {
+      const result = await this.runCli({
+        executable: status.executable,
+        model: this.model,
+        systemPrompt: options.systemPrompt,
+        userPrompt: options.userPrompt,
+        cacheableContext: options.cacheableContext,
+        onText,
+        workDir: this.workDir,
+      });
+      this.availability.recordSuccess();
+      this._lastProvider = CLAUDE_CLI_PROVIDER_NAME;
+      return result;
+    } catch (error) {
+      this.availability.recordFailure(error);
+      if (!this.apiAdapter) throw error;
+      console.warn(`[Claude CLI] ${error.message} - falling back to the Anthropic API`);
+      return null;
+    }
+  }
+
+  async generateCompletion(options) {
+    const result = await this._tryCli(options);
+    if (result) {
+      return { content: result.content, model: result.model, provider: 'claude-cli' };
+    }
+    this._lastProvider = 'Anthropic';
+    return this.apiAdapter.generateCompletion(options);
+  }
+
+  async streamCompletion(options) {
+    const result = await this._tryCli(options, options.onChunk);
+    if (result) return result.content;
+    this._lastProvider = 'Anthropic';
+    return this.apiAdapter.streamCompletion(options);
+  }
+
+  getProviderName() {
+    if (this._lastProvider) return this._lastProvider;
+    return this.availability.getSnapshot().usable || !this.apiAdapter
+      ? CLAUDE_CLI_PROVIDER_NAME
+      : 'Anthropic';
+  }
+}
+
 /**
  * Google Gemini Adapter
  * Uses the @google/genai SDK (the old @google/generative-ai hit EOL 2025-11-30).
@@ -531,9 +627,17 @@ class LLMService {
    * @param {Object} config.anthropic - Anthropic config { apiKey, model }
    * @param {Object} config.gemini - Gemini config { apiKey, model }
    * @param {Object} config.ollama - Ollama config { model, baseUrl }
+   * @param {Object} [config.claudeCli] - Route Claude models through Claude Code
+   *   when logged in: { enabled, availability?, workDir?, runCli? }. Omit to use
+   *   the API only.
    */
   constructor(config) {
     this.config = config;
+    // Shared by every Claude adapter, so one probe/cooldown covers all calls.
+    this._claudeCli = config.claudeCli
+      ? config.claudeCli.availability ||
+        new ClaudeCliAvailability({ enabled: config.claudeCli.enabled !== false })
+      : null;
     this.adapter = this._createAdapter();
     // Per-call-chain provider override (see runWithPreference). Lets overlapping
     // summaries for different meetings each use their own model without
@@ -552,14 +656,28 @@ class LLMService {
   _createAdapterFor(provider, model) {
     switch (provider) {
       case 'anthropic': {
-        if (!this.config.anthropic?.apiKey) {
+        const apiKey = this.config.anthropic?.apiKey;
+        const anthropicModel = model || this.config.anthropic?.model || 'claude-haiku-5-5';
+        const apiAdapter = apiKey ? new AnthropicAdapter(apiKey, anthropicModel) : null;
+        if (this._claudeCli) {
+          console.log(
+            `[LLM Service] Initializing Claude adapter (Claude Code subscription${
+              apiAdapter ? ', API fallback' : ', no API key'
+            }) with model: ${anthropicModel}`
+          );
+          return new ClaudeSubscriptionAdapter({
+            model: anthropicModel,
+            availability: this._claudeCli,
+            apiAdapter,
+            workDir: this.config.claudeCli.workDir,
+            runCli: this.config.claudeCli.runCli,
+          });
+        }
+        if (!apiAdapter) {
           throw new Error('Anthropic API key is required');
         }
-        const anthropicModel = model || this.config.anthropic.model;
-        console.log(
-          `[LLM Service] Initializing Anthropic adapter with model: ${anthropicModel || 'claude-haiku-5-5'}`
-        );
-        return new AnthropicAdapter(this.config.anthropic.apiKey, anthropicModel);
+        console.log(`[LLM Service] Initializing Anthropic adapter with model: ${anthropicModel}`);
+        return apiAdapter;
       }
 
       case 'gemini': {
@@ -717,6 +835,27 @@ class LLMService {
   }
 
   /**
+   * Turn subscription routing for Claude models on or off at runtime.
+   * Off: Claude models use the API key only.
+   */
+  setClaudeCliEnabled(enabled) {
+    if (this._claudeCli) this._claudeCli.setEnabled(enabled);
+  }
+
+  /**
+   * Whether Claude models currently run on the subscription (for the settings UI).
+   * @param {{refresh?: boolean}} [opts] - refresh: re-check now and clear any error pause
+   */
+  async getClaudeCliStatus({ refresh = false } = {}) {
+    const apiKeyConfigured = !!this.config.anthropic?.apiKey;
+    if (!this._claudeCli) {
+      return { supported: false, enabled: false, usable: false, apiKeyConfigured };
+    }
+    await this._claudeCli.check({ force: refresh });
+    return { supported: true, ...this._claudeCli.getSnapshot(), apiKeyConfigured };
+  }
+
+  /**
    * Get current model name (of the active runWithPreference scope, if any)
    */
   getCurrentModel() {
@@ -771,8 +910,15 @@ function createLLMServiceFromEnv() {
 /**
  * Create LLM service from Windows Credential Manager (with .env fallback)
  * @param {Object} keyManagementService - Key management service instance
+ * @param {Object} [options]
+ * @param {boolean} [options.claudeCliEnabled=true] - Run Claude models through
+ *   Claude Code (subscription) when it's logged in, with the API key as fallback
+ * @param {ClaudeCliAvailability} [options.claudeCliAvailability] - Injectable for tests
  */
-async function createLLMServiceFromCredentials(keyManagementService) {
+async function createLLMServiceFromCredentials(
+  keyManagementService,
+  { claudeCliEnabled = true, claudeCliAvailability } = {}
+) {
   // Try to get API keys from Windows Credential Manager first, fall back to env vars
   const anthropicKey =
     (await keyManagementService.getKey('ANTHROPIC_API_KEY')) || process.env.ANTHROPIC_API_KEY;
@@ -785,9 +931,14 @@ async function createLLMServiceFromCredentials(keyManagementService) {
   const ollamaModel =
     (await keyManagementService.getKey('OLLAMA_MODEL')) || process.env.OLLAMA_MODEL || 'llama3';
 
-  // Priority (v1.3.2): Anthropic > Gemini > Ollama (Ollama always available as fallback)
+  const claudeCli =
+    claudeCliAvailability || new ClaudeCliAvailability({ enabled: claudeCliEnabled });
+
+  // Priority: Anthropic (API key or Claude Code login) > Gemini > Ollama
+  // (Ollama always available as fallback). The CLI is only probed when there's
+  // no API key, since a key already makes Claude the default.
   let provider;
-  if (anthropicKey) {
+  if (anthropicKey || (claudeCliEnabled && (await claudeCli.check()).usable)) {
     provider = 'anthropic';
   } else if (geminiKey) {
     provider = 'gemini';
@@ -809,6 +960,7 @@ async function createLLMServiceFromCredentials(keyManagementService) {
       model: ollamaModel,
       baseUrl: ollamaBaseUrl,
     },
+    claudeCli: { enabled: claudeCliEnabled, availability: claudeCli },
   };
 
   return new LLMService(config);
@@ -912,6 +1064,7 @@ async function fetchLocalModels(baseUrl = 'http://localhost:11434') {
 module.exports = {
   LLMService,
   AnthropicAdapter,
+  ClaudeSubscriptionAdapter,
   GeminiAdapter,
   OllamaAdapter: LocalLLMAdapter, // backward compat alias
   LocalLLMAdapter,

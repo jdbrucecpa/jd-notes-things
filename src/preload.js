@@ -161,6 +161,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // LLM Provider Management
   getLLMProvider: () => ipcRenderer.invoke('llm:getProvider'),
   switchLLMProvider: provider => ipcRenderer.invoke('llm:switchProvider', provider),
+  getClaudeCliStatus: options => ipcRenderer.invoke('llm:getClaudeCliStatus', options),
   // Obsidian Export (Phase 5)
   obsidianExportMeeting: meetingId => ipcRenderer.invoke('obsidian:exportMeeting', meetingId),
   obsidianGetStatus: () => ipcRenderer.invoke('obsidian:getStatus'),
